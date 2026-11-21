@@ -1,55 +1,17 @@
-# Task Plan Template
+# 作業計画
 
-## 0. Metadata
-- Task ID:
-- Branch:
-- Owner:
-- Last Updated:
+## 目的と対象範囲
 
-## 1. Objective
-- このタスクで達成する成果を明確に記載する。
+実現する結果と変更範囲を記載する。範囲の判断に関係する前提や対象外の項目があれば添える。
 
-## 2. Non-Goals
-- 今回は実施しないことを明記する。
+## 受け入れ条件
 
-## 3. Scope
-- In scope:
-- Out of scope:
+- [ ] 利用者が確認できる振る舞い、または成果物が満たす条件を記載する。
 
-## 4. Milestones
-| Milestone | Description | Status (Done / Blocked / Cancelled) | Notes |
-| --- | --- | --- | --- |
-| M1 |  |  |  |
-| M2 |  |  |  |
-| M3 |  |  |  |
+## 検証
 
-## 5. Acceptance Criteria
-- [ ] 条件 1
-- [ ] 条件 2
-- [ ] 条件 3
+実行するコマンドまたは手動操作と、期待する結果を記載する。リポジトリのコマンドは [README.md](../README.md#検証と配布ビルド) を参照する。実施後は結果を記録し、確認できない項目があれば理由を添える。
 
-## 6. Verification Commands
-- [ ] `format command`
-- [ ] `lint command`
-- [ ] `typecheck command`
-- [ ] `test command`
-- [ ] `build command`
-- [ ] `smoke test command`
+## 作業上の判断
 
-## 7. Known Blockers
-- None / 具体的 blocker を記載
-
-## 8. Feature Flag / Rollback Plan (if needed)
-- Feature flag:
-- Rollback steps:
-
-## 9. Status Updates
-- YYYY-MM-DD: 進捗、判断、次のアクションを記録。
-
-## 10. Stop State Checklist
-停止時には全項目を `Done / Blocked / Cancelled` に更新し、`pending` と `in_progress` を残さない。
-
-- [ ] 各マイルストーン状態を更新した
-- [ ] Blocked 項目の停止理由と再開条件を記載した
-- [ ] 次に実行すべき最短アクションを記載した
-- [ ] 実行済み検証と未実行理由を整理した
+依存関係、受け入れ条件の変更、データ移行や切り戻しなど、引き継ぎに必要な判断がある場合に記載する。
