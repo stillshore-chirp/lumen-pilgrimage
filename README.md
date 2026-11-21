@@ -33,14 +33,16 @@ WebXR セッションを試すには、対応ブラウザとヘッドセット�
 npm run check
 ```
 
-型チェック、Vite の本番ビルド、コンテンツ検証、リリース検証を順に実行します。CI の各ステップは [CI ワークフロー](.github/workflows/ci.yml) を参照してください。
+型チェック、Vite の本番ビルド、コンテンツ・リリース・ハーネスの検証を実行します。[CI](.github/workflows/ci.yml) も同じコマンドを使います。
 
 - `npm run validate:content` は、コンテンツの最低件数、ID の重複と参照、biome の room graph、開発用・旧仕様の文言を静的に確認します。
 - `npm run validate:release` は、`src/` の旧実装への参照と、`dist/` のデバッグ・旧実装の痕跡を確認します。単独で実行する場合は、先に `npm run build` で `dist/` を生成してください。
+- `npm run validate:harness` は、現行文書のリポジトリ内リンク、記載された npm スクリプト、Skill の配置とメタデータを確認します。
 
-`dist/` のローカル確認には、ビルド後に `npm exec -- vite preview` を使います。操作の確認では、起動、出撃、入力、再読み込み後の Continue を変更範囲に合わせて試してください。WebXR のセッションや入力を変更した場合は、対象のブラウザと実機でセッションの開始・終了、コントローラーの選択、終了後のデスクトップ操作を確認してください。
+`dist/` のローカル確認には、ビルド後に `npm exec -- vite preview` を使います。入力、保存、XR の操作確認は [遠征検証Skill](.agents/skills/verify-expedition/SKILL.md) を参照してください。
 
 ## 開発資料
 
 - [設計](docs/architecture.md) に、入力、遠征、保存、描画・音響の現行の接続を記載しています。
+- [エージェントハーネス](docs/agent-harness.md) に、リポジトリ指示、検証Skill、Codexのワークツリー設定の配置を記載しています。
 - [Reforge ロードマップ](plans/reforge-roadmap.md) に、ゲームとしての到達目標と残る実装課題を記載しています。`plans/` 内の個別計画と進捗 JSON は、作成時点の記録です。

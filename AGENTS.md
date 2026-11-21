@@ -6,6 +6,7 @@
 
 - 起動手順、現行の操作範囲、検証コマンドは [README.md](README.md) を参照してください。
 - 入力、遠征、保存、描画の接続は [docs/architecture.md](docs/architecture.md) を参照してください。
+- ハーネスの構成と保守は [docs/agent-harness.md](docs/agent-harness.md)、Hub・遠征・XR・保存の操作確認は [遠征検証Skill](.agents/skills/verify-expedition/SKILL.md) を参照してください。
 - リポジトリ内に作業計画を残す場合は [plans/TEMPLATE.md](plans/TEMPLATE.md) を使えます。
 
 ## 変更時に確認する契約
@@ -17,6 +18,6 @@
 
 ## 検証
 
-- コード、コンテンツ、ビルド設定を変更したら、CI と同じ検証をまとめて実行する `npm run check` を使ってください。CI の手順は [`.github/workflows/ci.yml`](.github/workflows/ci.yml) を参照してください。
-- ロジックやデータ契約の変更で既存の検証が拾えない回帰条件は、対象に近い検証に追加してください。自動検証で扱えない UI・入力・保存の経路は、[操作手順](README.md#起動と操作)を起点に変更箇所を確認し、検証環境と結果を記録してください。
+- CI と同じ検証は `npm run check`、ハーネス文書と Skill の静的検査だけを行う場合は `npm run validate:harness` を使ってください。
+- ロジックやデータ契約の変更で既存の検証が拾えない回帰条件は、対象に近い検証に追加してください。操作や保存は、変更箇所に応じた手動確認の結果を記録してください。
 - 操作、セットアップ、モジュール間の契約を変更した場合は、対応する README または設計文書を更新してください。
