@@ -1,5 +1,7 @@
 # Reforge Phase 6: Particle Director Arena Hook Integration
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 - Arena mutation の channel 圧（hazard/focus/guard/overburn）を XR safe な world-side particle 演出へ接続し、postprocess 依存なしの視覚フィードバックを強化する。
 

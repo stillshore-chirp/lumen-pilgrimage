@@ -1,5 +1,7 @@
 # Reforge Phase 6: release debug gating
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 - release build に debug UI を残さないため、開発専用 HUD を本番バンドル実行時に自動無効化する。
 - README の build/check/release 手順を明示し、検証導線を固定化する。

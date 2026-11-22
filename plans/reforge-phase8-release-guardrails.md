@@ -1,5 +1,7 @@
 # reforge-phase8-release-guardrails
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 - release build から legacy 依存（ritual/glyph/export/codex）と debug helper 痕跡を機械的に検出し、Phase 8 の ship 前品質ゲートを強化する。
 

@@ -1,5 +1,7 @@
 # Reforge Phase 5: Audio Stem Source Routing
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 `AudioDirector` の stem target（exploration / threat / combat / clutch / boss）を、HUD 表示だけではなく実際の WebAudio gain bus に接続できる実行基盤へ拡張する。
 

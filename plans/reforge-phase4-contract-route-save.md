@@ -1,5 +1,7 @@
 # Task: reforge-phase4-contract-route-save
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Phase 4 継続として、Encounter の分岐導線を mission/contract 意図と接続し、run 内 relic 効果を continue snapshot に永続化する。
 

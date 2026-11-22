@@ -1,5 +1,7 @@
 # Task: reforge-phase3-reward-foundation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Phase 3 基盤を拡張し、run 内成長の核となる relic/sigil データ定義と room clear reward 選択フローを sandbox に導入する。
 

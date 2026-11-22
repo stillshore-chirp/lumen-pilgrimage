@@ -1,5 +1,7 @@
 # reforge-phase5-xr-controller-pointer
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 HubのXR端末選択をHMD前方固定rayから、接続済みコントローラー（left/right）由来rayへ置換し、VR/flatの操作等価性と誤選択耐性を高める。
 

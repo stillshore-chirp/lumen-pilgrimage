@@ -1,5 +1,7 @@
 # reforge-phase5-hub-vr-hand-affordance
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Hub の XR 端末操作で、どちらの手の pointer が terminal を lock しているかを world 側 affordance と wrist prompt の両方で即時判別できるようにし、誤操作時の認知負荷を下げる。
 

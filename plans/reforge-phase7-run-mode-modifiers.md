@@ -1,5 +1,7 @@
 # Reforge Phase 7: Run Mode Modifiers Foundation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 - Campaign / Contracts / Boss Rush / Endless Collapse の差分をデータ駆動ルールとして明示し、戦闘サンドボックスでモードごとの手触り差を強化する。
 - 既存の run mode 切替を UI 表示上だけでなく、敵圧・報酬・リソース管理に反映する。

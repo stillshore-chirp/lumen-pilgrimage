@@ -1,5 +1,7 @@
 # Reforge ロードマップ
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 Lumen Pilgrimage を、Hub での準備、複数の biome の攻略、最終エリア、クリア後の反復プレイまでつながるアクション探索ゲームへ発展させる。デスクトップと WebXR の両方で、主要な操作を完結できることを目標とする。
 
 [README](../README.md) と [設計文書](../docs/architecture.md) が現行の操作と実装を説明する。各 Phase の計画と [進捗スナップショット](reforge-progress.json) は当時の記録として参照する。

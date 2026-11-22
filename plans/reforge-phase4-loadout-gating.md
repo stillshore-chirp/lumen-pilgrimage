@@ -1,5 +1,7 @@
 # Task: reforge-phase4-loadout-gating
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Hub の恒久 unlock（weapon/offhand/sigil）を expedition 中ロードアウト循環へ反映し、未解放装備が戦闘サンドボックスで選択されないようにする。
 

@@ -1,5 +1,7 @@
 # Reforge Phase6: Authored Setpiece Integration
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 - biome ごとの arena visual preset に authored setpiece anchor を追加し、ライト/VFX の当たり先をルーム文脈に寄せる。
 

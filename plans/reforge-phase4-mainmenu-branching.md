@@ -1,5 +1,7 @@
 # Task: reforge-phase4-mainmenu-branching
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 MainMenu で Continue / New Game の明示分岐を実装し、run 開始条件をユーザー操作に統一する。
 

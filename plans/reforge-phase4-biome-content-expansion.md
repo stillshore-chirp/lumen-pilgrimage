@@ -1,5 +1,7 @@
 # Reforge Phase 4 Biome Content Expansion Plan
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 0. Metadata
 - Task ID: reforge-phase4-biome-content-expansion
 - Branch: current working branch

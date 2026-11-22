@@ -1,5 +1,7 @@
 # Task: reforge-phase4-room-graph-branching
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 EncounterDirector の linear room 進行を廃止し、room graph による分岐導線（risk / recovery / secret）を導入する。
 

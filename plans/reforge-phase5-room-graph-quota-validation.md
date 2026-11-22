@@ -1,5 +1,7 @@
 # Task Plan: Reforge Phase 5 Room Graph Quota & Validation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 0. Metadata
 - Task ID: reforge-phase5-room-graph-quota-validation
 - Branch: current working branch

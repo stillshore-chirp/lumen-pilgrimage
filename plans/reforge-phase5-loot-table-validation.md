@@ -1,5 +1,7 @@
 # Task Plan: reforge-phase5-loot-table-validation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 0. Metadata
 - Task ID: reforge-phase5-loot-table-validation
 - Branch: current

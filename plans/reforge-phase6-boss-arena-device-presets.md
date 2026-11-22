@@ -1,5 +1,7 @@
 # reforge-phase6-boss-arena-device-presets
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 `ArenaMutationDirector.visualHooksSnapshot()` の出力を受けて、biome ごとに差別化された arena device のライティング挙動を `WorldAssembler` へ接続し、boss 戦の phase 圧力が視覚的に判別できる状態を作る。
 

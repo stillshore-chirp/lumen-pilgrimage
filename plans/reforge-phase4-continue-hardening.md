@@ -1,5 +1,7 @@
 # Task: reforge-phase4-continue-hardening
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Phase 4 継続として、continue 復帰データの安定性を改善し、表示名依存の mission 復帰を廃止して ID ベースへ移行する。
 
