@@ -33,11 +33,17 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
     nightHorizon: 0x6484a5,
     nightZenith: 0x688ab3,
     nightGlow: { color: 0x494039, direction: new THREE.Vector3(0.16, 0, -0.987) },
-    starVisibility: 0.04,
     aerialDistanceScale: 0.22,
     moonDirection: new THREE.Vector3(-0.77, 0.48, -0.42),
   });
-  const sky = createCoastSky(atmosphere, 0.13);
+  // The sky dome uses its own palette so surface lighting keeps the basin's aerial tint.
+  const sky = createCoastSky({
+    ...atmosphere,
+    nightHorizon: { value: new THREE.Color(0x354762) },
+    nightZenith: { value: new THREE.Color(0x23314f) },
+    nightGlow: { value: new THREE.Color(0x271e19) },
+    starVisibility: { value: 0.10 },
+  }, 0.13);
   sky.clouds.scale.setScalar(2.70);
   sky.clouds.position.y = 425;
 

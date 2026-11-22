@@ -435,8 +435,8 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await dialog.waitFor({ state: 'hidden' });
     await day.click();
     const townDay = await skyBrightness(canvas);
-    // The overlook stays in blue hour at night and still has a distinct daylight sky.
-    assert.ok(townNight > 94 && townNight < 154 && townDay - townNight > 35, `${townDay} → ${townNight}`);
+    assert.ok(townNight > 28 && townNight < 66, `Overlook night sky: ${townNight}`);
+    assert.ok(townDay > 129, `Overlook daylight sky: ${townDay}`);
     await capture(page, 'overlook-east-day');
 
     await arrive('入り江の浜', 'coast', 'inlet', 'day');
