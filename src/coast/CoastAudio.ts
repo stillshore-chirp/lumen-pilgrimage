@@ -11,10 +11,12 @@ import {
 } from './coastShore';
 import { CoastFoley } from './CoastFoley';
 import { COAST_SWELL_PERIOD } from './world/coastSwell';
+import type { CoastBirdCue, CoastBirdSpecies } from './coastBirdCue';
 
-type AudioAsset = 'waves' | 'surf' | 'waterfall' | 'birds' | 'forestBirds' | 'shelterBirds' | 'insects' | 'rivulet';
+type AmbientAsset = 'waves' | 'surf' | 'waterfall' | 'forestBirds' | 'shelterBirds' | 'insects' | 'rivulet';
+type AudioAsset = AmbientAsset | CoastBirdSpecies;
 type FilterSpec = { type: BiquadFilterType; frequency: number };
-type ShelterCallTiming = { firstDelay: number; pause: number };
+type BirdCallTiming = { firstDelay: number; pause: number };
 type EmitterSpec = {
   asset: AudioAsset;
   position: [number, number, number];
@@ -25,7 +27,7 @@ type EmitterSpec = {
   filters: FilterSpec[];
   waterReflection?: number;
   rockResponse?: boolean;
-  birdCalls?: true | ShelterCallTiming;
+  birdCalls?: BirdCallTiming;
 };
 type DelayedArrival = { gain: GainNode; delay: DelayNode; surface: BiquadFilterNode };
 type ShoreVoice = {
@@ -47,6 +49,12 @@ type SpatialVoice = {
   reflection?: DelayedArrival & { strength: number };
   rock?: DelayedArrival & { panner: PannerNode };
 };
+type BirdVoice = {
+  input: GainNode;
+  panner: PannerNode;
+  voice: SpatialVoice;
+  call?: { cue: CoastBirdCue; source: AudioBufferSourceNode; startsAt: number; releaseAt: number };
+};
 
 function positionOf(point: CoastPoint): [number, number, number] {
   return [point.x, point.y, point.z];
@@ -60,12 +68,28 @@ const ASSET_FILES: Record<AudioAsset, string> = {
   waves: 'waves.ogg',
   surf: 'surf.ogg',
   waterfall: 'waterfall.ogg',
-  birds: 'birds.ogg',
   forestBirds: 'forest-birds.ogg',
   shelterBirds: 'shelter-birds.ogg',
   insects: 'insects.ogg',
   rivulet: 'rivulet.ogg',
+  gull: 'gull-calls.ogg',
+  whiteEye: 'white-eye-calls.ogg',
+  bushWarbler: 'bush-warbler-calls.ogg',
+  thrush: 'thrush-calls.ogg',
 };
+
+// Each edited excerpt starts on a fixed boundary, with a silent guard between excerpts.
+const BIRD_PHRASE_STRIDE = 3.5;
+const BIRD_VOICES_PER_SPECIES = 2;
+const BIRD_CALLS: Record<CoastBirdSpecies, {
+  lengths: readonly number[]; gain: number; refDistance: number; range: number; highpass: number;
+}> = {
+  gull: { lengths: [1.65, 2.35, 1.85], gain: 0.75, refDistance: 23, range: 235, highpass: 340 },
+  whiteEye: { lengths: [1.75, 1.55, 2.0, 1.85], gain: 0.68, refDistance: 11, range: 82, highpass: 1550 },
+  bushWarbler: { lengths: [1.45, 2.1, 1.65], gain: 0.79, refDistance: 16, range: 117, highpass: 840 },
+  thrush: { lengths: [2.65, 3.2, 2.75], gain: 0.69, refDistance: 14, range: 105, highpass: 660 },
+};
+const BIRD_SPECIES = Object.keys(BIRD_CALLS) as CoastBirdSpecies[];
 
 const MAX_SEGMENT_SECONDS = 82;
 const SCHEDULE_AHEAD_SECONDS = 2;
@@ -77,7 +101,7 @@ const SHELTER_PHRASE_COUNT = 4;
 
 function shelterBirdEmitters(): EmitterSpec[] {
   const perch = (
-    position: [number, number, number], gain: number, maxDistance: number, timing: ShelterCallTiming,
+    position: [number, number, number], gain: number, maxDistance: number, timing: BirdCallTiming,
   ): EmitterSpec => ({
     asset: 'shelterBirds', position, gain, maxDistance, refDistance: 11, rolloff: 1.16,
     birdCalls: timing, rockResponse: true,
@@ -85,21 +109,17 @@ function shelterBirdEmitters(): EmitterSpec[] {
   });
   return COAST_REST_SITES.filter(site => site.kind === 'terrace').flatMap(site => {
     const inland = site.id === 'lake-shelter';
-    const close = { x: site.x + (inland ? -11 : 12), z: site.z + 11 };
-    const across = { x: site.x + (inland ? 20 : -23), z: site.z + (inland ? -21 : 22) };
-    return [
-      perch(grovePosition(close, 5.8), 0.75, 39, { firstDelay: 1.2, pause: 13 }),
-      perch(grovePosition(across, 8.7), 0.57, 54, { firstDelay: 7.2, pause: 22 }),
-    ];
+    const across = { x: site.x + (inland ? 24 : -27), z: site.z + (inland ? -20 : 21) };
+    return [perch(grovePosition(across, 8.7), 0.48, 57, { firstDelay: 9.5, pause: 28 })];
   });
 }
 
 function wildlifeEmitters(): EmitterSpec[] {
   const perch = (
-    asset: 'birds' | 'forestBirds', grove: { x: number; z: number }, height: number, gain: number, range: number,
+    grove: { x: number; z: number }, height: number, gain: number, range: number,
   ): EmitterSpec => ({
-    asset, position: grovePosition(grove, height), gain, refDistance: 9, maxDistance: range, rolloff: 1.12,
-    birdCalls: true, rockResponse: true,
+    asset: 'forestBirds', position: grovePosition(grove, height), gain, refDistance: 9, maxDistance: range, rolloff: 1.12,
+    birdCalls: { firstDelay: 8, pause: 26 }, rockResponse: true,
     filters: [{ type: 'highpass', frequency: 720 }, { type: 'lowpass', frequency: 9800 }],
   });
   const insectPatch = (grove: { x: number; z: number }, gain: number, range: number): EmitterSpec => ({
@@ -107,21 +127,10 @@ function wildlifeEmitters(): EmitterSpec[] {
     filters: [{ type: 'highpass', frequency: 1400 }, { type: 'lowpass', frequency: 6900 }],
   });
   return [
-    perch('birds', COAST_GROVES.west, 8, 1.46, 114),
-    perch('birds', COAST_GROVES.east, 12, 1.38, 106),
-    perch('birds', COAST_GROVES.shore, 6, 1.12, 87),
-    perch('birds', { x: -87, z: 124 }, 5, 1.23, 79),
-    perch('forestBirds', { x: -25, z: 193 }, 9, 0.84, 78),
-    perch('forestBirds', { x: -52, z: 245 }, 15, 1.14, 88),
-    perch('forestBirds', { x: 20, z: 231 }, 10, 0.92, 77),
-    perch('forestBirds', { x: 52, z: 274 }, 9, 0.88, 75),
-    perch('forestBirds', { x: -45, z: 329 }, 7, 1.0, 79),
-    perch('forestBirds', { x: 13, z: 369 }, 8, 0.9, 73),
-    perch('forestBirds', { x: 97, z: 458 }, 9, 0.49, 74),
-    perch('forestBirds', { x: 37, z: 584 }, 11, 0.56, 87),
-    perch('forestBirds', { x: 133, z: 855 }, 9, 0.58, 85),
-    perch('forestBirds', { x: -133, z: 951 }, 8, 0.51, 83),
-    perch('forestBirds', { x: -71, z: 1011 }, 10, 0.43, 97),
+    perch({ x: -38, z: 358 }, 10, 0.72, 76),
+    perch({ x: 97, z: 458 }, 9, 0.52, 74),
+    perch({ x: 37, z: 584 }, 11, 0.54, 82),
+    perch({ x: 133, z: 855 }, 9, 0.50, 76),
     ...shelterBirdEmitters(),
     insectPatch(COAST_GROVES.west, 0.16, 36),
     insectPatch(COAST_GROVES.east, 0.17, 38),
@@ -307,20 +316,19 @@ class BirdCalls {
     private readonly context: AudioContext,
     private readonly buffer: AudioBuffer,
     private readonly input: AudioNode,
-    private readonly shelter?: ShelterCallTiming,
-  ) {
-    if (!shelter) this.nextCall = context.currentTime + 0.3 + Math.random() * 1.8;
-  }
+    private readonly timing: BirdCallTiming,
+    private readonly fixedPhrases: boolean,
+  ) {}
 
   schedule(now: number): void {
     if (!this.audible || this.source) return;
-    this.nextCall ??= now + (this.shelter?.firstDelay ?? 0) + Math.random() * 2.1;
+    this.nextCall ??= now + this.timing.firstDelay + Math.random() * 5;
     if (now < this.nextCall) return;
     const source = this.context.createBufferSource();
     const envelope = this.context.createGain();
     const rate = 0.95 + Math.random() * 0.1;
-    const duration = Math.min(this.buffer.duration, this.shelter ? SHELTER_PHRASE_SECONDS : 2.6 + Math.random() * 2.6);
-    const offset = this.shelter ? this.pickPhrase() : Math.random() * (this.buffer.duration - duration);
+    const duration = Math.min(this.buffer.duration, this.fixedPhrases ? SHELTER_PHRASE_SECONDS : 1.9 + Math.random() * 1.9);
+    const offset = this.fixedPhrases ? this.pickPhrase() : Math.random() * (this.buffer.duration - duration);
     const start = now + 0.05;
     const end = start + duration / rate;
     source.buffer = this.buffer;
@@ -338,7 +346,7 @@ class BirdCalls {
     };
     this.source = source;
     this.envelope = envelope;
-    this.nextCall = end + (this.shelter?.pause ?? 2.1) + Math.random() * (this.shelter ? 11 : 6.9);
+    this.nextCall = end + this.timing.pause + Math.random() * 15;
     source.start(start, offset, duration);
   }
 
@@ -370,6 +378,8 @@ export class CoastAudio {
   private foley: CoastFoley | undefined;
   private readonly graphNodes: AudioNode[] = [];
   private readonly voices: SpatialVoice[] = [];
+  private readonly birdVoices = new Map<CoastBirdSpecies, BirdVoice[]>();
+  private readonly lastBirdPhrase = new Map<CoastBirdSpecies, number>();
   private readonly shoreVoices: ShoreVoice[] = [];
   private shorePatches: ShorePatch[] = [];
   private readonly buffers: Partial<Record<AudioAsset, AudioBuffer>> = {};
@@ -397,7 +407,10 @@ export class CoastAudio {
       this.ensureGraph(context);
       const start = this.started ? resume : Promise.all([
         resume,
-        ...Object.keys(ASSET_FILES).map(asset => this.loadAsset(asset as AudioAsset, context)),
+        ...(Object.keys(ASSET_FILES) as AudioAsset[]).map(asset => {
+          const load = this.loadAsset(asset, context);
+          return asset in BIRD_CALLS ? load.catch(() => undefined) : load;
+        }),
       ]).then(() => {
         if (this.disposed || this.context !== context) throw new Error('CoastAudio is no longer active');
         this.beginLayers(context);
@@ -416,7 +429,9 @@ export class CoastAudio {
     this.applyMasterLevel();
   }
 
-  update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement?: CoastMovement): void {
+  update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement?: CoastMovement,
+    cues?: readonly CoastBirdCue[],
+  ): void {
     const context = this.context;
     if (!context) return;
     const listener = context.listener;
@@ -429,8 +444,11 @@ export class CoastAudio {
     listener.upX.value = up.x;
     listener.upY.value = up.y;
     listener.upZ.value = up.z;
-    if (context.state !== 'running' || context.currentTime < this.nextPropagationUpdate) return;
-    this.nextPropagationUpdate = context.currentTime + 0.113;
+    if (context.state !== 'running') return;
+    const now = context.currentTime;
+    if (cues?.length && this.started) this.playBirdCues(context, position, now, cues);
+    if (now < this.nextPropagationUpdate) return;
+    this.nextPropagationUpdate = now + 0.113;
     const waterLevel = coastWaterLevel(position.x, position.z);
     const immersion = smoothstep(-0.03, 0.62, waterLevel - position.y);
     this.medium?.input.frequency.setTargetAtTime(19_000 * 0.037 ** immersion, context.currentTime, 0.08);
@@ -484,59 +502,139 @@ export class CoastAudio {
     this.updateShoreSelection(listener, now);
     const terrain = listenerTerrain(listener);
     this.rockTail?.level.gain.setTargetAtTime(terrain.enclosure * 0.78, now, 0.19);
-    for (const voice of this.voices) {
-      const shore = voice.shore;
-      if (shore && !shore.patch) {
-        if (voice.recording) voice.recording.audible = false;
-        continue;
-      }
-      let point = voice.point;
-      let phase = 0;
-      if (shore?.patch) {
-        phase = shorePhase(shore.patch, elapsed);
-        point = shoreWavePoint(shore.patch, phase);
-        shore.panner.positionX.setTargetAtTime(point.x, now, 0.08);
-        shore.panner.positionZ.setTargetAtTime(point.z, now, 0.08);
-        const wash = 0.64 + 0.28 * smoothstep(0.18, 0.53, phase) * (1 - smoothstep(0.66, 0.97, phase));
-        shore.washLevel.gain.setTargetAtTime(wash, now, 0.22);
-      }
-      const distance = Math.hypot(point.x - listener.x, point.y - listener.y, point.z - listener.z);
-      const reach = soundReach(distance, voice.range);
-      const blocked = reach > 0 ? terrainOcclusion(listener, point) : 0;
-      const canopyLoss = terrain.canopy * smoothstep(14, 140, distance);
-      const airLoss = 1 - canopyLoss * 0.58;
-      const cutoff = airCutoff(distance) * airLoss;
-      const transmission = shore ? shoreTransmission(distance, blocked)
-        : { gain: reach * 0.11 ** blocked, cutoff: Math.max(350, cutoff * 0.075 ** blocked) };
-      if (voice.recording) voice.recording.audible = reach > 0.012 && shore?.releaseAt === undefined;
-      if (shore && reach > 0.012 && shore.releaseAt === undefined) shore.breaker.update(phase, distance, now);
-      if (shore && voice.recording) voice.recording.schedule(now);
-      voice.obstruction.frequency.setTargetAtTime(Math.max(330, transmission.cutoff * (shore ? airLoss : 1)), now, 0.12);
-      voice.direct.gain.setTargetAtTime(transmission.gain, now, 0.12);
-
-      const rock = voice.rock;
-      if (rock) {
-        const arrival = reach > 0 ? terrainArrival(listener, point, terrain, distance, blocked) : undefined;
-        let gain = 0;
-        if (arrival) {
-          const { refDistance, rolloff } = voice.spec;
-          const falloff = refDistance / (refDistance + rolloff * Math.max(0, arrival.distance - refDistance));
-          gain = reach * arrival.gain * falloff;
-          rock.panner.positionX.setTargetAtTime(arrival.point.x, now, 0.12);
-          rock.panner.positionY.setTargetAtTime(arrival.point.y, now, 0.12);
-          rock.panner.positionZ.setTargetAtTime(arrival.point.z, now, 0.12);
-          rock.delay.delayTime.setTargetAtTime(arrival.delay, now, 0.12);
-          rock.surface.frequency.setTargetAtTime(arrival.cutoff, now, 0.12);
+    for (const voice of this.voices) this.updateVoicePropagation(voice, listener, terrain, now, elapsed);
+    for (const flock of this.birdVoices.values()) {
+      for (const bird of flock) {
+        const call = bird.call;
+        if (!call) continue;
+        if (now >= call.releaseAt) {
+          bird.call = undefined;
+          continue;
         }
-        rock.gain.gain.setTargetAtTime(gain, now, 0.14);
+        const flight = Math.min(1.5, Math.max(0, now - call.startsAt));
+        const { cue } = call;
+        const point = bird.voice.point;
+        point.x = cue.x + (cue.vx ?? 0) * flight;
+        point.y = cue.y + (cue.vy ?? 0) * flight;
+        point.z = cue.z + (cue.vz ?? 0) * flight;
+        bird.panner.positionX.setTargetAtTime(point.x, now, 0.045);
+        bird.panner.positionY.setTargetAtTime(point.y, now, 0.045);
+        bird.panner.positionZ.setTargetAtTime(point.z, now, 0.045);
+        this.updateVoicePropagation(bird.voice, listener, terrain, now, elapsed);
       }
-      const branch = voice.reflection;
-      if (!branch) continue;
-      const reflection = reach > 0 ? waterReflection(listener, point) : { gain: 0, delay: 0 };
-      branch.gain.gain.setTargetAtTime(branch.strength * reflection.gain * reach, now, 0.15);
-      if (reflection.gain === 0) continue;
-      branch.delay.delayTime.setTargetAtTime(reflection.delay, now, 0.18);
-      branch.surface.frequency.setTargetAtTime(Math.min(3850, cutoff * 0.72), now, 0.15);
+    }
+  }
+
+  private updateVoicePropagation(
+    voice: SpatialVoice, listener: CoastPoint, terrain: ReturnType<typeof listenerTerrain>,
+    now: number, elapsed: number, onset = false,
+  ): void {
+    const shore = voice.shore;
+    if (shore && !shore.patch) {
+      if (voice.recording) voice.recording.audible = false;
+      return;
+    }
+    let point = voice.point;
+    let phase = 0;
+    if (shore?.patch) {
+      phase = shorePhase(shore.patch, elapsed);
+      point = shoreWavePoint(shore.patch, phase);
+      shore.panner.positionX.setTargetAtTime(point.x, now, 0.08);
+      shore.panner.positionZ.setTargetAtTime(point.z, now, 0.08);
+      const wash = 0.64 + 0.28 * smoothstep(0.18, 0.53, phase) * (1 - smoothstep(0.66, 0.97, phase));
+      shore.washLevel.gain.setTargetAtTime(wash, now, 0.22);
+    }
+    const distance = Math.hypot(point.x - listener.x, point.y - listener.y, point.z - listener.z);
+    const reach = soundReach(distance, voice.range);
+    const blocked = reach > 0 ? terrainOcclusion(listener, point) : 0;
+    const canopyLoss = terrain.canopy * smoothstep(14, 140, distance);
+    const airLoss = 1 - canopyLoss * 0.58;
+    const cutoff = airCutoff(distance) * airLoss;
+    const transmission = shore ? shoreTransmission(distance, blocked)
+      : { gain: reach * 0.11 ** blocked, cutoff: Math.max(350, cutoff * 0.075 ** blocked) };
+    if (voice.recording) voice.recording.audible = reach > 0.012 && shore?.releaseAt === undefined;
+    if (shore && reach > 0.012 && shore.releaseAt === undefined) shore.breaker.update(phase, distance, now);
+    if (shore && voice.recording) voice.recording.schedule(now);
+    const frequency = Math.max(330, transmission.cutoff * (shore ? airLoss : 1));
+    if (onset) {
+      voice.obstruction.frequency.setValueAtTime(frequency, now);
+      voice.direct.gain.setValueAtTime(transmission.gain, now);
+    } else {
+      voice.obstruction.frequency.setTargetAtTime(frequency, now, 0.12);
+      voice.direct.gain.setTargetAtTime(transmission.gain, now, 0.12);
+    }
+
+    const rock = voice.rock;
+    if (rock) {
+      const arrival = reach > 0 ? terrainArrival(listener, point, terrain, distance, blocked) : undefined;
+      let gain = 0;
+      if (arrival) {
+        const { refDistance, rolloff } = voice.spec;
+        const falloff = refDistance / (refDistance + rolloff * Math.max(0, arrival.distance - refDistance));
+        gain = reach * arrival.gain * falloff;
+        rock.panner.positionX.setTargetAtTime(arrival.point.x, now, 0.12);
+        rock.panner.positionY.setTargetAtTime(arrival.point.y, now, 0.12);
+        rock.panner.positionZ.setTargetAtTime(arrival.point.z, now, 0.12);
+        rock.delay.delayTime.setTargetAtTime(arrival.delay, now, 0.12);
+        rock.surface.frequency.setTargetAtTime(arrival.cutoff, now, 0.12);
+      }
+      rock.gain.gain.setTargetAtTime(gain, now, 0.14);
+    }
+    const branch = voice.reflection;
+    if (!branch) return;
+    const reflection = reach > 0 ? waterReflection(listener, point) : { gain: 0, delay: 0 };
+    branch.gain.gain.setTargetAtTime(branch.strength * reflection.gain * reach, now, 0.15);
+    if (reflection.gain === 0) return;
+    branch.delay.delayTime.setTargetAtTime(reflection.delay, now, 0.18);
+    branch.surface.frequency.setTargetAtTime(Math.min(3850, cutoff * 0.72), now, 0.15);
+  }
+
+  private playBirdCues(context: AudioContext, listener: CoastPoint, now: number, cues: readonly CoastBirdCue[]): void {
+    let terrain: ReturnType<typeof listenerTerrain> | undefined;
+    for (const cue of cues) {
+      const birds = this.birdVoices.get(cue.species);
+      const buffer = this.buffers[cue.species];
+      const profile = BIRD_CALLS[cue.species];
+      if (!birds || !buffer || cue.gain <= 0 || birds.some(bird => bird.call?.cue.id === cue.id)) continue;
+      const distance = Math.hypot(cue.x - listener.x, cue.y - listener.y, cue.z - listener.z);
+      if (soundReach(distance, profile.range) < 0.018) continue;
+      const bird = birds.find(candidate => !candidate.call);
+      if (!bird) continue;
+
+      const previous = this.lastBirdPhrase.get(cue.species);
+      const count = profile.lengths.length;
+      const phrase = previous === undefined ? Math.floor(Math.random() * count)
+        : (previous + 1 + Math.floor(Math.random() * (count - 1))) % count;
+      const offset = phrase * BIRD_PHRASE_STRIDE;
+      const duration = Math.min(profile.lengths[phrase], buffer.duration - offset);
+      if (duration <= 0) continue;
+      this.lastBirdPhrase.set(cue.species, phrase);
+
+      const { panner, voice } = bird;
+      const point = voice.point;
+      point.x = cue.x;
+      point.y = cue.y;
+      point.z = cue.z;
+      const { positionX, positionY, positionZ } = panner;
+      positionX.cancelScheduledValues(now);
+      positionY.cancelScheduledValues(now);
+      positionZ.cancelScheduledValues(now);
+      positionX.setValueAtTime(point.x, now);
+      positionY.setValueAtTime(point.y, now);
+      positionZ.setValueAtTime(point.z, now);
+      bird.input.gain.value = profile.gain * Math.min(1, cue.gain);
+      voice.rock?.gain.gain.setValueAtTime(0, now);
+      this.updateVoicePropagation(voice, listener, terrain ??= listenerTerrain(listener), now, 0, true);
+
+      const source = context.createBufferSource();
+      const rate = 0.975 + Math.random() * 0.05;
+      const startsAt = now + Math.max(0.012, distance / 343);
+      source.buffer = buffer;
+      source.playbackRate.value = rate;
+      source.connect(bird.input);
+      source.onended = () => { source.disconnect(); };
+      bird.call = { source, cue, startsAt, releaseAt: startsAt + duration / rate + 0.25 };
+      source.start(startsAt, offset, duration);
     }
   }
 
@@ -549,6 +647,16 @@ export class CoastAudio {
       voice.shore?.breaker.dispose();
       voice.recording?.dispose();
     }
+    for (const flock of this.birdVoices.values()) {
+      for (const bird of flock) {
+        if (!bird.call) continue;
+        const { source } = bird.call;
+        source.onended = null;
+        source.stop();
+        source.disconnect();
+      }
+    }
+    this.birdVoices.clear();
     this.foley?.dispose();
     this.voices.length = 0;
     this.shoreVoices.length = 0;
@@ -680,12 +788,22 @@ export class CoastAudio {
         const buffer = this.buffers[emitter.asset];
         if (!buffer) throw new Error(`The ${emitter.asset} recording is not decoded`);
         const { input, voice } = this.createEmitter(context, emitter);
+        this.voices.push(voice);
         if (emitter.birdCalls) {
-          const timing = emitter.birdCalls === true ? undefined : emitter.birdCalls;
-          voice.recording = new BirdCalls(context, buffer, input, timing);
+          voice.recording = new BirdCalls(context, buffer, input, emitter.birdCalls, emitter.asset === 'shelterBirds');
         } else {
           voice.recording = new VariationLoop(context, buffer, input);
         }
+      }
+      for (const species of BIRD_SPECIES) {
+        if (!this.buffers[species]) continue;
+        const profile = BIRD_CALLS[species];
+        const flock = Array.from({ length: BIRD_VOICES_PER_SPECIES }, () => this.createEmitter(context, {
+          asset: species, position: [0, 0, 0], gain: profile.gain,
+          refDistance: profile.refDistance, maxDistance: profile.range, rolloff: 1.12,
+          rockResponse: true, filters: [{ type: 'highpass', frequency: profile.highpass }],
+        }));
+        this.birdVoices.set(species, flock);
       }
       this.nextPropagationUpdate = 0;
       this.nextShoreSelection = 0;
@@ -697,6 +815,7 @@ export class CoastAudio {
         voice.recording?.dispose();
       }
       this.shoreVoices.length = 0;
+      this.birdVoices.clear();
       this.shorePatches = [];
       for (const node of this.graphNodes.splice(nodeStart)) node.disconnect();
       throw error;
@@ -722,6 +841,7 @@ export class CoastAudio {
     const shore = { panner, level, washLevel, breaker: new BreakingSurf(context, surf, level) };
     voice.shore = shore;
     voice.recording = new VariationLoop(context, wash, washLevel);
+    this.voices.push(voice);
     this.shoreVoices.push(shore);
   }
 
@@ -767,7 +887,6 @@ export class CoastAudio {
       arrival.gain.connect(this.rockTail!.input);
       voice.rock = { ...arrival, panner: echoPanner };
     }
-    this.voices.push(voice);
     return { input, panner, voice };
   }
 
