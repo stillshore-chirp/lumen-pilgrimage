@@ -28,16 +28,21 @@ interface ExplorationWorld {
   dispose(): void;
 }
 
+type ExplorationAudio = Pick<CoastAudio, 'start' | 'setLevel' | 'update' | 'dispose'> & {
+  setTimeOfDay?(time: CoastTimeOfDay): void;
+};
+
 export interface OverlookScene {
   readonly world: ExplorationWorld;
   readonly navigation: CoastNavigation;
+  readonly audio: ExplorationAudio;
 }
 
 export class CoastApp {
   private readonly renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   private readonly world: ExplorationWorld;
   private readonly worldId: ExplorationWorldId;
-  private readonly audio: CoastAudio | undefined;
+  private readonly audio: ExplorationAudio;
   private readonly camera: PerspectiveCamera;
   private readonly forward = new Vector3();
   private readonly up = new Vector3();
@@ -56,11 +61,12 @@ export class CoastApp {
     const description = EXPLORATION_WORLDS[overlook ? 1 : 0];
     this.worldId = description.id;
     this.world = overlook?.world ?? new CoastWorld();
-    this.audio = overlook ? undefined : new CoastAudio();
+    this.audio = overlook?.audio ?? new CoastAudio();
     this.camera = overlook ? new PerspectiveCamera(54, 1, 0.20, 43500) : new PerspectiveCamera(60, 1, 0.12, 2500);
     this.time = path.get('time') === 'night' ? 'night' : 'day';
     const destination = findDestination(this.worldId, path.get('place'));
     this.world.setTimeOfDay(this.time);
+    this.audio.setTimeOfDay?.(this.time);
     this.mount.classList.add('coast');
     this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -126,9 +132,8 @@ export class CoastApp {
     ui.querySelector('.coast-guide-description')!.textContent = overlook
       ? '南のデッキから盆地の市街地を見渡せます。柵に沿って東西のテラスへ歩けます。'
       : '海に向かって左は岩浜、右は潮だまり。浜を背にすると森の入口に休憩所があり、道は湖と稜線へ続きます。';
-    if (!this.audio) {
-      ui.querySelector('.coast-settings')!.setAttribute('aria-label', '描画');
-      ui.querySelectorAll('.coast-sound, .coast-audio-message, .coast-water-guide').forEach(node => node.remove());
+    if (overlook) {
+      ui.querySelectorAll('.coast-water-guide').forEach(node => node.remove());
       ui.querySelector('.coast-light')!.setAttribute('title', '広域の影と軽い描画');
       ui.querySelector('.coast-high')!.setAttribute('title', '近くの影と細かな描画');
     }
@@ -174,7 +179,7 @@ export class CoastApp {
     window.addEventListener('keydown', this.onTravelKey);
 
     this.bindQuality(ui);
-    if (this.audio) this.bindAudio(ui, this.audio);
+    this.bindAudio(ui, this.audio);
     this.resize = new ResizeObserver(() => this.resizeViewport());
     this.resize.observe(this.mount);
     this.resizeViewport();
@@ -209,6 +214,7 @@ export class CoastApp {
   private setTimeOfDay(time: CoastTimeOfDay): void {
     this.time = time;
     this.world.setTimeOfDay(time);
+    this.audio.setTimeOfDay?.(time);
     this.travel.setTimeOfDay(time);
     const address = new URL(location.href);
     address.searchParams.set('time', time);
@@ -230,7 +236,7 @@ export class CoastApp {
     apply('light');
   }
 
-  private bindAudio(ui: HTMLElement, audio: CoastAudio): void {
+  private bindAudio(ui: HTMLElement, audio: ExplorationAudio): void {
     const start = ui.querySelector<HTMLButtonElement>('.coast-audio')!;
     const mute = ui.querySelector<HTMLButtonElement>('.coast-mute')!;
     const volume = ui.querySelector<HTMLInputElement>('.coast-volume input')!;
@@ -276,11 +282,9 @@ export class CoastApp {
     this.elapsed += dt;
     if (!this.travelDialog.open) this.controls.update(dt);
     const birdCues = this.world.update(this.elapsed, this.camera);
-    if (this.audio) {
-      this.camera.getWorldDirection(this.forward);
-      this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
-      this.audio.update(this.camera.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
-    }
+    this.camera.getWorldDirection(this.forward);
+    this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
+    this.audio.update(this.camera.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
     this.renderer.render(this.world.scene, this.camera);
     this.frameId = requestAnimationFrame(this.render);
   };
@@ -292,7 +296,7 @@ export class CoastApp {
     cancelAnimationFrame(this.frameId);
     this.resize.disconnect();
     this.controls.dispose();
-    this.audio?.dispose();
+    this.audio.dispose();
     this.world.dispose();
     this.renderer.dispose();
   };

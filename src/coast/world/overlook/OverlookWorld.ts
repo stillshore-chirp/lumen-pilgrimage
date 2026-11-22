@@ -5,6 +5,7 @@ import type { CoastQuality } from '../../CoastWorld';
 import { createCoastAtmosphere, type CoastTimeOfDay } from '../coastAtmosphere';
 import { createCoastLighting } from '../coastLighting';
 import { createCoastSky } from '../coastSky';
+import { OverlookAudio } from './overlookAudio';
 import { createOverlookCity, createOverlookCityGround } from './overlookCity';
 import { createOverlookDeck, OVERLOOK_DECK_OBSTACLES } from './overlookDeck';
 import { createOverlookHillside } from './overlookHillside';
@@ -52,6 +53,7 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
   await Promise.all([streets.ready, city.ready]);
 
   return {
+    audio: new OverlookAudio(traffic.soundCorridors, heightAt),
     navigation: {
       bounds, spawn: EXPLORATION_WORLDS[1].places[0], groundHeight: () => DECK_LEVEL,
       flightCeiling: DECK_LEVEL + 105, blocksWalking: blocksDeckWalking, blocksFlight: insidePavilion,

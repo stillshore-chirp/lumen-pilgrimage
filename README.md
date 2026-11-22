@@ -42,7 +42,9 @@ Vite が表示したローカル URL を MacBook の Chrome で開くと、砂�
 
 浜や上空にはウミネコ、林と参道にはメジロ、ウグイス、クロツグミがいます。湖ではカルガモが泳いで餌を探します。野外録音の鳥声は、近くの止まり木や飛行中の鳥に加え、林の奥や峠、稜線からも間を置いて届きます。遠い声は小さくなり、間に岩壁があると高い音がこもります。湖の滝音は水が落ちる位置から聞こえます。
 
-素材の出典・再配布条件は [録音素材のクレジット](public/coast-audio/ATTRIBUTION.md)、[景観素材のクレジット](public/coast-materials/ATTRIBUTION.md)、[丘陵展望台の地形と街路の出典](public/coast-overlook/ATTRIBUTION.md) を参照してください。
+丘陵展望台でも「環境音を開始」を押すと、盆地の幹線から遠い交通音が聞こえます。丘に遮られる方向や遠い道路の音はこもり、視点を回すと聞こえる向きも変わります。昼は近くの低木から時折鳥が鳴き、夜は車の音が弱まってコオロギがかすかに聞こえます。
+
+素材の出典・再配布条件は [海岸の録音](public/coast-audio/ATTRIBUTION.md)、[景観素材](public/coast-materials/ATTRIBUTION.md)、[丘陵展望台の地形・街路・録音](public/coast-overlook/ATTRIBUTION.md) を参照してください。
 
 ## 検証と配布ビルド
 
