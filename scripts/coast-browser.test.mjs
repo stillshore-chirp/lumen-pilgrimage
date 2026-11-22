@@ -417,6 +417,14 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await light.press('Space');
     assert.equal(await light.getAttribute('aria-pressed'), 'true');
 
+    const guide = page.locator('summary').filter({ hasText: '操作方法' });
+    const guideDescription = page.locator('.coast-guide-description');
+    await guide.press('Space');
+    await guideDescription.waitFor({ state: 'visible' });
+    await walkWithFocus('w', guide);
+    await guide.press('Space');
+    await guideDescription.waitFor({ state: 'hidden' });
+
     await night.click();
     await walkWithFocus('d', night);
     const coastNight = await skyBrightness(canvas);
