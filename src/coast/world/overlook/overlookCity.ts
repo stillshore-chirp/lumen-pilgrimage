@@ -114,10 +114,12 @@ const cityAir = /* glsl */`
 const towersVertex = /* glsl */`
   attribute vec3 color;
   attribute vec4 cityFacade;
+  attribute float cityLightSeed;
   varying vec3 vCityColor;
   varying vec4 vFacade;
   varying float vTransmission;
   varying float vSkyReflection;
+  flat varying float vLightSeed;
   uniform vec3 uCitySun;
   ${cityAir}
   void main() {
@@ -128,6 +130,7 @@ const towersVertex = /* glsl */`
     vec3 nightlight = vec3(0.068, 0.100, 0.155) + roof * 0.058;
     vCityColor = color * mix(daylight, nightlight, uNight);
     vFacade = cityFacade;
+    vLightSeed = cityLightSeed;
     vTransmission = cityTransmittance(world);
     vSkyReflection = pow(1.0 - clamp(dot(normalize(cameraPosition - world), normal), 0.0, 1.0), 2.6);
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
@@ -139,12 +142,26 @@ const towersFragment = /* glsl */`
   varying vec4 vFacade;
   varying float vTransmission;
   varying float vSkyReflection;
+  flat varying float vLightSeed;
   ${cityAir}
+
+  vec3 towerFixture(float tint) {
+    return mix(vec3(1.0, 0.78, 0.43), vec3(0.81, 0.90, 1.0), smoothstep(0.59, 0.93, tint));
+  }
+
+  vec3 farSuiteEmission(vec2 key, float lotTint, float occupiedBias) {
+    float occupied = smoothstep(0.34, 0.86, windowRandom(key) + occupiedBias);
+    float tint = windowRandom(key + vec2(23.0, 11.0));
+    float working = occupied * smoothstep(0.69, 0.95, windowRandom(key + vec2(11.0, 37.0)));
+    return (0.018 + 0.23 * occupied + 0.63 * working) * towerFixture(mix(tint, lotTint, 0.30));
+  }
 
   void main() {
     vec3 color = vCityColor;
     if (vFacade.z > 0.1) {
-      vec2 window = vFacade.xy * vec2(0.30 * vFacade.z, 0.243);
+      float floorsPerMeter = mix(0.219, 0.271, fract(vLightSeed * 131.41));
+      float firstSill = fract(vLightSeed * 317.29);
+      vec2 window = vec2(vFacade.x * 0.30 * vFacade.z, vFacade.y * floorsPerMeter + firstSill);
       vec2 pixel = fwidth(window);
       vec2 frame = abs(fract(window) - 0.5);
       vec2 panes = 1.0 - smoothstep(vec2(0.31, 0.30) - min(pixel, vec2(0.28)),
@@ -152,13 +169,33 @@ const towersFragment = /* glsl */`
       float resolved = 1.0 - smoothstep(0.65, 2.2, max(pixel.x, pixel.y));
       float pane = mix(0.34, panes.x * panes.y, resolved);
       float local = windowRandom(floor(window));
-      float floorSuite = windowRandom(floor(window * vec2(0.12, 0.19)));
-      float occupancy = mix(0.059 + 0.37 * floorSuite, smoothstep(0.55, 0.90, local * 0.67 + floorSuite * 0.55), resolved);
-      float tint = windowRandom(floor(window * vec2(0.09, 0.14)) + vec2(13.0));
-      vec3 light = mix(vec3(1.0, 0.78, 0.52), vec3(0.64, 0.79, 0.95), smoothstep(0.24, 0.85, tint));
       vec3 glazing = color * (0.58 + local * 0.095) + vec3(0.074, 0.143, 0.230) * (0.35 + 0.80 * vSkyReflection);
       color = mix(color, glazing, pane * (1.0 - uNight));
-      color += uNight * pane * occupancy * light * (0.27 + 0.58 * floorSuite);
+      if (uNight > 0.0) {
+        vec2 lotKey = vLightSeed * vec2(233.73, 717.51);
+        vec2 size = mix(vec2(0.124, 0.22), vec2(0.225, 0.38), fract(lotKey));
+        vec2 phase = fract(vLightSeed * vec2(181.39, 379.61));
+        float lotTint = fract(vLightSeed * 523.79);
+        float occupiedBias = (fract(vLightSeed * 437.39) - 0.5) * 0.22;
+        vec2 room = floor(window);
+        vec2 roomSuite = floor((room + 0.5) * size + phase) + lotKey;
+        float roomsInUse = windowRandom(roomSuite) + occupiedBias;
+        float roomLit = smoothstep(0.55, 0.90, windowRandom(room + lotKey) * 0.67 + roomsInUse * 0.55);
+        float roomTint = windowRandom(roomSuite + vec2(23.0, 11.0));
+        vec3 nearEmission = pane * roomLit * (0.27 + 0.71 * clamp(roomsInUse, 0.0, 1.0))
+          * towerFixture(mix(roomTint, lotTint, 0.30));
+
+        // Average neighboring suites over the pixel footprint once individual panes are subpixel.
+        vec2 suite = window * size + phase - 0.5;
+        vec2 halfPixel = clamp(fwidth(suite) * 0.5, vec2(0.01), vec2(0.50));
+        vec2 blend = smoothstep(0.5 - halfPixel, 0.5 + halfPixel, fract(suite));
+        vec2 key = floor(suite) + lotKey;
+        vec3 lower = mix(farSuiteEmission(key, lotTint, occupiedBias),
+          farSuiteEmission(key + vec2(1.0, 0.0), lotTint, occupiedBias), blend.x);
+        vec3 upper = mix(farSuiteEmission(key + vec2(0.0, 1.0), lotTint, occupiedBias),
+          farSuiteEmission(key + 1.0, lotTint, occupiedBias), blend.x);
+        color += uNight * mix(mix(lower, upper, blend.y), nearEmission, resolved);
+      }
     }
     vec3 accent = mix(vec3(0.48, 0.76, 1.0), vec3(1.0, 0.56, 0.23), step(vFacade.w, -0.001));
     color += abs(vFacade.w) * uNight * accent;
@@ -175,8 +212,9 @@ const blocksVertex = /* glsl */`
   attribute vec3 cityColor;
   attribute float cityVariant;
   attribute float cityWindowScale;
+  attribute float cityEveningUse;
   varying vec3 vCityColor;
-  varying vec3 vBlockFace;
+  varying vec4 vBlockFace;
   varying float vBlockTransmission;
   uniform vec3 uCitySun;
   ${cityAir}
@@ -197,7 +235,8 @@ const blocksVertex = /* glsl */`
     vec3 dark = cityColor * (vec3(0.038, 0.054, 0.082) + roof * 0.039) + vec3(0.002, 0.004, 0.008);
     vCityColor = mix(day, dark, uNight);
     float across = abs(localNormal.x) > 0.5 ? p.z : p.x;
-    vBlockFace = vec3(across * cityWindowScale + cityVariant * 81.0, p.y * 0.254, cityWindowScale * (1.0 - roof));
+    vBlockFace = vec4(across * cityWindowScale + cityVariant * 81.0, p.y * 0.254,
+      cityWindowScale * (1.0 - roof), cityEveningUse);
     vBlockTransmission = cityTransmittance(world);
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
   }
@@ -205,7 +244,7 @@ const blocksVertex = /* glsl */`
 
 const blocksFragment = /* glsl */`
   varying vec3 vCityColor;
-  varying vec3 vBlockFace;
+  varying vec4 vBlockFace;
   varying float vBlockTransmission;
   ${cityAir}
   void main() {
@@ -224,9 +263,17 @@ const blocksFragment = /* glsl */`
       float storefront = (1.0 - glass) * (1.0 - smoothstep(1.24, 1.62, cell.y));
       pane = max(pane, storefront * (0.32 + 0.51 * mix(0.66, opening.x, resolved)));
       vec3 reflectedSky = vec3(0.071, 0.125, 0.174);
-      vec3 electric = mix(vec3(1.0, 0.72, 0.41), vec3(0.63, 0.76, 1.0), step(0.72, occupancy));
+      vec3 electric = mix(vec3(1.0, 0.75, 0.39), vec3(0.71, 0.82, 1.0), step(0.78, occupancy));
       color = mix(color, color * 0.46 + reflectedSky * mix(0.58, 1.25, glass), pane * (1.0 - uNight));
-      color += electric * lit * pane * uNight * (mix(0.43, 0.73, glass) + 0.14 * storefront);
+      color += electric * lit * pane * uNight * (mix(0.50, 0.89, glass) + 0.19 * storefront);
+      if (uNight > 0.0) {
+        // Groups of lit floors and shopfronts survive after individual windows become subpixel.
+        float occupiedSuite = smoothstep(0.53, 0.94, occupancy);
+        float suiteTint = windowRandom(floor(cell / vec2(6.1, 2.6)) + vec2(41.0, 12.0));
+        vec3 fixture = mix(vec3(1.0, 0.77, 0.43), vec3(0.88, 0.94, 1.0), smoothstep(0.68, 0.91, suiteTint));
+        float activity = vBlockFace.w * occupiedSuite * occupiedSuite * (0.48 + 0.13 * storefront);
+        color += uNight * fixture * activity * (1.0 - 0.72 * resolved);
+      }
     }
     gl_FragColor = vec4(cityInAir(color, vBlockTransmission), 1.0);
     #include <tonemapping_fragment>
@@ -249,9 +296,9 @@ const nightPointsVertex = /* glsl */`
     vec4 view = viewMatrix * vec4(world, 1.0);
     float distanceToEye = length(view.xyz);
     float lightKind = cityLightKind;
-    vec3 amber = vec3(1.0, 0.45, 0.14);
-    vec3 warmWhite = vec3(1.0, 0.75, 0.45);
-    vec3 coolWhite = vec3(0.64, 0.81, 1.0);
+    vec3 amber = vec3(1.0, 0.48, 0.13);
+    vec3 warmWhite = vec3(1.0, 0.78, 0.40);
+    vec3 coolWhite = vec3(0.82, 0.90, 1.0);
     vec3 color = mix(amber, warmWhite, smoothstep(0.09, 0.59, cityTemperature));
     color = mix(color, coolWhite, smoothstep(0.72, 0.96, cityTemperature));
     float diameter = 3.5;
@@ -271,13 +318,21 @@ const nightPointsVertex = /* glsl */`
     }
     float distant = smoothstep(5300.0, 14800.0, distanceToEye);
     float spread = min(2.8, 2100.0 / max(750.0, distanceToEye));
-    float practicalSize = diameter * (0.55 + 0.66 * cityPower) * mix(1.09, 0.94, distant);
+    float intensity = min(cityPower, 1.22);
+    float brightCore = smoothstep(0.57, 1.16, intensity) * (1.0 - step(3.5, lightKind));
+    float middleBasin = smoothstep(2300.0, 6700.0, distanceToEye) * (1.0 - smoothstep(15600.0, 23500.0, distanceToEye));
+    float warmPractical = middleBasin * brightCore * (1.0 - smoothstep(0.60, 0.92, cityTemperature));
+    float practicalSize = diameter * (0.57 + 0.73 * intensity)
+      * (mix(1.09, 1.04, distant) + 0.11 * distant * brightCore + 0.14 * warmPractical);
     gl_PointSize = max(1.7, (practicalSize + spread) * uCityPixelFactor);
     float transmission = cityTransmittance(world);
-    vec3 basinGlow = vec3(1.0, 0.57, 0.23);
-    vLamp = mix(color, basinGlow, 0.70 * distant * (1.0 - step(3.5, lightKind)));
-    vPower = transmission * radiance * (0.16 + cityPower * 0.96) * mix(1.14, 0.73, distant);
-    vScatter = mix(0.18, 0.095, distant) * smoothstep(0.33, 0.99, cityPower);
+    vec3 basinGlow = vec3(1.0, 0.70, 0.145);
+    float basinWarmth = max(0.73 * distant * (1.0 - smoothstep(0.65, 0.91, cityTemperature)), 0.64 * warmPractical);
+    vLamp = mix(color, basinGlow, basinWarmth * (1.0 - step(3.5, lightKind)));
+    float luminousCore = 0.15 + cityPower * (0.83 + mix(0.83, 1.16, distant) * cityPower);
+    vPower = transmission * radiance * mix(luminousCore, 0.16 + cityPower * 0.96, step(3.5, lightKind))
+      * mix(1.08, 1.19, distant) * (1.0 + 0.74 * warmPractical);
+    vScatter = mix(0.15, 0.088, distant) * smoothstep(0.38, 1.05, intensity);
     gl_Position = projectionMatrix * view;
   }
 `;
@@ -289,7 +344,7 @@ const nightPointsFragment = /* glsl */`
   void main() {
     vec2 offset = gl_PointCoord * 2.0 - 1.0;
     float radiusSquared = dot(offset, offset);
-    float core = exp(-radiusSquared * 7.7);
+    float core = exp(-radiusSquared * 7.0);
     float halo = exp(-radiusSquared * 2.1) * (1.0 - smoothstep(0.32, 1.0, radiusSquared));
     gl_FragColor = vec4(vLamp, vPower * (core + halo * vScatter));
     #include <tonemapping_fragment>
@@ -315,6 +370,10 @@ function neighborhoodNoise(x: number, z: number, size: number, salt: number): nu
 
 function neighborhoodActivity(x: number, z: number): number {
   return neighborhoodNoise(x, z, 1240, 74) * 0.66 + neighborhoodNoise(x, z, 390, 327) * 0.34;
+}
+
+function eveningUse(activity: number, distance: number): number {
+  return THREE.MathUtils.smoothstep(activity, 0.36, 0.72) * THREE.MathUtils.smoothstep(distance, 2500, 7200);
 }
 
 function flatGeometry(): THREE.BufferGeometry {
@@ -434,6 +493,7 @@ function createBlocks(items: CityVolume[], material: THREE.ShaderMaterial, shape
   const colors = new Float32Array(items.length * 3);
   const variety = new Float32Array(items.length);
   const facades = new Float32Array(items.length);
+  const eveningUses = new Float32Array(items.length);
   const bounds = new THREE.Box3();
   const point = new THREE.Vector3();
   for (const [i, block] of items.entries()) {
@@ -443,6 +503,7 @@ function createBlocks(items: CityVolume[], material: THREE.ShaderMaterial, shape
     colors.set([block.color.r, block.color.g, block.color.b], i * 3);
     variety[i] = block.variant;
     facades[i] = block.facade;
+    eveningUses[i] = block.eveningUse ?? 0;
     bounds.expandByPoint(point.set(block.x, block.y, block.z));
   }
   bounds.expandByScalar(100);
@@ -453,6 +514,7 @@ function createBlocks(items: CityVolume[], material: THREE.ShaderMaterial, shape
   geometry.setAttribute('cityColor', new THREE.InstancedBufferAttribute(colors, 3));
   geometry.setAttribute('cityVariant', new THREE.InstancedBufferAttribute(variety, 1));
   geometry.setAttribute('cityWindowScale', new THREE.InstancedBufferAttribute(facades, 1));
+  geometry.setAttribute('cityEveningUse', new THREE.InstancedBufferAttribute(eveningUses, 1));
   geometry.instanceCount = items.length;
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = 'Inferred buildings on street frontages';
@@ -612,6 +674,7 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       if (z < -5000 && Math.abs(x) < 18700) occupied.add({ x, z, radius: Math.hypot(w, d) * 0.5 });
       const expansion = infillWeight(x, z);
       const activity = neighborhoodActivity(x, z);
+      const evening = eveningUse(activity, distance);
       const intensity = 0.15 + 0.58 * district + 0.27 * activity;
       if (randomUnit(seed, 9241) < expansion * intensity) frontages.push({ x, z, yaw, width: w, seed });
       const sin = Math.sin(yaw), cos = Math.cos(yaw);
@@ -620,6 +683,7 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       const building: CityVolume = {
         x, y: feet, z, width: w, depth: d, height: h + ground - feet, yaw, color, variant,
         facade: commercial ? (office ? 0.302 + variant * 0.047 : 0.184 + variant * 0.039) : 0,
+        eveningUse: evening,
       };
       if (commercial && side >= 17 && Math.max(w, d) >= 29 && h < 48 && randomUnit(seed, 7807) < 0.53) {
         // Wide plots can hold an office with a separate retail building along the same frontage.
@@ -657,17 +721,19 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       }
       const lit = randomUnit(seed, 2629);
       const occupancy = use === 2 ? 0.13 + activity * 0.36 : 0.24 + activity * 0.58;
-      if (lit > occupancy * (commercial ? 0.62 : 1)) continue;
+      if (lit > occupancy * (commercial ? 0.62 + 0.21 * evening : 1)) continue;
 
       // The street-aligned façades catch different lights in adjoining rooms and entrances.
       const frontage = (sin * building.x + cos * building.z > 0 ? -1 : 1)
         * building.depth * (form === 'terraced' ? 0.439 : 0.515);
       const along = (randomUnit(seed, 1331) - 0.5) * building.width * 0.79;
-      const temperature = 0.28 + randomUnit(seed, 2003) * (use === 2 ? 0.70 : 0.49);
-      const power = 0.25 + randomUnit(seed, 4907) ** 1.43 * (0.56 + activity * 0.16) + 0.15 * activity;
+      const temperature = 0.28 + randomUnit(seed, 2003) * (use === 2 ? 0.70 : 0.57);
+      const power = (0.25 + randomUnit(seed, 4907) ** 1.43 * (0.56 + activity * 0.16) + 0.15 * activity)
+        * (1 + (commercial ? 0.51 : 0.17) * evening);
       const lampX = building.x + sin * frontage + cos * along, lampZ = building.z + cos * frontage - sin * along;
+      const lampHeight = Math.min(h * (0.32 + random * (0.22 + 0.30 * evening)), 12 + (commercial ? evening * 25 : 0));
       append(lampTiles, `0:${tile}`, {
-        x: lampX, z: lampZ, y: ground + Math.min(h * (0.32 + random * 0.22), 12), kind: 0, power, temperature,
+        x: lampX, z: lampZ, y: ground + lampHeight, kind: 0, power, temperature,
       });
       if (nearby && power > 0.52 && randomUnit(seed, 1617) < 0.35) {
         const spacing = (along > 0 ? -1 : 1) * building.width * (0.28 + variant * 0.2);
@@ -711,17 +777,18 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
         const detail = h < 29 && randomUnit(seed, 757) < 0.31;
         const form = h > 53 && variant < 0.22 ? 'terraced' : 'flat';
         const tile = tileKey(x, z);
+        const evening = eveningUse(neighborhoodActivity(x, z), Math.hypot(x, z));
         const infill: CityVolume = {
           x, y, z, width: w, depth: d, height: h + ground - y, yaw, color, variant,
-          facade: office ? 0.297 + variant * 0.046 : 0.18 + variant * 0.047,
+          facade: office ? 0.297 + variant * 0.046 : 0.18 + variant * 0.047, eveningUse: evening,
         };
         append(buildingTiles, `${detail ? 1 : 0}:${form}:${tile}`, infill);
         occupied.add({ x, z, radius });
-        if (randomUnit(seed, 2629) < 0.23) {
+        if (randomUnit(seed, 2629) < 0.23 + evening * 0.16) {
           const frontage = (sin * x + cos * z > 0 ? -1 : 1) * d * (form === 'terraced' ? 0.438 : 0.512);
           append(lampTiles, `${detail ? 1 : 0}:${tile}`, {
-            x: x + sin * frontage, y: ground + Math.min(h * 0.54, 19), z: z + cos * frontage,
-            kind: 0, power: 0.29 + random * 0.29, temperature: 0.43 + variant * 0.45,
+            x: x + sin * frontage, y: ground + Math.min(h * (0.48 + 0.18 * evening), 19 + 12 * evening), z: z + cos * frontage,
+            kind: 0, power: 0.29 + random * 0.29 + 0.29 * evening, temperature: 0.43 + variant * 0.45,
           });
         }
       }
@@ -737,10 +804,11 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
         || options.blocksFootprint?.(x, z, 0)) continue;
       const seed = Math.imul(x, 27173) + Math.imul(z, 65539);
       const activity = neighborhoodActivity(x, z);
-      const power = Math.min(1.18, (0.17 + 0.89 * sourceIntensity ** 1.7) * (0.70 + 0.64 * activity));
+      const evening = eveningUse(activity, distance);
+      const power = Math.min(1.22, (0.13 + 0.97 * sourceIntensity ** 1.9) * (0.66 + 0.55 * activity + 0.50 * evening));
       const electricDistrict = neighborhoodNoise(x, z, 820, 438);
-      const temperature = (kind === 2 ? 0.11 : 0) + electricDistrict * 0.69 + randomUnit(seed, 863) * 0.36;
-      const extra = kind === 1 && power < 0.36 && distance > 5300;
+      const temperature = (kind === 2 ? 0.08 : 0) + electricDistrict * 0.53 + randomUnit(seed, 863) * 0.40;
+      const extra = kind === 1 && power < 0.33 && distance > 5600;
       append(lampTiles, `${extra ? '1' : '0'}:${tileKey(x, z)}`, {
         x, y: ground + (kind === 1 ? 6 : kind === 2 ? 8 : 4.4) + randomUnit(seed, 272) * 1.8,
         z, kind, power, temperature,

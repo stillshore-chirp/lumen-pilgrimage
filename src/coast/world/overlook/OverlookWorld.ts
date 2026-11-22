@@ -30,9 +30,9 @@ function blocksDeckWalking(x: number, z: number, foot: number): boolean {
 export async function loadOverlookScene(): Promise<OverlookScene> {
   const heightAt = await loadOverlookTerrain();
   const atmosphere = createCoastAtmosphere(DAY_SUN, {
-    nightHorizon: 0x536a87,
-    nightZenith: 0x495d79,
-    nightGlow: { color: 0x322b23, direction: new THREE.Vector3(0.51, 0, -0.86) },
+    nightHorizon: 0x6484a5,
+    nightZenith: 0x688ab3,
+    nightGlow: { color: 0x494039, direction: new THREE.Vector3(0.16, 0, -0.987) },
     starVisibility: 0.04,
     aerialDistanceScale: 0.22,
     moonDirection: new THREE.Vector3(-0.77, 0.48, -0.42),
@@ -44,12 +44,15 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
   const streets = createOverlookCityGround();
   const traffic = createOverlookTraffic(heightAt);
   const city = createOverlookCity(heightAt, {
-    sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x344c62, blocksFootprint: isOverlookRoadway,
+    sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x496178, blocksFootprint: isOverlookRoadway,
   });
   const ground = createOverlookSurface(heightAt, streets, atmosphere.night);
   const deck = createOverlookDeck();
   const scene = new THREE.Scene();
   scene.add(sky.dome, sky.clouds, ground, deck.group, city.group, traffic.group, createOverlookHillside(heightAt));
+  const twilightFill = new THREE.HemisphereLight(0xa9c7f1, 0x8f8579, 0.27);
+  twilightFill.visible = false;
+  scene.add(twilightFill);
   const lighting = createCoastLighting(scene, atmosphere, heightAt);
   await Promise.all([streets.ready, city.ready]);
 
@@ -68,6 +71,7 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
       },
       setTimeOfDay(time: CoastTimeOfDay) {
         atmosphere.setTimeOfDay(time);
+        twilightFill.visible = time === 'night';
         sky.setTimeOfDay(time);
         lighting.setTimeOfDay(time);
         city.setTimeOfDay(time);

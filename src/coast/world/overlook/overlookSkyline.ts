@@ -47,22 +47,26 @@ class CityGeometry {
   private readonly positions: number[] = [];
   private readonly shades: number[] = [];
   private readonly facades: number[] = [];
+  private readonly lightSeeds: number[] = [];
   private readonly color = new THREE.Color();
   private lotGround = 0;
   private lotHeightScale = 1;
+  private lotLightSeed = 0;
 
-  setLotGround(ground: number, heightScale: number): void {
+  setLot(ground: number, heightScale: number, lightSeed: number): void {
     this.lotGround = ground;
     this.lotHeightScale = heightScale;
+    this.lotLightSeed = lightSeed;
   }
 
   triangle(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, surface: Surface, edgeCoordinate?: [number, number, number]): void {
     this.color.set(surface.color);
     for (const [i, v] of [a, b, c].entries()) {
-      const height = this.lotGround + (v.y - this.lotGround) * this.lotHeightScale;
-      this.positions.push(v.x, height, v.z);
+      const localHeight = (v.y - this.lotGround) * this.lotHeightScale;
+      this.positions.push(v.x, this.lotGround + localHeight, v.z);
       this.shades.push(this.color.r, this.color.g, this.color.b);
-      this.facades.push(edgeCoordinate?.[i] ?? 0, height, surface.facade ?? 0, surface.glow ?? 0);
+      this.facades.push(edgeCoordinate?.[i] ?? 0, localHeight, surface.facade ?? 0, surface.glow ?? 0);
+      this.lightSeeds.push(this.lotLightSeed);
     }
   }
 
@@ -100,6 +104,7 @@ class CityGeometry {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.shades, 3));
     geometry.setAttribute('cityFacade', new THREE.Float32BufferAttribute(this.facades, 4));
+    geometry.setAttribute('cityLightSeed', new THREE.Float32BufferAttribute(this.lightSeeds, 1));
     geometry.computeVertexNormals();
     return geometry;
   }
@@ -466,7 +471,7 @@ export function createOverlookSkyline(
   const lights: SkylineLight[] = [];
   const exclusions: Array<{ x: number; z: number; radius: number }> = [];
 
-  const building = (x: number, z: number, radius: number, shape: (x: number, y: number, z: number) => void,
+  const building = (x: number, z: number, radius: number, shape: (x: number, y: number, z: number, lightSeed: number) => void,
     outer = false) => {
     const step = radius + 31;
     const candidateOffsets: Point[] = [[0, 0],
@@ -499,9 +504,12 @@ export function createOverlookSkyline(
     exclusions.push({ x, z, radius });
     // The inherited inner lots step upward with distance. The outer grids specify their roof heights in metres.
     const heightScale = outer ? 1 : innerHeightScale(x, z);
+    const lotKey = Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(z * 10), 19349663);
+    // Use a fraction that stays below one when stored in the Float32 attribute.
+    const lightSeed = Math.floor(seededDetail(lotKey)() * 0x1000000) / 0x1000000;
     const firstLight = lights.length;
-    builder.setLotGround(ground, heightScale);
-    shape(x, ground - 3, z);
+    builder.setLot(ground, heightScale, lightSeed);
+    shape(x, ground - 3, z, lightSeed);
     for (let i = firstLight; i < lights.length; i++) {
       lights[i].y = ground + (lights[i].y - ground) * heightScale;
     }
@@ -709,10 +717,12 @@ export function createOverlookSkyline(
 
   const addTower = ([x, z, w, d, h, form, color, yaw = diagonalGrid]: Tower, outer = false) => {
     const podiumHeight = 10 + Math.min(h * 0.075, 25);
-    building(x, z, Math.hypot(w * 0.64, d * 0.65) + 3, (x, y, z) => {
+    building(x, z, Math.hypot(w * 0.64, d * 0.65) + 3, (x, y, z, lightSeed) => {
       floor(x, y, z, w * 1.28, d * 1.30, podiumHeight, { color: concrete, facade: 0.66 }, yaw, 6);
       const elevation = podiumHeight - 2;
       const footprint = chamfer(w, d, Math.min(11, d * 0.18));
+      const accent = (lightSeed * 43.71) % 1;
+      const crownGlow = accent < 0.25 ? 0 : THREE.MathUtils.lerp(0.035, 0.14, accent);
       if (form === 'terraced') {
         const shoulder = chamfer(w * 0.82, d * 0.85, 8);
         const upper = chamfer(w * 0.67, d * 0.70, 7);
@@ -725,7 +735,7 @@ export function createOverlookSkyline(
           { elevation: h - 11, outline: upper },
         ], { color, facade: 0.77 });
         floor(x, y + h - 11, z, w * 0.67, d * 0.70, 7, { color: pearl }, yaw, 7);
-        floor(x, y + h - 4, z, w * 0.48, d * 0.48, 6, { color: color, glow: 0.17 }, yaw, 5);
+        floor(x, y + h - 4, z, w * 0.48, d * 0.48, 6, { color, glow: crownGlow }, yaw, 5);
       } else if (form === 'glass') {
         const crown = chamfer(w * 0.76, d * 0.83, 12);
         const offset: Point = [w * 0.075, -d * 0.06];
@@ -737,7 +747,7 @@ export function createOverlookSkyline(
         builder.extrusion(x, y, z, yaw, [
           { elevation: h - 14, outline: crown, offset },
           { elevation: h + 2, outline: crown, offset, ridge: [5, 4, 12, 11, -3, -4, -5, 3] },
-        ], { color: 0x7193a5, glow: 0.24 }, pearl);
+        ], { color: 0x7193a5, glow: crownGlow }, pearl);
       } else if (form === 'ribbed') {
         // Light stone mullions in front of the continuous office glazing.
         floor(x, y + elevation, z, w * 0.96, d * 0.88, h - elevation - 10, { color, facade: 0.64 }, yaw, 8);
@@ -746,23 +756,23 @@ export function createOverlookSkyline(
           floor(x + along * w * cosine + d * 0.44 * sine, y + elevation, z - along * w * sine + d * 0.44 * cosine,
             3.3, 3.9, h - elevation - 8, { color: pearl }, yaw);
         }
-        const ledge = h * 0.64;
-        floor(x, y + ledge, z, w, d * 0.95, 4, { color: limestone, glow: -0.22 }, yaw, 8);
-        floor(x, y + h - 10, z, w, d * 0.94, 7, { color: limestone, glow: -0.21 }, yaw, 8);
+        const ledge = h * THREE.MathUtils.lerp(0.49, 0.74, lightSeed);
+        floor(x, y + ledge, z, w, d * 0.95, 4, { color: limestone, glow: -crownGlow * 0.50 }, yaw, 8);
+        floor(x, y + h - 10, z, w, d * 0.94, 7, { color: limestone, glow: -crownGlow }, yaw, 8);
         floor(x, y + h - 3, z, w * 0.75, d * 0.69, 12, { color: charcoal, facade: 0.55 }, yaw, 5);
       } else if (form === 'split') {
         // A sky lobby connects the double core beneath the staggered office floors.
         const cosine = Math.cos(yaw), sine = Math.sin(yaw);
-        const lobby = h * 0.45;
+        const lobby = h * THREE.MathUtils.lerp(0.34, 0.57, lightSeed);
         floor(x, y + elevation, z, w * 0.96, d, lobby - elevation, { color, facade: 0.58 }, yaw, 7);
-        floor(x, y + lobby, z, w, d * 0.94, 8, { color: pearl, glow: -0.30 }, yaw, 7);
+        floor(x, y + lobby, z, w, d * 0.94, 8, { color: pearl, glow: -crownGlow * 0.28 }, yaw, 7);
         for (const [offset, height, width, depth] of [[-0.24, h, w * 0.48, d * 0.88], [0.28, h * 0.82, w * 0.42, d * 0.78]]) {
           const wingX = x + offset * w * cosine, wingZ = z - offset * w * sine;
           floor(wingX, y + lobby + 8, wingZ, width, depth, height - lobby - 15, { color, facade: 0.71 }, yaw, 6);
-          floor(wingX, y + height - 7, wingZ, width, depth, 6, { color: pearl, glow: 0.26 }, yaw, 6);
+          floor(wingX, y + height - 7, wingZ, width, depth, 6, { color: pearl, glow: crownGlow }, yaw, 6);
           floor(wingX, y + height - 1, wingZ, width * 0.86, depth * 0.69, 11, { color: blueGray }, yaw, 5);
           if (h >= 390) lights.push({ x: wingX, y: y + height - 1, z: wingZ + depth * 0.51, kind: 3,
-            power: 0.43, temperature: offset < 0 ? 0.92 : 0.45 });
+            power: 0.28 + 0.22 * accent, temperature: offset < 0 ? 0.92 : 0.45 });
         }
       } else if (form === 'residential') {
         floor(x, y + elevation, z, w * 0.91, d * 0.88, h - elevation, { color, facade: 0.94 }, yaw, 8);
@@ -771,11 +781,11 @@ export function createOverlookSkyline(
           const level = elevation + (h - elevation - 5) * band / 9;
           floor(x, y + level, z, w, d, 2.7, { color: pearl }, yaw, 9);
         }
-        floor(x, y + h - 4, z, w * 0.97, d * 0.95, 9, { color: pearl, glow: 0.10 }, yaw, 9);
+        floor(x, y + h - 4, z, w * 0.97, d * 0.95, 9, { color: pearl, glow: crownGlow * 0.65 }, yaw, 9);
         floor(x, y + h + 5, z, w * 0.52, d * 0.55, 13, { color, facade: 0.86 }, yaw, 5);
       } else {
         floor(x, y + elevation, z, w, d, h - elevation - 14, { color, facade: 0.65 }, yaw, 3);
-        floor(x, y + h - 14, z, w, d, 8, { color: charcoal, glow: 0.16 }, yaw, 3);
+        floor(x, y + h - 14, z, w, d, 8, { color: charcoal, glow: crownGlow }, yaw, 3);
         floor(x, y + h - 6, z, w * 0.77, d * 0.79, 15, { color: pearl }, yaw, 3);
       }
       const beaconHeight = { terraced: 3, glass: 15, residential: 19, slab: 10, ribbed: 10, split: 11 };

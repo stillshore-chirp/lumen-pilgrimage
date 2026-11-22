@@ -250,6 +250,14 @@ function sampleRoad(road: Road, distance: number, point: RoadPoint): void {
 
 const lampSpacing = 78;
 
+const roadLampTint = /* glsl */`
+  vec3 roadLampTint(vec2 xz) {
+    float district = sin(dot(xz, vec2(0.0016, 0.0007))) * cos(xz.y * 0.0019);
+    float warmth = smoothstep(-0.65, 0.65, district);
+    return mix(vec3(1.0, 0.84, 0.55), vec3(1.0, 0.57, 0.19), warmth);
+  }
+`;
+
 function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
   const positions: number[] = [], uv: number[] = [], indices: number[] = [];
   const laneStyles: number[] = [];
@@ -294,13 +302,16 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
     shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
       attribute float laneStyle;
       varying vec2 vTrafficUv;
+      varying vec2 vRoadXZ;
       varying float vLaneStyle;
-    `).replace('#include <begin_vertex>', '#include <begin_vertex>\nvTrafficUv = uv;\nvLaneStyle = laneStyle;');
+    `).replace('#include <begin_vertex>', '#include <begin_vertex>\nvTrafficUv = uv;\nvRoadXZ = position.xz;\nvLaneStyle = laneStyle;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uRoadNight;
         varying vec2 vTrafficUv;
+        varying vec2 vRoadXZ;
         varying float vLaneStyle;
+        ${roadLampTint}
         float paintLine(float center, float width, float feather) {
           float lateral = abs(vTrafficUv.x) - center;
           return smoothstep(-width - feather, -width + feather, lateral)
@@ -325,13 +336,18 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.51, 0.36, 0.14), median);
       `)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        float station = fract(chainage / ${lampSpacing.toFixed(1)} - step(0.0, vTrafficUv.x) * 0.5);
-        float fromLamp = abs(station - 0.5);
-        float lightAcross = (lateral - 0.68) / 0.34;
-        float roadPool = exp(-lightAcross * lightAcross * 1.45 - fromLamp * fromLamp * 12.0);
-        float edgeReflection = (lateral - 0.84) * 7.0;
-        float warmReflection = roadPool * 0.21 + exp(-edgeReflection * edgeReflection) * 0.047;
-        totalEmissiveRadiance += uRoadNight * warmReflection * vec3(1.0, 0.46, 0.17);
+        if (uRoadNight > 0.0) {
+          float station = chainage / ${lampSpacing.toFixed(1)};
+          float fromLamp = abs(fract(station - step(0.0, vTrafficUv.x) * 0.5) - 0.5);
+          float lightAcross = (lateral - 0.68) / 0.36;
+          // Average neighboring pools when a projected pixel spans an entire lamp interval.
+          float along = mix(exp(-fromLamp * fromLamp * 12.0), 0.51, smoothstep(0.35, 1.2, fwidth(station)));
+          float roadPool = exp(-lightAcross * lightAcross * 1.45) * along;
+          float edgeReflection = (lateral - 0.84) * 7.0;
+          float distanceLift = smoothstep(3800.0, 13800.0, length(vViewPosition));
+          float reflection = roadPool * mix(0.27, 0.40, distanceLift) + exp(-edgeReflection * edgeReflection) * 0.054;
+          totalEmissiveRadiance += uRoadNight * reflection * roadLampTint(vRoadXZ);
+        }
       `);
   };
   const surface = new THREE.Mesh(geometry, material);
@@ -353,6 +369,7 @@ const lightsVertex = /* glsl */`
   varying vec2 vAxis;
   varying float vOpacity;
   varying float vTraffic;
+  ${roadLampTint}
 
   void main() {
     vec3 world = (modelMatrix * vec4(position, 1.0)).xyz;
@@ -363,9 +380,7 @@ const lightsVertex = /* glsl */`
     float power = lamp.y;
     vTraffic = step(0.5, axle);
     vAxis = vec2(1.0, 0.0);
-    vOpacity = exp(-eyeDistance * 0.000066) * power;
-    vColor = vec3(1.0, 0.52, 0.15);
-    float size = clamp(4.1 + 4200.0 / max(700.0, eyeDistance), 4.5, 8.5);
+    float size;
     if (vTraffic > 0.5) {
       vec2 facing = (cameraPosition.xz - world.xz) / max(1.0, length(cameraPosition.xz - world.xz));
       vec3 direction = vec3(heading.x, 0.0, heading.y);
@@ -375,8 +390,12 @@ const lightsVertex = /* glsl */`
       motion *= vec2(projectionMatrix[1][1] / projectionMatrix[0][0], -1.0);
       vAxis = motion / max(length(motion), 0.00001);
       vColor = axle < 1.5 ? vec3(0.96, 0.98, 1.0) : vec3(1.0, 0.049, 0.024);
-      vOpacity *= 1.38 * visibility;
+      vOpacity = exp(-eyeDistance * 0.000066) * power * 1.38 * visibility;
       size = clamp(5.4 + 10700.0 / max(820.0, eyeDistance), 6.1, 13.2);
+    } else {
+      vOpacity = min(0.94, exp(-eyeDistance * 0.000043) * power);
+      vColor = roadLampTint(world.xz);
+      size = clamp(5.05 + 4000.0 / max(700.0, eyeDistance), 5.4, 8.5);
     }
     gl_PointSize = size * uPixelFactor;
     gl_Position = clip;
@@ -394,10 +413,10 @@ const lightsFragment = /* glsl */`
     if (rad2 > 0.25 || vOpacity < 0.005) discard;
     vec2 tangentSpace = vec2(dot(p, vAxis), dot(p, vec2(-vAxis.y, vAxis.x)));
     float head = exp(-mix(100.0, 74.0, vTraffic) * rad2);
-    float halo = exp(-22.0 * rad2);
+    float halo = exp(-mix(16.0, 22.0, vTraffic) * rad2);
     float tail = exp(-202.0 * tangentSpace.y * tangentSpace.y)
       * smoothstep(-0.47, -0.065, tangentSpace.x) * (1.0 - smoothstep(-0.08, 0.13, tangentSpace.x));
-    float alpha = head * 0.91 + halo * 0.15 + tail * 0.33 * vTraffic;
+    float alpha = head * 0.91 + halo * mix(0.20, 0.15, vTraffic) + tail * 0.33 * vTraffic;
     gl_FragColor = vec4(vColor, vOpacity * alpha);
     #include <colorspace_fragment>
   }

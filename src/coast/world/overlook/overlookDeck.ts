@@ -281,7 +281,7 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
   for (let y = 0; y < resolution; y += 1) {
     for (let x = 0; x < resolution; x += 1) {
       const r = Math.hypot((x + 0.5) / resolution * 2 - 1, (y + 0.5) / resolution * 2 - 1);
-      const fade = Math.round(255 * Math.max(0, 1 - r ** 1.65) ** 3);
+      const fade = Math.round(255 * Math.max(0, 1 - r ** 1.65) ** 2.5);
       const i = (x + resolution * y) * 4;
       pixels.set([fade, fade, fade, 255], i);
     }
@@ -290,25 +290,25 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
   falloff.magFilter = falloff.minFilter = THREE.LinearFilter;
   falloff.needsUpdate = true;
   const haze = new THREE.MeshBasicMaterial({
-    color: 0xe69149, alphaMap: falloff, opacity: 0.34, depthWrite: false,
+    color: 0xeaa55e, alphaMap: falloff, opacity: 0.44, depthWrite: false,
     transparent: true, blending: THREE.AdditiveBlending,
   });
   const lamps = new THREE.Group();
   lamps.name = 'Amber grazing light and terrace lanterns';
   const pools = new OverlookModel();
   const wash = haze.clone();
-  wash.color.setHex(0xf6a156);
-  wash.opacity = 0.55;
+  wash.color.setHex(0xffb960);
+  wash.opacity = 0.72;
   for (const { x, z, yaw } of wallLamps) {
     const nx = Math.sin(yaw), nz = Math.cos(yaw);
     model.block(finish.bronze, x + 0.418 * nx, 0.586, z + 0.418 * nz, 0.49, 0.105, 0.145, yaw);
     model.block(finish.frosted, x + 0.442 * nx, 0.533, z + 0.442 * nz, 0.36, 0.027, 0.093, yaw);
 
     // A half-disc starts under the hood and spreads over the floor on the inner side.
-    const floor = new THREE.PlaneGeometry(4.55, 3.10);
+    const floor = new THREE.PlaneGeometry(5.45, 3.65);
     const uv = floor.getAttribute('uv');
     for (let i = 0; i < uv.count; i += 1) uv.setY(i, uv.getY(i) * 0.5);
-    pools.mesh(floor.rotateX(-Math.PI / 2).rotateY(yaw).translate(x + 2.06 * nx, 0.014, z + 2.06 * nz), wash, false);
+    pools.mesh(floor.rotateX(-Math.PI / 2).rotateY(yaw).translate(x + 2.29 * nx, 0.014, z + 2.29 * nz), wash, false);
 
     const wall = new THREE.PlaneGeometry(2.86, 0.56);
     const wallUv = wall.getAttribute('uv'), positions = wall.getAttribute('position');
@@ -324,7 +324,7 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
   for (const pool of upperPools) pools.mesh(pool, wash, false);
   pools.finish(lamps);
   for (const x of [-5.68, 5.68]) {
-    const lamp = new THREE.PointLight(0xffbf7d, 108, 11.5, 2);
+    const lamp = new THREE.PointLight(0xffbf7d, 154, 14.5, 2);
     lamp.position.set(x, 3.37, 7.97);
     lamps.add(lamp);
   }
@@ -363,7 +363,7 @@ export function createOverlookDeck(): { group: THREE.Group; setTimeOfDay(time: '
     setTimeOfDay(time) {
       const night = time === 'night';
       finish.frosted.emissiveIntensity = night ? 2.25 : 0.04;
-      finish.window.emissiveIntensity = night ? 0.88 : 0;
+      finish.window.emissiveIntensity = night ? 1.08 : 0;
       lamps.visible = night;
     },
   };

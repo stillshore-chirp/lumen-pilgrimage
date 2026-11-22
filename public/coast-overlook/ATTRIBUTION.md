@@ -6,7 +6,7 @@
 
 公共の場所から見える建築の絵画・写真などを扱う米国著作権法の規定と、図面、写真、彫刻、ロゴやゲーム用モデルの利用条件を確認しました。展望台、パビリオン、市街の建物と窓明かりは独自に造形しました。高層街区の位置・規模と車が走る幹線は、展望台からの眺めに合わせて構成しました。 [17 U.S.C. §120](https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title17-section120) · [米国著作権局の建築著作物の資料](https://www.copyright.gov/circs/circ41.pdf)
 
-夕暮れ時の空と市街の灯り、展望デッキの見え方を検討する際は、Rlumstead の撮影資料（Wikimedia Commons、ファイル記録の版 1173105928）を参照しました。テラスの形状と地表、市街、空は3Dシーンで描画します。 [参照写真のライセンス CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+夕暮れの青い空と遠方まで続く街の灯り、暖色のデッキ照明の明るさを検討する際は、Rlumstead の撮影資料（Wikimedia Commons、ファイル記録の版 1173105928）を参照しました。テラスの形状と地表、市街、空は3Dシーンで描画します。 [参照写真のライセンス CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
 ## 地形と街路
 
