@@ -195,9 +195,9 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     assert.equal(await light.getAttribute('aria-pressed'), 'true');
     assert.equal(await page.evaluate(() => window.coastProbe.context), null);
     const fonts = await page.evaluate(() =>
-      ['.coast-title h1', '.coast-mode', '.coast-legacy', '.coast-panel button', '.coast-panel kbd']
+      ['.coast-title h1', '.coast-mode', '.coast-panel button', '.coast-panel kbd']
         .map(selector => getComputedStyle(document.querySelector(selector)).fontSize));
-    assert.deepEqual(fonts, ['38px', '24px', '26px', '24px', '22px']);
+    assert.deepEqual(fonts, ['38px', '24px', '24px', '22px']);
     await capture(page, 'lagoon-light');
 
     await page.getByRole('button', { name: '環境音を開始' }).click();
@@ -447,57 +447,16 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
   }
 });
 
-test('the legacy entry navigates to Hub, saves a run, and continues it after reloading', { timeout }, async () => {
+test('retired expedition URLs open exploration without exposing the old entry', { timeout }, async () => {
   const page = await newPage();
-  const saveKey = 'lumen-pilgrimage:save-slot:0';
-  // MenuManager replaces buttons during its render loop. Click the current node without holding a reference across frames.
-  const invoke = (name) => page.getByRole('button', { name, exact: true }).evaluate(button => button.click());
-  const enterLegacy = () => Promise.all([
-    page.waitForURL(address => address.search === '?scene=expedition', { waitUntil: 'commit' }),
-    page.getByRole('link', { name: '従来のゲームへ' }).click({ noWaitAfter: true }),
-  ]);
   try {
-    await page.goto(url, { waitUntil: 'commit' });
-    await enterLegacy();
-    assert.equal(new URL(page.url()).search, '?scene=expedition');
-    await invoke('Enter Hub');
-    await page.getByText("Pilgrim's Belfry (Hub)", { exact: true }).waitFor();
-    // The legacy adapter samples key state each frame, so keep the key down until the screen changes.
-    await page.keyboard.down('e');
-    await page.getByRole('button', { name: 'Launch Expedition', exact: true }).waitFor();
-    await page.keyboard.up('e');
-    await invoke('Launch Expedition');
-    await page.waitForFunction(key => Boolean(JSON.parse(localStorage.getItem(key))?.expedition), saveKey);
-    const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
-    await page.goto(url, { waitUntil: 'commit' });
-    await page.getByRole('heading', { name: '自然景観探索' }).waitFor();
-    const afterCoast = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
-    assert.deepEqual(afterCoast, saved);
-    await enterLegacy();
-    await page.getByRole('button', { name: 'Continue Expedition', exact: true }).waitFor();
-    await page.reload({ waitUntil: 'commit' });
-    await invoke('Continue Expedition');
-    await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.state === 'InExpedition', saveKey);
-    const resumed = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
-    for (const key of ['biomeId', 'roomId', 'missionId', 'runSeed']) assert.equal(resumed[key], saved[key], key);
+    await page.goto(`${url}?scene=expedition`, { waitUntil: 'commit' });
+    await page.getByRole('heading', { name: '自然景観探索', exact: true }).waitFor();
+    assert.equal(await page.getByRole('link', { name: '従来のゲームへ' }).count(), 0);
 
-    await page.goto(url, { waitUntil: 'commit' });
-    await page.getByRole('heading', { name: '自然景観探索' }).waitFor();
-    await page.evaluate(key => {
-      const slot = JSON.parse(localStorage.getItem(key));
-      slot.slotId = 1;
-      delete slot.metaProgress;
-      for (const field of ['runSeed', 'roomId', 'missionId', 'relicModifiers']) delete slot.expedition[field];
-      localStorage.setItem('lumen-pilgrimage:save-slot:1', JSON.stringify(slot));
-    }, saveKey);
-    await enterLegacy();
-    await invoke('Slot 2');
-    await invoke('Continue Expedition');
-    await page.waitForFunction(() => {
-      const slot = JSON.parse(localStorage.getItem('lumen-pilgrimage:save-slot:1'));
-      return slot?.state === 'InExpedition' && slot.expedition.runSeed === 1
-        && Boolean(slot.expedition.roomId && slot.expedition.missionId);
-    });
+    await page.goto(`${url}?scene=expedition&world=overlook`, { waitUntil: 'commit' });
+    await page.getByRole('heading', { name: '丘陵展望台', exact: true }).waitFor();
+    assert.equal(await page.getByRole('link', { name: '従来のゲームへ' }).count(), 0);
   } finally {
     await page.close();
   }

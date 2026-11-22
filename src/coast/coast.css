@@ -41,7 +41,6 @@
 }
 
 .coast-title,
-.coast-legacy,
 .coast-panel {
   border: 1px solid #bfe2dc45;
   background: #102728e6;
@@ -69,20 +68,6 @@
   color: #bce2d5;
   font-size: 24px;
   white-space: nowrap;
-}
-
-.coast-legacy {
-  border-radius: 12px;
-  color: #f6fbf7;
-  padding: 10px 13px;
-  pointer-events: auto;
-  text-decoration: none;
-  font-size: 26px;
-}
-
-.coast-legacy span {
-  margin-left: 4px;
-  color: #bce2d5;
 }
 
 .coast-dock {
@@ -138,8 +123,7 @@
   font: inherit;
 }
 
-.coast-panel button:hover,
-.coast-legacy:hover {
+.coast-panel button:hover {
   border-color: #bfe2dc;
 }
 
@@ -211,8 +195,7 @@
 }
 
 .coast-locked .coast-guide,
-.coast-locked .coast-settings,
-.coast-locked .coast-legacy {
+.coast-locked .coast-settings {
   visibility: hidden;
 }
 

@@ -79,9 +79,7 @@ export class CoastApp {
           <h1></h1>
           <span class="coast-mode">歩行</span>
         </div>
-        <div class="coast-header-actions">
-          <a class="coast-legacy" href="?scene=expedition">従来のゲームへ <span aria-hidden="true">↗</span></a>
-        </div>
+        <div class="coast-header-actions"></div>
       </header>
       <div class="coast-reticle" aria-hidden="true"></div>
       <div class="coast-dock">
