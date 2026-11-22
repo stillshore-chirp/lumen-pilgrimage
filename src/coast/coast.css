@@ -1,0 +1,223 @@
+.coast {
+  background: #83b8cc;
+  color-scheme: dark;
+}
+
+.coast-view {
+  width: 100%;
+  height: 100%;
+}
+
+.coast-view:focus-visible {
+  outline: 2px solid #d0f5e9;
+  outline-offset: -4px;
+}
+
+.coast-ui {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(12px, 2.3vw, 32px);
+  color: #f6fbf7;
+  pointer-events: none;
+}
+
+.coast-header,
+.coast-dock {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.coast-title,
+.coast-legacy,
+.coast-panel {
+  border: 1px solid #bfe2dc45;
+  background: #102728e6;
+  box-shadow: 0 8px 24px #082b292d;
+}
+
+.coast-title {
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+}
+
+.coast-title h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+}
+
+.coast-mode {
+  border-left: 1px solid #bfe2dc45;
+  padding-left: 12px;
+  color: #bce2d5;
+  font-size: 12px;
+}
+
+.coast-legacy {
+  border-radius: 12px;
+  color: #f6fbf7;
+  padding: 10px 13px;
+  pointer-events: auto;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.coast-legacy span {
+  margin-left: 4px;
+  color: #bce2d5;
+}
+
+.coast-dock {
+  align-items: flex-end;
+}
+
+.coast-panel {
+  border-radius: 14px;
+  padding: 11px 13px;
+  pointer-events: auto;
+  font-size: 12px;
+}
+
+.coast-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.coast-panel p {
+  margin: 7px 0 0;
+  color: #d9e9e4;
+  line-height: 1.6;
+}
+
+.coast-guide details {
+  width: fit-content;
+  margin-top: 8px;
+}
+
+.coast-guide summary,
+.coast-panel button {
+  cursor: pointer;
+}
+
+.coast-panel button {
+  border: 1px solid #bfe2dc4d;
+  border-radius: 9px;
+  padding: 5px 10px;
+  min-height: 32px;
+  color: inherit;
+  background: #ffffff0d;
+  font: inherit;
+}
+
+.coast-panel button:hover,
+.coast-legacy:hover {
+  border-color: #bfe2dc;
+}
+
+.coast-panel button[aria-pressed="true"],
+.coast-panel .coast-lock {
+  background: #c8eddf;
+  border-color: #c8eddf;
+  color: #133833;
+  font-weight: 600;
+}
+
+.coast-panel button:disabled {
+  color: #d9e9e4;
+  cursor: progress;
+}
+
+.coast-ui :focus-visible {
+  outline: 2px solid #e1ffed;
+  outline-offset: 3px;
+}
+
+.coast-divider,
+.coast-label {
+  margin-inline: 3px;
+  color: #a8cfc4;
+}
+
+.coast-panel kbd {
+  display: inline-block;
+  border: 1px solid #bfe2dc40;
+  border-radius: 4px;
+  padding: 0 3px;
+  margin-right: 2px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.coast-sound {
+  margin-top: 8px;
+}
+
+.coast-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coast-volume input {
+  width: 66px;
+  margin: 0;
+  accent-color: #c8eddf;
+}
+
+.coast-reticle {
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 2px 1px #1536329e;
+  transform: translate(-50%, -50%);
+}
+
+.coast-locked .coast-reticle {
+  display: block;
+}
+
+.coast-locked .coast-guide,
+.coast-locked .coast-settings,
+.coast-locked .coast-legacy {
+  visibility: hidden;
+}
+
+.coast-error {
+  max-width: 34rem;
+  margin: 12vh auto;
+  padding: 24px;
+  color: #e4f2ec;
+}
+
+.coast-error a {
+  color: #bbf1dc;
+}
+
+@media (max-width: 670px) {
+  .coast-dock {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .coast-panel {
+    padding: 8px 10px;
+  }
+}

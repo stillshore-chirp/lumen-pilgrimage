@@ -2,8 +2,15 @@
 
 ## 起動と状態遷移
 
-- [main.ts](../src/main.ts) が `#app` を取得し、[AppBootstrap](../src/bootstrap/AppBootstrap.ts) から [Game](../src/core/Game.ts) を起動する。`Game` は Three.js のレンダラー、シーン、フレームループを用意し、入力、UI、遠征、保存、描画・音響を接続する。
+- [main.ts](../src/main.ts) が `#app` を取得する。標準の起動先は海岸探索。クエリが `?scene=expedition` のときは [AppBootstrap](../src/bootstrap/AppBootstrap.ts) から [Game](../src/core/Game.ts) を起動する。`Game` は Three.js のレンダラー、シーン、フレームループを用意し、入力、UI、遠征、保存、描画・音響を接続する。
 - [MenuManager](../src/game/ui/MenuManager.ts) は UI の操作をコマンドとしてキューに積む。`Game` がフレームごとに取り出し、[GameStateMachine](../src/game/state/GameStateMachine.ts) の遷移表に沿って画面と進行状態を切り替える。起動時は Main Menu で待機し、出撃または Continue で遠征が始まる。
+
+## 海岸探索
+
+- [CoastApp](../src/coast/CoastApp.ts) は、海岸専用のレンダラー、カメラ、画面とフレームループを起動する。従来ゲームへのリンクは同一オリジンでページを遷移する。海岸側は遠征のセーブや設定を読み書きしない。
+- [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形の高さ関数と座標](../src/coast/terrain.ts) を共有する。描画は高さ関数から海岸線、滝のある岩棚、起伏をサンプリングし、植生を固定シードで配置する。岩・砂・空のテクスチャと水際の岩棚には [収録済みの景観素材](../public/coast-materials/ATTRIBUTION.md) を使う。移動は同じ高さ関数で斜面・水際・接地を判定する。
+- 起動時の描画設定は毎回ローポリ。ローポリでは低解像度の影を再利用する。通常描画は、影の解像度と更新頻度、ピクセル比、遠方クリップ面、景観のメッシュと植生を増やす。カメラの姿勢、制御器、音響グラフは初期化し直さない。
+- [CoastAudio](../src/coast/CoastAudio.ts) は、明示操作で Web Audio の再生を開始する。ループや間隔を変えて鳴らす録音を複数レイヤーで重ね、点音源は HRTF と距離減衰を使う。カメラの位置と前方ベクトルをリスナーに渡す。描画品質は音響側への入力に含まれない。
 
 ## 遠征とキャンペーン
 

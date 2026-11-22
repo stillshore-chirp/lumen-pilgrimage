@@ -1,0 +1,323 @@
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { after, before, test } from 'node:test';
+import { chromium } from 'playwright';
+import { preview } from 'vite';
+
+const screenshotDirectory = process.env.COAST_SCREENSHOTS;
+const chromeChannel = process.env.COAST_CHROME_CHANNEL || undefined;
+const viewport = chromeChannel || screenshotDirectory ? { width: 1280, height: 800 } : { width: 768, height: 480 };
+const lowWidth = Math.floor(viewport.width * 0.8);
+const timeout = 65_000;
+let server;
+let browser;
+let url;
+
+before(async () => {
+  server = await preview({ logLevel: 'error', preview: { host: '127.0.0.1', port: 0 } });
+  url = `http://127.0.0.1:${server.httpServer.address().port}/`;
+  browser = await chromium.launch({
+    channel: chromeChannel ?? 'chromium',
+    args: ['--enable-unsafe-swiftshader'],
+  });
+  if (screenshotDirectory) await mkdir(screenshotDirectory, { recursive: true });
+});
+
+async function newPage() {
+  const page = await browser.newPage({ viewport });
+  page.setDefaultTimeout(15_000);
+  return page;
+}
+
+after(async () => {
+  try {
+    await browser?.close();
+  } finally {
+    await server?.close();
+  }
+});
+
+async function capture(page, name) {
+  if (screenshotDirectory) await page.screenshot({ path: join(screenshotDirectory, `${name}.png`) });
+}
+
+async function sampleRendering(page, quality) {
+  if (!screenshotDirectory) return;
+  const result = await page.locator('canvas.coast-view').evaluate(async canvas => {
+    const gl = canvas.getContext('webgl2');
+    const rendererInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    const frameTimes = [];
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    await nextFrame();
+    const start = await nextFrame();
+    let previous = start;
+    while (previous - start < 1800) {
+      const now = await nextFrame();
+      frameTimes.push(now - previous);
+      previous = now;
+    }
+    const frameRate = frameTimes.length * 1000 / (previous - start);
+    const slowFrameTime = frameTimes.slice().sort((a, b) => a - b)[Math.floor(frameTimes.length * 0.95)];
+    return {
+      renderer: rendererInfo && gl.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL),
+      size: [canvas.width, canvas.height],
+      frames: frameTimes.length,
+      fps: Number(frameRate.toFixed(1)),
+      p95FrameMs: Number(slowFrameTime.toFixed(1)),
+    };
+  });
+  await writeFile(join(screenshotDirectory, `coast-${quality}-rendering.json`), JSON.stringify(result, null, 2) + '\n');
+}
+
+function installBrowserProbes() {
+  const probe = { context: null, analyser: null, panners: [], pad: null, decoded: 0, contexts: 0 };
+  window.coastProbe = probe;
+  probe.peak = () => {
+    const signal = new Float32Array(probe.analyser.fftSize);
+    probe.analyser.getFloatTimeDomainData(signal);
+    return Math.max(...signal.map(Math.abs));
+  };
+  const NativeAudioContext = window.AudioContext;
+  const connect = AudioNode.prototype.connect;
+  window.AudioContext = class extends NativeAudioContext {
+    constructor(...args) {
+      super(...args);
+      probe.contexts++;
+      probe.context = this;
+      probe.analyser = this.createAnalyser();
+      probe.analyser.fftSize = 1024;
+    }
+    createPanner() {
+      const panner = super.createPanner();
+      probe.panners.push(panner);
+      return panner;
+    }
+    async decodeAudioData(buffer, success, failure) {
+      const decoded = await super.decodeAudioData(buffer, success, failure);
+      probe.decoded++;
+      return decoded;
+    }
+  };
+  AudioNode.prototype.connect = function (destination, ...args) {
+    if (destination === probe.context?.destination) connect.call(this, probe.analyser);
+    return connect.call(this, destination, ...args);
+  };
+  Object.defineProperty(navigator, 'getGamepads', {
+    value: () => [probe.pad, null, null, null],
+  });
+}
+
+function setPad({ axes = [0, 0, 0, 0], pressed = [], connected = true } = {}) {
+  window.coastProbe.pad = connected ? {
+    connected,
+    id: 'Standard pad (test)',
+    index: 0,
+    mapping: 'standard',
+    timestamp: performance.now(),
+    axes,
+    buttons: Array.from({ length: 17 }, (_, index) => {
+      const down = pressed.includes(index);
+      return { pressed: down, touched: down, value: Number(down) };
+    }),
+  } : null;
+}
+
+function audioPosition() {
+  const { positionX, positionY, positionZ, forwardX, forwardZ } = window.coastProbe.context.listener;
+  return { x: positionX.value, y: positionY.value, z: positionZ.value, fx: forwardX.value, fz: forwardZ.value };
+}
+
+function signalLevel() {
+  const peak = window.coastProbe.peak();
+  return peak > 0.001 && peak < 0.98 ? peak : 0;
+}
+
+test('the coast renders, walks, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
+  const page = await newPage();
+  const errors = [];
+  const recordings = new Set();
+  const externalRequests = new Set();
+  const appOrigin = new URL(url).origin;
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(`${message.location().url}: ${message.text()}`);
+  });
+  page.on('response', response => {
+    const path = new URL(response.url()).pathname;
+    if (path.includes('/coast-audio/') && response.ok()) recordings.add(path);
+  });
+  page.on('request', request => {
+    const target = new URL(request.url());
+    if ((target.protocol === 'http:' || target.protocol === 'https:') && target.origin !== appOrigin) {
+      externalRequests.add(target.origin);
+    }
+  });
+  await page.addInitScript(installBrowserProbes);
+  try {
+    const sceneryAssets = Promise.all(['rock.webp', 'sand.webp', 'sky.webp', 'cliff-ledge.glb'].map(file =>
+      page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/coast-materials/${file}`))));
+    const [, loadedAssets] = await Promise.all([page.goto(url, { waitUntil: 'commit' }), sceneryAssets]);
+    const low = page.getByRole('button', { name: 'ローポリ' });
+    const normal = page.getByRole('button', { name: '通常' });
+    const flight = page.getByRole('button', { name: '自由飛行' });
+    const canvas = page.locator('canvas.coast-view');
+    await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lowWidth);
+    for (const response of loadedAssets) {
+      assert.ok(response.ok(), `Scenery asset request failed: ${response.url()}`);
+      assert.equal(await response.finished(), null);
+    }
+    assert.equal(await low.getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.evaluate(() => window.coastProbe.context), null);
+    await capture(page, 'coast-low');
+
+    await page.getByRole('button', { name: '環境音を開始' }).click();
+    await page.getByRole('button', { name: '環境音を再開' }).waitFor();
+    await page.waitForFunction(signalLevel, undefined, { polling: 100 });
+    const beforeSwitch = await page.evaluate(() => ({
+      contexts: window.coastProbe.contexts,
+      contextState: window.coastProbe.context.state,
+      decoded: window.coastProbe.decoded,
+      panners: window.coastProbe.panners.map(node => [node.panningModel, node.distanceModel, node.rolloffFactor]),
+    }));
+    const start = await page.evaluate(audioPosition);
+    assert.equal(beforeSwitch.contexts, 1);
+    assert.equal(beforeSwitch.contextState, 'running');
+    assert.ok(beforeSwitch.decoded >= 6, `Only ${beforeSwitch.decoded} recordings decoded`);
+    assert.ok(recordings.size >= 6, `Only ${recordings.size} local recordings served`);
+    assert.ok(beforeSwitch.panners.filter(([model, , rolloff]) => model === 'HRTF' && rolloff > 0).length >= 4);
+    await sampleRendering(page, 'low');
+
+    await normal.click();
+    assert.equal(await normal.getAttribute('aria-pressed'), 'true');
+    assert.equal(await canvas.evaluate(node => node.width), viewport.width);
+    assert.deepEqual(await page.evaluate(() => ({
+      contexts: window.coastProbe.contexts,
+      contextState: window.coastProbe.context.state,
+      decoded: window.coastProbe.decoded,
+      panners: window.coastProbe.panners.map(node => [node.panningModel, node.distanceModel, node.rolloffFactor]),
+    })), beforeSwitch);
+    const afterSwitch = await page.evaluate(audioPosition);
+    assert.ok(Math.hypot(start.x - afterSwitch.x, start.y - afterSwitch.y, start.z - afterSwitch.z) < 0.05);
+    await capture(page, 'coast-normal');
+    await sampleRendering(page, 'normal');
+    await low.click();
+
+    const mute = page.getByRole('button', { name: 'ミュート' });
+    await mute.click();
+    assert.equal(await mute.getAttribute('aria-pressed'), 'true');
+    await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
+    await mute.click();
+    await page.waitForFunction(signalLevel, undefined, { polling: 100 });
+    const volume = page.getByRole('slider', { name: '音量' });
+    await volume.press('Home');
+    assert.equal(await volume.inputValue(), '0');
+    await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
+    await volume.press('End');
+    await page.waitForFunction(signalLevel, undefined, { polling: 100 });
+    await page.evaluate(() => window.coastProbe.context.suspend());
+    await page.getByRole('button', { name: '環境音を再開' }).click();
+    await page.waitForFunction(() => window.coastProbe.context.state === 'running');
+    assert.equal(await page.evaluate(() => window.coastProbe.decoded), beforeSwitch.decoded);
+
+    await page.getByRole('button', { name: 'マウス操作を開始' }).click();
+    await page.waitForFunction(() => document.pointerLockElement?.classList.contains('coast-view'));
+    await page.keyboard.down('w');
+    await page.waitForFunction(({ x, z }) => {
+      const listener = window.coastProbe.context.listener;
+      return Math.hypot(listener.positionX.value - x, listener.positionZ.value - z) > 0.8;
+    }, start);
+    await page.keyboard.up('w');
+    await canvas.evaluate(node => node.dispatchEvent(new MouseEvent('mousemove', { movementX: 220 })));
+    await page.waitForFunction(fx => Math.abs(window.coastProbe.context.listener.forwardX.value - fx) > 0.15, start.fx);
+    const walked = await page.evaluate(audioPosition);
+    assert.ok(Math.abs(walked.y - start.y) < 1.4, 'walking keeps the listener at ground level');
+
+    await page.keyboard.press('f');
+    await page.waitForFunction(() => document.querySelector('.coast-flight')?.getAttribute('aria-pressed') === 'true');
+    await page.keyboard.down('Space');
+    const flightHeight = walked.y + (screenshotDirectory ? 9 : 3);
+    await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y, flightHeight);
+    await page.keyboard.up('Space');
+    await page.evaluate(() => document.exitPointerLock());
+    await flight.waitFor();
+    await capture(page, 'coast-flight');
+
+    const flown = await page.evaluate(audioPosition);
+    await page.evaluate(setPad, { axes: [0.55, -0.6, -0.5, 0], pressed: [1] });
+    await page.waitForFunction(({ x, z, fx, y }) => {
+      const listener = window.coastProbe.context.listener;
+      return Math.hypot(listener.positionX.value - x, listener.positionZ.value - z) > 0.6
+        && Math.abs(listener.forwardX.value - fx) > 0.12 && listener.positionY.value < y - 0.5;
+    }, flown);
+    await page.evaluate(setPad, { pressed: [3] });
+    await page.waitForFunction(() => document.querySelector('.coast-flight')?.getAttribute('aria-pressed') === 'false');
+    await page.evaluate(setPad, { connected: false });
+
+    await normal.click();
+    await page.reload({ waitUntil: 'commit' });
+    await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lowWidth);
+    assert.equal(await low.getAttribute('aria-pressed'), 'true');
+    assert.equal(await flight.getAttribute('aria-pressed'), 'false');
+    assert.equal(await page.evaluate(() => window.coastProbe.context), null);
+    assert.deepEqual([...externalRequests], []);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('the legacy entry navigates to Hub, saves a run, and continues it after reloading', { timeout }, async () => {
+  const page = await newPage();
+  const saveKey = 'lumen-pilgrimage:save-slot:0';
+  // MenuManager replaces buttons during its render loop. Click the current node without holding a reference across frames.
+  const invoke = (name) => page.getByRole('button', { name, exact: true }).evaluate(button => button.click());
+  const enterLegacy = () => Promise.all([
+    page.waitForURL(address => address.search === '?scene=expedition', { waitUntil: 'commit' }),
+    page.getByRole('link', { name: '従来のゲームへ' }).click({ noWaitAfter: true }),
+  ]);
+  try {
+    await page.goto(url, { waitUntil: 'commit' });
+    await enterLegacy();
+    assert.equal(new URL(page.url()).search, '?scene=expedition');
+    await invoke('Enter Hub');
+    await page.getByText("Pilgrim's Belfry (Hub)", { exact: true }).waitFor();
+    // The legacy adapter samples key state each frame, so keep the key down until the screen changes.
+    await page.keyboard.down('e');
+    await page.getByRole('button', { name: 'Launch Expedition', exact: true }).waitFor();
+    await page.keyboard.up('e');
+    await invoke('Launch Expedition');
+    await page.waitForFunction(key => Boolean(JSON.parse(localStorage.getItem(key))?.expedition), saveKey);
+    const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
+    await page.goto(url, { waitUntil: 'commit' });
+    await page.getByRole('heading', { name: '海岸探索' }).waitFor();
+    const afterCoast = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
+    assert.deepEqual(afterCoast, saved);
+    await enterLegacy();
+    await page.reload({ waitUntil: 'commit' });
+    await invoke('Continue Expedition');
+    await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.state === 'InExpedition', saveKey);
+    const resumed = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
+    for (const key of ['biomeId', 'roomId', 'missionId', 'runSeed']) assert.equal(resumed[key], saved[key], key);
+
+    await page.goto(url, { waitUntil: 'commit' });
+    await page.getByRole('heading', { name: '海岸探索' }).waitFor();
+    await page.evaluate(key => {
+      const slot = JSON.parse(localStorage.getItem(key));
+      slot.slotId = 1;
+      delete slot.metaProgress;
+      for (const field of ['runSeed', 'roomId', 'missionId', 'relicModifiers']) delete slot.expedition[field];
+      localStorage.setItem('lumen-pilgrimage:save-slot:1', JSON.stringify(slot));
+    }, saveKey);
+    await enterLegacy();
+    await invoke('Slot 2');
+    await invoke('Continue Expedition');
+    await page.waitForFunction(() => {
+      const slot = JSON.parse(localStorage.getItem('lumen-pilgrimage:save-slot:1'));
+      return slot?.state === 'InExpedition' && slot.expedition.runSeed === 1
+        && Boolean(slot.expedition.roomId && slot.expedition.missionId);
+    });
+  } finally {
+    await page.close();
+  }
+});
