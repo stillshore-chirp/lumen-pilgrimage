@@ -131,10 +131,10 @@ function wildlifeEmitters(): EmitterSpec[] {
     birdCalls: { firstDelay: 8, pause: 26 }, rockResponse: true, activity: BIRD_ACTIVITY,
     filters: [{ type: 'highpass', frequency: 720 }, { type: 'lowpass', frequency: 9800 }],
   });
-  const insectPatch = (grove: { x: number; z: number }, gain: number, range: number): EmitterSpec => ({
+  const insectPatch = (grove: { x: number; z: number }, gain: number, range: number, cutoff = 6900): EmitterSpec => ({
     asset: 'insects', position: grovePosition(grove, 1.1), gain, refDistance: 5, maxDistance: range, rolloff: 1.2,
     activity: INSECT_ACTIVITY,
-    filters: [{ type: 'highpass', frequency: 1400 }, { type: 'lowpass', frequency: 6900 }],
+    filters: [{ type: 'highpass', frequency: 1400 }, { type: 'lowpass', frequency: cutoff }],
   });
   return [
     perch({ x: -38, z: 358 }, 10, 0.72, 76),
@@ -144,7 +144,12 @@ function wildlifeEmitters(): EmitterSpec[] {
     ...shelterBirdEmitters(),
     insectPatch(COAST_GROVES.west, 0.16, 36),
     insectPatch(COAST_GROVES.east, 0.17, 38),
-    insectPatch(COAST_GROVES.shore, 0.14, 30),
+    {
+      // Keep the calls above the surf from the beach path, especially with the grove behind the listener.
+      ...insectPatch(COAST_GROVES.shore, 0.86, 35, 8600),
+      refDistance: 11,
+      activity: { day: 0.006, night: 1 },
+    },
     insectPatch({ x: 5, z: 204 }, 0.29, 36),
     insectPatch({ x: -28, z: 251 }, 0.35, 35),
     insectPatch({ x: 42, z: 252 }, 0.30, 34),
