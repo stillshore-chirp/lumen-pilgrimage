@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { CoastBirdCue, CoastBirdSpecies } from '../coastBirdCue';
+import { BIRD_CALL_RANGE, type CoastBirdCue, type CoastBirdSpecies } from '../coastBirdCue';
 import { coastRandom, groundHeight, SEA_LEVEL, smoothstep, UPLAND_LAKE } from '../terrain';
 import { createBirdMaterials, createBirdModel, type BirdKind, type CoastBirdModel } from './coastBirdModels';
 import { coastSwellPhase } from './coastSwell';
@@ -36,6 +36,25 @@ const cueCadence: Record<CoastBirdSpecies, [min: number, variation: number, dura
   bushWarbler: [19, 20, 1.76, .82],
   thrush: [17, 22, 2.83, .77],
 };
+
+// Out-of-sight territories on rock ledges, in canopy and in scrub beside the walks.
+const territories: readonly [kind: CoastBirdSpecies, x: number, z: number, height: number, firstCall: number][] = [
+  ['gull', -155, 11, .75, 18], ['gull', -83, -48, .72, 32],
+  ['gull', 89, -38, .58, 23], ['gull', 141, -5, .72, 11],
+  ['whiteEye', -112, 90, 5.3, 8], ['whiteEye', 79, 86, 4.4, 18],
+  ['whiteEye', -37, 243, 5.0, 12], ['bushWarbler', -43, 326, 2.5, 6],
+  ['thrush', 48, 349, 5.0, 17],
+  ['bushWarbler', 79, 414, 2.6, 9], ['whiteEye', 119, 481, 5.3, 39],
+  ['thrush', 53, 554, 6.4, 7], ['bushWarbler', 24, 644, 3.2, 22],
+  ['whiteEye', 169, 682, 5.4, 10], ['bushWarbler', 225, 749, 4.8, 19],
+  ['thrush', 177, 828, 6.0, 11], ['bushWarbler', 42, 785, 2.9, 18],
+  ['thrush', 37, 892, 4.9, 14], ['bushWarbler', -84, 891, 2.65, 18],
+  ['bushWarbler', -67, 1086, 3.1, 43], ['thrush', 59, 1058, 3.6, 8],
+  ['bushWarbler', 150, 969, 3.5, 11],
+  ['whiteEye', 203, 909, 6.1, 7], ['thrush', 223, 990, 6.2, 17],
+  ['bushWarbler', 197, 1026, 3.2, 23],
+  ['whiteEye', -18, 898, 3.4, 38], ['whiteEye', 18, 1091, 4.2, 38],
+];
 const flapRate: Record<BirdKind, number> = { gull: 3.7, whiteEye: 12.4, thrush: 9.5, bushWarbler: 13, duck: 7.5 };
 
 function wrapAngle(angle: number) {
@@ -166,12 +185,10 @@ function beatWindow(kind: BirdKind, time: number, phase: number) {
 }
 
 // Traveling bearings and banks are derived from the actual flight path.
-function flyResident(bird: Resident, elapsed: number, sample: THREE.Vector3, velocity: THREE.Vector3) {
+function flyResident(bird: Resident, elapsed: number, u: number, sample: THREE.Vector3, velocity: THREE.Vector3) {
   const flight = bird.flight!;
   const { model, kind, id } = bird;
   const t = Math.min(1, (elapsed - flight.start) / flight.duration);
-  const u = t * (.62 + t * (1.57 - 1.19 * t));
-  flight.curve.getPoint(u, model.root.position);
   flight.curve.getTangent(u, velocity);
   flight.curve.getTangent(Math.min(1, u + .035), sample);
   bird.yaw = heading(velocity.x, velocity.z);
@@ -219,9 +236,8 @@ function resting(bird: Resident, elapsed: number, dt: number) {
   }
 }
 
-function nearby(model: CoastBirdModel, viewer: Viewer, range: number) {
-  const p = model.root.position;
-  return Math.hypot(p.x - viewer.x, p.y - viewer.y, p.z - viewer.z) < range;
+function distanceToViewer(point: Viewer, viewer: Viewer) {
+  return Math.hypot(point.x - viewer.x, point.y - viewer.y, point.z - viewer.z);
 }
 
 function placeDuck(duck: Duck, elapsed: number) {
@@ -277,6 +293,10 @@ export function createCoastBirdLife() {
   group.name = 'Coast wildlife';
   const calls: CoastBirdCue[] = [];
   const residents: Resident[] = [];
+  const territorialCalls = territories.map(([species, x, z, height, callAt], index) => ({
+    id: 201 + index, species, x, y: groundHeight(x, z) + height, z, callAt,
+    random: coastRandom(4177 + index * 139),
+  }));
   const ducks: Duck[] = [];
   const sample = new THREE.Vector3();
   const velocity = new THREE.Vector3();
@@ -351,7 +371,8 @@ export function createCoastBirdLife() {
     group.add(bird.root);
     return { pass, bird, seed, phase: pass.offset - i * .024 - random() * .024,
       side: (random() - .5) * (index ? 25 : 10), altitude: .7 + i * .63 + random() * 2.5,
-      callAt: index === 0 && (i === 0 || i === 3) ? 6.8 + i * 5.7 : Infinity, callUntil: 0, random };
+      callAt: index === 0 && (i === 0 || i === 3) ? 6.8 + i * 5.7 : index === 1 && i === 0 ? 26.4 : Infinity,
+      callUntil: 0, random };
   }));
 
   return {
@@ -365,16 +386,21 @@ export function createCoastBirdLife() {
         for (const site of bird.stops) {
           if (site.contact) site.contact.visible = false;
         }
-        const distance = bird.kind === 'gull' ? 108 : 49;
         if (bird.flight && elapsed > bird.flight.start + bird.flight.duration) settle(bird, elapsed);
-        const wasVisible = model.root.visible;
-        model.root.visible = nearby(model, viewer, distance);
-        if (!model.root.visible) continue;
-        if (!wasVisible) {
-          bird.switchAt = Math.max(bird.switchAt, elapsed + 13 + bird.random() * 18);
-          bird.callAt = Math.max(bird.callAt, elapsed + 2 + bird.random() * 9);
+        const site = bird.stops[bird.stop];
+        let flightProgress = 0;
+        if (bird.flight) {
+          const t = (elapsed - bird.flight.start) / bird.flight.duration;
+          flightProgress = t * (.62 + t * (1.57 - 1.19 * t));
+          bird.flight.curve.getPoint(flightProgress, model.root.position);
+        } else {
+          model.root.position.copy(site.point);
+          model.root.position.y += model.standingY * (site.mode === 'water' ? .13 : 1);
         }
-        const close = nearby(model, viewer, bird.kind === 'gull' ? 1.85 : 1.35);
+        const distance = distanceToViewer(model.root.position, viewer);
+        const gull = bird.kind === 'gull';
+        model.root.visible = distance < (gull ? 108 : 49);
+        const close = distance < (gull ? 1.85 : 1.35);
         if (!bird.flight && close && bird.kick === 0) bird.kick = elapsed + .37 + bird.random() * .61;
         if (!close) bird.kick = 0;
         const movingSoon = bird.kick > 0 && elapsed > bird.kick;
@@ -390,20 +416,30 @@ export function createCoastBirdLife() {
           } else {
             bird.callAt = elapsed + minimum + bird.random() * variation;
             bird.callUntil = elapsed + phrase;
-            cue = true;
+            cue = distance < BIRD_CALL_RANGE[bird.kind] + model.standingY;
           }
         }
+        if (!model.root.visible && !cue) continue;
         if (bird.flight) {
-          flyResident(bird, elapsed, sample, velocity);
+          flyResident(bird, elapsed, flightProgress, sample, velocity);
         } else {
           resting(bird, elapsed, dt);
-          const site = bird.stops[bird.stop];
-          if (site.contact) site.contact.visible = true;
+          if (site.contact) site.contact.visible = model.root.visible;
           if (cue) {
             model.billTip.getWorldPosition(cuePosition);
             calls.push({ id: bird.id, species: bird.kind,
               x: cuePosition.x, y: cuePosition.y, z: cuePosition.z, gain });
           }
+        }
+      }
+
+      for (const perch of territorialCalls) {
+        if (elapsed < perch.callAt) continue;
+        const [minimum, variation, , gain] = cueCadence[perch.species];
+        perch.callAt = elapsed + minimum + 12 + perch.random() * (variation + 12);
+        if (distanceToViewer(perch, viewer) < BIRD_CALL_RANGE[perch.species]) {
+          const { id, species, x, y, z } = perch;
+          calls.push({ id, species, x, y, z, gain: gain * .74 });
         }
       }
 
@@ -416,21 +452,26 @@ export function createCoastBirdLife() {
       for (const flight of flock) {
         const { pass, bird, seed, altitude } = flight;
         const t = gullPosition(flight, elapsed, bird.root.position, velocity);
+        const distance = distanceToViewer(bird.root.position, viewer);
+        bird.root.visible = distance < pass.distance;
+        const strength = beatWindow('gull', elapsed, seed * 1.12) * (.58 + altitude * .036);
+        const calling = elapsed >= flight.callAt && strength < .28;
+        const cue = calling && distance < BIRD_CALL_RANGE.gull + bird.standingY;
+        if (calling) {
+          flight.callAt = elapsed + 44 + 32 * flight.random();
+          flight.callUntil = elapsed + cueCadence.gull[2];
+        }
+        if (!bird.root.visible && !cue) continue;
         pass.route.getTangentAt((t + .017) % 1, sample);
-        bird.root.visible = nearby(bird, viewer, pass.distance);
-        if (!bird.root.visible) continue;
         const yaw = heading(velocity.x, velocity.z);
         const bank = 1.56 * wrapAngle(yaw - heading(sample.x, sample.z));
-        const strength = beatWindow('gull', elapsed, seed * 1.12) * (.58 + altitude * .036);
         bird.root.rotation.set(-velocity.y * .27, yaw, bank, 'YXZ');
         bird.head.rotation.y = -bank * .25;
         bird.head.rotation.x = -.02 + velocity.y * .13;
         bird.tail.rotation.x = -.17 * bank;
         for (const leg of bird.legs) leg.visible = false;
         wingStroke(bird, 'gull', elapsed, strength, .96, seed * 1.7);
-        if (elapsed >= flight.callAt && strength < .28 && nearby(bird, viewer, 76)) {
-          flight.callAt = elapsed + 44 + 32 * flight.random();
-          flight.callUntil = elapsed + cueCadence.gull[2];
+        if (cue) {
           bird.billTip.getWorldPosition(cuePosition);
           gullPosition(flight, elapsed + .10, futurePosition, sample);
           velocity.subVectors(futurePosition, bird.root.position).multiplyScalar(10);
