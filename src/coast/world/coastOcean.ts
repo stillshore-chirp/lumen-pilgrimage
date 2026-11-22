@@ -340,10 +340,19 @@ function oceanShader(sand: THREE.Texture) {
         float skyOpening = smoothstep(-0.08, 0.37, reflectedRay.y);
         vec3 reflected = mix(water * vec3(0.69, 0.79, 0.83) + 0.024, broadSky * (0.63 + 0.17 * sunlit), skyOpening);
         if (uLiveReflection > 0.0 && vReflection.w > 0.0) {
-          vec2 uvReflect = vReflection.xy / vReflection.w + slope * vec2(0.018, 0.039);
+          float resolvedRipples = 1.0 - smoothstep(0.9, 4.1, length(fwidth(p)));
+          vec2 uvReflect = vReflection.xy / vReflection.w + slope * vec2(0.010, 0.016) * resolvedRipples;
           float edge = min(min(uvReflect.x, uvReflect.y), min(1.0 - uvReflect.x, 1.0 - uvReflect.y));
-          vec3 sceneReflection = texture2D(tDiffuse, clamp(uvReflect, 0.003, 0.997)).rgb;
-          reflected = mix(reflected, sceneReflection, smoothstep(0.012, 0.075, edge) * 0.79);
+          vec2 center = clamp(uvReflect, 0.005, 0.995);
+          vec2 footprint = vec2(0.0012, 0.0009) * (1.0 + smoothstep(18.0, 180.0, distance) * 1.8);
+          // Average reflections over the unresolved ripple slopes at grazing angles.
+          vec3 sceneReflection = texture2D(tDiffuse, center).rgb * 0.40;
+          sceneReflection += 0.15 * (texture2D(tDiffuse, center + vec2(footprint.x, 0.0)).rgb
+            + texture2D(tDiffuse, center - vec2(footprint.x, 0.0)).rgb
+            + texture2D(tDiffuse, center + vec2(0.0, footprint.y)).rgb
+            + texture2D(tDiffuse, center - vec2(0.0, footprint.y)).rgb);
+          float reflectionWeight = smoothstep(0.012, 0.075, edge) * (0.45 + 0.33 * resolvedRipples);
+          reflected = mix(reflected, sceneReflection, reflectionWeight);
         }
         water = mix(water, reflected, fresnel);
         float sparkle = waterSunGlint(normal, eye, uCoastSunDirection, 0.12 + 0.15 * current);
