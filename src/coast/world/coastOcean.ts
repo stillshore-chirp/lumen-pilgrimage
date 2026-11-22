@@ -250,7 +250,7 @@ function oceanShader(sand: THREE.Texture) {
         vec2 bedUV = (p + bounce.xz * min(bedPath, 45.0)) * 0.42;
         vec3 sand = textureGrad(uSand, bedUV, dpdx * 0.42, dpdy * 0.42).rgb;
         vec3 bed = sand * vec3(0.55, 0.94, 0.80) * (0.85 + wave * 0.22) * (0.54 + sunlit * 0.46);
-        vec3 reflected = mix(uUnderwaterScatter * 0.64, bed, underwaterExtinction(bedPath));
+        vec3 reflected = mix(uUnderwaterScatter * 0.64, bed, underwaterExtinction(bedPath)) * uCoastSurfaceLight;
         return mix(reflected, sky, transmission);
       }
 
@@ -301,7 +301,7 @@ function oceanShader(sand: THREE.Texture) {
           gl_FragColor = vec4(oceanUnderside(-eye, opticalNormal, p, thickness, sunlit, wave, dpdx, dpdy), 1.0);
           #include <tonemapping_fragment>
           // The distant water and the Three.js scene fog share a display-referred color.
-          gl_FragColor.rgb = mix(uUnderwaterScatter, gl_FragColor.rgb, underwaterExtinction(distance));
+          gl_FragColor.rgb = mix(uUnderwaterScatter * uCoastSurfaceLight, gl_FragColor.rgb, underwaterExtinction(distance));
           #include <colorspace_fragment>
           return;
         }
@@ -333,12 +333,14 @@ function oceanShader(sand: THREE.Texture) {
           * (0.067*wave + 0.024*cos(phaseC + phaseD + sin(p.x*0.42-p.y*0.77))));
         water = mix(water, water * 0.83 + vec3(0.008, 0.034, 0.018),
           waveFace * breaker * shallows * rippleFade);
+        water *= uCoastSurfaceLight;
         float fresnel = waterFresnel(dot(normal, eye));
         vec3 reflectedRay = reflect(-eye, normal);
         vec3 broadSky = coastSkyRadiance(normalize(vec3(reflectedRay.x, max(0.20, reflectedRay.y), reflectedRay.z)));
         // Near-horizontal reflections sample the surrounding banks and distant water.
         float skyOpening = smoothstep(-0.08, 0.37, reflectedRay.y);
-        vec3 reflected = mix(water * vec3(0.69, 0.79, 0.83) + 0.024, broadSky * (0.63 + 0.17 * sunlit), skyOpening);
+        vec3 reflected = mix(water * vec3(0.69, 0.79, 0.83) + 0.024 * uCoastSurfaceLight,
+          broadSky * (0.63 + 0.17 * sunlit), skyOpening);
         if (uLiveReflection > 0.0 && vReflection.w > 0.0) {
           float resolvedRipples = 1.0 - smoothstep(0.9, 4.1, length(fwidth(p)));
           vec2 uvReflect = vReflection.xy / vReflection.w + slope * vec2(0.010, 0.016) * resolvedRipples;
@@ -386,7 +388,7 @@ function oceanShader(sand: THREE.Texture) {
             bubbles.r * 0.51 + flecks * 0.34 + groups * 0.19 + bubbles.g * 0.12);
           float residue = trailFoam * (0.055 * broken + (0.28 + 0.20 * breaker) * driftingLace);
           float shoreFoam = crestFoam + residue * (1.0 - crestFoam);
-          water = mix(water, uWash * (0.69 + 0.31 * sunlit), shoreFoam);
+          water = mix(water, uWash * uCoastSurfaceLight * (0.69 + 0.31 * sunlit), shoreFoam);
         }
 
         float horizon = smoothstep(500.0, 2240.0, distance);
@@ -416,6 +418,7 @@ export function createCoastOcean(time: THREE.IUniform<number>, atmosphere: Coast
   const reflect = mesh.onBeforeRender;
   let high = false;
   let lastReflection = -Infinity;
+  let reflectedNight = atmosphere.night.value;
   mesh.onBeforeRender = (renderer, scene, camera, geometry, material, group) => {
     const canReflect = high && camera.position.y > SEA_LEVEL + 0.17 && camera.position.z < 164;
     surface.uniforms.uLiveReflection.value = Number(canReflect);
@@ -423,7 +426,8 @@ export function createCoastOcean(time: THREE.IUniform<number>, atmosphere: Coast
       lastReflection = -Infinity;
       return;
     }
-    if (time.value - lastReflection < 0.105) return;
+    if (reflectedNight === atmosphere.night.value && time.value - lastReflection < 0.105) return;
+    reflectedNight = atmosphere.night.value;
     lastReflection = time.value;
     reflect.call(mesh, renderer, scene, camera, geometry, material, group);
   };
