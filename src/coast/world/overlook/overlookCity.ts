@@ -324,7 +324,8 @@ const nightPointsVertex = /* glsl */`
     float warmPractical = middleBasin * brightCore * (1.0 - smoothstep(0.60, 0.92, cityTemperature));
     float practicalSize = diameter * (0.57 + 0.73 * intensity)
       * (mix(1.09, 1.04, distant) + 0.11 * distant * brightCore + 0.14 * warmPractical);
-    gl_PointSize = max(1.7, (practicalSize + spread) * uCityPixelFactor);
+    float distantLowland = distant * (1.0 - smoothstep(95.0, 185.0, world.y)) * (1.0 - step(2.5, lightKind));
+    gl_PointSize = max(1.7, (practicalSize + spread) * uCityPixelFactor * mix(1.0, 0.82, distantLowland));
     float transmission = cityTransmittance(world);
     vec3 basinGlow = vec3(1.0, 0.70, 0.145);
     float basinWarmth = max(0.73 * distant * (1.0 - smoothstep(0.65, 0.91, cityTemperature)), 0.64 * warmPractical);
@@ -332,7 +333,7 @@ const nightPointsVertex = /* glsl */`
     float luminousCore = 0.15 + cityPower * (0.83 + mix(0.83, 1.16, distant) * cityPower);
     vPower = transmission * radiance * mix(luminousCore, 0.16 + cityPower * 0.96, step(3.5, lightKind))
       * mix(1.08, 1.19, distant) * (1.0 + 0.74 * warmPractical);
-    vScatter = mix(0.15, 0.088, distant) * smoothstep(0.38, 1.05, intensity);
+    vScatter = mix(0.15, 0.088, distant) * smoothstep(0.38, 1.05, intensity) * mix(1.0, 0.66, distantLowland);
     gl_Position = projectionMatrix * view;
   }
 `;
