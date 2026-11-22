@@ -6,6 +6,7 @@ const signs = [
   { x: -30.2, z: 105.2, bearing: Math.PI, label: '休憩所', arrow: '←' },
   { x: -8.8, z: 394.0, bearing: Math.PI - 0.27, label: '湖・稜線', arrow: '←' },
   { x: 98.2, z: 842.6, bearing: -0.46, label: '稜線', arrow: '→' },
+  { x: 153.1, z: 847.9, bearing: -1.35, label: '朱の参道', arrow: '→' },
 ];
 
 function makeSignFace(label: string, arrow: string): THREE.CanvasTexture {

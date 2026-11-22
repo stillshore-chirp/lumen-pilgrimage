@@ -1,5 +1,8 @@
 import * as THREE from 'three';
+import { Reflector } from 'three/addons/objects/Reflector.js';
+import type { CoastQuality } from '../CoastWorld';
 import { coastRandom, groundHeight, SEA_LEVEL } from '../terrain';
+import { bindCoastSky, coastSkyGlsl, type CoastAtmosphere } from './coastAtmosphere';
 import { coastNoise } from './coastNoise';
 import { coastSwellGLSL } from './coastSwell';
 import { coastWaterOptics, SEA_WATER_SCATTER } from './coastWaterOptics';
@@ -7,7 +10,7 @@ import { coastWaterOptics, SEA_WATER_SCATTER } from './coastWaterOptics';
 // The sea shader only needs the coastal strip, at a higher sampling density than the uplands.
 const OCEAN_BATHYMETRY = { minX: -574, maxX: 574, minZ: -817, maxZ: 695 };
 
-export function createCoastOceanGeometry(): THREE.BufferGeometry {
+function createCoastOceanGeometry(): THREE.BufferGeometry {
   // Denser triangles at the beach carry the breaking lip. Open water stays a flat extension.
   const xs = [-2445, -575, -315];
   const zs = [-2580, -818];
@@ -167,17 +170,17 @@ const shoreBathymetry = /* glsl */`
   }
 `;
 
-export function createCoastOceanMaterial(
-  time: THREE.IUniform<number>, sun: THREE.Vector3, sand: THREE.Texture
-): THREE.ShaderMaterial {
+function oceanShader(sand: THREE.Texture) {
   const { minX, maxX, minZ, maxZ } = OCEAN_BATHYMETRY;
-  return new THREE.ShaderMaterial({
-    lights: true,
-    side: THREE.DoubleSide,
+  return {
+    name: 'Shore breakers and reflected cliffs',
     uniforms: {
-      ...THREE.UniformsUtils.clone(THREE.UniformsLib.lights),
-      uTime: time,
-      uSun: { value: sun },
+      ...THREE.UniformsLib.lights,
+      tDiffuse: { value: null },
+      textureMatrix: { value: null },
+      color: { value: null },
+      uTime: { value: 0 },
+      uLiveReflection: { value: 0 },
       uDepth: { value: createDepthTexture() },
       uWaterDetail: { value: createWaterDetailTexture() },
       uSand: { value: sand },
@@ -186,13 +189,13 @@ export function createCoastOceanMaterial(
       uLagoon: { value: new THREE.Color(0x17b4b0) },
       uWater: { value: new THREE.Color(0x1381b0) },
       uDeep: { value: new THREE.Color(0x0a5484) },
-      uReflection: { value: new THREE.Color(0x4c97c7) },
-      uHorizon: { value: new THREE.Color(0x8cbfdf) },
       uWash: { value: new THREE.Color(0xe9fff7) },
       uUnderwaterScatter: { value: new THREE.Color(SEA_WATER_SCATTER) },
     },
     vertexShader: /* glsl */`
       varying vec3 vSurface;
+      varying vec4 vReflection;
+      uniform mat4 textureMatrix;
       #include <common>
       #include <shadowmap_pars_vertex>
       ${shoreBathymetry}
@@ -214,15 +217,18 @@ export function createCoastOceanMaterial(
         }
         vec3 transformedNormal = normalize(normalMatrix * normal);
         vSurface = worldPosition.xyz;
+        vReflection = textureMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * viewMatrix * worldPosition;
         #include <shadowmap_vertex>
       }
     `,
     fragmentShader: /* glsl */`
-      uniform sampler2D uSand, uWaterDetail;
-      uniform vec3 uSun, uLagoon, uWater, uDeep, uReflection, uHorizon, uWash;
+      uniform sampler2D uSand, uWaterDetail, tDiffuse;
+      uniform float uLiveReflection;
+      uniform vec3 uLagoon, uWater, uDeep, uWash;
       uniform vec3 uUnderwaterScatter;
       varying vec3 vSurface;
+      varying vec4 vReflection;
       #include <common>
       #include <packing>
       #include <lights_pars_begin>
@@ -231,19 +237,13 @@ export function createCoastOceanMaterial(
       ${coastNoise}
       ${shoreBathymetry}
       ${coastWaterOptics}
+      ${coastSkyGlsl}
 
       vec3 oceanUnderside(vec3 ray, vec3 normal, vec2 p, float thickness,
         float sunlit, float wave, vec2 dpdx, vec2 dpdy) {
         vec3 airRay;
         float transmission = waterTransmission(ray, normal, airRay);
-        float skyHeight = clamp(airRay.y, 0.0, 1.0);
-        vec3 sky = mix(uHorizon, vec3(0.022, 0.126, 0.36), smoothstep(0.0, 0.76, skyHeight));
-        vec2 clouds = airRay.xz * 4.6 + vec2(skyHeight * 3.2, skyHeight * 2.6);
-        float wisps = coastNoise(clouds) * 0.63 + coastNoise(clouds * 2.17) * 0.25
-          + coastNoise(clouds * 4.61) * 0.12;
-        sky = mix(sky, vec3(0.79, 0.88, 0.87), smoothstep(0.49, 0.71, wisps) * 0.46);
-        float sun = max(dot(airRay, uSun), 0.0);
-        sky += vec3(1.0, 0.94, 0.72) * (0.24 * pow(sun, 18.0) + 1.35 * pow(sun, 220.0)) * sunlit;
+        vec3 sky = coastSkyRadiance(airRay) + sunlit * coastSunRadiance(airRay);
 
         vec3 bounce = reflect(ray, -normal);
         float bedPath = thickness / max(0.055, -bounce.y);
@@ -285,6 +285,10 @@ export function createCoastOceanMaterial(
         float waveFace = 1.0 - smoothstep(0.0, 1.9, abs(head + 0.24));
         slope -= shoreward * waveFace * breaker * shallows * 0.13;
         float rippleFade = 1.0 - smoothstep(95.0, 550.0, distance);
+        vec2 capillary = textureGrad(uWaterDetail,
+          p * 0.32 + vec2(uTime * 0.071, -uTime * 0.033) + 0.04 * sin(p.yx * 0.69),
+          dFdx(p) * 0.32, dFdy(p) * 0.32).rg - 0.5;
+        slope += 0.13 * capillary * (1.0 - smoothstep(0.22, 3.1, length(fwidth(p))));
         vec3 normal = normalize(vec3(-slope.x*rippleFade, 1.0, -slope.y*rippleFade));
         float thickness = max(depth + vSurface.y, 0.0);
         float sunlit = getShadowMask();
@@ -326,17 +330,33 @@ export function createCoastOceanMaterial(
           water = mix(water, seaBed, bottom * 0.97);
         }
         water *= (0.69 + 0.31*sunlit) * (0.96 + 0.08*swell + rippleFade
-          * (0.13*wave + 0.043*cos(phaseC + phaseD + sin(p.x*0.42-p.y*0.77))));
+          * (0.067*wave + 0.024*cos(phaseC + phaseD + sin(p.x*0.42-p.y*0.77))));
         water = mix(water, water * 0.83 + vec3(0.008, 0.034, 0.018),
           waveFace * breaker * shallows * rippleFade);
-        float fresnel = pow(1.0 - max(dot(normal, eye), 0.0), 5.0);
-        vec3 reflected = uReflection * (0.71 + 0.38*smoothstep(-0.1, 0.79, wave));
-        water = mix(water, reflected, fresnel * (0.36 + 0.25*blue));
-
-        vec3 halfway = normalize(eye + uSun);
-        float specular = pow(max(dot(halfway, normal), 0.0), 95.0);
-        float sparkle = smoothstep(0.56, 0.9, cos(phaseD)*(0.09 + current*0.53) + wave*0.67);
-        water += uWash * (specular * 1.23 * sunlit + sparkle * 0.056) * rippleFade;
+        float fresnel = waterFresnel(dot(normal, eye));
+        vec3 reflectedRay = reflect(-eye, normal);
+        vec3 broadSky = coastSkyRadiance(normalize(vec3(reflectedRay.x, max(0.20, reflectedRay.y), reflectedRay.z)));
+        // Near-horizontal reflections sample the surrounding banks and distant water.
+        float skyOpening = smoothstep(-0.08, 0.37, reflectedRay.y);
+        vec3 reflected = mix(water * vec3(0.69, 0.79, 0.83) + 0.024, broadSky * (0.63 + 0.17 * sunlit), skyOpening);
+        if (uLiveReflection > 0.0 && vReflection.w > 0.0) {
+          float resolvedRipples = 1.0 - smoothstep(0.9, 4.1, length(fwidth(p)));
+          vec2 uvReflect = vReflection.xy / vReflection.w + slope * vec2(0.010, 0.016) * resolvedRipples;
+          float edge = min(min(uvReflect.x, uvReflect.y), min(1.0 - uvReflect.x, 1.0 - uvReflect.y));
+          vec2 center = clamp(uvReflect, 0.005, 0.995);
+          vec2 footprint = vec2(0.0012, 0.0009) * (1.0 + smoothstep(18.0, 180.0, distance) * 1.8);
+          // Average reflections over the unresolved ripple slopes at grazing angles.
+          vec3 sceneReflection = texture2D(tDiffuse, center).rgb * 0.40;
+          sceneReflection += 0.15 * (texture2D(tDiffuse, center + vec2(footprint.x, 0.0)).rgb
+            + texture2D(tDiffuse, center - vec2(footprint.x, 0.0)).rgb
+            + texture2D(tDiffuse, center + vec2(0.0, footprint.y)).rgb
+            + texture2D(tDiffuse, center - vec2(0.0, footprint.y)).rgb);
+          float reflectionWeight = smoothstep(0.012, 0.075, edge) * (0.45 + 0.33 * resolvedRipples);
+          reflected = mix(reflected, sceneReflection, reflectionWeight);
+        }
+        water = mix(water, reflected, fresnel);
+        float sparkle = waterSunGlint(normal, eye, uCoastSunDirection, 0.12 + 0.15 * current);
+        water += uCoastSolarColor * sparkle * sunlit;
 
         float antialias = max(fwidth(head) * 0.55, 0.035);
         if (shoal > 0.0 && depth > -0.31 && abs(head) < 8.0) {
@@ -370,11 +390,48 @@ export function createCoastOceanMaterial(
         }
 
         float horizon = smoothstep(500.0, 2240.0, distance);
-        water = mix(water, uHorizon, horizon * 0.87);
+        water = mix(water, coastSkyRadiance(-eye), horizon);
         gl_FragColor = vec4(water, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
     `,
+  };
+}
+
+export function createCoastOcean(time: THREE.IUniform<number>, atmosphere: CoastAtmosphere, sand: THREE.Texture) {
+  const mesh = new Reflector(createCoastOceanGeometry(), {
+    shader: oceanShader(sand), textureWidth: 840, textureHeight: 512, multisample: 0, clipBias: 0.0007,
   });
+  mesh.name = 'Clear shoals and open sea';
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(0, SEA_LEVEL, -230);
+  mesh.receiveShadow = true;
+  const surface = mesh.material as THREE.ShaderMaterial;
+  surface.side = THREE.DoubleSide;
+  surface.lights = true;
+  surface.uniforms.uTime = time;
+  bindCoastSky(surface.uniforms, atmosphere);
+
+  const reflect = mesh.onBeforeRender;
+  let high = false;
+  let lastReflection = -Infinity;
+  mesh.onBeforeRender = (renderer, scene, camera, geometry, material, group) => {
+    const canReflect = high && camera.position.y > SEA_LEVEL + 0.17 && camera.position.z < 164;
+    surface.uniforms.uLiveReflection.value = Number(canReflect);
+    if (!canReflect) {
+      lastReflection = -Infinity;
+      return;
+    }
+    if (time.value - lastReflection < 0.105) return;
+    lastReflection = time.value;
+    reflect.call(mesh, renderer, scene, camera, geometry, material, group);
+  };
+  return {
+    mesh,
+    setQuality(quality: CoastQuality) {
+      high = quality === 'high';
+      lastReflection = -Infinity;
+    },
+  };
 }

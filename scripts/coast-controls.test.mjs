@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera, Ray, Triangle, Vector3 } from 'three';
 import {
-  COAST_WALKS, FOREST_WALKS, UPLAND_LAKE, UPLAND_WALKS, groundHeight, SEA_LEVEL, SPAWN,
+  COAST_WALKS, FOREST_WALKS, INARI_WALKS, UPLAND_LAKE, UPLAND_WALKS, groundHeight, SEA_LEVEL, SPAWN,
 } from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
@@ -542,7 +542,7 @@ test('the upland lake uses its own water level for floating, diving, and surfaci
   }
 });
 
-test('the main walking controls complete the coastal and forest paths without flying', () => {
+test('walking connects the beach, forest, lake, ridge and both vermilion stairs', () => {
   const browser = createBrowser();
   const camera = new PerspectiveCamera();
   const modes = [];
@@ -579,6 +579,12 @@ test('the main walking controls complete the coastal and forest paths without fl
     assert.ok(lakeToRidge > 0);
     walkThrough('lake to ridge', lake.points.slice(1, lakeToRidge + 1));
     walkThrough(ridge.id, ridge.points);
+    const [vermilionApproach, westSteps, eastSteps, hillsideReturn] = INARI_WALKS;
+    walkThrough(vermilionApproach.id, vermilionApproach.points);
+    walkThrough(westSteps.id, westSteps.points);
+    walkThrough('west stairs downhill', [...westSteps.points].reverse());
+    walkThrough(eastSteps.id, eastSteps.points);
+    walkThrough(hillsideReturn.id, hillsideReturn.points);
     const oldOverlook = ford.points.at(-1);
     camera.position.set(oldOverlook.x, groundHeight(oldOverlook.x, oldOverlook.z) + 1.65, oldOverlook.z);
     walkThrough(ford.id, [...ford.points].reverse());

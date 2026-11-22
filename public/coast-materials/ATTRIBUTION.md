@@ -10,6 +10,7 @@
 | `forest-mud.webp` | eye-candy.xyz の [Mud Forest](https://polyhaven.com/a/mud_forest)（Poly Haven、CC0 1.0） | 踏み跡と水際の泥。1K Diffuse を WebP に変換 |
 | `forest-relief.webp` | 上記3素材の Displacement（Poly Haven、CC0 1.0） | 赤に林床、緑に岩、青に泥の凹凸を収録。線形データとして読み込む |
 | `forest-bark.webp`、`forest-bark-height.webp` | Rob Tuytel の [Bark Brown 01](https://polyhaven.com/a/bark_brown_01)（Poly Haven、CC0 1.0） | 近景の幹と板根。1K Diffuse と640 pxの高さを WebP で配布 |
+| `trail-granite.webp`、`trail-granite-normal.webp` | Amal Kumar の [Granite Tile 04](https://polyhaven.com/a/granite_tile_04)（Poly Haven、CC0 1.0） | 朱の参道の石段と石灯籠。1K Diffuse と OpenGL Normal から目地を除いて切り出し、WebP に変換 |
 | `scenery/shelf.glb` | Rob Tuytel の [Coast Rocks 05](https://polyhaven.com/a/coast_rocks_05)（Poly Haven、CC0 1.0） | 潮棚と海底。形状を圧縮し、色・法線・粗さ・AO を同梱 |
 | `scenery/boulder.glb` | Rico Cilliers の [Boulder 01](https://polyhaven.com/a/boulder_01)（Poly Haven、CC0 1.0） | 露出した割れ岩。形状を圧縮し、表面マップを同梱 |
 | `scenery/moss.glb` | Kless Gyzen の [Rock Moss Set 01](https://polyhaven.com/a/rock_moss_set_01)（Poly Haven、CC0 1.0） | 林の岩、沢と岸。岩6種を別のメッシュにし、表面マップを同梱 |

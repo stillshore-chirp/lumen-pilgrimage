@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bindCoastSky, coastSkyGlsl, type CoastAtmosphere } from './coastAtmosphere';
 import { loadCoastTexture } from './coastSurface';
 
 const atlas = [
@@ -24,7 +25,7 @@ const cloudBanks = [
   { tile: 1, x: -1290, y: 215, z: 166, width: 600, height: 315, opacity: 0.82 },
 ];
 
-export function createCoastSky(sun: THREE.Vector3): {
+export function createCoastSky(atmosphere: CoastAtmosphere): {
   dome: THREE.Mesh;
   clouds: THREE.Group;
 } {
@@ -32,37 +33,26 @@ export function createCoastSky(sun: THREE.Vector3): {
     side: THREE.BackSide,
     depthWrite: false,
     depthTest: false,
-    toneMapped: false,
-    uniforms: {
-      uSun: { value: sun },
-      uHorizon: { value: new THREE.Color(0xb9e0f2) },
-      uHaze: { value: new THREE.Color(0x70b9ec) },
-      uAzure: { value: new THREE.Color(0x246cbd) },
-      uZenith: { value: new THREE.Color(0x164b93) },
-    },
     vertexShader: /* glsl */`
       varying vec3 vSkyDirection;
       void main() {
         vSkyDirection = position;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
+        gl_Position.z = gl_Position.w;
       }
     `,
     fragmentShader: /* glsl */`
-      uniform vec3 uSun, uHorizon, uHaze, uAzure, uZenith;
       varying vec3 vSkyDirection;
+      ${coastSkyGlsl}
       void main() {
-        vec3 d = normalize(vSkyDirection);
-        float h = max(0.0, d.y);
-        vec3 sky = mix(uHorizon, uHaze, smoothstep(0.0, 0.19, h));
-        sky = mix(sky, uAzure, smoothstep(0.09, 0.49, h));
-        sky = mix(sky, uZenith, smoothstep(0.51, 1.0, h));
-        float sun = max(dot(d,uSun), 0.0);
-        sky += vec3(1.0, 0.89, 0.62) * (pow(sun, 14.0)*0.18 + pow(sun, 280.0)*0.41);
-        gl_FragColor = vec4(sky, 1.0);
+        vec3 direction = normalize(vSkyDirection);
+        gl_FragColor = vec4(coastSkyRadiance(direction) + coastSunRadiance(direction), 1.0);
+        #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
     `,
   });
+  bindCoastSky(material.uniforms, atmosphere);
   const dome = new THREE.Mesh(new THREE.SphereGeometry(2170, 28, 18), material);
   dome.name = 'Open sky and sunlight';
   dome.renderOrder = -100;
@@ -78,10 +68,12 @@ export function createCoastSky(sun: THREE.Vector3): {
     for (let i = 0; i < uv.count; i += 1) {
       uv.setXY(i, x + w * uv.getX(i), 1 - y - h * (1 - uv.getY(i)));
     }
+    const sunward = new THREE.Vector3(bank.x, 0, bank.z).normalize()
+      .dot(atmosphere.sun.value);
     const cloud = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
-      map: texture, color: new THREE.Color(1.05, 1.09, 1.11),
+      map: texture, color: new THREE.Color(0.95 + 0.13 * sunward, 0.98 + 0.06 * sunward, 1.00 - 0.08 * sunward),
       transparent: true, opacity: bank.opacity, alphaTest: 0.018,
-      side: THREE.DoubleSide, depthWrite: false, fog: false, toneMapped: false,
+      side: THREE.DoubleSide, depthWrite: false, fog: false,
     }));
     cloud.position.set(bank.x, bank.y, bank.z);
     cloud.lookAt(0, bank.y, 30);

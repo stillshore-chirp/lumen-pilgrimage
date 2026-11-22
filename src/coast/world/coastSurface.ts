@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { CoastQuality } from '../CoastWorld';
-import { COAST_BOUNDS, LANDSCAPE_BOUNDS, coastBedrock, coastTreadWear, forestStreamDistance, groundHeight, smoothstep } from '../terrain';
+import {
+  COAST_BOUNDS, LANDSCAPE_BOUNDS, coastBedrock, coastTreadWear, forestStreamDistance, groundHeight,
+  smoothstep, uplandSpillWetness,
+} from '../terrain';
 import { coastNoise } from './coastNoise';
 
 export function loadCoastTexture(file: string, repeat = false): THREE.Texture {
@@ -12,12 +15,13 @@ export function loadCoastTexture(file: string, repeat = false): THREE.Texture {
 }
 
 function terrainAxis(start: number, end: number, playStart: number, playEnd: number,
-  detailedStart: number, detailedEnd: number, outerDetailEnd = detailedEnd): number[] {
+  detailedStart: number, detailedEnd: number, outerDetailEnd: number, pavedBand: readonly [number, number]): number[] {
   const result = [start];
   let value = start;
   while (value < end) {
     const offMap = Math.max(playStart - value, value - playEnd);
-    const step = value >= detailedStart && value < detailedEnd ? 1.17
+    const onStonework = value >= pavedBand[0] && value < pavedBand[1];
+    const step = onStonework ? 0.96 : value >= detailedStart && value < detailedEnd ? 1.17
       : value >= detailedEnd && value < outerDetailEnd ? 1.96
       : offMap > 0 ? Math.min(31, 6.6 + offMap * 0.09) : 3.15;
     value = Math.min(value + step, end);
@@ -28,8 +32,8 @@ function terrainAxis(start: number, end: number, playStart: number, playEnd: num
 
 export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, time: THREE.IUniform<number>) {
   const { minX, maxX, minZ, maxZ } = LANDSCAPE_BOUNDS;
-  const xs = terrainAxis(minX, maxX, COAST_BOUNDS.minX, COAST_BOUNDS.maxX, -164, 153, 246);
-  const zs = terrainAxis(minZ, maxZ, COAST_BOUNDS.minZ, COAST_BOUNDS.maxZ, -59, 416, 1115);
+  const xs = terrainAxis(minX, maxX, COAST_BOUNDS.minX, COAST_BOUNDS.maxX, -164, 153, 246, [194, 270]);
+  const zs = terrainAxis(minZ, maxZ, COAST_BOUNDS.minZ, COAST_BOUNDS.maxZ, -59, 416, 1115, [889, 1044]);
   const positions = new Float32Array(xs.length * zs.length * 3);
   const trail = new Float32Array(xs.length * zs.length);
   const damp = new Float32Array(xs.length * zs.length);
@@ -39,7 +43,7 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
   for (const z of zs) {
     for (const x of xs) {
       trail[offset / 3] = coastTreadWear(x, z);
-      damp[offset / 3] = 1 - smoothstep(0, 6.2, forestStreamDistance(x, z));
+      damp[offset / 3] = Math.max(uplandSpillWetness(x, z), 1 - smoothstep(0, 6.2, forestStreamDistance(x, z)));
       bedrock[offset / 3] = coastBedrock(x, z);
       positions[offset++] = x;
       positions[offset++] = groundHeight(x, z);
@@ -126,7 +130,7 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
         float pocket = coastNoise(p.xz * 0.143 + p.y * 0.083)
           + coastNoise(p.xz * 0.36 - p.y * 0.18) * 0.24;
         float weathered = vBedrock * smoothstep(0.24, 0.67, pocket);
-        rocky = max(rocky, weathered);
+        rocky = max(rocky, max(weathered, vBedrock * vDamp * 0.91));
         float green = smoothstep(2.1, 6.8, p.y + 2.5 * (broad - 0.5));
         float moss = smoothstep(0.68, 1.08, pocket) * smoothstep(6.0, 20.0, p.y);
         green *= (1.0 - rocky * (0.96 - moss * 0.77));
@@ -205,6 +209,9 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
           forestFloor = mix(forestFloor, meadow, moor * (1.0 - worn * 0.90) * 0.76);
           float greenSlope = upland * (1.0 - worn) * smoothstep(0.19, 0.92, slopeColor) * (1.0 - rockCover * 0.74);
           forestFloor *= mix(vec3(1.0), vec3(0.83, 1.29, 0.77), greenSlope * 0.86);
+          float cedarGrove = smoothstep(177.0, 208.0, p.x) * (1.0 - smoothstep(259.0, 310.0, p.x))
+            * smoothstep(886.0, 909.0, p.z) * (1.0 - smoothstep(1046.0, 1078.0, p.z));
+          forestFloor *= mix(vec3(1.0), vec3(0.84, 0.69, 0.52), cedarGrove * (0.89 - 0.29 * worn));
           vec3 forestSurface = mix(forestFloor, rockMat, rockCover) * (0.78 + 0.49 * broad);
           forestSurface *= mix(vec3(1.0), vec3(0.54, 0.67, 0.63), forestWet);
           diffuseColor.rgb = mix(diffuseColor.rgb, forestSurface, interior);

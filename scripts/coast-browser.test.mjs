@@ -207,7 +207,8 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     assert.equal(beforeSwitch.contexts, 1);
     assert.equal(beforeSwitch.contextState, 'running');
     assert.deepEqual([...recordings].sort(), [
-      'birds.ogg', 'forest-birds.ogg', 'insects.ogg', 'rivulet.ogg', 'shelter-birds.ogg', 'surf.ogg', 'waterfall.ogg', 'waves.ogg',
+      'bush-warbler-calls.ogg', 'forest-birds.ogg', 'gull-calls.ogg', 'insects.ogg', 'rivulet.ogg',
+      'shelter-birds.ogg', 'surf.ogg', 'thrush-calls.ogg', 'waterfall.ogg', 'waves.ogg', 'white-eye-calls.ogg',
     ]);
     assert.equal(beforeSwitch.decoded, recordings.size);
     assert.ok(await page.evaluate(() => window.coastProbe.panners.filter(node =>
