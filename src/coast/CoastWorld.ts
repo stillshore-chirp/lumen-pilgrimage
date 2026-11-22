@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   COAST_FALLS, SEA_LEVEL, coastPlantingDistance, coastRandom, coastTrailDistance, forestStreamDistance,
-  groundHeight, groundSlope, smoothstep,
+  forestStreamLevel, groundHeight, groundSlope, smoothstep,
 } from './terrain';
 import { createForestRocks } from './world/coastForestRocks';
 import { createForestWater } from './world/coastForestWater';
@@ -11,6 +11,7 @@ import { createCoastSky } from './world/coastSky';
 import { createCoastTerrain, loadCoastTexture } from './world/coastSurface';
 import { createCoastVegetation } from './world/coastVegetation';
 import { createWaterfalls } from './world/coastWaterfall';
+import { SEA_WATER_SCATTER, STREAM_WATER_SCATTER } from './world/coastWaterOptics';
 
 export type CoastQuality = 'light' | 'high';
 
@@ -144,6 +145,8 @@ export class CoastWorld {
   private readonly fog = new THREE.Fog(0xa6d0e8, 135, 854);
   private readonly coastAir = new THREE.Color(0xa6d0e8);
   private readonly forestAir = new THREE.Color(0x80988e);
+  private readonly seaScattering = new THREE.Color(SEA_WATER_SCATTER);
+  private readonly streamScattering = new THREE.Color(STREAM_WATER_SCATTER);
   private readonly lighting: ReturnType<typeof createCoastLighting>;
   private readonly sky: ReturnType<typeof createCoastSky>;
   private readonly terrain: ReturnType<typeof createCoastTerrain>;
@@ -161,7 +164,7 @@ export class CoastWorld {
     const stone = loadCoastTexture('limestone.webp', true);
     const sand = loadCoastTexture('sand.webp', true);
     const canopy = loadCoastTexture('canopy.webp', true);
-    this.terrain = createCoastTerrain(stone, sand, canopy);
+    this.terrain = createCoastTerrain(stone, sand, canopy, this.time);
     this.scene.add(this.terrain.mesh, createShoreRocks(stone), createForestRocks(this.terrain.mossRock));
     const ocean = new THREE.Mesh(createCoastOceanGeometry(),
       createCoastOceanMaterial(this.time, sunDirection, sand));
@@ -195,6 +198,16 @@ export class CoastWorld {
     this.fog.color.copy(this.coastAir).lerp(this.forestAir, humidAir);
     this.fog.near = 135 - humidAir * 95;
     this.fog.far = 854 - humidAir * 433;
+    const stream = forestStreamLevel(x, z);
+    const depth = (stream ?? SEA_LEVEL) - y;
+    if (depth > 0) {
+      const submersion = smoothstep(0.01, 0.24, depth);
+      const openWater = stream === undefined;
+      this.fog.color.lerp(openWater ? this.seaScattering : this.streamScattering, submersion);
+      this.fog.near = THREE.MathUtils.lerp(this.fog.near, 2.0, submersion);
+      const visibility = openWater ? 58 - 30 * smoothstep(1.7, 23, depth) : 23;
+      this.fog.far = THREE.MathUtils.lerp(this.fog.far, visibility, submersion);
+    }
     this.waterfalls.update(elapsed);
     this.seabirds.update(elapsed);
     this.vegetation.update(camera);

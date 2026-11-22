@@ -24,7 +24,7 @@ function terrainAxis(start: number, end: number, playStart: number, playEnd: num
   return result;
 }
 
-export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, canopy: THREE.Texture) {
+export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, canopy: THREE.Texture, time: THREE.IUniform<number>) {
   const { minX, maxX, minZ, maxZ } = LANDSCAPE_BOUNDS;
   const xs = terrainAxis(minX, maxX, COAST_BOUNDS.minX, COAST_BOUNDS.maxX, -164, 153);
   const zs = terrainAxis(minZ, maxZ, COAST_BOUNDS.minZ, COAST_BOUNDS.maxZ, -17, 416);
@@ -78,6 +78,7 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, can
     shader.uniforms.uForestMud = { value: mud };
     shader.uniforms.uForestRelief = { value: relief };
     shader.uniforms.uMicroRelief = microRelief;
+    shader.uniforms.uCoastSurfaceTime = time;
     shader.uniforms.uGrayStone = { value: new THREE.Color(0x596e90) };
     shader.uniforms.uLitStone = { value: new THREE.Color(0xcbc3a6) };
     shader.uniforms.uWetSand = { value: new THREE.Color(0xaf9472) };
@@ -103,7 +104,7 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, can
         uniform sampler2D uSand;
         uniform sampler2D uCanopy;
         uniform sampler2D uForestLitter, uForestRock, uForestMud, uForestRelief;
-        uniform float uMicroRelief;
+        uniform float uMicroRelief, uCoastSurfaceTime;
         uniform vec3 uGrayStone, uLitStone, uWetSand, uDrySand, uForestFloor;
 
         ${coastNoise}
@@ -175,6 +176,22 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, can
       `)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor *= 1.0 - 0.63 * forestWet;
+      `)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        if (vCoastPoint.y < 0.0) {
+          float depth = -vCoastPoint.y;
+          vec2 field = (vCoastPoint.xz + vec2(0.44, 0.56) * depth * 0.64) * 2.05;
+          float t = uCoastSurfaceTime;
+          float w1 = sin(field.x + 0.47 * field.y - 1.36 * t);
+          float w2 = sin(field.y - 0.61 * field.x + 0.93 * t + 0.78 * w1);
+          float w3 = sin(field.x - field.y * 0.73 - 0.66 * t + 0.89 * w2);
+          float focus = abs(w1 + w2 + w3 * 0.72);
+          float caustic = (1.0 - smoothstep(0.026, 0.18 + fwidth(focus) * 0.5, focus));
+          float pulse = 0.47 + 0.53 * coastNoise(field * 0.24 + t * 0.16);
+          float penetration = exp(-depth * 0.165) * smoothstep(0.015, 0.22, depth);
+          reflectedLight.directDiffuse *= mix(vec3(1.0), vec3(0.65, 0.94, 0.94), smoothstep(0.0, 8.0, depth));
+          reflectedLight.directDiffuse *= 1.0 + 0.92 * pulse * caustic * penetration;
+        }
       `)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         vec3 coastTangentX = dFdx(-vViewPosition);

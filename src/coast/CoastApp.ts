@@ -12,7 +12,7 @@ const qualitySettings = {
 } satisfies Record<CoastQuality, number>;
 
 const movementLabels: Record<CoastMovement, string> = {
-  walk: '歩行', wade: '浅瀬', swim: '遊泳', flight: '自由飛行',
+  walk: '歩行', wade: '浅瀬', swim: '遊泳', dive: '潜水', flight: '自由飛行',
 };
 
 export class CoastApp {
@@ -62,12 +62,14 @@ export class CoastApp {
             <p>浜を背にして林へ進むと、沢と岩間に分かれます。</p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
-            <p><kbd>Space</kbd> ジャンプ</p>
+            <p>地上で <kbd>Space</kbd> ジャンプ</p>
+            <p>泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
             <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
               <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
+              <p>泳いでいるとき <kbd>B</kbd> 潜る <kbd>A</kbd> 浮上</p>
               <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
             </details>
           </details>
