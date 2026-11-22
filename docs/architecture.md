@@ -7,7 +7,7 @@
 
 ## 自然景観探索
 
-- 丘陵展望台は標高データに展望デッキの擁壁と、その外側に落ちる斜面を接続する。公開街路に沿って建物と街灯を配置する。手前から遠景へ [高層業務街区](../src/coast/world/overlook/overlookSkyline.ts) を並べ、街区のあいだを低・中層の店舗や事務所でつなぐ。幅のある敷地には店舗と事務所を別棟で建て、独立住宅は小規模な街区にまとめる。[幹線交通](../src/coast/world/overlook/overlookTraffic.ts) は立体交差の高さを求め、同じ線形に車体・前照灯・尾灯を沿わせる。幹線と高層棟の敷地には、街路沿いの建物を配置しない。[地理データの出典](../public/coast-overlook/ATTRIBUTION.md)
+- 丘陵展望台は標高データに展望デッキの擁壁と、その外側に落ちる斜面を接続する。手前の街区から約15 km先の都心へ向けて建物を段階的に高くし、西・東・さらに奥へ複数の高層街区を広げる。高層棟と周囲の低・中層街区は同じ基準位置を使う。既存の街路沿いの建物から向きと間隔を求め、遠方の低・中層街区を補う。幹線と高層棟の敷地を空け、延伸先でも車体・前照灯・尾灯を道路の高さと線形に合わせる。 [街区の基準位置](../src/coast/world/overlook/overlookDistricts.ts) · [高層業務街区](../src/coast/world/overlook/overlookSkyline.ts) · [幹線交通](../src/coast/world/overlook/overlookTraffic.ts) · [地理データの出典](../public/coast-overlook/ATTRIBUTION.md)
 - [2階展望デッキ](../src/coast/world/overlook/overlookUpperDeck.ts) は東側の階段と踊り場をパビリオンの屋外デッキにつなぐ。階段の滑らかな歩行面と各踊り場の高さを共有し、手すりの位置で歩行を止める。ファストトラベルで選んだ着地点にも同じ高さを適用する。1階はテラスの縁、建物、ベンチ、望遠鏡に沿って歩行を制限する。夜は石の縁と段鼻の灯りが足元を照らす。
 - [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形、散策路、沢の水位](../src/coast/terrain.ts) を共有する。道の縦断勾配を滑らかにつなぎ、周囲の地面に応じて横断勾配を付ける。西の岩棚、東の潮棚、林内の分岐と沢は、地形と [岩・シダの配置](../src/coast/world/coastLandmarks.ts) を合わせて組む。素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
 - 地上の登坂判定に引っかかったときは横方向の移動を試す。急な下りとジャンプは重力で接地させる。遊泳と潜水は海・沢・湖の水位を参照し、潜水時に水底への進入を止める。水底が浅くなると浮上し、岸で接地する。水中の視界は深さで減衰し、水面の裏側と水底に届く光を描く。

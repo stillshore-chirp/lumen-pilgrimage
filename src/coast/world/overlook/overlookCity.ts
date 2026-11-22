@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OUTER_DISTRICTS } from './overlookDistricts';
 import { createOverlookSkyline, OVERLOOK_DISTRICTS, type SkylineLight } from './overlookSkyline';
 import { DECK_LEVEL } from './overlookTerrain';
 
@@ -31,7 +32,7 @@ type CityVolume = {
   x: number; y: number; z: number;
   width: number; height: number; depth: number;
   yaw: number; color: THREE.Color;
-  variant: number; facade: number;
+  variant: number; facade: number; eveningUse?: number;
 };
 
 const roofs = {
@@ -53,20 +54,42 @@ const slopeGroves = [
 ] as const;
 
 const commercialDistricts = [
-  [OVERLOOK_DISTRICTS.campus, 1200, 970, 68],
-  [OVERLOOK_DISTRICTS.west, 1440, 1080, 74],
-  [OVERLOOK_DISTRICTS.midtown, 1110, 970, 96],
-  [OVERLOOK_DISTRICTS.exchange, 1190, 980, 89],
-  [OVERLOOK_DISTRICTS.central, 1770, 1440, 134],
-  [OVERLOOK_DISTRICTS.parkway, 980, 810, 76],
-  [OVERLOOK_DISTRICTS.east, 1540, 1210, 108],
-  [OVERLOOK_DISTRICTS.gateway, 1370, 1160, 77],
-  [[8300, -5200], 1700, 1130, 92],
-  [OVERLOOK_DISTRICTS.south, 2050, 1360, 96],
-  [OVERLOOK_DISTRICTS.westRidge, 1700, 1510, 88],
-  [OVERLOOK_DISTRICTS.eastRidge, 1860, 1580, 104],
-  [OVERLOOK_DISTRICTS.horizon, 2240, 1740, 100],
+  [OVERLOOK_DISTRICTS.campus, 1320, 1080, 25],
+  [OVERLOOK_DISTRICTS.west, 1550, 1280, 45],
+  [OVERLOOK_DISTRICTS.midtown, 1440, 1250, 48],
+  [OVERLOOK_DISTRICTS.exchange, 1430, 1250, 43],
+  [OVERLOOK_DISTRICTS.central, 1920, 1540, 65],
+  [OVERLOOK_DISTRICTS.parkway, 1370, 1180, 44],
+  [OVERLOOK_DISTRICTS.east, 1740, 1450, 61],
+  [OVERLOOK_DISTRICTS.gateway, 1690, 1270, 53],
+  [[8300, -5200], 1780, 1480, 56],
+  [OVERLOOK_DISTRICTS.south, 2250, 1690, 85],
+  [OVERLOOK_DISTRICTS.westRidge, 1980, 1740, 75],
+  [OVERLOOK_DISTRICTS.eastRidge, 2070, 1790, 84],
+  [OVERLOOK_DISTRICTS.horizon, 2400, 1940, 98],
+  [OUTER_DISTRICTS.westApproach, 2440, 1960, 67],
+  [OUTER_DISTRICTS.westJunction, 2890, 2340, 108],
+  [OUTER_DISTRICTS.westShore, 2660, 2430, 110],
+  [OUTER_DISTRICTS.westBasin, 3010, 2520, 123],
+  [OUTER_DISTRICTS.downtown, 3190, 2810, 150],
+  [OUTER_DISTRICTS.eastBasin, 3090, 2650, 129],
+  [OUTER_DISTRICTS.eastJunction, 2760, 2480, 106],
+  [OUTER_DISTRICTS.farWest, 3130, 2530, 114],
+  [OUTER_DISTRICTS.farCenter, 3480, 2830, 120],
+  [OUTER_DISTRICTS.farEast, 2790, 2460, 110],
 ] as const;
+
+function commercialProfile(x: number, z: number) {
+  let district = 0, rise = 0;
+  for (const [[centerX, centerZ], spanX, spanZ, height] of commercialDistricts) {
+    const reach = ((x - centerX) / spanX) ** 2 + ((z - centerZ) / spanZ) ** 2;
+    if (reach > 4.8) continue;
+    const influence = Math.exp(-reach);
+    district = Math.max(district, influence);
+    rise = Math.max(rise, influence * height);
+  }
+  return { district, rise };
+}
 
 const cityAir = /* glsl */`
   uniform float uNight;
@@ -365,6 +388,41 @@ function append<Key, T>(map: Map<Key, T[]>, key: Key, item: T): void {
   else map.set(key, [item]);
 }
 
+type Footprint = { x: number; z: number; radius: number };
+const lotCell = 160;
+
+class FootprintIndex {
+  private readonly cells = new Map<string, Footprint[]>();
+
+  add(footprint: Footprint): void {
+    const { x, z, radius } = footprint;
+    for (let column = Math.floor((x - radius) / lotCell); column <= Math.floor((x + radius) / lotCell); column++) {
+      for (let row = Math.floor((z - radius) / lotCell); row <= Math.floor((z + radius) / lotCell); row++) {
+        append(this.cells, `${column}:${row}`, footprint);
+      }
+    }
+  }
+
+  overlaps(x: number, z: number, padding: number): boolean {
+    const reach = Math.max(0, padding);
+    for (let column = Math.floor((x - reach) / lotCell); column <= Math.floor((x + reach) / lotCell); column++) {
+      for (let row = Math.floor((z - reach) / lotCell); row <= Math.floor((z + reach) / lotCell); row++) {
+        const footprints = this.cells.get(`${column}:${row}`);
+        if (footprints?.some(lot => lot.radius + padding > 0
+          && (x - lot.x) ** 2 + (z - lot.z) ** 2 < (lot.radius + padding) ** 2)) return true;
+      }
+    }
+    return false;
+  }
+}
+
+function infillWeight(x: number, z: number): number {
+  // Fill the south basin and flanking centers while tapering into undeveloped land.
+  return THREE.MathUtils.smoothstep(-z, 5200, 8900)
+    * (1 - THREE.MathUtils.smoothstep(-z, 20600, 24700))
+    * (1 - THREE.MathUtils.smoothstep(Math.abs(x), 14600, 18400));
+}
+
 function createBlocks(items: CityVolume[], material: THREE.ShaderMaterial, shape: THREE.BufferGeometry): THREE.Mesh {
   const geometry = new THREE.InstancedBufferGeometry();
   geometry.index = shape.index;
@@ -501,9 +559,10 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
         color: new THREE.Color(canopyColors[colorIndex]), variant: shape, facade: 0,
       });
     };
-    const closeToLandmark = (x: number, z: number, padding: number) => skyline.exclusions.some(exclusion =>
-      (x - exclusion.x) ** 2 + (z - exclusion.z) ** 2 < (exclusion.radius + padding) ** 2,
-    );
+    const landmarks = new FootprintIndex();
+    for (const exclusion of skyline.exclusions) landmarks.add(exclusion);
+    const occupied = new FootprintIndex();
+    const frontages: Array<{ x: number; z: number; yaw: number; width: number; seed: number }> = [];
     const buildingCount = view.getUint32(4, true);
     const lampCount = view.getUint32(8, true);
     let offset = 12;
@@ -515,7 +574,7 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       const use = view.getUint8(offset + 7);
       const distance = Math.hypot(x, z);
       const footprint = Math.max(w, d) * 0.68;
-      if (distance < 410 || closeToLandmark(x, z, footprint) || options.blocksFootprint?.(x, z, footprint)) continue;
+      if (distance < 410 || landmarks.overlaps(x, z, footprint) || options.blocksFootprint?.(x, z, footprint)) continue;
 
       const ground = heightAt(x, z);
       if (ground < 1 || ground > 587) continue;
@@ -527,14 +586,7 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       const random = randomUnit(seed, 641);
       const nearby = distance < 8000;
       const variant = randomUnit(seed, 3464);
-      let district = 0, rise = 0;
-      for (const [[centerX, centerZ], width, depth, height] of commercialDistricts) {
-        const reach = ((x - centerX) / width) ** 2 + ((z - centerZ) / depth) ** 2;
-        if (reach > 4.8) continue;
-        const influence = Math.exp(-reach);
-        district = Math.max(district, influence);
-        rise = Math.max(rise, influence * height);
-      }
+      const { district, rise } = commercialProfile(x, z);
       const side = Math.min(w, d);
       const broadLot = THREE.MathUtils.smoothstep(side, 13, 31);
       const neighborhood = use === 0
@@ -557,6 +609,11 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       color.multiplyScalar((residence ? 0.75 : 0.90) + randomUnit(seed, 1675) * 0.22);
       const feet = lowest - 3.0;
       const yaw = -view.getUint8(offset + 6) / 256 * Math.PI;
+      if (z < -5000 && Math.abs(x) < 18700) occupied.add({ x, z, radius: Math.hypot(w, d) * 0.5 });
+      const expansion = infillWeight(x, z);
+      const activity = neighborhoodActivity(x, z);
+      const intensity = 0.15 + 0.58 * district + 0.27 * activity;
+      if (randomUnit(seed, 9241) < expansion * intensity) frontages.push({ x, z, yaw, width: w, seed });
       const sin = Math.sin(yaw), cos = Math.cos(yaw);
       const tile = tileKey(x, z);
       const detail = !nearby && district < 0.31 && randomUnit(seed, 757) < (distance > 11000 ? 0.48 : 0.24);
@@ -598,7 +655,6 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
           }
         }
       }
-      const activity = neighborhoodActivity(x, z);
       const lit = randomUnit(seed, 2629);
       const occupancy = use === 2 ? 0.13 + activity * 0.36 : 0.24 + activity * 0.58;
       if (lit > occupancy * (commercial ? 0.62 : 1)) continue;
@@ -622,13 +678,62 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       }
     }
 
+    // Extend the sparse rows of distant frontages along their existing alignment.
+    for (const anchor of frontages) {
+      const { yaw } = anchor;
+      const sin = Math.sin(yaw), cos = Math.cos(yaw);
+      for (const side of [-1, 1]) {
+        const seed = anchor.seed + side * 19237;
+        const variant = randomUnit(seed, 3464), random = randomUnit(seed, 641);
+        const w = 22 + randomUnit(seed, 8978) * 34;
+        const d = w * (0.54 + randomUnit(seed, 8382) * 0.63);
+        const along = side * ((anchor.width + w) * 0.5 + 11 + randomUnit(seed, 3967) * 46);
+        const x = anchor.x + cos * along, z = anchor.z - sin * along;
+        const radius = Math.hypot(w, d) * 0.5;
+        if (occupied.overlaps(x, z, radius + 4) || landmarks.overlaps(x, z, radius + 6)
+          || options.blocksFootprint?.(x, z, radius + 4)) continue;
+
+        const ground = heightAt(x, z);
+        if (ground < 2.5 || ground > 420) continue;
+        const step = Math.min(radius, 25);
+        const edges = [heightAt(x - step, z), heightAt(x + step, z), heightAt(x, z - step), heightAt(x, z + step)];
+        const lowest = Math.min(ground, ...edges), highest = Math.max(ground, ...edges);
+        if (lowest < 1 || highest - lowest > step * 0.40) continue;
+
+        const { district, rise } = commercialProfile(x, z);
+        const office = random < 0.42 + district * 0.31;
+        const h = office ? Math.min(Math.min(w, d) * 3.2, 18 + variant * 18 + rise * (0.19 + 0.76 * randomUnit(seed, 2431) ** 1.62))
+          : 8 + variant * 10 + rise * (0.025 + 0.125 * random);
+        const palette = office ? (variant < 0.62 ? roofs.offices : roofs.masonry) : roofs.shops;
+        const color = new THREE.Color(palette[Math.floor(randomUnit(seed, 9925) * palette.length)]);
+        color.multiplyScalar(0.89 + randomUnit(seed, 1675) * 0.24);
+        const y = lowest - 3;
+        const detail = h < 29 && randomUnit(seed, 757) < 0.31;
+        const form = h > 53 && variant < 0.22 ? 'terraced' : 'flat';
+        const tile = tileKey(x, z);
+        const infill: CityVolume = {
+          x, y, z, width: w, depth: d, height: h + ground - y, yaw, color, variant,
+          facade: office ? 0.297 + variant * 0.046 : 0.18 + variant * 0.047,
+        };
+        append(buildingTiles, `${detail ? 1 : 0}:${form}:${tile}`, infill);
+        occupied.add({ x, z, radius });
+        if (randomUnit(seed, 2629) < 0.23) {
+          const frontage = (sin * x + cos * z > 0 ? -1 : 1) * d * (form === 'terraced' ? 0.438 : 0.512);
+          append(lampTiles, `${detail ? 1 : 0}:${tile}`, {
+            x: x + sin * frontage, y: ground + Math.min(h * 0.54, 19), z: z + cos * frontage,
+            kind: 0, power: 0.29 + random * 0.29, temperature: 0.43 + variant * 0.45,
+          });
+        }
+      }
+    }
+
     for (let i = 0; i < lampCount; i += 1, offset += 6) {
       const x = minX + view.getUint16(offset, true);
       const z = minZ + view.getUint16(offset + 2, true);
       const kind = view.getUint8(offset + 4), sourceIntensity = view.getUint8(offset + 5) / 255;
       const ground = heightAt(x, z);
       const distance = Math.hypot(x, z);
-      if (ground < 1 || ground > 520 || distance < 465 || closeToLandmark(x, z, -14)
+      if (ground < 1 || ground > 520 || distance < 465 || landmarks.overlaps(x, z, -14)
         || options.blocksFootprint?.(x, z, 0)) continue;
       const seed = Math.imul(x, 27173) + Math.imul(z, 65539);
       const activity = neighborhoodActivity(x, z);
