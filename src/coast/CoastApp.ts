@@ -21,6 +21,7 @@ export class CoastApp {
   private readonly audio = new CoastAudio();
   private readonly camera = new PerspectiveCamera(60, 1, 0.12, 2500);
   private readonly forward = new Vector3();
+  private readonly up = new Vector3();
   private readonly controls: CoastControls;
   private readonly resize: ResizeObserver;
   private quality: CoastQuality = 'light';
@@ -177,7 +178,8 @@ export class CoastApp {
     this.elapsed += dt;
     this.controls.update(dt);
     this.camera.getWorldDirection(this.forward);
-    this.audio.update(this.camera.position, this.forward);
+    this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
+    this.audio.update(this.camera.position, this.forward, this.up);
     this.world.update(this.elapsed, this.camera);
     this.renderer.render(this.world.scene, this.camera);
     this.frameId = requestAnimationFrame(this.render);

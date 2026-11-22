@@ -71,7 +71,7 @@ async function sampleRendering(page, quality) {
 }
 
 function installBrowserProbes() {
-  const probe = { context: null, analyser: null, panners: [], pad: null, decoded: 0, contexts: 0 };
+  const probe = { context: null, analyser: null, panners: [], delays: [], pad: null, decoded: 0, contexts: 0 };
   window.coastProbe = probe;
   probe.peak = () => {
     const signal = new Float32Array(probe.analyser.fftSize);
@@ -92,6 +92,11 @@ function installBrowserProbes() {
       const panner = super.createPanner();
       probe.panners.push(panner);
       return panner;
+    }
+    createDelay(...args) {
+      const delay = super.createDelay(...args);
+      probe.delays.push(delay);
+      return delay;
     }
     async decodeAudioData(buffer, success, failure) {
       const decoded = await super.decodeAudioData(buffer, success, failure);
@@ -178,6 +183,7 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
       contexts: window.coastProbe.contexts,
       contextState: window.coastProbe.context.state,
       decoded: window.coastProbe.decoded,
+      delays: window.coastProbe.delays.length,
       panners: window.coastProbe.panners.map(node => [
         node.panningModel, node.distanceModel, node.rolloffFactor,
         node.positionX.value, node.positionY.value, node.positionZ.value,
@@ -188,7 +194,11 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
     assert.equal(beforeSwitch.contextState, 'running');
     assert.deepEqual([...recordings].sort(), ['birds.ogg', 'foliage.ogg', 'insects.ogg', 'waterfall.ogg', 'waves.ogg']);
     assert.equal(beforeSwitch.decoded, recordings.size);
-    assert.ok(beforeSwitch.panners.filter(([model, , rolloff]) => model === 'HRTF' && rolloff > 0).length >= 4);
+    const reflected = beforeSwitch.panners.filter(([model, , rolloff, , y]) => model === 'HRTF' && rolloff > 0 && y < 0);
+    assert.ok(reflected.length >= 2);
+    assert.equal(beforeSwitch.delays, reflected.length);
+    assert.ok(reflected.every(([, , , x, y, z]) => beforeSwitch.panners.some(([, , , dryX, dryY, dryZ]) =>
+      x === dryX && -y === dryY && z === dryZ)), 'reflected sources mirror dry sources across the water');
     await sampleRendering(page, 'light');
 
     await high.click();
@@ -198,6 +208,7 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
       contexts: window.coastProbe.contexts,
       contextState: window.coastProbe.context.state,
       decoded: window.coastProbe.decoded,
+      delays: window.coastProbe.delays.length,
       panners: window.coastProbe.panners.map(node => [
         node.panningModel, node.distanceModel, node.rolloffFactor,
         node.positionX.value, node.positionY.value, node.positionZ.value,

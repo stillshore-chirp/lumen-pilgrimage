@@ -1,5 +1,6 @@
 import type { Vector3 } from 'three';
-import { COAST_FALLS, COAST_GROVES, groundHeight, shoreline, type CoastPoint } from './terrain';
+import { COAST_FALLS, COAST_GROVES, groundHeight, SEA_LEVEL, shoreline, smoothstep, type CoastPoint } from './terrain';
+import { terrainOcclusion, waterReflection } from './coastAcoustics';
 
 type AudioAsset = 'waves' | 'waterfall' | 'foliage' | 'birds' | 'insects';
 type FilterSpec = { type: BiquadFilterType; frequency: number };
@@ -11,6 +12,14 @@ type EmitterSpec = {
   maxDistance: number;
   rolloff: number;
   filters: FilterSpec[];
+  overWater?: boolean;
+};
+type SpatialVoice = {
+  point: CoastPoint;
+  range: number;
+  obstruction: BiquadFilterNode;
+  direct: GainNode;
+  reflection?: { gain: GainNode; delay: DelayNode };
 };
 
 function positionOf(point: CoastPoint): [number, number, number] {
@@ -130,6 +139,7 @@ export class CoastAudio {
   private compressor: DynamicsCompressorNode | undefined;
   private readonly graphNodes: AudioNode[] = [];
   private readonly players: VariationLoop[] = [];
+  private readonly voices: SpatialVoice[] = [];
   private readonly buffers: Partial<Record<AudioAsset, AudioBuffer>> = {};
   private readonly assetLoads: Partial<Record<AudioAsset, Promise<AudioBuffer>>> = {};
   private pendingStart: Promise<void> | undefined;
@@ -137,6 +147,7 @@ export class CoastAudio {
   private disposed = false;
   private volume = 0.7;
   private muted = false;
+  private nextPropagationUpdate = 0;
 
   start(): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('CoastAudio has been disposed'));
@@ -169,16 +180,36 @@ export class CoastAudio {
     this.applyMasterLevel();
   }
 
-  update(position: Vector3, forward: Vector3): void {
-    const listener = this.context?.listener;
-    if (!listener) return;
-    const length = Math.hypot(forward.x, forward.y, forward.z) || 1;
+  update(position: Vector3, forward: Vector3, up: Vector3): void {
+    const context = this.context;
+    if (!context) return;
+    const listener = context.listener;
     listener.positionX.value = position.x;
     listener.positionY.value = position.y;
     listener.positionZ.value = position.z;
-    listener.forwardX.value = forward.x / length;
-    listener.forwardY.value = forward.y / length;
-    listener.forwardZ.value = forward.z / length;
+    listener.forwardX.value = forward.x;
+    listener.forwardY.value = forward.y;
+    listener.forwardZ.value = forward.z;
+    listener.upX.value = up.x;
+    listener.upY.value = up.y;
+    listener.upZ.value = up.z;
+    if (context.state !== 'running' || context.currentTime < this.nextPropagationUpdate) return;
+    this.nextPropagationUpdate = context.currentTime + 0.113;
+    this.updatePropagation(position, context.currentTime);
+  }
+
+  private updatePropagation(listener: CoastPoint, now: number): void {
+    for (const voice of this.voices) {
+      const distance = Math.hypot(voice.point.x - listener.x, voice.point.y - listener.y, voice.point.z - listener.z);
+      const reach = 1 - smoothstep(voice.range * 0.87, voice.range * 1.30, distance);
+      const blocked = reach > 0 ? terrainOcclusion(listener, voice.point) : 0;
+      voice.obstruction.frequency.setTargetAtTime(17_000 * Math.pow(0.053, blocked), now, 0.12);
+      voice.direct.gain.setTargetAtTime(reach * (1 - 0.82 * blocked), now, 0.12);
+      if (!voice.reflection) continue;
+      const reflection = waterReflection(listener, voice.point);
+      voice.reflection.gain.gain.setTargetAtTime(0.19 * reflection.gain * reach * (1 - blocked), now, 0.15);
+      voice.reflection.delay.delayTime.setTargetAtTime(reflection.delay, now, 0.15);
+    }
   }
 
   dispose(): void {
@@ -186,6 +217,7 @@ export class CoastAudio {
     this.disposed = true;
     for (const player of this.players) player.dispose();
     this.players.length = 0;
+    this.voices.length = 0;
     for (const node of this.graphNodes) node.disconnect();
     this.graphNodes.length = 0;
     const context = this.context;
@@ -240,22 +272,23 @@ export class CoastAudio {
     if (this.started) return;
     const nodeStart = this.graphNodes.length;
     const playerStart = this.players.length;
+    const voiceStart = this.voices.length;
     const [mainFall, westFall] = COAST_FALLS;
     const emitters: EmitterSpec[] = [
       // Foreground surf follows the starting cove; the far point opens toward the sea.
-      { asset: 'waves', position: [-19, 0.8, shoreline(-19) - 3.5], gain: 0.72, refDistance: 9, maxDistance: 145, rolloff: 0.8,
+      { asset: 'waves', position: [-19, 0.8, shoreline(-19) - 3.5], gain: 0.72, refDistance: 9, maxDistance: 145, rolloff: 0.8, overWater: true,
         filters: [{ type: 'lowpass', frequency: 6500 }] },
-      { asset: 'waves', position: [18, 0.8, -58], gain: 0.34, refDistance: 17, maxDistance: 240, rolloff: 0.72,
+      { asset: 'waves', position: [18, 0.8, -58], gain: 0.34, refDistance: 17, maxDistance: 240, rolloff: 0.72, overWater: true,
         filters: [{ type: 'lowpass', frequency: 4800 }] },
       { asset: 'waterfall', position: positionOf(mainFall.path[mainFall.path.length - 5]), gain: 0.7,
-        refDistance: 12, maxDistance: 190, rolloff: 0.82,
+        refDistance: 12, maxDistance: 190, rolloff: 0.82, overWater: true,
         filters: [{ type: 'lowpass', frequency: 8500 }] },
       // A high-passed branch of the fall recording gives the pool a lighter spray layer.
       { asset: 'waterfall', position: [mainFall.impact.x, 2.8, mainFall.impact.z], gain: 0.32,
         refDistance: 5, maxDistance: 74, rolloff: 1.12,
         filters: [{ type: 'highpass', frequency: 580 }, { type: 'lowpass', frequency: 9800 }] },
       { asset: 'waterfall', position: [westFall.impact.x, 3.1, westFall.impact.z], gain: 0.44,
-        refDistance: 12, maxDistance: 190, rolloff: 0.82,
+        refDistance: 12, maxDistance: 190, rolloff: 0.82, overWater: true,
         filters: [{ type: 'lowpass', frequency: 8500 }] },
       { asset: 'foliage', position: grovePosition(COAST_GROVES.west, 5), gain: 0.34, refDistance: 10, maxDistance: 96, rolloff: 1.05,
         filters: [{ type: 'highpass', frequency: 420 }, { type: 'lowpass', frequency: 8200 }] },
@@ -281,10 +314,12 @@ export class CoastAudio {
         const player = new VariationLoop(context, buffer, input, emitter.gain);
         this.players.push(player);
       }
+      this.nextPropagationUpdate = 0;
       for (const player of this.players) player.start();
     } catch (error) {
       for (const player of this.players.splice(playerStart)) player.dispose();
       for (const node of this.graphNodes.splice(nodeStart)) node.disconnect();
+      this.voices.length = voiceStart;
       throw error;
     }
   }
@@ -303,6 +338,36 @@ export class CoastAudio {
       this.graphNodes.push(filter);
     }
 
+    const point = { x: spec.position[0], y: spec.position[1], z: spec.position[2] };
+    const obstruction = context.createBiquadFilter();
+    obstruction.type = 'lowpass';
+    obstruction.frequency.value = 17_000;
+    obstruction.Q.value = 0.1;
+    const direct = context.createGain();
+    direct.gain.value = 0;
+    const panner = this.createPanner(context, spec, point);
+    tail.connect(obstruction).connect(direct).connect(panner).connect(this.compressor!);
+    this.graphNodes.push(obstruction, direct, panner);
+
+    const voice: SpatialVoice = { point, range: spec.maxDistance, obstruction, direct };
+    if (spec.overWater) {
+      const reflected = this.createPanner(context, spec, { ...point, y: 2 * SEA_LEVEL - point.y });
+      const delay = context.createDelay(0.2);
+      const gain = context.createGain();
+      gain.gain.value = 0;
+      const surface = context.createBiquadFilter();
+      surface.type = 'lowpass';
+      surface.frequency.value = 3850;
+      surface.Q.value = 0.14;
+      tail.connect(surface).connect(delay).connect(gain).connect(reflected).connect(this.compressor!);
+      this.graphNodes.push(surface, delay, gain, reflected);
+      voice.reflection = { gain, delay };
+    }
+    this.voices.push(voice);
+    return input;
+  }
+
+  private createPanner(context: AudioContext, spec: EmitterSpec, point: CoastPoint): PannerNode {
     const panner = context.createPanner();
     panner.panningModel = 'HRTF';
     panner.distanceModel = 'inverse';
@@ -311,13 +376,10 @@ export class CoastAudio {
     panner.rolloffFactor = spec.rolloff;
     panner.coneInnerAngle = 360;
     panner.coneOuterAngle = 360;
-    panner.positionX.value = spec.position[0];
-    panner.positionY.value = spec.position[1];
-    panner.positionZ.value = spec.position[2];
-    tail.connect(panner);
-    panner.connect(this.compressor!);
-    this.graphNodes.push(panner);
-    return input;
+    panner.positionX.value = point.x;
+    panner.positionY.value = point.y;
+    panner.positionZ.value = point.z;
+    return panner;
   }
 
   private applyMasterLevel(): void {

@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
+import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { COAST_BOUNDS, COAST_FALLS, SEA_LEVEL, SPAWN, groundHeight, shoreline } from '../src/coast/terrain.ts';
+
+const acousticsUrl = new URL('../src/coast/coastAcoustics.ts', import.meta.url).href;
+const hooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const path = specifier === './terrain' && context.parentURL === acousticsUrl ? './terrain.ts' : specifier;
+    return nextResolve(path, context);
+  },
+});
+const { terrainOcclusion, waterReflection } = await import(acousticsUrl);
+hooks.deregister();
 
 test('the coast contains a dry approach, tidal edge, and submerged seabed', () => {
   const { x, z } = SPAWN;
@@ -32,4 +43,18 @@ test('each waterfall visibly descends from its rock face to the sea', () => {
     }
     assert.ok(groundHeight(impact.x, impact.z) < SEA_LEVEL);
   }
+});
+
+test('a headland occludes a low source while the open channel preserves the direct path', () => {
+  assert.ok(terrainOcclusion({ x: -218, y: 10, z: -140 }, { x: -68, y: 10, z: -141 }) > 0.9);
+  assert.equal(terrainOcclusion({ x: 30, y: 3, z: -15 }, { x: 30, y: 20, z: -171 }), 0);
+});
+
+test('a reflected arrival is audible over water and disappears over the dry beach', () => {
+  const source = { x: -15, y: 25, z: 35 };
+  const wet = waterReflection({ x: -15, y: 1, z: 55 }, source);
+  const dry = waterReflection({ x: -15, y: 3.5, z: 84 }, source);
+  assert.ok(wet.gain > 0.9);
+  assert.ok(wet.delay > 0.009 && wet.delay < 0.15);
+  assert.equal(dry.gain, 0);
 });
