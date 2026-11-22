@@ -189,6 +189,10 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
           vec3 rockMat = surfaceProjection(uForestRock, faceUV, n);
           float slopeColor = coastNoise(p.xz * 0.026 + p.y * 0.041)
             + 0.35 * coastNoise(p.xz * 0.064 - p.y * 0.025);
+          float grove = smoothstep(0.27, 0.92, slopeColor);
+          vec3 farFloor = mix(vec3(0.154, 0.179, 0.083), vec3(0.27, 0.26, 0.13), grove);
+          leafMat = mix(leafMat, farFloor, upland * (1.0 - nearDetail) * 0.93);
+          mudMat = mix(mudMat, vec3(0.19, 0.16, 0.098) * (0.82 + 0.28 * grove), upland * (1.0 - nearDetail));
           vec3 grayOcher = mix(vec3(0.118, 0.142, 0.086), vec3(0.30, 0.302, 0.229),
             smoothstep(0.37, 1.1, slopeColor));
           vec3 farRock = surfaceProjection(uForestRock, p / vec3(24.0, 30.0, 24.0), n);

@@ -1,4 +1,7 @@
-import { coastRandom, FOREST_WALKS, UPLAND_WALKS, groundHeight, groundSlope, smoothstep, uplandLakeRadius } from '../terrain';
+import {
+  coastRandom, coastTrailDistance, FOREST_WALKS, UPLAND_LAKE, UPLAND_WALKS, groundHeight, groundSlope,
+  smoothstep, uplandLakeRadius,
+} from '../terrain';
 import type { FloorForm } from './coastPlantMeshes';
 import type { TreeForm } from './coastTreeMeshes';
 
@@ -200,6 +203,22 @@ export function plantForest(trailDistance: PlantingDistance, streamDistance: Pla
         }
       }
     }
+  }
+
+  // Irregular patches of short reeds follow the wet edge through openings in the tree line.
+  const reedRandom = coastRandom(386465);
+  for (let index = 0; index < 410; index += 1) {
+    const arc = reedRandom() * Math.PI * 2;
+    const patch = 0.51 + 0.26 * Math.sin(arc * 8.0 + 0.6) + 0.19 * Math.cos(arc * 17.0);
+    if (reedRandom() > patch) continue;
+    const radius = 0.74 + reedRandom() * 0.24;
+    const x = UPLAND_LAKE.x + Math.cos(arc) * UPLAND_LAKE.width * radius;
+    const z = UPLAND_LAKE.z + Math.sin(arc) * UPLAND_LAKE.length * radius;
+    const bank = groundHeight(x, z) - UPLAND_LAKE.level;
+    if (bank < -0.08 || bank > 2.2 || groundSlope(x, z, 0.75) > 0.78 || coastTrailDistance(x, z) < 2.2) continue;
+    const width = 0.43 + reedRandom() * 0.68;
+    understory.push({ ...makePlant(x, z, width, width * (1.0 + reedRandom() * 0.55), reedRandom, -0.07),
+      form: 'sedge', detailOnly: false });
   }
 
   return { trees, understory };
