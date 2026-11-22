@@ -2,8 +2,12 @@ import * as THREE from 'three';
 import { coastNoise } from '../coastNoise';
 
 export const DECK_LEVEL = 346;
+export const DECK_FRONT = -24;
+export const DECK_SIDE = 35;
 const DATA_FOLDER = `${import.meta.env.BASE_URL}coast-overlook/`;
 const HEADER_BYTES = 24;
+const FRONT_FOOTING = DECK_FRONT - 0.45;
+const SIDE_FOOTING = DECK_SIDE + 0.45;
 
 interface ElevationGrid {
   readonly data: DataView;
@@ -52,9 +56,21 @@ export async function loadOverlookTerrain(): Promise<(x: number, z: number) => n
     if (edge > 810) {
       h = THREE.MathUtils.lerp(h, elevation(regional, x, z), THREE.MathUtils.smoothstep(edge, 810, 1030));
     }
-    // Level the immediate deck foundation and blend it into the measured hillside.
-    const terraceEdge = Math.hypot(Math.max(Math.abs(x) - 34.0, 0), Math.max(Math.abs(z - 3.2) - 26, 0));
-    return THREE.MathUtils.lerp(DECK_LEVEL - 0.28, h, THREE.MathUtils.smoothstep(terraceEdge, 0, 20));
+    const side = Math.max(Math.abs(x) - SIDE_FOOTING, 0);
+    const front = Math.max(FRONT_FOOTING - z, 0);
+    const rear = Math.max(z - 30.9, 0);
+    const terraceEdge = Math.hypot(side, front, rear);
+    const foundation = DECK_LEVEL - 0.35;
+    const apron = THREE.MathUtils.lerp(foundation, h, THREE.MathUtils.smoothstep(terraceEdge, 0, 20));
+
+    // A short, steep cut at the retaining wall turns into a gentler slope below the terrace.
+    const distance = Math.hypot(side, front);
+    const run = THREE.MathUtils.lerp(Math.max(side, front), distance, THREE.MathUtils.smoothstep(distance, 6, 20));
+    const cut = foundation - 12.5 * (1 - Math.exp(-run * 0.36))
+      - 23 * (1 - Math.exp(-run * 0.026)) - 0.30 * run;
+    const southFace = 1 - THREE.MathUtils.smoothstep(z, -11, 6);
+    const surveyBlend = 1 - THREE.MathUtils.smoothstep(run, 330, 780);
+    return THREE.MathUtils.lerp(apron, Math.min(apron, cut), southFace * surveyBlend);
   };
 }
 
@@ -78,6 +94,11 @@ export function createOverlookSurface(
   night: THREE.IUniform<number>,
 ): THREE.Mesh {
   const xs = terrainAxis(-23000, 23000), zs = terrainAxis(-26000, 11000);
+  // Sample the top and toe of the cut independently of the regular grid.
+  xs.push(-SIDE_FOOTING - 1.4, -SIDE_FOOTING, SIDE_FOOTING, SIDE_FOOTING + 1.4);
+  zs.push(FRONT_FOOTING - 1.4, FRONT_FOOTING);
+  xs.sort((a, b) => a - b);
+  zs.sort((a, b) => a - b);
   const positions = new Float32Array(xs.length * zs.length * 3);
   const colors = new Float32Array(positions.length);
   const indices = new Uint32Array((xs.length - 1) * (zs.length - 1) * 6);

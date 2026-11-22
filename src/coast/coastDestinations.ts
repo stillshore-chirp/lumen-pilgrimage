@@ -24,7 +24,7 @@ export const EXPLORATION_WORLDS = [
     id: 'overlook',
     label: '丘陵展望台',
     places: [
-      { id: 'main-deck', label: '中央展望デッキ', x: -7, z: -22.6, yaw: -0.64, pitch: -0.16 },
+      { id: 'main-deck', label: '中央展望デッキ', x: -7, z: -20.9, yaw: -0.64, pitch: -0.16 },
       { id: 'west-terrace', label: '西テラス', x: -29, z: -21.2, yaw: 0.07, pitch: -0.10 },
       { id: 'east-terrace', label: '東テラス', x: 29, z: -21.2, yaw: -0.82, pitch: -0.10 },
     ],
