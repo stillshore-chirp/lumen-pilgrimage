@@ -282,6 +282,19 @@ const uplandRidges = [
   [627, 1648, 148, 167, 284], [846, 1528, 133, 187, 297], [1073, 1438, 171, 220, 306],
 ] as const;
 
+function inariSaddleDepth(x: number, z: number): number {
+  if (z > 795 && z < 928 && x > 240 && x < 407) {
+    const radius = Math.hypot((x - 312) / 94, (z - 856) / 72);
+    return 67 * (1 - smoothstep(0.23, 1, radius))
+      * smoothstep(240, 256, x) * smoothstep(795, 818, z);
+  }
+  if (z > 975 && z < 1065 && x > 255.5 && x < 316) {
+    const radius = Math.hypot((x - 280) / 36, (z - 1020) / 45);
+    return 25 * (1 - smoothstep(0.21, 1, radius)) * smoothstep(255.5, 268, x);
+  }
+  return 0;
+}
+
 function uplandHeight(x: number, z: number): number {
   const grade = 50 + (z - 450) * 0.054;
   const waves = 4.4 * Math.sin(x * 0.018 + z * 0.016) + 3.3 * Math.cos(x * 0.027 - z * 0.028);
@@ -296,7 +309,7 @@ function uplandHeight(x: number, z: number): number {
     slopes += height * 0.25 * (1 - smoothstep(0.41, 1.21, r));
     crests = Math.max(crests, height * 0.75 * (1 - smoothstep(0.23, 0.94, r)));
   }
-  let height = grade + waves + ledges + slopes + crests;
+  let height = grade + waves + ledges + slopes + crests - inariSaddleDepth(x, z);
   if (z > 632 && z < 886 && x > 17 && x < 268) {
     const radius = uplandLakeRadius(x, z);
     const basin = (1 - smoothstep(0.95, 1.39, radius));
