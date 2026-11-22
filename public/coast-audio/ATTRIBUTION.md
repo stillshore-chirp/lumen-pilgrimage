@@ -23,26 +23,32 @@
 - Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Water_fall.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/5/5d/Water_fall.ogg)
 - 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。通常の滝音と、実行時に高域を通す水しぶき音に使用。変換音源は CC BY-SA 3.0 で再配布。
 
-## `foliage.ogg`
-
-- 秋の風と葉擦れ「Wind - autumn wind with leaves rustling」— Gregor Quendel
-- ライセンス: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
-- クレジット表記: [www.gregorquendel.com](https://www.gregorquendel.com/)
-- OpenGameArt: [作品ページ](https://opengameart.org/content/free-general-ambience-sounds) · [元ファイル](https://opengameart.org/sites/default/files/wind_-_autumn_wind_with_leaves_rustling.mp3)
-- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。左右の林の葉擦れ音として再生。変換音源は CC BY-SA 4.0 で再配布。
-
 ## `birds.ogg`
 
 - Abuja の庭で録音された鳥のさえずり「Birds chirping in a garden.ogg」— Akum20
 - ライセンス: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
 - Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Birds_chirping_in_a_garden.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/2/2f/Birds_chirping_in_a_garden.ogg)
-- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。開始地点近くと左右の林に離した 3 点から再生。
+- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。浜の周囲の木に分けて短い呼び声として再生。
+
+## `forest-birds.ogg`
+
+- Fontainebleau の森林で録音されたミソサザイなどの鳥声「Birds forest.ogg」— Barracuda1983
+- ライセンス: 著作者によるパブリックドメインへの提供
+- Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Birds_forest.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/3/38/Birds_forest.ogg)
+- 変更: 帯域と音量を調整し、モノラル 48 kHz の Opus に変換。森の樹冠の各所で短い呼び声として再生。
 
 ## `insects.ogg`
 
 - キリギリスの仲間 *Tettigonia cantans* の録音「Tettigonia cantans - sound.ogg」— Baudewijn Odé
 - ライセンス: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 - Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Tettigonia_cantans_-_sound.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/2/26/Tettigonia_cantans_-_sound.ogg)
-- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。左右の草地寄りから再生。変換音源は CC BY-SA 4.0 で再配布。
+- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。浜の草地と森の下草に置いた近距離の点から再生。変換音源は CC BY-SA 4.0 で再配布。
+
+## `rivulet.ogg`
+
+- 森の縁の小川の録音「Welling rivulet in the woods」— stephan
+- ライセンス: 著作者によるパブリックドメインへの提供
+- Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Welling_rivulet_in_the_woods.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/a/a4/Welling_rivulet_in_the_woods.ogg)
+- 変更: 帯域と音量を調整し、モノラル 48 kHz の Opus に変換。森の小川の瀬から再生。
 
 音源はすべてビルド時にリポジトリから配信します。実行時の外部音源サービスへの通信はありません。
