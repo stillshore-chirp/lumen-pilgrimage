@@ -4,7 +4,7 @@ import { addOverlookPavilion } from './overlookPavilion';
 import { DECK_FRONT, DECK_LEVEL, DECK_SIDE } from './overlookTerrain';
 import { addOverlookUpperDeck } from './overlookUpperDeck';
 
-const benchLocations = [[-22.5, -10.2], [22.5, -10.2], [-29.2, 4.7], [29.2, 4.7]] as const;
+const benchLocations = [[-0.3, -18.4], [-22.5, -10.2], [22.5, -10.2], [-29.2, 4.7], [29.2, 4.7]] as const;
 const viewerLocations = [[-19.3, -21.17, 0.14], [18.7, -21.17, -0.56]] as const;
 const wallLamps = [
   ...[-31, -23, -15, -5, 3, 11, 21, 31].map(x => ({ x, z: DECK_FRONT, yaw: 0 })),
