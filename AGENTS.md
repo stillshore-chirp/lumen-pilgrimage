@@ -6,7 +6,7 @@
 
 - 起動手順、現行の操作範囲、検証コマンドは [README.md](README.md) を参照してください。
 - 自然景観探索の起動、操作、ワールド間移動、描画・音響の接続は [docs/architecture.md](docs/architecture.md) を参照してください。
-- リポジトリ指示と静的検査の保守は [docs/agent-harness.md](docs/agent-harness.md) を参照してください。
+- Issue・PRの記載とリポジトリ指示・静的検査の保守は [docs/agent-harness.md](docs/agent-harness.md) を参照してください。
 - リポジトリ内に作業計画を残す場合は [plans/TEMPLATE.md](plans/TEMPLATE.md) を使えます。
 
 ## 変更時に確認する契約
