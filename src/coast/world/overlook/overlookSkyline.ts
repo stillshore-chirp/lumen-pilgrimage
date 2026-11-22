@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OUTER_DISTRICTS } from './overlookDistricts';
 import { seededDetail } from './overlookModel';
 
 type Point = [number, number];
@@ -303,24 +304,158 @@ const commercialGrids: CommercialGrid[] = [
   },
 ];
 
-function commercialTowers(): Tower[] {
+const outerGrids: CommercialGrid[] = [
+  {
+    // The lower western approach follows a slightly turned grid along the valley.
+    center: OUTER_DISTRICTS.westApproach, spacing: 345, yaw: 0.16,
+    roofHeights: [
+      [136, 241, 193, 0, 282, 331, 207, 275, 0, 194, 125],
+      [215, 274, 343, 269, 0, 286, 353, 304, 222, 178, 142],
+      [0, 188, 268, 0, 234, 308, 250, 0, 291, 212, 0],
+      [141, 199, 246, 189, 271, 216, 304, 186, 214, 0, 119],
+      [0, 133, 183, 216, 0, 264, 180, 233, 129, 177, 113],
+      [111, 161, 0, 181, 164, 0, 210, 153, 190, 0, 137],
+    ],
+    styles: [['ribbed', limestone], ['residential', sand], ['glass', steel], ['terraced', copper], ['slab', oxide]],
+  }, {
+    // A secondary station and campuses link the closer approach to the west basin.
+    center: [-2620, -10100], spacing: 385, yaw: -0.22,
+    roofHeights: [
+      [189, 276, 216, 335, 0, 308, 188, 235, 161],
+      [214, 0, 297, 389, 325, 430, 386, 300, 216],
+      [271, 328, 418, 0, 343, 502, 0, 355, 228],
+      [187, 244, 315, 266, 391, 309, 291, 212, 0],
+      [153, 199, 0, 241, 186, 259, 0, 235, 142],
+    ],
+    styles: [['terraced', blueGray], ['split', copper], ['glass', steel], ['slab', sand], ['ribbed', concrete]],
+  }, {
+    // Wider transportation lots and masonry towers surround the western junction.
+    center: OUTER_DISTRICTS.westJunction, spacing: 410, yaw: -0.38,
+    roofHeights: [
+      [180, 0, 267, 365, 312, 0, 377, 239, 282, 192],
+      [223, 329, 441, 0, 322, 409, 533, 443, 315, 244],
+      [161, 285, 347, 494, 372, 0, 358, 395, 0, 290],
+      [246, 0, 305, 360, 252, 442, 318, 262, 331, 208],
+      [143, 234, 188, 0, 226, 289, 205, 0, 255, 161],
+    ],
+    styles: [['terraced', concrete], ['ribbed', oxide], ['split', blueGray], ['slab', limestone], ['glass', steel]],
+  }, {
+    // Short waterfront blocks bracket taller inland roofs as the shore curves west.
+    center: OUTER_DISTRICTS.westShore, spacing: 430, yaw: 0.28,
+    roofHeights: [
+      [104, 0, 176, 298, 0, 342, 0, 282, 371, 200],
+      [0, 136, 215, 325, 252, 394, 481, 315, 407, 267],
+      [150, 220, 284, 345, 471, 0, 356, 527, 382, 230],
+      [0, 145, 262, 0, 330, 447, 311, 391, 0, 211],
+      [125, 0, 165, 213, 265, 192, 233, 181, 207, 142],
+    ],
+    styles: [['terraced', copper], ['glass', blueGray], ['slab', marine], ['ribbed', sand], ['residential', concrete]],
+  }, {
+    // The west basin has two ridges divided by a lower civic corridor.
+    center: OUTER_DISTRICTS.westBasin, spacing: 385, yaw: 0.15,
+    roofHeights: [
+      [237, 300, 0, 417, 485, 424, 288, 0, 333, 409, 320, 227],
+      [294, 0, 493, 539, 639, 526, 330, 282, 414, 488, 387, 299],
+      [244, 425, 575, 483, 0, 434, 303, 0, 568, 499, 325, 236],
+      [195, 332, 462, 522, 414, 263, 234, 385, 494, 413, 0, 272],
+      [177, 256, 0, 362, 317, 0, 275, 251, 347, 306, 269, 184],
+      [0, 149, 230, 285, 207, 268, 192, 0, 234, 190, 157, 0],
+    ],
+    styles: [['ribbed', limestone], ['terraced', sand], ['glass', steel], ['slab', oxide], ['split', pearl]],
+  }, {
+    // Multiple downtown groups share the high crest around plazas and lower cross streets.
+    center: OUTER_DISTRICTS.downtown, spacing: 436, yaw: -0.10,
+    roofHeights: [
+      [213, 300, 439, 397, 0, 473, 553, 623, 522, 426, 346, 278, 211],
+      [281, 416, 488, 0, 573, 674, 588, 704, 0, 518, 470, 375, 309],
+      [342, 460, 625, 541, 359, 678, 0, 747, 669, 609, 448, 543, 376],
+      [287, 361, 0, 492, 545, 627, 509, 0, 608, 496, 536, 404, 269],
+      [231, 318, 430, 376, 493, 0, 580, 434, 528, 383, 0, 336, 223],
+      [167, 213, 271, 360, 285, 406, 376, 421, 309, 278, 330, 0, 192],
+      [0, 176, 248, 0, 291, 215, 267, 0, 301, 236, 175, 254, 146],
+    ],
+    styles: [['glass', marine], ['terraced', charcoal], ['split', steel], ['ribbed', pearl], ['slab', copper]],
+  }, {
+    // Offset office crowns and taller apartments step away toward the east.
+    center: OUTER_DISTRICTS.eastBasin, spacing: 404, yaw: -0.39,
+    roofHeights: [
+      [262, 0, 403, 521, 437, 0, 479, 414, 489, 317, 253],
+      [326, 470, 566, 648, 554, 615, 0, 583, 511, 408, 288],
+      [407, 514, 0, 684, 591, 531, 632, 487, 431, 0, 338],
+      [281, 373, 500, 434, 552, 367, 0, 459, 517, 361, 272],
+      [219, 291, 397, 321, 489, 411, 342, 273, 371, 294, 0],
+      [168, 250, 194, 0, 310, 230, 287, 215, 0, 203, 157],
+    ],
+    styles: [['split', blueGray], ['glass', steel], ['slab', marine], ['residential', concrete], ['terraced', limestone]],
+  }, {
+    // The roofline breaks up along the outer eastern interchange.
+    center: OUTER_DISTRICTS.eastJunction, spacing: 430, yaw: -0.24,
+    roofHeights: [
+      [227, 316, 388, 279, 425, 0, 283, 289, 0, 217],
+      [281, 475, 0, 512, 462, 368, 404, 320, 381, 280],
+      [0, 388, 561, 435, 0, 472, 396, 254, 348, 253],
+      [221, 285, 337, 418, 302, 255, 335, 0, 311, 178],
+      [146, 0, 239, 266, 207, 305, 185, 258, 159, 0],
+    ],
+    styles: [['terraced', sand], ['split', steel], ['slab', copper], ['glass', blueGray], ['ribbed', concrete]],
+  }, {
+    // The rear shoreline, central rail corridor and eastern plateaus form a broken horizon.
+    center: OUTER_DISTRICTS.farWest, spacing: 478, yaw: 0.22,
+    roofHeights: [
+      [180, 251, 0, 303, 229, 364, 271, 0, 252, 227, 169],
+      [247, 0, 372, 490, 385, 442, 534, 473, 326, 395, 209],
+      [0, 343, 443, 310, 499, 404, 349, 542, 418, 285, 229],
+      [195, 286, 0, 342, 258, 438, 340, 0, 365, 247, 0],
+      [131, 175, 234, 0, 278, 203, 307, 273, 202, 165, 156],
+    ],
+    styles: [['ribbed', pearl], ['slab', concrete], ['glass', marine], ['terraced', copper]],
+  }, {
+    center: OUTER_DISTRICTS.farCenter, spacing: 490, yaw: -0.17,
+    roofHeights: [
+      [147, 233, 276, 0, 335, 293, 413, 322, 351, 0, 274, 207],
+      [256, 340, 491, 385, 0, 531, 468, 550, 392, 434, 301, 217],
+      [190, 300, 402, 0, 523, 578, 452, 539, 358, 512, 409, 268],
+      [234, 374, 0, 463, 402, 482, 381, 0, 443, 371, 285, 0],
+      [159, 213, 287, 343, 288, 360, 0, 301, 259, 215, 185, 161],
+    ],
+    styles: [['terraced', steel], ['ribbed', concrete], ['glass', blueGray], ['slab', copper], ['split', charcoal]],
+  }, {
+    center: OUTER_DISTRICTS.farEast, spacing: 510, yaw: -0.32,
+    roofHeights: [
+      [153, 240, 0, 312, 262, 365, 0, 277, 228, 192, 158],
+      [0, 319, 403, 465, 399, 477, 321, 448, 350, 298, 218],
+      [274, 391, 374, 529, 432, 0, 496, 397, 280, 366, 256],
+      [221, 0, 311, 395, 0, 412, 381, 325, 395, 289, 205],
+      [156, 233, 271, 0, 280, 337, 279, 0, 250, 211, 142],
+    ],
+    styles: [['glass', marine], ['terraced', blueGray], ['split', steel], ['ribbed', sand], ['slab', concrete]],
+  },
+];
+
+function commercialTowers(grids: CommercialGrid[], dispersed = false): Tower[] {
   const lots: Tower[] = [];
-  for (const { center: [x, z], spacing, yaw, roofHeights, styles } of commercialGrids) {
+  for (const { center: [x, z], spacing, yaw, roofHeights, styles } of grids) {
     const random = seededDetail(Math.imul(x, 27173) + Math.imul(z, 65539));
     const cosine = Math.cos(yaw), sine = Math.sin(yaw);
+    const lateralVariation = dispersed ? spacing * 0.61 : 29;
+    const depthVariation = dispersed ? spacing * 0.63 : 22;
     for (const [row, heights] of roofHeights.entries()) {
       for (const [column, height] of heights.entries()) {
         if (height === 0) continue;
-        const u = (column - (heights.length - 1) / 2) * spacing + (random() - 0.5) * 29;
-        const v = (row - (roofHeights.length - 1) / 2) * spacing * 0.88 + (random() - 0.5) * 22;
+        const u = (column - (heights.length - 1) / 2) * spacing + (random() - 0.5) * lateralVariation;
+        const v = (row - (roofHeights.length - 1) / 2) * spacing * 0.88 + (random() - 0.5) * depthVariation;
         const [form, color] = styles[Math.floor(random() * styles.length)];
-        const width = 60 + height * 0.071 + random() * 29;
+        const width = 60 + height * 0.071 + random() * 29 + (dispersed ? 10 : 0);
         const depth = width * (0.61 + random() * 0.26);
         lots.push([x + u * cosine + v * sine, z - u * sine + v * cosine, width, depth, height, form, color, yaw]);
       }
     }
   }
   return lots;
+}
+
+function innerHeightScale(x: number, z: number): number {
+  return THREE.MathUtils.lerp(0.32, 0.65, THREE.MathUtils.smoothstep(Math.hypot(x, z), 3700, 12200));
 }
 
 export function createOverlookSkyline(
@@ -331,7 +466,8 @@ export function createOverlookSkyline(
   const lights: SkylineLight[] = [];
   const exclusions: Array<{ x: number; z: number; radius: number }> = [];
 
-  const building = (x: number, z: number, radius: number, shape: (x: number, y: number, z: number) => void) => {
+  const building = (x: number, z: number, radius: number, shape: (x: number, y: number, z: number) => void,
+    outer = false) => {
     const step = radius + 31;
     const candidateOffsets: Point[] = [[0, 0],
       [-step, 0], [step, 0], [0, -step], [0, step],
@@ -339,16 +475,30 @@ export function createOverlookSkyline(
     const clear = (cx: number, cz: number) => !blocksFootprint?.(cx, cz, radius)
       && !exclusions.some(existing =>
         (cx - existing.x) ** 2 + (cz - existing.z) ** 2 < ((radius + existing.radius) * 0.90) ** 2);
-    const offset = candidateOffsets.find(([dx, dz]) => clear(x + dx, z + dz));
-    if (!offset) return;
-    x += offset[0];
-    z += offset[1];
-    exclusions.push({ x, z, radius });
     const sample = radius * 0.65;
-    const ground = Math.min(heightAt(x, z), heightAt(x - sample, z), heightAt(x + sample, z),
-      heightAt(x, z + sample), heightAt(x, z - sample));
-    // Bring out the nearest commercial blocks while preserving a second skyline in the basin beyond.
-    const heightScale = THREE.MathUtils.lerp(0.79, 0.94, THREE.MathUtils.smoothstep(Math.hypot(x, z), 3950, 9900));
+    let ground: number | undefined;
+    for (const [dx, dz] of candidateOffsets) {
+      const cx = x + dx, cz = z + dz;
+      if (!clear(cx, cz)) continue;
+      const heights = [heightAt(cx, cz), heightAt(cx - sample, cz), heightAt(cx + sample, cz),
+        heightAt(cx, cz + sample), heightAt(cx, cz - sample)];
+      if (outer) {
+        const diagonal = radius * 0.46;
+        for (const ox of [-diagonal, diagonal]) {
+          for (const oz of [-diagonal, diagonal]) heights.push(heightAt(cx + ox, cz + oz));
+        }
+      }
+      const lowest = Math.min(...heights);
+      if (outer && (lowest < 4 || Math.max(...heights) - lowest > 26)) continue;
+      x = cx;
+      z = cz;
+      ground = lowest;
+      break;
+    }
+    if (ground === undefined) return;
+    exclusions.push({ x, z, radius });
+    // The inherited inner lots step upward with distance. The outer grids specify their roof heights in metres.
+    const heightScale = outer ? 1 : innerHeightScale(x, z);
     const firstLight = lights.length;
     builder.setLotGround(ground, heightScale);
     shape(x, ground - 3, z);
@@ -397,8 +547,9 @@ export function createOverlookSkyline(
     beacon(x - 32, y + 352, z - 5, 0.85);
   });
 
-  // The main crown rises off centre. A stone fin and two shorter glass wings frame it.
-  building(2975, -5515, 138, (x, y, z) => {
+  // Downtown's sloping crown rises above a stone fin and two lower glass wings.
+  const [downtownX, downtownZ] = OUTER_DISTRICTS.downtown;
+  building(downtownX - 100, downtownZ - 180, 161, (x, y, z) => {
     floor(x, y, z, 215, 162, 39, { color: limestone, facade: 0.77 }, diagonalGrid, 13);
     const lower = chamfer(149, 125, 20);
     const upper = chamfer(128, 107, 20);
@@ -407,13 +558,13 @@ export function createOverlookSkyline(
     const crownRidge = [24, 30, -2, -12, -18, -17, 7, 16];
     builder.extrusion(x, y, z, diagonalGrid, [
       { elevation: 34, outline: lower },
-      { elevation: 436, outline: lower },
-      { elevation: 568, outline: upper, offset: [5, 0] },
-      { elevation: 670, outline: crown, offset: crownOffset, ridge: crownRidge },
+      { elevation: 476, outline: lower },
+      { elevation: 620, outline: upper, offset: [5, 0] },
+      { elevation: 750, outline: crown, offset: crownOffset, ridge: crownRidge },
     ], { color: marine, facade: 0.62 }, 0x8ca7b2);
     builder.extrusion(x, y, z, diagonalGrid, [
-      { elevation: 670, outline: crown, offset: crownOffset, ridge: crownRidge },
-      { elevation: 681, outline: chamfer(93, 91, 17), offset: crownOffset, ridge: crownRidge },
+      { elevation: 750, outline: crown, offset: crownOffset, ridge: crownRidge },
+      { elevation: 769, outline: chamfer(93, 91, 17), offset: crownOffset, ridge: crownRidge },
     ], { color: 0x9eafb5, glow: 0.42 }, 0x879ea7);
     const wing = chamfer(78, 115, 14);
     const upperWing = chamfer(62, 84, 12);
@@ -434,13 +585,42 @@ export function createOverlookSkyline(
     ], { color: 0xa0b5b6, glow: 0.11 });
     builder.extrusion(x - 53, y, z + 38, diagonalGrid, [
       { elevation: 649, outline: chamfer(14, 45, 4), offset: [10, -1] },
-      { elevation: 730, outline: chamfer(11, 32, 4), offset: [22, -12], ridge: [5, 9, 4, 6, -6, -6, -8, -5] },
+      { elevation: 779, outline: chamfer(11, 32, 4), offset: [22, -12], ridge: [5, 9, 4, 6, -6, -6, -8, -5] },
     ], { color: pearl, glow: 0.26 });
-    beacon(x - 41, y + 740, z + 37, 1.05);
-  });
+    beacon(x + 10, y + 801, z - 8, 1.05);
+  }, true);
 
-  // A tapered oval capped by a broad mechanical ring.
-  building(2600, -5540, 108, (x, y, z) => {
+  // A stepped civic pair marks the western crest above the basin's old rail yards.
+  const [westBasinX, westBasinZ] = OUTER_DISTRICTS.westBasin;
+  building(westBasinX - 1430, westBasinZ + 220, 181, (x, y, z) => {
+    const yaw = 0.19;
+    floor(x, y, z, 272, 161, 30, { color: concrete, facade: 0.72 }, yaw, 14);
+    const lower = chamfer(145, 123, 13);
+    const shoulder = chamfer(117, 110, 11);
+    const upper = chamfer(91, 88, 10);
+    const cap = chamfer(61, 62, 8);
+    builder.extrusion(x - 29, y, z, yaw, [
+      { elevation: 24, outline: lower },
+      { elevation: 283, outline: lower },
+      { elevation: 313, outline: shoulder, offset: [-9, 0] },
+      { elevation: 457, outline: shoulder, offset: [-9, 0] },
+      { elevation: 482, outline: upper, offset: [-17, -4] },
+      { elevation: 608, outline: upper, offset: [-17, -4] },
+    ], { color: copper, facade: 0.67 }, pearl);
+    floor(x - 46, y + 608, z - 1, 90, 89, 17, { color: limestone, glow: -0.23 }, yaw, 9);
+    builder.extrusion(x - 49, y, z - 2, yaw, [
+      { elevation: 622, outline: cap },
+      { elevation: 655, outline: chamfer(53, 46, 7), offset: [-7, 2] },
+    ], { color: pearl, facade: 0.66 }, limestone);
+    floor(x + 69, y + 25, z + 18, 103, 106, 411, { color: steel, facade: 0.67 }, yaw, 13);
+    floor(x + 69, y + 436, z + 18, 103, 96, 12, { color: pearl, glow: 0.18 }, yaw, 13);
+    floor(x + 77, y + 444, z + 10, 74, 78, 49, { color: blueGray, facade: 0.75 }, yaw, 9);
+    beacon(x - 55, y + 657, z, 0.81);
+  }, true);
+
+  // A tapered oval capped by a broad mechanical ring in the east basin.
+  const [eastBasinX, eastBasinZ] = OUTER_DISTRICTS.eastBasin;
+  building(eastBasinX + 810, eastBasinZ + 470, 108, (x, y, z) => {
     floor(x, y, z, 163, 127, 32, { color: sand, facade: 0.71 }, diagonalGrid, 11);
     const base = oval(60, 52);
     const middle = oval(61, 54);
@@ -462,7 +642,7 @@ export function createOverlookSkyline(
       { elevation: 544, outline: oval(28, 27) },
     ], { color: 0x516d77, facade: 0.85 }, pearl);
     beacon(x, y + 546, z, 0.90);
-  });
+  }, true);
 
   // Offset blue volumes leave a sky lobby between two tiers of roof terraces.
   building(3400, -5720, 129, (x, y, z) => {
@@ -527,7 +707,7 @@ export function createOverlookSkyline(
     }
   });
 
-  for (const [x, z, w, d, h, form, color, yaw = diagonalGrid] of [...towers, ...commercialTowers()]) {
+  const addTower = ([x, z, w, d, h, form, color, yaw = diagonalGrid]: Tower, outer = false) => {
     const podiumHeight = 10 + Math.min(h * 0.075, 25);
     building(x, z, Math.hypot(w * 0.64, d * 0.65) + 3, (x, y, z) => {
       floor(x, y, z, w * 1.28, d * 1.30, podiumHeight, { color: concrete, facade: 0.66 }, yaw, 6);
@@ -599,9 +779,12 @@ export function createOverlookSkyline(
         floor(x, y + h - 6, z, w * 0.77, d * 0.79, 15, { color: pearl }, yaw, 3);
       }
       const beaconHeight = { terraced: 3, glass: 15, residential: 19, slab: 10, ribbed: 10, split: 11 };
-      if (h >= 310) beacon(x, y + h + beaconHeight[form], z, 0.55);
-    });
-  }
+      if (h * (outer ? 1 : innerHeightScale(x, z)) >= 310) beacon(x, y + h + beaconHeight[form], z, 0.55);
+    }, outer);
+  };
+  for (const lot of towers) addTower(lot);
+  for (const lot of commercialTowers(commercialGrids)) addTower(lot);
+  for (const lot of commercialTowers(outerGrids, true)) addTower(lot, true);
 
   // Broad office and station blocks create a second roofline around the taller towers.
   const frontage = [
