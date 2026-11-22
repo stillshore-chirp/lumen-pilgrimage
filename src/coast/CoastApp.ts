@@ -12,7 +12,7 @@ const qualitySettings = {
 } satisfies Record<CoastQuality, number>;
 
 const movementLabels: Record<CoastMovement, string> = {
-  walk: '歩行', wade: '浅瀬', swim: '遊泳', dive: '潜水', flight: '自由飛行', rest: '休憩',
+  walk: '歩行', wade: '浅瀬', swim: '遊泳', dive: '潜水', flight: '自由飛行',
 };
 
 export class CoastApp {
@@ -24,8 +24,6 @@ export class CoastApp {
   private readonly up = new Vector3();
   private readonly controls: CoastControls;
   private readonly resize: ResizeObserver;
-  private readonly restButton: HTMLButtonElement;
-  private readonly restLabel: HTMLElement;
   private quality: CoastQuality = 'light';
   private lastFrame = 0;
   private elapsed = 0;
@@ -53,9 +51,6 @@ export class CoastApp {
         <a class="coast-legacy" href="?scene=expedition">従来のゲームへ <span aria-hidden="true">↗</span></a>
       </header>
       <div class="coast-reticle" aria-hidden="true"></div>
-      <button type="button" class="coast-rest-button" hidden>
-        <span class="coast-rest-label"></span> <kbd aria-hidden="true">E</kbd><kbd aria-hidden="true">X</kbd>
-      </button>
       <div class="coast-dock">
         <section class="coast-panel coast-guide" aria-label="探索操作">
           <div class="coast-row">
@@ -64,18 +59,16 @@ export class CoastApp {
           </div>
           <details>
             <summary>操作方法</summary>
-            <p>浜を背にすると林の入口に東屋があり、森を抜けると湖と稜線へ続きます。</p>
+            <p>海に向かって左は岩浜、右は潮だまり。浜を背にすると森の入口に休憩所があり、道は湖と稜線へ続きます。</p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
             <p>地上で <kbd>Space</kbd> ジャンプ</p>
-            <p>ベンチの近くで <kbd>E</kbd> 座る／立つ</p>
             <p>泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
             <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
               <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
-              <p><kbd>X</kbd> 座る／立つ</p>
               <p>泳いでいるとき <kbd>B</kbd> 潜る <kbd>A</kbd> 浮上</p>
               <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
             </details>
@@ -103,14 +96,11 @@ export class CoastApp {
     const lock = ui.querySelector<HTMLButtonElement>('.coast-lock')!;
     const flight = ui.querySelector<HTMLButtonElement>('.coast-flight')!;
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
-    this.restButton = ui.querySelector<HTMLButtonElement>('.coast-rest-button')!;
-    this.restLabel = ui.querySelector<HTMLElement>('.coast-rest-label')!;
     this.controls = new CoastControls(this.camera, canvas, {
       diveObstacleHeight: (x, z) => this.world.diveObstacleHeight(x, z),
       onMovementChange: movement => {
         mode.textContent = movementLabels[movement];
         flight.setAttribute('aria-pressed', String(movement === 'flight'));
-        this.mount.classList.toggle('coast-resting', movement === 'rest');
       },
       onLockChange: locked => {
         this.mount.classList.toggle('coast-locked', locked);
@@ -126,9 +116,6 @@ export class CoastApp {
     flight.addEventListener('click', () => {
       this.controls.toggleFlight();
       canvas.focus({ preventScroll: true });
-    });
-    this.restButton.addEventListener('click', () => {
-      if (this.controls.toggleRest()) canvas.focus({ preventScroll: true });
     });
 
     this.bindQuality(ui);
@@ -200,12 +187,6 @@ export class CoastApp {
     this.lastFrame = now;
     this.elapsed += dt;
     this.controls.update(dt);
-    const site = this.controls.currentRestSite;
-    const restText = this.controls.currentMovement === 'rest' ? '立つ' : site ? `${site.name}で座る` : '';
-    if (this.restLabel.textContent !== restText) {
-      this.restLabel.textContent = restText;
-      this.restButton.hidden = restText === '';
-    }
     this.camera.getWorldDirection(this.forward);
     this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
     this.audio.update(this.camera.position, this.forward, this.up, this.elapsed, this.controls.currentMovement);

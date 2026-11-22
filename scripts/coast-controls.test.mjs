@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera, Ray, Triangle, Vector3 } from 'three';
 import {
-  COAST_REST_SITES, COAST_WALKS, FOREST_WALKS, UPLAND_WALKS, groundHeight, restSiteYaw, SEA_LEVEL, SPAWN,
+  COAST_WALKS, FOREST_WALKS, UPLAND_LAKE, UPLAND_WALKS, groundHeight, SEA_LEVEL, SPAWN,
 } from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
@@ -515,40 +515,27 @@ test('walking near the edge of the ravine tread passes the inside of its bend', 
   }
 });
 
-test('a reachable seat holds walking and jumping while allowing the player to look around and stand', () => {
-  const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
-  const gamepad = { connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons };
-  const browser = createBrowser([gamepad]);
+test('the upland lake uses its own water level for floating, diving, and surfacing', () => {
+  const browser = createBrowser();
   const camera = new PerspectiveCamera();
   const controls = createControls(browser, camera);
-  const site = COAST_REST_SITES.find(({ id }) => id === 'beach-bench');
-  const yaw = restSiteYaw(site);
-  const x = site.x + 2.1 * Math.sin(yaw), z = site.z + 2.1 * Math.cos(yaw);
-  const advance = () => { for (let frame = 0; frame < 13; frame++) controls.update(0.05); };
+  const { x, z, level } = UPLAND_LAKE;
+  const press = code => browser.window.dispatch('keydown', { target: browser.canvas, code });
+  const release = code => browser.window.dispatch('keyup', { code });
+  const advance = frames => { for (let frame = 0; frame < frames; frame++) controls.update(0.05); };
   try {
-    assert.equal(controls.toggleRest(), false);
-    camera.position.set(x, groundHeight(x, z) + 1.65, z);
-    assert.equal(controls.currentRestSite.id, site.id);
-    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyE' });
-    advance();
-    assert.equal(controls.currentMovement, 'rest');
-    assert.ok(camera.position.distanceTo(new Vector3(site.x, site.grade + 1.22, site.z)) < 0.0001);
-    const seated = camera.position.clone();
-    const beforeLook = camera.rotation.y;
-    gamepad.axes = [0, -1, 0.7, 0];
-    buttons[0] = { pressed: true, value: 1 };
-    advance();
-    assert.deepEqual(camera.position, seated);
-    assert.ok(camera.rotation.y < beforeLook - 0.2);
-
-    gamepad.axes = [0, 0, 0, 0];
-    buttons[0] = { pressed: false, value: 0 };
-    buttons[2] = { pressed: true, value: 1 };
-    advance();
-    assert.equal(controls.currentMovement, 'walk');
-    advance();
-    assert.equal(controls.currentMovement, 'walk', 'held X toggled the seat more than once');
-    assert.ok(camera.position.distanceTo(seated) > 1.4);
+    camera.position.set(x, level + 0.63, z);
+    advance(1);
+    assert.equal(controls.currentMovement, 'swim');
+    press('KeyC');
+    advance(18);
+    release('KeyC');
+    assert.equal(controls.currentMovement, 'dive');
+    assert.ok(camera.position.y < level - 1 && camera.position.y > groundHeight(x, z));
+    press('Space');
+    advance(26);
+    assert.equal(controls.currentMovement, 'swim');
+    assert.ok(Math.abs(camera.position.y - level - 0.63) < 0.0001);
   } finally {
     controls.dispose();
     browser.cleanup();

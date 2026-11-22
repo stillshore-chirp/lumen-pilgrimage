@@ -41,7 +41,7 @@
 
 - 米国ノースカロライナ州ウィルクス郡で録音された Wood Thrush (*Hylocichla mustelina*) の歌「Wood Thrush.ogg」— G. McGrane
 - 著作者がパブリックドメインに提供。[作品ページ](https://commons.wikimedia.org/wiki/File:Wood_Thrush.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/d/d4/Wood_Thrush.ogg)
-- 元録音の 7.35、10.99、29.73、153.73 秒から、それぞれ 2 秒を抽出。帯域・音量と前後のフェードを調整し、モノラル 48 kHz の Opus に変換。休憩小屋の周辺で間を置きながら再生。
+- 元録音の 7.35、10.99、29.73、153.73 秒から、それぞれ 2 秒を抽出。帯域・音量と前後のフェードを調整し、モノラル 48 kHz の Opus に変換。休憩所の周辺で間を置きながら再生。
 
 ## `insects.ogg`
 

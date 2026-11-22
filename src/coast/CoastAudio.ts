@@ -83,7 +83,7 @@ function shelterBirdEmitters(): EmitterSpec[] {
     birdCalls: timing, rockResponse: true,
     filters: [{ type: 'highpass', frequency: 820 }, { type: 'lowpass', frequency: 5500 }],
   });
-  return COAST_REST_SITES.filter(site => site.kind === 'shelter').flatMap(site => {
+  return COAST_REST_SITES.filter(site => site.kind === 'terrace').flatMap(site => {
     const inland = site.id === 'lake-shelter';
     const close = { x: site.x + (inland ? -11 : 12), z: site.z + 11 };
     const across = { x: site.x + (inland ? 20 : -23), z: site.z + (inland ? -21 : 22) };
@@ -117,6 +117,11 @@ function wildlifeEmitters(): EmitterSpec[] {
     perch('forestBirds', { x: 52, z: 274 }, 9, 0.88, 75),
     perch('forestBirds', { x: -45, z: 329 }, 7, 1.0, 79),
     perch('forestBirds', { x: 13, z: 369 }, 8, 0.9, 73),
+    perch('forestBirds', { x: 97, z: 458 }, 9, 0.49, 74),
+    perch('forestBirds', { x: 37, z: 584 }, 11, 0.56, 87),
+    perch('forestBirds', { x: 133, z: 855 }, 9, 0.58, 85),
+    perch('forestBirds', { x: -133, z: 951 }, 8, 0.51, 83),
+    perch('forestBirds', { x: -71, z: 1011 }, 10, 0.43, 97),
     ...shelterBirdEmitters(),
     insectPatch(COAST_GROVES.west, 0.16, 36),
     insectPatch(COAST_GROVES.east, 0.17, 38),
@@ -145,6 +150,11 @@ function streamEmitters(): EmitterSpec[] {
     asset: 'waterfall', position: [impact.x, impact.y + 0.85, impact.z], gain: 0.46, refDistance: 12,
     maxDistance: 184, rolloff: 0.92, rockResponse: true,
     filters: [{ type: 'highpass', frequency: 280 }, { type: 'lowpass', frequency: 6100 }],
+  });
+  const cascade = UPLAND_FALL.path[Math.floor(UPLAND_FALL.path.length * 0.52)];
+  riffles.push({
+    asset: 'waterfall', position: positionOf(cascade), gain: 0.34, refDistance: 21, maxDistance: 555,
+    rolloff: 0.73, rockResponse: true, filters: [{ type: 'lowpass', frequency: 4500 }],
   });
   const x = 85;
   const z = 297.5;

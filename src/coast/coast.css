@@ -32,50 +32,6 @@
   gap: 12px;
 }
 
-.coast-rest-button {
-  position: absolute;
-  z-index: 1;
-  left: 50%;
-  bottom: clamp(94px, 13vh, 145px);
-  transform: translateX(-50%);
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 1px solid #cae3d56e;
-  border-radius: 12px;
-  background: #112a28dd;
-  color: inherit;
-  font: inherit;
-  font-size: clamp(17px, 2vw, 23px);
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.coast-rest-button kbd {
-  margin-inline-start: 6px;
-  color: #bce2d5;
-  font-size: 0.82em;
-}
-
-.coast-resting .coast-header {
-  visibility: hidden;
-}
-
-.coast-resting .coast-dock {
-  margin-block-start: auto;
-  justify-content: flex-end;
-}
-
-.coast-resting .coast-guide,
-.coast-resting .coast-reticle,
-.coast-resting .coast-settings > [aria-label="描画品質"] {
-  display: none;
-}
-
-.coast-resting .coast-rest-button {
-  bottom: clamp(80px, 12vh, 132px);
-  background: #112a28aa;
-}
-
 .coast-title,
 .coast-legacy,
 .coast-panel {

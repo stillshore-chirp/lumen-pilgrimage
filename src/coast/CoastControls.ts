@@ -1,15 +1,9 @@
 import { Vector3, type PerspectiveCamera } from 'three';
-import { COAST_BOUNDS, COAST_REST_SITES, coastWaterLevel, groundHeight, restSiteYaw, smoothstep, SPAWN,
-  type CoastRestSite } from './terrain';
+import { COAST_BOUNDS, COAST_REST_SITES, coastWaterLevel, groundHeight, restSiteYaw, smoothstep, SPAWN } from './terrain';
 
-export type CoastMovement = 'walk' | 'wade' | 'swim' | 'dive' | 'flight' | 'rest';
+export type CoastMovement = 'walk' | 'wade' | 'swim' | 'dive' | 'flight';
 
 type DivePhase = 'entering' | 'submerged' | 'surfacing';
-type RestTransition = {
-  from: Vector3; to: Vector3; elapsed: number;
-  yaw: number; turn: number; pitch: number; tilt: number;
-  standingUp: boolean;
-};
 
 export interface CoastControlCallbacks {
   onMovementChange: (movement: CoastMovement) => void;
@@ -46,27 +40,19 @@ const WALK_SLOPE_EPSILON = 0.000001;
 const BOUNDS_PADDING = 0.35;
 const MAX_FLIGHT_HEIGHT = 255;
 const GAMEPAD_DEADZONE = 0.16;
-const SEATED_EYE_HEIGHT = 1.22;
-const REST_STAND_OFFSET = 1.45;
-const REST_REACH = 3.95;
-const REST_TRANSITION_SECONDS = 0.54;
 
-const restSites = COAST_REST_SITES.map(site => {
+const benches = COAST_REST_SITES.map(site => {
   const yaw = restSiteYaw(site);
-  return { site, yaw, forwardX: Math.sin(yaw), forwardZ: Math.cos(yaw) };
+  return { site, forwardX: Math.sin(yaw), forwardZ: Math.cos(yaw), halfWidth: site.kind === 'terrace' ? 1.39 : 1.18 };
 });
-type RestSite = typeof restSites[number];
 
-function restObstruction(x: number, z: number, foot: number): boolean {
-  for (const { site, forwardX, forwardZ } of restSites) {
+function hitsBench(x: number, z: number, foot: number): boolean {
+  for (const { site, forwardX, forwardZ, halfWidth } of benches) {
     const dx = x - site.x, dz = z - site.z;
-    if (Math.abs(dx) > 2.5 || Math.abs(dz) > 2.5 || foot > site.grade + 2.45) continue;
+    if (Math.abs(dx) > 1.6 || Math.abs(dz) > 1.6 || foot > site.grade + 0.83) continue;
     const side = Math.abs(dx * forwardZ - dz * forwardX);
     const along = dx * forwardX + dz * forwardZ;
-    const sheltered = site.kind === 'shelter';
-    if (side < (sheltered ? 1.39 : 1.18) && along > -0.48 && along < 0.30 && foot < site.grade + 0.53) return true;
-    if (sheltered && Math.abs(side - 1.62) < 0.24 && (Math.abs(along - 1.32) < 0.22
-      || Math.abs(along + 1.03) < 0.22)) return true;
+    if (side < halfWidth && along > -0.48 && along < 0.30) return true;
   }
   return false;
 }
@@ -90,9 +76,6 @@ export class CoastControls {
   private previousGamepadFlight = false;
   private previousGamepadJump = false;
   private previousGamepadDive = false;
-  private previousGamepadRest = false;
-  private seated: RestSite | undefined;
-  private restTransition: RestTransition | undefined;
   private pointerLockRequestPending = false;
   private inputSuspended = false;
   private disposed = false;
@@ -126,36 +109,8 @@ export class CoastControls {
     return this.movementMode;
   }
 
-  get currentRestSite(): CoastRestSite | undefined {
-    return (this.seated ?? this.reachableRestSite())?.site;
-  }
-
-  toggleRest(): boolean {
-    if (this.disposed || this.restTransition) return false;
-    const access = this.seated ?? this.reachableRestSite();
-    if (!access) return false;
-    const { site, yaw, forwardX, forwardZ } = access;
-    const standingUp = this.seated !== undefined;
-    const offset = standingUp ? REST_STAND_OFFSET : 0;
-    const x = site.x + forwardX * offset, z = site.z + forwardZ * offset;
-    const to = new Vector3(x, groundHeight(x, z) + (standingUp ? EYE_HEIGHT : SEATED_EYE_HEIGHT), z);
-    const pitch = this.camera.rotation.x;
-    const fromYaw = this.camera.rotation.y;
-    const angle = yaw + Math.PI - fromYaw;
-    this.restTransition = {
-      from: this.camera.position.clone(), to, elapsed: 0, yaw: fromYaw,
-      turn: standingUp ? 0 : Math.atan2(Math.sin(angle), Math.cos(angle)),
-      pitch, tilt: standingUp ? 0 : site.pitch - pitch, standingUp,
-    };
-    this.clearInput();
-    this.verticalVelocity = 0;
-    if (!standingUp) this.seated = access;
-    this.updateMovementMode();
-    return true;
-  }
-
   toggleFlight(): void {
-    if (this.disposed || this.seated) return;
+    if (this.disposed) return;
 
     this.flying = !this.flying;
     this.verticalVelocity = 0;
@@ -195,21 +150,6 @@ export class CoastControls {
     const delta = Number.isFinite(dt) ? Math.max(0, Math.min(dt, MAX_DELTA)) : 0;
     const input = this.readMovementInput(delta);
     if (delta === 0 || this.inputSuspended) return;
-    if (this.restTransition) {
-      const transition = this.restTransition;
-      transition.elapsed += delta;
-      const progress = smoothstep(0, REST_TRANSITION_SECONDS, transition.elapsed);
-      this.camera.position.lerpVectors(transition.from, transition.to, progress);
-      this.camera.rotation.set(transition.pitch + transition.tilt * progress, transition.yaw + transition.turn * progress, 0);
-      if (transition.elapsed >= REST_TRANSITION_SECONDS) {
-        if (transition.standingUp) this.seated = undefined;
-        this.restTransition = undefined;
-        this.clearInput();
-        this.updateMovementMode();
-      }
-      return;
-    }
-    if (this.seated) return;
     const pace = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
       ? SPRINT_MULTIPLIER
       : 1;
@@ -274,7 +214,6 @@ export class CoastControls {
       event.preventDefault();
       if (!event.repeat) this.toggleFlight();
     }
-    if (event.code === 'KeyE' && !event.repeat && this.toggleRest()) event.preventDefault();
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent): void => {
@@ -368,7 +307,6 @@ export class CoastControls {
       this.previousGamepadFlight = false;
       this.previousGamepadJump = false;
       this.previousGamepadDive = false;
-      this.previousGamepadRest = false;
       return this.normalizePlanarInput(forward, right, vertical);
     }
 
@@ -382,15 +320,12 @@ export class CoastControls {
     vertical += Number(ascend) - Number(descend);
 
     const toggle = this.readButton(gamepad, 3);
-    const rest = this.readButton(gamepad, 2);
-    if (rest && !this.previousGamepadRest) this.toggleRest();
     if (toggle && !this.previousGamepadFlight) this.toggleFlight();
     if (ascend && !this.previousGamepadJump && !this.flying) this.jumpQueued = true;
     if (descend && !this.previousGamepadDive && !this.flying) this.diveQueued = true;
     this.previousGamepadFlight = toggle;
     this.previousGamepadJump = ascend;
     this.previousGamepadDive = descend;
-    this.previousGamepadRest = rest;
 
     const lookX = this.applyDeadzone(this.readAxis(gamepad.axes[2]));
     const lookY = this.applyDeadzone(this.readAxis(gamepad.axes[3]));
@@ -407,7 +342,6 @@ export class CoastControls {
     this.previousGamepadFlight = gamepad !== null && this.readButton(gamepad, 3);
     this.previousGamepadJump = gamepad !== null && this.readButton(gamepad, 0);
     this.previousGamepadDive = gamepad !== null && this.readButton(gamepad, 1);
-    this.previousGamepadRest = gamepad !== null && this.readButton(gamepad, 2);
   }
 
   private normalizePlanarInput(
@@ -573,7 +507,7 @@ export class CoastControls {
       const distance = Math.hypot(x - position.x, z - position.z);
       if (distance === 0) return false;
       const height = this.supportHeight(x, z);
-      if (restObstruction(x, z, followSupport ? height : footAtStep)) return false;
+      if (hitsBench(x, z, followSupport ? height : footAtStep)) return false;
       const rise = height - support;
       const walkableRise = distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON);
       if (followSupport ? rise > walkableRise : height > footAtStep + FOOT_CLEARANCE) return false;
@@ -608,16 +542,6 @@ export class CoastControls {
     return coastWaterLevel(x, z);
   }
 
-  private reachableRestSite(): RestSite | undefined {
-    if (this.movementMode !== 'walk') return undefined;
-    const { x, y, z } = this.camera.position;
-    return restSites.find(({ site, forwardX, forwardZ }) => {
-      const dx = x - site.x, dz = z - site.z;
-      return Math.hypot(dx, dz) < REST_REACH && dx * forwardX + dz * forwardZ > -0.85
-        && Math.abs(y - EYE_HEIGHT - site.grade) < 0.87 && Math.abs(this.verticalVelocity) < 0.12;
-    });
-  }
-
   private diveFloorY(x: number, z: number, ground: number): number {
     return Math.max(ground, this.callbacks.diveObstacleHeight?.(x, z) ?? ground) + DIVE_FLOOR_CLEARANCE;
   }
@@ -627,8 +551,7 @@ export class CoastControls {
     const water = this.waterLevel(x, z);
     const depth = water - groundHeight(x, z);
     let mode: CoastMovement = 'walk';
-    if (this.seated) mode = 'rest';
-    else if (this.flying) mode = 'flight';
+    if (this.flying) mode = 'flight';
     else if (this.divePhase !== null) mode = 'dive';
     else if (y <= water + EYE_HEIGHT + 0.03) {
       if (depth >= SWIM_DEPTH) mode = 'swim';

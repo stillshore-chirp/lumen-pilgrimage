@@ -13,7 +13,6 @@ type RestParts = {
   timber: Part[];
   stone: Part[];
   fittings: Part[];
-  roof: Part[];
 };
 
 const oiledWood = 0xc2a891;
@@ -21,7 +20,6 @@ const frameWood = 0xa28a73;
 const endWood = 0xb3987e;
 const grayStone = 0xb2afa9;
 const iron = 0x49443c;
-const roofMetal = 0x54574d;
 
 /** Cross section of a dressed beam with the grain and long edges running along local X. */
 function createTimberGeometry(): THREE.BufferGeometry {
@@ -90,8 +88,8 @@ function addFooting(parts: Part[], localGrade: (x: number, z: number) => number,
   return top - 0.018;
 }
 
-function addBench(parts: RestParts, localGrade: (x: number, z: number) => number, sheltered: boolean): void {
-  const length = sheltered ? 2.50 : 2.10;
+function addBench(parts: RestParts, localGrade: (x: number, z: number) => number, onTerrace: boolean): void {
+  const length = onTerrace ? 2.50 : 2.10;
   const legOffset = length / 2 - 0.24;
   for (const [index, z] of [-0.166, 0, 0.166].entries()) {
     addPart(parts.timber, [0, 0.454, z], [length, 0.052, 0.152], index === 1 ? endWood : oiledWood);
@@ -117,52 +115,21 @@ function addBench(parts: RestParts, localGrade: (x: number, z: number) => number
   }
 }
 
-function addShelter(parts: RestParts, localGrade: (x: number, z: number) => number): void {
-  const mastX = 1.62;
-  const ridgeZ = 0.13;
-  const eaveY = 2.375;
-  const eaveRun = 1.63;
-  const pitch = Math.PI / 10;
-  const rise = eaveRun * Math.tan(pitch);
-  const slopeLength = eaveRun / Math.cos(pitch);
-  const ridgeY = eaveY + rise;
-  const roofWidth = 4.18;
+function addTerrace(parts: RestParts, localGrade: (x: number, z: number) => number): void {
+  for (const [x, z, width, depth] of [
+    [-1.79, -0.43, 0.48, 0.55], [-1.69, -0.91, 0.49, 0.63], [-1.27, -1.28, 0.59, 0.42],
+    [-0.72, -1.39, 0.61, 0.45], [-0.12, -1.43, 0.67, 0.47], [0.52, -1.43, 0.67, 0.42],
+    [1.08, -1.32, 0.56, 0.46], [1.51, -1.08, 0.52, 0.54], [1.72, -0.61, 0.47, 0.48],
+  ]) addFooting(parts.stone, localGrade, x, z, width, depth, 0.17);
 
-  for (const z of [-1.03, 1.32]) {
-    addPart(parts.timber, [0, 2.33, z], [3.84, 0.205, 0.17], frameWood);
-    for (const sign of [-1, 1]) {
-      const x = sign * mastX;
-      const foot = addFooting(parts.stone, localGrade, x, z, 0.47, 0.45, 0.34);
-      addBeam(parts.timber, [x, foot, z], [x, 2.35, z], 0.169, 0.169, frameWood);
-      addBeam(parts.timber, [x, 1.92, z], [x - sign * 0.51, 2.30, z], 0.11, 0.095, endWood);
-      addBeam(parts.timber, [x, 1.99, z], [x, 2.30, z - Math.sign(z) * 0.44], 0.095, 0.095, endWood);
-      addPart(parts.fittings, [x, 2.33, z + 0.097], [0.036, 0.014, 0.036],
-        iron, new THREE.Euler(Math.PI / 2, 0, 0));
-    }
-  }
-  for (const x of [-mastX, mastX]) {
-    addPart(parts.timber, [x, 2.33, 0.145], [2.50, 0.15, 0.145], frameWood, new THREE.Euler(0, Math.PI / 2, 0));
-  }
-
-  addPart(parts.timber, [0, ridgeY - 0.13, ridgeZ], [roofWidth - 0.07, 0.18, 0.145], frameWood);
-  for (const side of [-1, 1]) {
-    const slope = new THREE.Euler(side * pitch, 0, 0);
-    const z = ridgeZ + side * eaveRun / 2;
-    const y = ridgeY - rise / 2;
-    const eaveZ = ridgeZ + side * eaveRun;
-    for (const x of [-2.04, -1.62, -0.81, 0, 0.81, 1.62, 2.04]) {
-      addBeam(parts.timber, [x, ridgeY - 0.093, ridgeZ], [x, eaveY - 0.093, eaveZ], 0.145, 0.088, endWood);
-    }
-    addPart(parts.timber, [0, eaveY - 0.063, eaveZ], [roofWidth + 0.02, 0.145, 0.068], endWood);
-    addPart(parts.timber, [0, y - 0.022, z], [roofWidth, 0.05, slopeLength], frameWood, slope);
-    // Standing seams and folded ridge above the timber deck keep the roof profile thin.
-    addPart(parts.roof, [0, y + 0.012, z], [roofWidth + 0.038, 0.035, slopeLength + 0.017], roofMetal, slope);
-    for (let seam = -4; seam <= 4; seam += 1) {
-      addPart(parts.roof, [seam * 0.51, y + 0.044, z], [0.019, 0.032, slopeLength + 0.01], 0x66695b, slope);
-    }
-    addPart(parts.roof, [0, ridgeY + 0.025, ridgeZ + side * 0.061],
-      [roofWidth + 0.055, 0.034, 0.148], 0x5d6054, slope);
-  }
+  // Flagstones sit flush with the trail opening, so the foreground stays clear from the bench.
+  for (const [x, z, width, depth, turn] of [
+    [-0.49, 0.60, 0.85, 0.57, -0.16], [0.32, 0.57, 0.74, 0.60, 0.08],
+    [-0.69, 1.09, 0.79, 0.56, 0.08], [0.06, 1.14, 0.80, 0.61, -0.11],
+    [0.73, 1.06, 0.57, 0.51, 0.18], [-0.28, 1.62, 0.82, 0.53, 0.17],
+    [0.43, 1.58, 0.65, 0.50, -0.09],
+  ]) addPart(parts.stone, [x, localGrade(x, z) - 0.058, z], [width, 0.15, depth],
+    grayStone, new THREE.Euler(0, turn, 0));
 }
 
 function createPartBatch(parts: readonly Part[], geometry: THREE.BufferGeometry,
@@ -185,14 +152,13 @@ function createPartBatch(parts: readonly Part[], geometry: THREE.BufferGeometry,
   return mesh;
 }
 
-export function createCoastRestShelters(sites: readonly CoastRestSite[], wood: THREE.Texture,
+export function createCoastRestAreas(sites: readonly CoastRestSite[], wood: THREE.Texture,
   stone: THREE.Texture): THREE.Group {
   const restAreas = new THREE.Group();
-  restAreas.name = 'Trail benches and shelters';
+  restAreas.name = 'Trail benches and open park terraces';
   const timberGeometry = createTimberGeometry();
   const footingGeometry = createFootingGeometry();
   const fittingGeometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 6);
-  const roofGeometry = new THREE.BoxGeometry(1, 1, 1);
   const timber = new THREE.MeshStandardMaterial({ map: wood, roughness: 0.81, bumpMap: wood, bumpScale: 0.0025 });
   timber.onBeforeCompile = shader => {
     // Retain the grain from the bark map and soften the deep fissures for planed timber.
@@ -202,7 +168,6 @@ export function createCoastRestShelters(sites: readonly CoastRestSite[], wood: T
   };
   const footing = new THREE.MeshStandardMaterial({ map: stone, roughness: 0.95, bumpMap: stone, bumpScale: 0.015 });
   const fittings = new THREE.MeshStandardMaterial({ roughness: 0.61, metalness: 0.43 });
-  const roof = new THREE.MeshStandardMaterial({ roughness: 0.72, metalness: 0.35 });
 
   for (const site of sites) {
     const height = groundHeight(site.x, site.z);
@@ -213,10 +178,10 @@ export function createCoastRestShelters(sites: readonly CoastRestSite[], wood: T
       groundHeight(site.x + x * cos + z * sin, site.z - x * sin + z * cos) - height
     );
 
-    const parts: RestParts = { timber: [], stone: [], fittings: [], roof: [] };
-    const sheltered = site.kind === 'shelter';
-    addBench(parts, localGrade, sheltered);
-    if (sheltered) addShelter(parts, localGrade);
+    const parts: RestParts = { timber: [], stone: [], fittings: [] };
+    const onTerrace = site.kind === 'terrace';
+    addBench(parts, localGrade, onTerrace);
+    if (onTerrace) addTerrace(parts, localGrade);
 
     const model = new THREE.Group();
     model.name = site.name;
@@ -225,7 +190,6 @@ export function createCoastRestShelters(sites: readonly CoastRestSite[], wood: T
     model.add(createPartBatch(parts.timber, timberGeometry, timber),
       createPartBatch(parts.stone, footingGeometry, footing),
       createPartBatch(parts.fittings, fittingGeometry, fittings));
-    if (sheltered) model.add(createPartBatch(parts.roof, roofGeometry, roof));
     restAreas.add(model);
   }
 

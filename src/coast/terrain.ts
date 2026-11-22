@@ -6,19 +6,19 @@ export type CoastPoint = { x: number; y: number; z: number };
 
 export const UPLAND_LAKE = { x: 143, z: 754, width: 82, length: 76, level: 71 };
 export type CoastRestSite = {
-  id: string; name: string; kind: 'bench' | 'shelter';
-  x: number; z: number; grade: number; lookX: number; lookZ: number; pitch: number;
+  id: string; name: string; kind: 'bench' | 'terrace';
+  x: number; z: number; grade: number; lookX: number; lookZ: number;
 };
 
 export const COAST_REST_SITES: readonly CoastRestSite[] = [
   { id: 'beach-bench', name: '浜のベンチ', kind: 'bench', x: -25.5, z: 75.2, grade: 4.30,
-    lookX: 2, lookZ: -235, pitch: 0.12 },
-  { id: 'shore-shelter', name: '森の入口の東屋', kind: 'shelter', x: -27, z: 111, grade: 11.15,
-    lookX: -79, lookZ: -27, pitch: 0.035 },
-  { id: 'lake-shelter', name: '湖畔の東屋', kind: 'shelter', x: 84, z: 702, grade: 73.85,
-    lookX: 221, lookZ: 787, pitch: 0.075 },
+    lookX: 2, lookZ: -235 },
+  { id: 'shore-shelter', name: '森の入口の休憩所', kind: 'terrace', x: -27, z: 111, grade: 11.15,
+    lookX: -79, lookZ: -27 },
+  { id: 'lake-shelter', name: '湖畔の休憩所', kind: 'terrace', x: 84, z: 702, grade: 73.85,
+    lookX: 221, lookZ: 787 },
   { id: 'ridge-bench', name: '稜線のベンチ', kind: 'bench', x: -113.5, z: 976, grade: 183.1,
-    lookX: 533, lookZ: 1334, pitch: -0.058 },
+    lookX: 533, lookZ: 1334 },
 ];
 
 export function restSiteYaw(site: CoastRestSite): number {
@@ -248,6 +248,7 @@ const uplandRidges = [
   [-556, 1465, 250, 245, 150], [-240, 1610, 259, 245, 176], [63, 1683, 185, 192, 130],
   [431, 1751, 268, 247, 197], [769, 1740, 389, 354, 215], [-801, 1698, 322, 318, 190],
   [-502, 1954, 386, 331, 238], [77, 2025, 325, 286, 214], [746, 2095, 453, 403, 184],
+  [627, 1648, 148, 167, 284], [846, 1528, 133, 187, 297], [1073, 1438, 171, 220, 306],
 ] as const;
 
 function uplandHeight(x: number, z: number): number {
@@ -617,7 +618,7 @@ export function groundHeight(x: number, z: number): number {
     const dx = x - site.x, dz = z - site.z;
     if (Math.abs(dx) > 7.6 || Math.abs(dz) > 7.6) continue;
     const radius = Math.hypot(dx, dz);
-    const clear = site.kind === 'shelter' ? 2.9 : 1.7;
+    const clear = site.kind === 'terrace' ? 2.9 : 1.7;
     height += (site.grade - height) * (1 - smoothstep(clear, clear + 4.6, radius));
   }
   const stream = sampleForestStream(x, z);
@@ -698,7 +699,7 @@ const waterfallClearings = COAST_FALLS.map(fall => {
 export function coastPlantingDistance(x: number, z: number): number {
   let distance = coastTrailDistance(x, z);
   for (const site of COAST_REST_SITES) {
-    const radius = site.kind === 'shelter' ? 4.5 : 2.7;
+    const radius = site.kind === 'terrace' ? 4.5 : 2.7;
     distance = Math.min(distance, Math.max(0, Math.hypot(x - site.x, z - site.z) - radius));
     if (site.id === 'shore-shelter') continue;
     const yaw = restSiteYaw(site);

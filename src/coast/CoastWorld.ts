@@ -8,7 +8,7 @@ import { createForestWater } from './world/coastForestWater';
 import { createCoastLandmarks, createCoastSeagrass, createCreekFlowers } from './world/coastLandmarks';
 import { createCoastLighting } from './world/coastLighting';
 import { createCoastOceanGeometry, createCoastOceanMaterial } from './world/coastOcean';
-import { createCoastRestShelters } from './world/coastRestShelters';
+import { createCoastRestAreas } from './world/coastRestAreas';
 import { loadCoastScenery } from './world/coastSceneryAssets';
 import { createCoastSky } from './world/coastSky';
 import { createCoastTerrain, loadCoastTexture } from './world/coastSurface';
@@ -184,7 +184,7 @@ export class CoastWorld {
     this.lake = createUplandLake(this.time, sunDirection);
     const wood = loadCoastTexture('forest-bark.webp', true);
     this.scene.add(ocean, this.lake.mesh, this.vegetation, createForestWater(this.time), createCoastSeagrass(this.time),
-      createCreekFlowers(), createCoastRestShelters(COAST_REST_SITES, wood, stone), createUplandTrailDetails(this.time, wood));
+      createCreekFlowers(), createCoastRestAreas(COAST_REST_SITES, wood, stone), createUplandTrailDetails(this.time, wood));
 
     this.waterfalls = createWaterfalls([...COAST_FALLS, UPLAND_FALL], this.time);
     this.scene.add(this.waterfalls.group, this.seabirds.mesh);

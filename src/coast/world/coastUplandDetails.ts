@@ -3,7 +3,7 @@ import { groundHeight } from '../terrain';
 import { coastNoise } from './coastNoise';
 
 const signs = [
-  { x: -30.2, z: 105.2, bearing: Math.PI, label: '東屋', arrow: '←' },
+  { x: -30.2, z: 105.2, bearing: Math.PI, label: '休憩所', arrow: '←' },
   { x: -8.8, z: 394.0, bearing: Math.PI - 0.27, label: '湖・稜線', arrow: '←' },
   { x: 98.2, z: 842.6, bearing: -0.46, label: '稜線', arrow: '→' },
 ];
