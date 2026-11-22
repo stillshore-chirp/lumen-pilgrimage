@@ -131,10 +131,15 @@ function wildlifeEmitters(): EmitterSpec[] {
     birdCalls: { firstDelay: 8, pause: 26 }, rockResponse: true, activity: BIRD_ACTIVITY,
     filters: [{ type: 'highpass', frequency: 720 }, { type: 'lowpass', frequency: 9800 }],
   });
-  const insectPatch = (grove: { x: number; z: number }, gain: number, range: number): EmitterSpec => ({
+  const insectPatch = (grove: { x: number; z: number }, gain: number, range: number, cutoff = 6900): EmitterSpec => ({
     asset: 'insects', position: grovePosition(grove, 1.1), gain, refDistance: 5, maxDistance: range, rolloff: 1.2,
     activity: INSECT_ACTIVITY,
-    filters: [{ type: 'highpass', frequency: 1400 }, { type: 'lowpass', frequency: 6900 }],
+    filters: [{ type: 'highpass', frequency: 1400 }, { type: 'lowpass', frequency: cutoff }],
+  });
+  const forestInsectPatch = (x: number, z: number, nightGain: number, dayGain = 0): EmitterSpec => ({
+    ...insectPatch({ x, z }, nightGain, 45, 8600),
+    refDistance: 10,
+    activity: { day: dayGain / nightGain, night: 1 },
   });
   return [
     perch({ x: -38, z: 358 }, 10, 0.72, 76),
@@ -144,11 +149,33 @@ function wildlifeEmitters(): EmitterSpec[] {
     ...shelterBirdEmitters(),
     insectPatch(COAST_GROVES.west, 0.16, 36),
     insectPatch(COAST_GROVES.east, 0.17, 38),
-    insectPatch(COAST_GROVES.shore, 0.14, 30),
-    insectPatch({ x: 5, z: 204 }, 0.29, 36),
-    insectPatch({ x: -28, z: 251 }, 0.35, 35),
-    insectPatch({ x: 42, z: 252 }, 0.30, 34),
-    insectPatch({ x: -16, z: 347 }, 0.25, 39),
+    {
+      // Keep the calls above the surf from the beach path, especially with the grove behind the listener.
+      ...insectPatch(COAST_GROVES.shore, 0.86, 35, 8600),
+      refDistance: 11,
+      activity: { day: 0.006, night: 1 },
+    },
+    // Understory between the shore shelter and the fork.
+    forestInsectPatch(-45, 117, 0.68),
+    forestInsectPatch(-31, 151, 0.62),
+    forestInsectPatch(5, 204, 0.65, 0.016),
+    // Ravine mouths and ledges toward the high clearing.
+    forestInsectPatch(-28, 251, 0.67, 0.020),
+    forestInsectPatch(-54, 282, 0.67),
+    forestInsectPatch(-68, 324, 0.66),
+    forestInsectPatch(-16, 347, 0.62, 0.014),
+    forestInsectPatch(-53, 370, 0.55),
+    // Dry banks around the ford and headwater.
+    forestInsectPatch(42, 252, 0.76, 0.017),
+    forestInsectPatch(59, 294, 0.78),
+    forestInsectPatch(71, 330, 0.60),
+    forestInsectPatch(35, 366, 0.58),
+    // Shaded edges of the high clearing and the forested saddle.
+    forestInsectPatch(-22, 379, 0.60),
+    forestInsectPatch(39, 407, 0.58),
+    forestInsectPatch(87, 419, 0.59),
+    forestInsectPatch(100, 459, 0.60),
+    forestInsectPatch(106, 484, 0.59),
   ];
 }
 

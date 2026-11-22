@@ -113,6 +113,31 @@ function installBrowserProbes() {
   });
 }
 
+function installProjectionProbe() {
+  const gl = WebGL2RenderingContext.prototype;
+  const getLocation = gl.getUniformLocation;
+  const uploadMatrix = gl.uniformMatrix4fv;
+  const projectionLocations = new WeakSet();
+  gl.getUniformLocation = function (program, name) {
+    const location = getLocation.call(this, program, name);
+    if (location && name === 'projectionMatrix') projectionLocations.add(location);
+    return location;
+  };
+  gl.uniformMatrix4fv = function (location, transpose, matrix, ...range) {
+    if (projectionLocations.has(location) && matrix[11] === -1) {
+      const near = matrix[14] / (matrix[10] - 1);
+      // Select the exploration camera rather than shadow and reflection passes.
+      if (Math.abs(near - 0.12) < 0.0001 || Math.abs(near - 0.20) < 0.0001) {
+        window.coastProjection = {
+          fov: Math.atan(1 / matrix[5]) * 360 / Math.PI,
+          aspect: matrix[5] / matrix[0],
+        };
+      }
+    }
+    return uploadMatrix.call(this, location, transpose, matrix, ...range);
+  };
+}
+
 function setPad({ axes = [0, 0, 0, 0], pressed = [], connected = true } = {}) {
   window.coastProbe.pad = connected ? {
     connected,
@@ -386,11 +411,52 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await canvas.waitFor();
   }
 
+  async function walkWithFocus(key, focused) {
+    const start = await page.evaluate(audioPosition);
+    await page.keyboard.down(key);
+    try {
+      await page.waitForFunction(({ x, z }) => {
+        const listener = window.coastProbe.context.listener;
+        return Math.hypot(listener.positionX.value - x, listener.positionZ.value - z) > 0.2;
+      }, start);
+    } finally {
+      await page.keyboard.up(key);
+    }
+    assert.equal(await focused.evaluate(node => document.activeElement === node
+      && document.pointerLockElement === null), true);
+  }
+
   try {
     await page.goto(url, { waitUntil: 'commit' });
     const coastDay = await skyBrightness(canvas);
     assert.equal(await day.getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: '環境音を開始' }).click();
+    await page.getByRole('button', { name: '環境音を再開' }).waitFor();
+    await walkWithFocus('w', page.locator('body'));
+
+    const high = page.getByRole('button', { name: '高品質' });
+    const light = page.getByRole('button', { name: '軽量' });
+    await high.click();
+    assert.equal(await high.getAttribute('aria-pressed'), 'true');
+    await walkWithFocus('s', high);
+    await light.press('Space');
+    assert.equal(await light.getAttribute('aria-pressed'), 'true');
+
+    const guide = page.locator('summary').filter({ hasText: '操作方法' });
+    const guideDescription = page.locator('.coast-guide-description');
+    await guide.press('Space');
+    await guideDescription.waitFor({ state: 'visible' });
+    await walkWithFocus('w', guide);
+    await guide.press('Space');
+    await guideDescription.waitFor({ state: 'hidden' });
+
+    const fov = page.getByRole('slider', { name: '視野角' });
+    await fov.focus();
+    await walkWithFocus('s', fov);
+    assert.equal(await fov.inputValue(), '60');
+
     await night.click();
+    await walkWithFocus('d', night);
     const coastNight = await skyBrightness(canvas);
     assert.ok(coastNight > 5 && coastDay - coastNight > 65, `${coastDay} → ${coastNight}`);
     await capture(page, 'lagoon-night');
@@ -403,8 +469,21 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'hidden' });
 
-    await page.getByRole('button', { name: '環境音を開始' }).click();
-    await page.getByRole('button', { name: '環境音を再開' }).waitFor();
+    await travel.click();
+    await dialog.waitFor();
+    const paused = await page.evaluate(audioPosition);
+    await page.keyboard.down('w');
+    try {
+      await dialog.getByRole('button', { name: '閉じる' }).press('Space');
+      await dialog.waitFor({ state: 'hidden' });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const resumed = await page.evaluate(audioPosition);
+      assert.deepEqual([resumed.x, resumed.z], [paused.x, paused.z]);
+    } finally {
+      await page.keyboard.up('w');
+    }
+    await walkWithFocus('a', travel);
+
     await flight.click();
     assert.equal(await flight.getAttribute('aria-pressed'), 'true');
     for (const [label, id, x, z] of [
@@ -420,6 +499,7 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
       }, [x, z]);
       assert.equal(await flight.getAttribute('aria-pressed'), 'false');
       assert.equal(await page.locator('.coast-mode').textContent(), '歩行');
+      if (id === 'forest') await walkWithFocus('w', travel);
     }
 
     await arrive('中央展望デッキ', 'overlook', 'main-deck', 'night');
@@ -447,6 +527,58 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await page.close();
   }
 });
+
+test('first-person field of view changes the projection, persists across worlds, and resets to each world default',
+  { timeout }, async () => {
+    const page = await newPage();
+    const slider = page.getByRole('slider', { name: '視野角' });
+    const reset = page.getByRole('button', { name: '既定に戻す' });
+    await page.addInitScript(installProjectionProbe);
+
+    async function expectFieldOfView(degrees) {
+      const { width, height } = page.viewportSize();
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await page.waitForFunction(({ degrees, aspect }) => {
+        const projected = window.coastProjection;
+        return projected && Math.abs(projected.fov - degrees) < 0.01 && Math.abs(projected.aspect - aspect) < 0.01;
+      }, { degrees, aspect: width / height });
+      assert.equal(await slider.inputValue(), String(degrees));
+      assert.equal(await slider.getAttribute('aria-valuetext'), `${degrees}度`);
+      assert.equal(await page.locator('.coast-fov-value').textContent(), `${degrees}°`);
+    }
+
+    try {
+      await page.goto(url, { waitUntil: 'commit' });
+      await expectFieldOfView(60);
+      await slider.press('End');
+      await expectFieldOfView(95);
+      await slider.press('ArrowLeft');
+      await expectFieldOfView(94);
+      await page.setViewportSize({ width: viewport.width - 80, height: viewport.height + 50 });
+      await expectFieldOfView(94);
+      await page.getByRole('button', { name: '高品質' }).click();
+      await expectFieldOfView(94);
+
+      await page.getByRole('button', { name: 'ファストトラベル' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: '中央展望デッキ', exact: true }).click();
+      await page.waitForURL(address => address.searchParams.get('world') === 'overlook', { waitUntil: 'commit' });
+      await expectFieldOfView(94);
+      await reset.click();
+      await expectFieldOfView(54);
+
+      await page.goto(url, { waitUntil: 'commit' });
+      await expectFieldOfView(60);
+      await page.evaluate(() => Object.defineProperty(window, 'localStorage', {
+        get() { throw new DOMException('Storage denied', 'SecurityError'); },
+      }));
+      await slider.press('Home');
+      await expectFieldOfView(40);
+      await reset.click();
+      await expectFieldOfView(60);
+    } finally {
+      await page.close();
+    }
+  });
 
 test('the overlook plays quiet spatial audio and its upper deck can be reached and left on foot', { timeout }, async () => {
   const page = await newPage();

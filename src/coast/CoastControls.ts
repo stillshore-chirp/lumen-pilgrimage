@@ -241,7 +241,7 @@ export class CoastControls {
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
-    if (!this.canUseSceneKeyboard(event.target)) return;
+    if (!this.canUseSceneKeyboard(event)) return;
 
     if (this.isControlKey(event.code)) {
       event.preventDefault();
@@ -311,10 +311,17 @@ export class CoastControls {
     this.callbacks.onLockError();
   }
 
-  private canUseSceneKeyboard(target: EventTarget | null): boolean {
+  private canUseSceneKeyboard(event: KeyboardEvent): boolean {
     if (this.inputSuspended) return false;
-    if (this.isInteractiveTarget(target)) return false;
+    const { target } = event;
     const active = document.activeElement;
+    if (target instanceof Element && target === active
+      && target.closest('.coast-ui :is(button[type="button"], summary, input[type="range"])')
+      && !target.closest('dialog')) {
+      return !event.defaultPrevented && !event.ctrlKey && !event.metaKey && !event.altKey
+        && this.isPlanarControlKey(event.code);
+    }
+    if (this.isInteractiveTarget(target)) return false;
     return active === this.canvas || active === document.body || document.pointerLockElement === this.canvas;
   }
 
@@ -326,8 +333,12 @@ export class CoastControls {
   }
 
   private isControlKey(code: string): boolean {
+    return this.isPlanarControlKey(code) || code === 'Space' || code === 'KeyC';
+  }
+
+  private isPlanarControlKey(code: string): boolean {
     return code === 'KeyW' || code === 'KeyA' || code === 'KeyS' || code === 'KeyD'
-      || code === 'Space' || code === 'KeyC' || code === 'ShiftLeft' || code === 'ShiftRight';
+      || code === 'ShiftLeft' || code === 'ShiftRight';
   }
 
   private clearInput(): void {
