@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createOverlookSkyline, OVERLOOK_DISTRICTS, type SkylineLight } from './overlookSkyline';
+import { DECK_LEVEL } from './overlookTerrain';
 
 const minX = -23000;
 const minZ = -26000;
@@ -26,12 +27,14 @@ type TimeOfDay = 'day' | 'night';
 type Quality = 'light' | 'high';
 type BuildingForm = 'flat' | 'pitched' | 'terraced';
 
-type Building = {
+type CityVolume = {
   x: number; y: number; z: number;
   width: number; height: number; depth: number;
   yaw: number; color: THREE.Color;
   variant: number; facade: number;
 };
+
+type CityLight = SkylineLight & { temperature?: number };
 
 const roofs = {
   plaster: [0xd3c4b2, 0xc4bfae, 0xa7a29a, 0xdbd4bd, 0xddd6cb, 0xb9b8ad],
@@ -41,6 +44,14 @@ const roofs = {
   masonry: [0xbcb6aa, 0xa1978e, 0xa3978d, 0xb6aaa3, 0x8e8380, 0xc0b7a6],
   offices: [0x7a929f, 0x8296a2, 0x667d8d, 0x859a9d, 0x92999d, 0x99928a],
 } as const;
+
+const canopyColors = [0x455038, 0x46573e, 0x556447, 0x3d4e42, 0x50634f];
+
+// Small groves on the open slope between the deck and the nearest street frontages.
+const slopeGroves = [
+  [225, -492, 66, 79], [335, -421, 74, 53], [480, -349, 72, 64],
+  [546, -587, 101, 76], [668, -472, 85, 65], [651, -308, 68, 50],
+] as const;
 
 const midriseDistricts = [
   [OVERLOOK_DISTRICTS.west, 1190, 1020, 48],
@@ -85,7 +96,7 @@ const towersVertex = /* glsl */`
     float sun = max(0.0, dot(normal, uCitySun));
     float roof = max(normal.y, 0.0);
     vec3 daylight = vec3(0.57, 0.65, 0.75) + sun * vec3(0.97, 0.86, 0.69) + roof * 0.19;
-    vec3 nightlight = vec3(0.11, 0.16, 0.24) + roof * 0.095;
+    vec3 nightlight = vec3(0.068, 0.100, 0.155) + roof * 0.058;
     vCityColor = color * mix(daylight, nightlight, uNight);
     vFacade = cityFacade;
     vTransmission = cityTransmittance(world);
@@ -113,12 +124,12 @@ const towersFragment = /* glsl */`
       float pane = mix(0.34, panes.x * panes.y, resolved);
       float local = windowRandom(floor(window));
       float floorSuite = windowRandom(floor(window * vec2(0.12, 0.19)));
-      float occupancy = mix(0.10 + 0.66 * floorSuite, smoothstep(0.46, 0.76, local * 0.68 + floorSuite * 0.53), resolved);
+      float occupancy = mix(0.035 + 0.29 * floorSuite, smoothstep(0.61, 0.91, local * 0.67 + floorSuite * 0.55), resolved);
       float tint = windowRandom(floor(window * vec2(0.09, 0.14)) + vec2(13.0));
-      vec3 light = mix(vec3(1.04, 0.69, 0.36), vec3(0.58, 0.73, 0.93), smoothstep(0.24, 0.85, tint));
+      vec3 light = mix(vec3(1.0, 0.78, 0.52), vec3(0.64, 0.79, 0.95), smoothstep(0.24, 0.85, tint));
       vec3 glazing = color * (0.58 + local * 0.095) + vec3(0.074, 0.143, 0.230) * (0.35 + 0.80 * vSkyReflection);
       color = mix(color, glazing, pane * (1.0 - uNight));
-      color += uNight * pane * occupancy * light * (0.36 + 0.46 * floorSuite);
+      color += uNight * pane * occupancy * light * (0.25 + 0.38 * floorSuite);
     }
     color += vFacade.w * uNight * vec3(0.48, 0.76, 1.0);
     gl_FragColor = vec4(cityInAir(color, vTransmission), 1.0);
@@ -153,7 +164,7 @@ const blocksVertex = /* glsl */`
     float roof = smoothstep(0.18, 0.77, n.y);
     vec3 day = cityColor * (vec3(0.53, 0.62, 0.73) + facing * vec3(0.86, 0.78, 0.65) + roof * 0.10);
     day *= mix(0.54, 1.0, smoothstep(0.0, 0.46, position.y + roof * 0.2));
-    vec3 dark = cityColor * (vec3(0.097, 0.108, 0.142) + roof * 0.062) + vec3(0.004, 0.008, 0.016);
+    vec3 dark = cityColor * (vec3(0.038, 0.054, 0.082) + roof * 0.039) + vec3(0.002, 0.004, 0.008);
     vCityColor = mix(day, dark, uNight);
     float across = abs(localNormal.x) > 0.5 ? p.z : p.x;
     vBlockFace = vec3(across * cityWindowScale + cityVariant * 81.0, world.y * 0.252, cityWindowScale * (1.0 - roof));
@@ -177,11 +188,11 @@ const blocksFragment = /* glsl */`
         vec2(0.42, 0.34) + footprint * 0.4, abs(fract(cell) - 0.5));
       float pane = mix(0.48, opening.x * opening.y, resolved);
       float occupancy = windowRandom(floor(cell / vec2(6.1, 2.6)));
-      float lit = mix(0.15 + occupancy * 0.19, smoothstep(0.34, 0.81, windowRandom(floor(cell)) * (0.76 + occupancy * 0.4)), resolved);
+      float lit = mix(0.022 + occupancy * 0.14, smoothstep(0.56, 0.89, windowRandom(floor(cell)) * (0.75 + occupancy * 0.38)), resolved);
       vec3 reflectedSky = vec3(0.071, 0.125, 0.174);
-      vec3 electric = mix(vec3(0.94, 0.54, 0.22), vec3(0.52, 0.73, 0.93), step(0.61, occupancy));
+      vec3 electric = mix(vec3(1.0, 0.72, 0.41), vec3(0.63, 0.76, 1.0), step(0.72, occupancy));
       color = mix(color, color * 0.47 + reflectedSky, pane * (1.0 - uNight));
-      color += electric * lit * pane * uNight * 0.64;
+      color += electric * lit * pane * uNight * 0.42;
     }
     gl_FragColor = vec4(cityInAir(color, vBlockTransmission), 1.0);
     #include <tonemapping_fragment>
@@ -192,9 +203,11 @@ const blocksFragment = /* glsl */`
 const nightPointsVertex = /* glsl */`
   attribute float cityLightKind;
   attribute float cityPower;
+  attribute float cityTemperature;
   uniform float uCityPixelFactor;
   varying vec3 vLamp;
   varying float vPower;
+  varying float vScatter;
   ${cityAir}
 
   void main() {
@@ -202,32 +215,35 @@ const nightPointsVertex = /* glsl */`
     vec4 view = viewMatrix * vec4(world, 1.0);
     float distanceToEye = length(view.xyz);
     float lightKind = cityLightKind;
-    vec3 amber = vec3(1.0, 0.44, 0.12);
-    vec3 warmWhite = vec3(1.0, 0.75, 0.46);
-    vec3 coolWhite = vec3(0.64, 0.77, 1.0);
-    vec3 color = mix(amber, warmWhite, smoothstep(0.2, 0.8, cityPower));
-    float size = 1.02;
+    vec3 amber = vec3(1.0, 0.45, 0.14);
+    vec3 warmWhite = vec3(1.0, 0.75, 0.45);
+    vec3 coolWhite = vec3(0.64, 0.81, 1.0);
+    vec3 color = mix(amber, warmWhite, smoothstep(0.09, 0.59, cityTemperature));
+    color = mix(color, coolWhite, smoothstep(0.72, 0.96, cityTemperature));
+    float diameter = 3.5;
+    float radiance = 1.0;
     if (lightKind < 0.5) {
-      color = mix(amber, warmWhite, smoothstep(0.25, 1.0, cityPower));
-      size = 0.81;
-    } else if (lightKind < 1.5) {
-      color = mix(color, coolWhite, 0.29 * step(0.66, cityPower));
+      diameter = 3.2;
+      radiance = 0.86;
     } else if (lightKind < 2.5) {
-      color = mix(warmWhite, coolWhite, 0.72 * smoothstep(0.49, 0.95, cityPower));
-      size = 1.33;
+      diameter = mix(3.5, 4.35, step(1.5, lightKind));
     } else if (lightKind < 3.5) {
-      color = mix(amber * vec3(1.0, 0.80, 0.7), warmWhite, 0.82 * step(0.48, cityPower));
-      size = 1.45;
+      diameter = 4.1;
+      radiance = 0.93;
     } else {
-      color = vec3(1.0, 0.086, 0.050);
-      size = 1.8;
+      color = vec3(1.0, 0.094, 0.071);
+      diameter = 3.0;
+      radiance = 0.86;
     }
-    float coreSize = 1.16 + cityPower * 0.87 + 1400.0 / max(850.0, distanceToEye);
-    gl_PointSize = clamp(size * coreSize * uCityPixelFactor, 1.3, 6.5 * uCityPixelFactor);
-    vLamp = color;
-    float distanceFade = 1.0 - 0.30 * smoothstep(6800.0, 21000.0, distanceToEye);
-    float streetPower = lightKind < 0.5 ? 0.60 : lightKind < 3.5 ? 0.66 : 1.0;
-    vPower = cityTransmittance(world) * (0.34 + cityPower * 0.68) * min(1.0, size * 0.90) * distanceFade * streetPower;
+    float distant = smoothstep(5300.0, 14800.0, distanceToEye);
+    float spread = min(2.8, 2100.0 / max(750.0, distanceToEye));
+    float practicalSize = diameter * (0.55 + 0.66 * cityPower) * mix(1.09, 0.94, distant);
+    gl_PointSize = max(1.7, (practicalSize + spread) * uCityPixelFactor);
+    float transmission = cityTransmittance(world);
+    vec3 basinGlow = vec3(1.0, 0.57, 0.23);
+    vLamp = mix(color, basinGlow, 0.70 * distant * (1.0 - step(3.5, lightKind)));
+    vPower = transmission * radiance * (0.16 + cityPower * 0.96) * mix(1.14, 0.73, distant);
+    vScatter = mix(0.18, 0.095, distant) * smoothstep(0.33, 0.99, cityPower);
     gl_Position = projectionMatrix * view;
   }
 `;
@@ -235,12 +251,13 @@ const nightPointsVertex = /* glsl */`
 const nightPointsFragment = /* glsl */`
   varying vec3 vLamp;
   varying float vPower;
+  varying float vScatter;
   void main() {
-    float radius = length(gl_PointCoord - 0.5) * 2.0;
-    if (radius > 1.0) discard;
-    float core = 1.0 - smoothstep(0.16, 0.76, radius);
-    float halo = exp(-radius * radius * 3.0);
-    gl_FragColor = vec4(vLamp, vPower * (core * 0.75 + halo * 0.20));
+    vec2 offset = gl_PointCoord * 2.0 - 1.0;
+    float radiusSquared = dot(offset, offset);
+    float core = exp(-radiusSquared * 7.7);
+    float halo = exp(-radiusSquared * 2.1) * (1.0 - smoothstep(0.32, 1.0, radiusSquared));
+    gl_FragColor = vec4(vLamp, vPower * (core + halo * vScatter));
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -250,6 +267,20 @@ function randomUnit(seed: number, salt: number): number {
   let n = Math.imul(seed ^ salt, 3266489917);
   n = Math.imul(n ^ n >>> 15, 2246822519);
   return ((n ^ n >>> 16) >>> 0) / 4294967296;
+}
+
+function neighborhoodNoise(x: number, z: number, size: number, salt: number): number {
+  const column = Math.floor(x / size), row = Math.floor(z / size);
+  const east = THREE.MathUtils.smoothstep(x / size - column, 0, 1);
+  const south = THREE.MathUtils.smoothstep(z / size - row, 0, 1);
+  const cell = Math.imul(column, 27173) + Math.imul(row, 65539);
+  const north = THREE.MathUtils.lerp(randomUnit(cell, salt), randomUnit(cell + 27173, salt), east);
+  const next = THREE.MathUtils.lerp(randomUnit(cell + 65539, salt), randomUnit(cell + 92712, salt), east);
+  return THREE.MathUtils.lerp(north, next, south);
+}
+
+function neighborhoodActivity(x: number, z: number): number {
+  return neighborhoodNoise(x, z, 1240, 74) * 0.66 + neighborhoodNoise(x, z, 390, 327) * 0.34;
 }
 
 function flatGeometry(): THREE.BufferGeometry {
@@ -300,6 +331,19 @@ function pitchedGeometry(): THREE.BufferGeometry {
   return geometry;
 }
 
+function canopyGeometry(): THREE.BufferGeometry {
+  const geometry = new THREE.IcosahedronGeometry(0.5, 1);
+  const positions = geometry.getAttribute('position');
+  for (let i = 0; i < positions.count; i += 1) {
+    const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
+    const lobes = 0.94 + 0.14 * Math.sin(x * 16.1 + y * 8.7) * Math.cos(z * 14.3 - y * 5.6);
+    const taper = 1 + Math.min(0, y) * 0.88;
+    positions.setXYZ(i, x * lobes * taper, 0.45 + y * lobes, z * lobes * taper);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function tileKey(x: number, z: number): string {
   return `${Math.floor(x / 4500)}:${Math.floor(z / 4500)}`;
 }
@@ -310,7 +354,7 @@ function append<Key, T>(map: Map<Key, T[]>, key: Key, item: T): void {
   else map.set(key, [item]);
 }
 
-function createBlocks(items: Building[], material: THREE.ShaderMaterial, shape: THREE.BufferGeometry): THREE.Mesh {
+function createBlocks(items: CityVolume[], material: THREE.ShaderMaterial, shape: THREE.BufferGeometry): THREE.Mesh {
   const geometry = new THREE.InstancedBufferGeometry();
   geometry.index = shape.index;
   geometry.setAttribute('position', shape.attributes.position);
@@ -346,25 +390,28 @@ function createBlocks(items: Building[], material: THREE.ShaderMaterial, shape: 
   return mesh;
 }
 
-function createPoints(points: SkylineLight[], material: THREE.ShaderMaterial): THREE.Points {
+function createPoints(points: CityLight[], material: THREE.ShaderMaterial): THREE.Points {
   const geometry = new THREE.BufferGeometry();
   const positions = new Float32Array(points.length * 3);
   const kinds = new Float32Array(points.length);
   const intensity = new Float32Array(points.length);
+  const temperatures = new Float32Array(points.length);
   for (const [i, light] of points.entries()) {
     positions.set([light.x, light.y, light.z], i * 3);
     kinds[i] = light.kind;
     intensity[i] = light.power;
+    temperatures[i] = light.temperature ?? 0.52;
   }
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('cityLightKind', new THREE.BufferAttribute(kinds, 1));
   geometry.setAttribute('cityPower', new THREE.BufferAttribute(intensity, 1));
+  geometry.setAttribute('cityTemperature', new THREE.BufferAttribute(temperatures, 1));
   geometry.computeBoundingSphere();
   const lights = new THREE.Points(geometry, material);
   const viewport = new THREE.Vector2();
   lights.onBeforeRender = renderer => {
     renderer.getDrawingBufferSize(viewport);
-    material.uniforms.uCityPixelFactor.value = Math.min(2.4, Math.max(0.86, viewport.y / 860));
+    material.uniforms.uCityPixelFactor.value = Math.min(2.4, Math.max(0.60, viewport.y / 900));
   };
   lights.name = 'Street and building lights';
   return lights;
@@ -431,8 +478,18 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
   mainLamps.add(createPoints(skyline.lights, pointsMaterial));
 
   const ready = loadPlacements().then(view => {
-    const buildingTiles = new Map<`${0 | 1}:${BuildingForm}:${string}`, Building[]>();
-    const lampTiles = new Map<string, SkylineLight[]>();
+    const buildingTiles = new Map<`${0 | 1}:${BuildingForm}:${string}`, CityVolume[]>();
+    const canopyTiles = new Map<string, CityVolume[]>();
+    const lampTiles = new Map<string, CityLight[]>();
+    const appendCrown = (x: number, y: number, z: number, crown: number, yaw: number, seed: number) => {
+      const shape = randomUnit(seed, 7403);
+      const colorIndex = Math.floor(randomUnit(seed, 4221) * canopyColors.length);
+      append(canopyTiles, tileKey(x, z), {
+        x, y: y - 0.7, z, width: crown, depth: crown * (0.76 + shape * 0.31),
+        height: crown * (0.62 + randomUnit(seed, 7927) * 0.45), yaw,
+        color: new THREE.Color(canopyColors[colorIndex]), variant: shape, facade: 0,
+      });
+    };
     const closeToLandmark = (x: number, z: number, padding: number) => skyline.exclusions.some(exclusion =>
       (x - exclusion.x) ** 2 + (z - exclusion.z) ** 2 < (exclusion.radius + padding) ** 2,
     );
@@ -447,7 +504,7 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       const use = view.getUint8(offset + 7);
       const distance = Math.hypot(x, z);
       const footprint = Math.max(w, d) * 0.68;
-      if (distance < 525 || closeToLandmark(x, z, footprint) || options.blocksFootprint?.(x, z, footprint)) continue;
+      if (distance < 410 || closeToLandmark(x, z, footprint) || options.blocksFootprint?.(x, z, footprint)) continue;
 
       const ground = heightAt(x, z);
       if (ground < 1 || ground > 587) continue;
@@ -478,16 +535,48 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       color.multiplyScalar(0.78 + randomUnit(seed, 1675) * 0.31);
       const feet = lowest - 3.0;
       const yaw = -view.getUint8(offset + 6) / 256 * Math.PI;
+      const sin = Math.sin(yaw), cos = Math.cos(yaw);
       const tile = tileKey(x, z);
       const detail = !nearby && district < 0.31 && randomUnit(seed, 757) < (distance > 11000 ? 0.56 : 0.30);
       append(buildingTiles, `${detail ? 1 : 0}:${form}:${tile}`, {
         x, y: feet, z, width: w, depth: d, height: h + ground - feet, yaw, color, variant,
         facade: midrise ? (office ? 0.33 : 0.25) : 0,
       });
-      if (!midrise && variant > 0.81 && distance < 16500 && (use === 2 || random > 0.45)) {
-        append(lampTiles, `${!detail ? '0' : '1'}:${tile}`, {
-          x: x + Math.sin(yaw) * d * 0.53, z: z + Math.cos(yaw) * d * 0.53,
-          y: ground + Math.min(h * 0.72, 9.2), kind: 0, power: 0.42 + variant * 0.45,
+      if (!midrise && use === 0 && distance < 6200) {
+        const greenery = neighborhoodNoise(x, z, 530, 618) * 0.68 + neighborhoodNoise(x, z, 210, 663) * 0.32;
+        const growth = THREE.MathUtils.smoothstep(greenery, 0.27, 0.74);
+        if (randomUnit(seed, 7194) < 0.11 + growth * 0.67) {
+          // Draw crowns along garden edges, outside the inferred roof footprint.
+          const crown = 6 + growth * 5 + randomUnit(seed, 4133) * 7;
+          const side = (randomUnit(seed, 5120) > 0.46 ? -1 : 1) * (d * 0.5 + crown * 0.31);
+          const along = (randomUnit(seed, 1539) - 0.5) * w * 0.91;
+          const treeX = x + sin * side + cos * along, treeZ = z + cos * side - sin * along;
+          const treeY = heightAt(treeX, treeZ);
+          if (Math.abs(treeY - ground) < 6.5 && Math.hypot(treeX, treeZ) > 405
+            && !options.blocksFootprint?.(treeX, treeZ, crown * 0.45)) {
+            appendCrown(treeX, treeY, treeZ, crown, yaw, seed);
+          }
+        }
+      }
+      const activity = neighborhoodActivity(x, z);
+      const lit = randomUnit(seed, 2629);
+      const occupancy = use === 2 ? 0.13 + activity * 0.36 : 0.24 + activity * 0.58;
+      if (lit > occupancy || (midrise && lit > occupancy * 0.59)) continue;
+
+      // The street-aligned façades catch different lights in adjoining rooms and entrances.
+      const frontage = (sin * x + cos * z > 0 ? -1 : 1) * d * (form === 'terraced' ? 0.439 : 0.515);
+      const along = (randomUnit(seed, 1331) - 0.5) * w * 0.79;
+      const temperature = 0.28 + randomUnit(seed, 2003) * (use === 2 ? 0.70 : 0.49);
+      const power = 0.25 + randomUnit(seed, 4907) ** 1.43 * (0.56 + activity * 0.16) + 0.15 * activity;
+      const lampX = x + sin * frontage + cos * along, lampZ = z + cos * frontage - sin * along;
+      append(lampTiles, `0:${tile}`, {
+        x: lampX, z: lampZ, y: ground + Math.min(h * (0.32 + random * 0.22), 12), kind: 0, power, temperature,
+      });
+      if (nearby && power > 0.52 && randomUnit(seed, 1617) < 0.35) {
+        const spacing = (along > 0 ? -1 : 1) * w * (0.28 + variant * 0.2);
+        append(lampTiles, `0:${tile}`, {
+          x: lampX + cos * spacing, z: lampZ - sin * spacing,
+          y: ground + Math.min(h * 0.39, 10), kind: 0, power: power * 0.68, temperature,
         });
       }
     }
@@ -495,14 +584,40 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
     for (let i = 0; i < lampCount; i += 1, offset += 6) {
       const x = minX + view.getUint16(offset, true);
       const z = minZ + view.getUint16(offset + 2, true);
-      const kind = view.getUint8(offset + 4), power = view.getUint8(offset + 5) / 255;
+      const kind = view.getUint8(offset + 4), sourceIntensity = view.getUint8(offset + 5) / 255;
       const ground = heightAt(x, z);
-      if (ground < 1 || ground > 520 || Math.hypot(x, z) < 615 || closeToLandmark(x, z, -14)
+      const distance = Math.hypot(x, z);
+      if (ground < 1 || ground > 520 || distance < 465 || closeToLandmark(x, z, -14)
         || options.blocksFootprint?.(x, z, 0)) continue;
-      const extra = kind === 1 && power < 0.54 && Math.hypot(x, z) > 3700;
+      const seed = Math.imul(x, 27173) + Math.imul(z, 65539);
+      const activity = neighborhoodActivity(x, z);
+      const power = Math.min(1.18, (0.17 + 0.89 * sourceIntensity ** 1.7) * (0.70 + 0.64 * activity));
+      const electricDistrict = neighborhoodNoise(x, z, 820, 438);
+      const temperature = (kind === 2 ? 0.11 : 0) + electricDistrict * 0.69 + randomUnit(seed, 863) * 0.36;
+      const extra = kind === 1 && power < 0.36 && distance > 5300;
       append(lampTiles, `${extra ? '1' : '0'}:${tileKey(x, z)}`, {
-        x, y: ground + (kind === 1 ? 6 : kind === 2 ? 8 : 4.4), z, kind, power,
+        x, y: ground + (kind === 1 ? 6 : kind === 2 ? 8 : 4.4) + randomUnit(seed, 272) * 1.8,
+        z, kind, power, temperature,
       });
+    }
+
+    const groveSpacing = 14;
+    for (const [centerX, centerZ, radiusX, radiusZ] of slopeGroves) {
+      for (let row = -Math.floor(radiusZ / groveSpacing); row <= radiusZ / groveSpacing; row += 1) {
+        for (let column = -Math.floor(radiusX / groveSpacing); column <= radiusX / groveSpacing; column += 1) {
+          const seed = Math.imul(centerX + column, 27173) + Math.imul(centerZ + row, 65539);
+          const x = centerX + (column + randomUnit(seed, 1528) - 0.5) * groveSpacing;
+          const z = centerZ + (row + randomUnit(seed, 3828) - 0.5) * groveSpacing;
+          const edge = ((x - centerX) / radiusX) ** 2 + ((z - centerZ) / radiusZ) ** 2;
+          if (edge > 0.58 + neighborhoodNoise(x, z, 35, 112) * 0.48 || Math.hypot(x, z) < 420
+            || randomUnit(seed, 4093) < 0.17 || options.blocksFootprint?.(x, z, 7.5)) continue;
+          const y = heightAt(x, z);
+          const width = 7 + randomUnit(seed, 8149) * 8;
+          if (y > 1 && y + width * 1.07 < DECK_LEVEL - 24) {
+            appendCrown(x, y, z, width, randomUnit(seed, 8431) * Math.PI, seed);
+          }
+        }
+      }
     }
     const flat = flatGeometry();
     const shapes = { flat, pitched: pitchedGeometry(), terraced: terracedGeometry(flat) };
@@ -510,6 +625,12 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       const form = key.split(':', 2)[1] as BuildingForm;
       const mesh = createBlocks(buildings, blockMaterial, shapes[form]);
       (key[0] === '1' ? extraRoofs : group).add(mesh);
+    }
+    const canopy = canopyGeometry();
+    for (const crowns of canopyTiles.values()) {
+      const mesh = createBlocks(crowns, blockMaterial, canopy);
+      mesh.name = 'Neighborhood tree crowns';
+      group.add(mesh);
     }
     for (const [key, lamps] of lampTiles) {
       (key[0] === '1' ? extraLamps : mainLamps).add(createPoints(lamps, pointsMaterial));

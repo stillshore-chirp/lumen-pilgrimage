@@ -14,11 +14,10 @@ const roadPlans: RoadPlan[] = [
     [2440, -5150], [2580, -5490], [2950, -5940], [3490, -6370], [3740, -7000], [3970, -7480],
     [4560, -8400], [5400, -8950],
   ] },
-  // Eastern bypass follows the saddle, then curves out towards the outer district.
-  { halfWidth: 31, speed: 37, waypoints: [
-    [5630, -1680], [4660, -1910], [3310, -1640], [2590, -1370], [2190, -1420], [1760, -1750], [1890, -2250],
-    [2000, -2710], [2100, -3170], [2380, -3650], [2840, -3970], [3300, -4330], [3750, -4490],
-    [4460, -4460], [5140, -4870], [6260, -5470], [7680, -5840],
+  // A long arterial leads through the eastern grid toward the far edge of the basin.
+  { halfWidth: 23, speed: 30, waypoints: [
+    [1680, -1140], [2340, -1620], [3190, -2210], [4290, -2980], [5460, -3810], [6550, -4570],
+    [7770, -5410], [8860, -6190], [10070, -7010], [11220, -7810], [12380, -8620],
   ] },
   // Cross-town viaduct passes over the valley approach and continues behind the skyline.
   { halfWidth: 26, speed: 33, overpass: true, waypoints: [
@@ -202,7 +201,7 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
         float lightAcross = (lateral - 0.68) / 0.34;
         float roadPool = exp(-lightAcross * lightAcross * 1.45 - fromLamp * fromLamp * 12.0);
         float edgeReflection = (lateral - 0.84) * 7.0;
-        float warmReflection = roadPool * 0.28 + exp(-edgeReflection * edgeReflection) * 0.049;
+        float warmReflection = roadPool * 0.19 + exp(-edgeReflection * edgeReflection) * 0.037;
         totalEmissiveRadiance += uRoadNight * warmReflection * vec3(1.0, 0.41, 0.12);
       `);
   };
@@ -245,9 +244,9 @@ const lightsVertex = /* glsl */`
       vec2 motion = ahead.xy / ahead.w - clip.xy / clip.w;
       motion *= vec2(projectionMatrix[1][1] / projectionMatrix[0][0], -1.0);
       vAxis = motion / max(length(motion), 0.00001);
-      vColor = axle < 1.5 ? vec3(1.0, 0.89, 0.62) : vec3(1.0, 0.043, 0.019);
-      vOpacity *= 1.35 * visibility;
-      size = clamp(6.4 + 13800.0 / max(820.0, eyeDistance), 6.8, 16.4);
+      vColor = axle < 1.5 ? vec3(1.0, 0.89, 0.66) : vec3(1.0, 0.105, 0.043);
+      vOpacity *= 1.15 * visibility;
+      size = clamp(6.0 + 9900.0 / max(820.0, eyeDistance), 6.5, 13.8);
     }
     gl_PointSize = size * uPixelFactor;
     gl_Position = clip;
@@ -268,7 +267,7 @@ const lightsFragment = /* glsl */`
     float halo = exp(-22.0 * rad2);
     float tail = exp(-202.0 * tangentSpace.y * tangentSpace.y)
       * smoothstep(-0.47, -0.065, tangentSpace.x) * (1.0 - smoothstep(-0.08, 0.13, tangentSpace.x));
-    float alpha = head * 0.85 + halo * 0.19 + tail * 0.52 * vTraffic;
+    float alpha = head * 0.85 + halo * 0.15 + tail * 0.40 * vTraffic;
     gl_FragColor = vec4(vColor, vOpacity * alpha);
     #include <colorspace_fragment>
   }
