@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
+import { COAST_SUN_DIRECTION } from '../src/coast/world/coastAtmosphere.ts';
 import {
   COAST_BOUNDS, COAST_FALLS, COAST_WALKS, FOREST_STREAM, FOREST_WALKS, SEA_LEVEL, SPAWN,
   coastBedrock, coastPlantingDistance, coastTreadWear, forestStreamLevel, groundHeight, shoreline,
@@ -35,6 +36,21 @@ test('the sandy inlet opens to sea between headlands', () => {
   assert.ok(groundHeight(-180, -143) > 135);
   assert.ok(groundHeight(196, -199) > 155);
   assert.ok(groundHeight(-73, -281) > 75);
+});
+
+test('the land leaves the direct sun open above the vermilion trail courts', () => {
+  const sites = [
+    [210, 901, 'large torii'], [215, 913, 'gate approach'], [216, 923, 'forecourt'],
+    [207, 922, 'worship hall'], [231, 948, 'fork'], [235, 961, 'east steps'],
+    [229, 961, 'west steps'], [253, 1035, 'upper court'], [254, 1038, 'small shrine'],
+  ];
+  for (const [x, z, site] of sites) {
+    const y = groundHeight(x, z) + 0.35;
+    for (let distance = 2; distance <= 195; distance += 1) {
+      const h = groundHeight(x + COAST_SUN_DIRECTION.x * distance, z + COAST_SUN_DIRECTION.z * distance);
+      assert.ok(h < y + COAST_SUN_DIRECTION.y * distance, `${site} is in the ridge's shadow at ${distance} m`);
+    }
+  }
 });
 
 test('both trails reach a high lookout and the east trail skirts shallow tidal pools', () => {

@@ -7,6 +7,7 @@ export type CoastPoint = { x: number; y: number; z: number };
 export const UPLAND_LAKE = { x: 143, z: 754, width: 82, length: 76, level: 71 };
 export const INARI_COURT = { x: 216, z: 923, y: 78.6 };
 export const INARI_INNER_COURT = { x: 253, z: 1035, y: 120.8 };
+const inariShrineLanding = { x: 253.9, z: 1038.15, y: 120.67 };
 export type CoastRestSite = {
   id: string; name: string; kind: 'bench' | 'terrace';
   x: number; z: number; grade: number; lookX: number; lookZ: number;
@@ -234,6 +235,13 @@ export function inariWoodland(x: number, z: number): number {
     * smoothstep(886, 909, z) * (1 - smoothstep(1046, 1078, z));
 }
 
+export function inariCanopyScale(x: number, z: number): number {
+  if (x < 207 || x > 264 || z < 877 || z > 958) return 1;
+  const gateGlade = Math.hypot((x - 231) / 24, (z - 899) / 22);
+  const stairsGlade = Math.hypot((x - 244) / 20, (z - 939) / 19);
+  return 0.20 + 0.80 * smoothstep(0.48, 1, Math.min(gateGlade, stairsGlade));
+}
+
 const inlandRidges = [
   { x: -114, z: 204, width: 39, length: 68, height: 31 },
   { x: -101, z: 304, width: 29, length: 50, height: 37 },
@@ -282,6 +290,19 @@ const uplandRidges = [
   [627, 1648, 148, 167, 284], [846, 1528, 133, 187, 297], [1073, 1438, 171, 220, 306],
 ] as const;
 
+function inariSaddleDepth(x: number, z: number): number {
+  if (z > 795 && z < 928 && x > 240 && x < 407) {
+    const radius = Math.hypot((x - 312) / 94, (z - 856) / 72);
+    return 67 * (1 - smoothstep(0.23, 1, radius))
+      * smoothstep(240, 256, x) * smoothstep(795, 818, z);
+  }
+  if (z > 975 && z < 1065 && x > 255.5 && x < 316) {
+    const radius = Math.hypot((x - 280) / 36, (z - 1020) / 45);
+    return 25 * (1 - smoothstep(0.21, 1, radius)) * smoothstep(255.5, 268, x);
+  }
+  return 0;
+}
+
 function uplandHeight(x: number, z: number): number {
   const grade = 50 + (z - 450) * 0.054;
   const waves = 4.4 * Math.sin(x * 0.018 + z * 0.016) + 3.3 * Math.cos(x * 0.027 - z * 0.028);
@@ -296,7 +317,7 @@ function uplandHeight(x: number, z: number): number {
     slopes += height * 0.25 * (1 - smoothstep(0.41, 1.21, r));
     crests = Math.max(crests, height * 0.75 * (1 - smoothstep(0.23, 0.94, r)));
   }
-  let height = grade + waves + ledges + slopes + crests;
+  let height = grade + waves + ledges + slopes + crests - inariSaddleDepth(x, z);
   if (z > 632 && z < 886 && x > 17 && x < 268) {
     const radius = uplandLakeRadius(x, z);
     const basin = (1 - smoothstep(0.95, 1.39, radius));
@@ -685,6 +706,9 @@ export function groundHeight(x: number, z: number): number {
     const footfall = Math.sin(x * 1.19 + z * 0.68) * 0.040 + Math.cos(z * 1.72 - x * 0.63) * 0.028 + erosion;
     height += (trail.grade + footfall - terrain) * blend;
   }
+  // The stairs meet a level stone landing at the small shrine's foundation.
+  const landing = inariTerraceBlend(x, z, inariShrineLanding, 4.5, 4.6);
+  height += (inariShrineLanding.y - height) * landing;
   for (const site of COAST_REST_SITES) {
     const dx = x - site.x, dz = z - site.z;
     if (Math.abs(dx) > 7.6 || Math.abs(dz) > 7.6) continue;

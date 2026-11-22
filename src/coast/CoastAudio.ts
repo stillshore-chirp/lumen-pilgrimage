@@ -11,7 +11,7 @@ import {
 } from './coastShore';
 import { CoastFoley } from './CoastFoley';
 import { COAST_SWELL_PERIOD } from './world/coastSwell';
-import type { CoastBirdCue, CoastBirdSpecies } from './coastBirdCue';
+import { BIRD_CALL_RANGE, type CoastBirdCue, type CoastBirdSpecies } from './coastBirdCue';
 
 type AmbientAsset = 'waves' | 'surf' | 'waterfall' | 'forestBirds' | 'shelterBirds' | 'insects' | 'rivulet';
 type AudioAsset = AmbientAsset | CoastBirdSpecies;
@@ -82,12 +82,12 @@ const ASSET_FILES: Record<AudioAsset, string> = {
 const BIRD_PHRASE_STRIDE = 3.5;
 const BIRD_VOICES_PER_SPECIES = 2;
 const BIRD_CALLS: Record<CoastBirdSpecies, {
-  lengths: readonly number[]; gain: number; refDistance: number; range: number; highpass: number;
+  lengths: readonly number[]; gain: number; refDistance: number; highpass: number;
 }> = {
-  gull: { lengths: [1.65, 2.35, 1.85], gain: 0.75, refDistance: 23, range: 235, highpass: 340 },
-  whiteEye: { lengths: [1.75, 1.55, 2.0, 1.85], gain: 0.68, refDistance: 11, range: 82, highpass: 1550 },
-  bushWarbler: { lengths: [1.45, 2.1, 1.65], gain: 0.79, refDistance: 16, range: 117, highpass: 840 },
-  thrush: { lengths: [2.65, 3.2, 2.75], gain: 0.69, refDistance: 14, range: 105, highpass: 660 },
+  gull: { lengths: [1.65, 2.35, 1.85], gain: 0.75, refDistance: 25, highpass: 340 },
+  whiteEye: { lengths: [1.75, 1.55, 2.0, 1.85], gain: 0.68, refDistance: 16, highpass: 1550 },
+  bushWarbler: { lengths: [1.45, 2.1, 1.65], gain: 0.79, refDistance: 22, highpass: 840 },
+  thrush: { lengths: [2.65, 3.2, 2.75], gain: 0.69, refDistance: 19, highpass: 660 },
 };
 const BIRD_SPECIES = Object.keys(BIRD_CALLS) as CoastBirdSpecies[];
 
@@ -597,7 +597,7 @@ export class CoastAudio {
       const profile = BIRD_CALLS[cue.species];
       if (!birds || !buffer || cue.gain <= 0 || birds.some(bird => bird.call?.cue.id === cue.id)) continue;
       const distance = Math.hypot(cue.x - listener.x, cue.y - listener.y, cue.z - listener.z);
-      if (soundReach(distance, profile.range) < 0.018) continue;
+      if (soundReach(distance, BIRD_CALL_RANGE[cue.species]) < 0.018) continue;
       const bird = birds.find(candidate => !candidate.call);
       if (!bird) continue;
 
@@ -800,7 +800,7 @@ export class CoastAudio {
         const profile = BIRD_CALLS[species];
         const flock = Array.from({ length: BIRD_VOICES_PER_SPECIES }, () => this.createEmitter(context, {
           asset: species, position: [0, 0, 0], gain: profile.gain,
-          refDistance: profile.refDistance, maxDistance: profile.range, rolloff: 1.12,
+          refDistance: profile.refDistance, maxDistance: BIRD_CALL_RANGE[species], rolloff: 1.12,
           rockResponse: true, filters: [{ type: 'highpass', frequency: profile.highpass }],
         }));
         this.birdVoices.set(species, flock);

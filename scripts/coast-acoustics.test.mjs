@@ -5,9 +5,12 @@ import { COAST_FALLS, COAST_WALKS, SEA_LEVEL, SPAWN, groundHeight } from '../src
 
 const acousticsUrl = new URL('../src/coast/coastAcoustics.ts', import.meta.url).href;
 const shoreUrl = new URL('../src/coast/coastShore.ts', import.meta.url).href;
+const birdLifeUrl = new URL('../src/coast/world/coastBirdLife.ts', import.meta.url).href;
+const birdModelsUrl = new URL('../src/coast/world/coastBirdModels.ts', import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const internal = (context.parentURL === acousticsUrl || context.parentURL === shoreUrl) && specifier.startsWith('./');
+    const internal = [acousticsUrl, shoreUrl, birdLifeUrl, birdModelsUrl].includes(context.parentURL)
+      && specifier.startsWith('.');
     const path = internal ? `${specifier}.ts` : specifier;
     return nextResolve(path, context);
   },
@@ -17,6 +20,7 @@ const {
   buildShorePatches, selectShorePatches, shoreTransmission, shoreWavePoint,
   SHORE_VOICE_COUNT, SHORE_REF_DISTANCE, SHORE_ROLLOFF,
 } = await import(shoreUrl);
+const { createCoastBirdLife } = await import(birdLifeUrl);
 hooks.deregister();
 
 const shore = buildShorePatches();
@@ -118,4 +122,43 @@ test('the canopy shades a listener under it and opens up at the vista or above t
   assert.ok(listenerTerrain(grove).canopy > 0.9);
   assert.equal(listenerTerrain(ear(-14, 392)).canopy, 0);
   assert.equal(listenerTerrain({ ...grove, y: grove.y + 30 }).canopy, 0);
+});
+
+test('a resident and a flying gull can call from beyond their model culling distances', () => {
+  const wildlife = createCoastBirdLife();
+  const listener = ear(-29, 198);
+  const calls = [];
+  for (let elapsed = 0; elapsed <= 18; elapsed += 0.25) {
+    for (const cue of wildlife.update(elapsed, listener)) {
+      const name = cue.vx === undefined ? `${cue.species}-${cue.id}` : `gull-flight-${cue.id - 101}`;
+      const model = wildlife.group.getObjectByName(name);
+      if (model?.visible === false) calls.push(cue);
+    }
+  }
+  assert.ok(calls.some(cue => cue.species === 'whiteEye' && separation(cue, listener) > 90));
+  assert.ok(calls.some(cue => cue.species === 'gull' && cue.vx !== undefined && separation(cue, listener) > 190));
+});
+
+test('wildlife supplies spatial calls across the saddle, lake, ridge and vermilion trail', () => {
+  const sites = [[98, 422, 34], [54, 550, 34], [213, 743], [32, 876, 34], [-42, 1090, 34], [222, 955]];
+  for (const [x, z, gapLimit] of sites) {
+    const wildlife = createCoastBirdLife();
+    const listener = ear(x, z);
+    const sources = new Set();
+    const duration = 90;
+    let lastCall = 0;
+    let longestGap = 0;
+    for (let elapsed = 0; elapsed <= duration; elapsed += 0.25) {
+      for (const cue of wildlife.update(elapsed, listener)) {
+        if (separation(cue, listener) > 115 || terrainOcclusion(listener, cue) > 0.42) continue;
+        sources.add(cue.id);
+        longestGap = Math.max(longestGap, elapsed - lastCall);
+        lastCall = elapsed;
+      }
+    }
+    assert.ok(sources.size >= 2, `fewer than two local sources reach ${x}, ${z}`);
+    if (gapLimit !== undefined) {
+      assert.ok(Math.max(longestGap, duration - lastCall) <= gapLimit, `call gap exceeds ${gapLimit} s at ${x}, ${z}`);
+    }
+  }
 });
