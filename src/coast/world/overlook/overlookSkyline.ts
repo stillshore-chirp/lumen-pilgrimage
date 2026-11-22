@@ -40,13 +40,21 @@ class CityGeometry {
   private readonly shades: number[] = [];
   private readonly facades: number[] = [];
   private readonly color = new THREE.Color();
+  private lotGround = 0;
+  private lotHeightScale = 1;
+
+  setLotGround(ground: number, heightScale: number): void {
+    this.lotGround = ground;
+    this.lotHeightScale = heightScale;
+  }
 
   triangle(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, surface: Surface, edgeCoordinate?: [number, number, number]): void {
     this.color.set(surface.color);
     for (const [i, v] of [a, b, c].entries()) {
-      this.positions.push(v.x, v.y, v.z);
+      const height = this.lotGround + (v.y - this.lotGround) * this.lotHeightScale;
+      this.positions.push(v.x, height, v.z);
       this.shades.push(this.color.r, this.color.g, this.color.b);
-      this.facades.push(edgeCoordinate?.[i] ?? 0, v.y, surface.facade ?? 0, surface.glow ?? 0);
+      this.facades.push(edgeCoordinate?.[i] ?? 0, height, surface.facade ?? 0, surface.glow ?? 0);
     }
   }
 
@@ -222,7 +230,14 @@ export function createOverlookSkyline(
     const sample = radius * 0.65;
     const ground = Math.min(heightAt(x, z), heightAt(x - sample, z), heightAt(x + sample, z),
       heightAt(x, z + sample), heightAt(x, z - sample));
+    // Use the greater skyline height in the deeper districts so the view reads across the whole basin.
+    const heightScale = THREE.MathUtils.lerp(0.58, 0.72, THREE.MathUtils.smoothstep(Math.hypot(x, z), 5000, 9700));
+    const firstLight = lights.length;
+    builder.setLotGround(ground, heightScale);
     shape(x, ground - 3, z);
+    for (let i = firstLight; i < lights.length; i++) {
+      lights[i].y = ground + (lights[i].y - ground) * heightScale;
+    }
   };
   const floor = (x: number, y: number, z: number, w: number, d: number, h: number, surface: Surface,
     yaw = diagonalGrid, cut = 0) => {

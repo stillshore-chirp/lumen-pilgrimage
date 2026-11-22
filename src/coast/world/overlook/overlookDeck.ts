@@ -1,10 +1,15 @@
 import * as THREE from 'three';
 import { OverlookModel, overlookFinishes, seededDetail, type OverlookFinishes } from './overlookModel';
 import { addOverlookPavilion } from './overlookPavilion';
+import { DECK_FRONT, DECK_LEVEL, DECK_SIDE } from './overlookTerrain';
 
-const deckElevation = 346;
 const benchLocations = [[-22.5, -10.2], [22.5, -10.2], [-29.2, 4.7], [29.2, 4.7]] as const;
 const viewerLocations = [[-19.3, -21.17, 0.14], [18.7, -21.17, -0.56]] as const;
+const wallLamps = [
+  ...[-31, -23, -15, -5, 3, 11, 21, 31].map(x => ({ x, z: DECK_FRONT, yaw: 0 })),
+  { x: -DECK_SIDE, z: -19.4, yaw: Math.PI / 2 },
+  { x: DECK_SIDE, z: -19.4, yaw: -Math.PI / 2 },
+];
 
 export const OVERLOOK_DECK_OBSTACLES = [
   ...benchLocations.map(([x, z]) => ({ minX: x - 1.85, maxX: x + 1.85, minZ: z - 0.52, maxZ: z + 0.62 })),
@@ -24,7 +29,28 @@ const slabFields: SlabField[] = [
 ];
 
 function addPaving(model: OverlookModel, finish: OverlookFinishes): void {
-  model.block(finish.foundation, 0, -2.65, 3.29, 71.2, 5.19, 55.63);
+  const retainingHeight = 13.80, batter = 2.58;
+  const retaining = new THREE.BoxGeometry(71.2, retainingHeight, 55.63);
+  const retainingPosition = retaining.getAttribute('position');
+  const retainingUv = retaining.getAttribute('uv');
+  for (let i = 0; i < retainingPosition.count; i += 1) {
+    let x = retainingPosition.getX(i), y = retainingPosition.getY(i), z = retainingPosition.getZ(i);
+    if (y < 0) {
+      x += Math.sign(x) * batter;
+      if (z < 0) z -= batter;
+    }
+    y -= retainingHeight * 0.5 + 0.29;
+    z += 3.29;
+    retainingPosition.setXYZ(i, x, y, z);
+    retainingUv.setXY(i, (i < 8 ? z : x) * 0.27, (i < 8 || i >= 16 ? y : z) * 0.27);
+  }
+  retaining.computeVertexNormals();
+  model.mesh(retaining, finish.foundation);
+  for (const [y, height] of [[-1.58, 0.16], [-3.15, 0.12], [-5.08, 0.13]]) {
+    const projection = (-y - 0.29) * batter / retainingHeight;
+    model.block(finish.limestone, 0, y, 3.29 - projection * 0.5,
+      71.32 + projection * 2, height, 55.75 + projection);
+  }
   model.block(finish.shadowStone, 0, -0.83, 3.29, 71.30, 0.195, 55.73);
   model.block(finish.limestone, 0, -0.485, 3.29, 71.55, 0.38, 55.95);
   model.block(finish.cream, 0, -0.186, 3.29, 71.72, 0.215, 56.10);
@@ -175,6 +201,29 @@ function addRail(model: OverlookModel, finish: OverlookFinishes,
   }
 }
 
+function addParapet(model: OverlookModel, finish: OverlookFinishes,
+  fixed: number, from: number, to: number, axis: 'x' | 'z'): void {
+  const stone = (material: THREE.Material, left: number, right: number, y: number, height: number, depth: number) => {
+    const center = (left + right) * 0.5;
+    model.block(material, axis === 'x' ? center : fixed, y, axis === 'x' ? fixed : center,
+      right - left, height, depth, axis === 'x' ? 0 : Math.PI / 2);
+  };
+  stone(finish.shadowStone, from, to, 0.39, 0.76, 0.72);
+  stone(finish.shadowStone, from, to, 0.047, 0.15, 1.02);
+  stone(finish.cream, from, to, 0.139, 0.054, 0.92);
+  for (const [offset, y, height] of [[1.08, 0.30, 0.251], [2.15, 0.54, 0.211]]) {
+    let left = from;
+    for (let edge = from + offset; edge < to - 0.38; edge += 2.15) {
+      stone(finish.limestone, left + 0.008, edge - 0.008, y, height, 0.76);
+      left = edge;
+    }
+    stone(finish.limestone, left + 0.008, to - 0.008, y, height, 0.76);
+  }
+  stone(finish.shadowStone, from, to, 0.659, 0.027, 0.82);
+  stone(finish.cream, from, to, 0.718, 0.105, 0.94);
+  stone(finish.limestone, from, to, 0.787, 0.054, 0.88);
+}
+
 function addBench(model: OverlookModel, finish: OverlookFinishes, x: number, z: number): void {
   for (const offset of [-1.33, 1.33]) {
     const arm = x + offset;
@@ -224,7 +273,7 @@ function addViewer(model: OverlookModel, finish: OverlookFinishes, x: number, z:
   place(new THREE.BoxGeometry(0.056, 0.013, 0.007).translate(0, -0.082, 0.21), finish.iron);
 }
 
-function addLampPools(group: THREE.Group): THREE.Group {
+function addLampPools(group: THREE.Group, model: OverlookModel, finish: OverlookFinishes): THREE.Group {
   const resolution = 64;
   const pixels = new Uint8Array(resolution ** 2 * 4);
   for (let y = 0; y < resolution; y += 1) {
@@ -243,13 +292,34 @@ function addLampPools(group: THREE.Group): THREE.Group {
     transparent: true, blending: THREE.AdditiveBlending,
   });
   const lamps = new THREE.Group();
-  lamps.name = 'Warm pools from terrace lanterns';
-  for (const [x, z] of [[-23, -22.36], [23, -22.36], [-33.55, -6], [33.55, -6], [-33.55, 11], [33.55, 11]]) {
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 5.8), haze);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x, 0.017, z);
-    lamps.add(mesh);
+  lamps.name = 'Amber grazing light and terrace lanterns';
+  const pools = new OverlookModel();
+  const wash = haze.clone();
+  wash.color.setHex(0xf6a156);
+  wash.opacity = 0.55;
+  for (const { x, z, yaw } of wallLamps) {
+    const nx = Math.sin(yaw), nz = Math.cos(yaw);
+    model.block(finish.bronze, x + 0.418 * nx, 0.586, z + 0.418 * nz, 0.49, 0.105, 0.145, yaw);
+    model.block(finish.frosted, x + 0.442 * nx, 0.533, z + 0.442 * nz, 0.36, 0.027, 0.093, yaw);
+
+    // A half-disc starts under the hood and spreads over the floor on the inner side.
+    const floor = new THREE.PlaneGeometry(4.55, 3.10);
+    const uv = floor.getAttribute('uv');
+    for (let i = 0; i < uv.count; i += 1) uv.setY(i, uv.getY(i) * 0.5);
+    pools.mesh(floor.rotateX(-Math.PI / 2).rotateY(yaw).translate(x + 2.06 * nx, 0.014, z + 2.06 * nz), wash, false);
+
+    const wall = new THREE.PlaneGeometry(2.86, 0.56);
+    const wallUv = wall.getAttribute('uv'), positions = wall.getAttribute('position');
+    for (let i = 0; i < wallUv.count; i += 1) {
+      if (wallUv.getY(i) === 1) positions.setX(i, positions.getX(i) * 0.17);
+      wallUv.setY(i, wallUv.getY(i) * 0.5);
+    }
+    pools.mesh(wall.rotateY(yaw).translate(x + 0.384 * nx, 0.276, z + 0.384 * nz), wash, false);
   }
+  for (const [x, z] of [[-33.55, -6], [33.55, -6], [-33.55, 11], [33.55, 11]]) {
+    pools.mesh(new THREE.PlaneGeometry(5.8, 5.8).rotateX(-Math.PI / 2).translate(x, 0.017, z), haze, false);
+  }
+  pools.finish(lamps);
   for (const x of [-5.68, 5.68]) {
     const lamp = new THREE.PointLight(0xffbf7d, 108, 11.5, 2);
     lamp.position.set(x, 3.37, 7.97);
@@ -262,27 +332,27 @@ function addLampPools(group: THREE.Group): THREE.Group {
 export function createOverlookDeck(): { group: THREE.Group; setTimeOfDay(time: 'day' | 'night'): void } {
   const group = new THREE.Group();
   group.name = 'Hilltop observatory terrace';
-  group.position.y = deckElevation;
+  group.position.y = DECK_LEVEL;
   const model = new OverlookModel();
   const finish = overlookFinishes();
   addPaving(model, finish);
   addCompass(model, finish);
-  const frontPiers = [-35, -23, -11, 11, 23, 35];
-  const sidePiers = [-24, -15, -6, 2.5, 11, 24];
-  addRail(model, finish, -24, frontPiers, 'x');
-  for (const x of frontPiers) addPier(model, finish, x, -24, Math.abs(x) === 23);
+  const sidePiers = [-15, -6, 2.5, 11, 24];
+  addParapet(model, finish, DECK_FRONT, -DECK_SIDE - 0.51, DECK_SIDE + 0.51, 'x');
   for (const side of [-1, 1]) {
-    const x = side * 35;
+    const x = side * DECK_SIDE;
+    addParapet(model, finish, x, DECK_FRONT + 0.39, sidePiers[0], 'z');
+    addPier(model, finish, x, DECK_FRONT);
     addRail(model, finish, x, sidePiers, 'z');
-    for (const z of sidePiers.slice(1)) addPier(model, finish, x, z, z === -6 || z === 11);
+    for (const z of sidePiers) addPier(model, finish, x, z, z === -6 || z === 11);
     addRail(model, finish, 24, side < 0 ? [x, -24.25] : [24.25, x], 'x');
     addPier(model, finish, side * 24.25, 24);
   }
   for (const [x, z] of benchLocations) addBench(model, finish, x, z);
   for (const [x, z, yaw] of viewerLocations) addViewer(model, finish, x, z, yaw);
   addOverlookPavilion(model, finish);
+  const lamps = addLampPools(group, model, finish);
   model.finish(group);
-  const lamps = addLampPools(group);
   lamps.visible = false;
   return {
     group,

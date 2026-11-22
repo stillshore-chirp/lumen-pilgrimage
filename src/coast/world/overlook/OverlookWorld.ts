@@ -28,20 +28,21 @@ function blocksDeckWalking(x: number, z: number, foot: number): boolean {
 export async function loadOverlookScene(): Promise<OverlookScene> {
   const heightAt = await loadOverlookTerrain();
   const atmosphere = createCoastAtmosphere(DAY_SUN, {
-    nightHorizon: 0x343d5b,
-    nightGlow: { color: 0x5c321c, direction: new THREE.Vector3(0.52, 0, -0.85) },
-    starVisibility: 0.48,
-    aerialDistanceScale: 0.24,
-    moonDirection: new THREE.Vector3(0.27, 0.27, -0.925),
+    nightHorizon: 0x536a87,
+    nightZenith: 0x495d79,
+    nightGlow: { color: 0x322b23, direction: new THREE.Vector3(0.51, 0, -0.86) },
+    starVisibility: 0.04,
+    aerialDistanceScale: 0.22,
+    moonDirection: new THREE.Vector3(-0.77, 0.48, -0.42),
   });
-  const sky = createCoastSky(atmosphere);
+  const sky = createCoastSky(atmosphere, 0.13);
   sky.clouds.scale.setScalar(2.70);
   sky.clouds.position.y = 425;
 
   const streets = createOverlookCityGround();
   const traffic = createOverlookTraffic(heightAt);
   const city = createOverlookCity(heightAt, {
-    sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x333d54, blocksFootprint: isOverlookRoadway,
+    sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x344c62, blocksFootprint: isOverlookRoadway,
   });
   const ground = createOverlookSurface(heightAt, streets, atmosphere.night);
   const deck = createOverlookDeck();

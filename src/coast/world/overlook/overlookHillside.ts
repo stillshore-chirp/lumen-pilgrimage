@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { addStem, GOLDEN_ANGLE, plantDirection, PlantSurface } from '../coastTreeMeshes';
 import { seededDetail } from './overlookModel';
+import { DECK_FRONT, DECK_SIDE } from './overlookTerrain';
 
 type Random = () => number;
 type Kind = 'sage' | 'buckwheat' | 'chaparral' | 'yucca' | 'grass' | 'stone';
@@ -237,8 +238,9 @@ export function createOverlookHillside(heightAt: (x: number, z: number) => numbe
   const stones = stoneMaterial();
   const placements = new Map<string, { kind: Kind; detail: boolean; form: number; points: Position[] }>();
   const place = (kind: Kind, x: number, z: number, width: number, height: number, aspect = 1) => {
-    const ledgeGap = Math.max(Math.abs(x) - 35.6, -24.45 - z, z - 31.1);
-    if (ledgeGap < 0.8 + width * 1.55 || (z > 30 && z < 69 && Math.abs(x + 2) < 12)) return;
+    const ledgeGap = Math.max(Math.abs(x) - DECK_SIDE - 0.60, DECK_FRONT - 0.45 - z, z - 31.1);
+    const clearance = z < DECK_FRONT + 9 ? 4.2 : 0.8;
+    if (ledgeGap < clearance + width * 1.55 || (z > 30 && z < 69 && Math.abs(x + 2) < 12)) return;
     const detail = ledgeGap < 18;
     const form = Math.floor(random() * (kind === 'stone' ? 4 : kind === 'grass' ? 2 : 3));
     const key = `${kind}:${detail}:${form}`;
@@ -291,21 +293,9 @@ export function createOverlookHillside(heightAt: (x: number, z: number) => numbe
     place('yucca', x + 1.7, z - 2.1, 0.78, 0.79);
     place('stone', x - 0.8, z - 2.7, size * 0.85, size * 0.62, 0.70);
   }
-  // Short, scattered groups on the exposed apron stay below the view across the railing.
-  for (const [x, z, spread] of [[-34, -27, 1.2], [-26, -29, 2.4], [-17, -27, 1.8], [-4, -29, 2.3],
-    [2, -27, 1.2], [13, -30, 2.1], [20, -27, 1.7], [30, -29, 2.4], [37, -27, 1.9]] as const) {
-    for (let i = 0; i < 7; i += 1) {
-      const px = x + (random() - 0.5) * 2 * spread;
-      const pz = z - random() * 2.7;
-      const size = 0.32 + random() * 0.61;
-      place(i === 0 ? 'buckwheat' : i % 3 === 1 ? 'stone' : 'grass', px, pz, size, size * 0.48);
-    }
-  }
-
   const dummy = new THREE.Object3D();
   const tint = new THREE.Color();
   const normal = new THREE.Vector3();
-  const point = new THREE.Vector3();
   const lean = new THREE.Quaternion();
   for (const { kind, detail, form, points } of placements.values()) {
     const source = seededDetail(8747 + form * 349);
@@ -313,7 +303,6 @@ export function createOverlookHillside(heightAt: (x: number, z: number) => numbe
       : kind === 'grass' ? grassGeometry(source) : shrubGeometry(kind, source, detail);
     geometry.computeBoundingBox();
     const maxY = geometry.boundingBox!.max.y;
-    const positions = geometry.getAttribute('position');
     const batch = new THREE.InstancedMesh(geometry, kind === 'stone' ? stones : plants, points.length);
     batch.name = `${kind}${detail ? ' (near)' : ' (slope)'}`;
     batch.count = 0;
@@ -321,16 +310,12 @@ export function createOverlookHillside(heightAt: (x: number, z: number) => numbe
       const y = heightAt(x, z);
       if (!Number.isFinite(y)) continue;
       const stone = kind === 'stone';
-      const southRim = z < -24.45 && z > -53 - width && Math.abs(x) < 34 + width;
-      const crownCeiling = 346.38;
       const baseY = y - (stone ? height * 0.18 : 0.025);
-      const crown = southRim ? Math.min(height, crownCeiling - baseY) : height;
-      if (crown < height * 0.35) continue;
       const angle = random() * tau;
       const index = batch.count++;
       dummy.position.set(x, baseY, z);
       dummy.rotation.set(0, angle, 0);
-      dummy.scale.set(width, crown / maxY, width * aspect);
+      dummy.scale.set(width, height / maxY, width * aspect);
       if (stone) {
         const slopeX = (heightAt(x + width * 0.6, z) - heightAt(x - width * 0.6, z)) / (width * 1.2);
         const slopeZ = (heightAt(x, z + width * 0.6) - heightAt(x, z - width * 0.6)) / (width * 1.2);
@@ -340,13 +325,6 @@ export function createOverlookHillside(heightAt: (x: number, z: number) => numbe
         dummy.position.y -= Math.min(0.29 * width, Math.hypot(slopeX, slopeZ) * 0.16 * width);
       }
       dummy.updateMatrix();
-      if (stone && southRim) {
-        let crest = -Infinity;
-        for (let i = 0; i < positions.count; i += 1) {
-          crest = Math.max(crest, point.fromBufferAttribute(positions, i).applyMatrix4(dummy.matrix).y);
-        }
-        dummy.matrix.elements[13] -= Math.max(0, crest - crownCeiling);
-      }
       batch.setMatrixAt(index, dummy.matrix);
       const tone = 0.83 + random() * 0.29;
       tint.setRGB(tone * (0.94 + random() * 0.12), tone, tone * (0.91 + random() * 0.13));
