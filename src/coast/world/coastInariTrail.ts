@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { INARI_COURT, INARI_INNER_COURT, INARI_WALKS, coastRandom, groundHeight, type CoastPoint } from '../terrain';
 import { createInariArchitecture, type InariGatePlacement, type InariPlacement } from './coastInariModels';
 import { createInariGrove } from './coastInariGrove';
+import { InariStoneBatch, stoneCourse } from './coastInariStonework';
 import { loadCoastTexture } from './coastSurface';
 
 const [entrance, west, east] = INARI_WALKS;
@@ -41,80 +42,91 @@ function across(at: InariPlacement, distance: number, forward = 0): InariPlaceme
   return placement(at.x + cosine * distance + sine * forward, at.z - sine * distance + cosine * forward, at.yaw);
 }
 
-function stonework(texture: THREE.Texture, normal: THREE.Texture): THREE.InstancedMesh {
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
-  const material = new THREE.MeshStandardMaterial({
-    map: texture, normalMap: normal, normalScale: new THREE.Vector2(0.53, 0.53), roughness: 0.9,
+function trailFrames(points: readonly CoastPoint[], start: InariPlacement, end: InariPlacement,
+  pitch: number): InariPlacement[] {
+  return [start, ...stations(points, pitch, start.z + pitch * 0.48, end.z - pitch * 0.48), end];
+}
+
+function straightFrames(start: InariPlacement, end: InariPlacement, rows: number): InariPlacement[] {
+  return Array.from({ length: rows + 1 }, (_, i) => {
+    const t = i / rows;
+    return placement(THREE.MathUtils.lerp(start.x, end.x, t), THREE.MathUtils.lerp(start.z, end.z, t),
+      THREE.MathUtils.lerp(start.yaw, end.yaw, t));
   });
-  const courses = [
-    { positions: stations(entrance.points, 0.83, 895, 947), length: 0.83, width: 3.2, columns: 3 },
-    { positions: stations(west.points, 0.41, 952, 1028), length: 0.41, width: 2.41, columns: 2 },
-    { positions: stations(east.points, 0.39, 952, 1028), length: 0.39, width: 2.41, columns: 2 },
-  ];
-  const courtColumns = 10, courtRows = 13;
-  const courtWidth = 0.815, courtLength = 0.84;
-  const edging = courses[0].positions.filter(row => row.z > 902 && row.z < 944 && (row.z < 917.7 || row.z > 929));
-  const count = courses.reduce((total, course) => total + course.positions.length * course.columns, 0)
-    + courtColumns * courtRows + 20 + edging.length * 2;
-  const mesh = new THREE.InstancedMesh(geometry, material, count);
-  mesh.name = 'Worn granite paving and uphill stairs';
-  mesh.castShadow = mesh.receiveShadow = true;
+}
+
+function stonework(texture: THREE.Texture, normal: THREE.Texture, worship: InariPlacement, shrine: InariPlacement): THREE.Group {
+  const material = new THREE.MeshStandardMaterial({
+    map: texture, normalMap: normal, normalScale: new THREE.Vector2(0.93, 0.93), roughness: 0.91, vertexColors: true,
+  });
+  const group = new THREE.Group();
+  group.name = 'Worn granite paving and uphill stairs';
   const random = coastRandom(187734);
-  const transform = new THREE.Object3D();
-  const color = new THREE.Color();
-  let index = 0;
-  function set(at: InariPlacement, width: number, length: number, rise: number, reveal: number): void {
-    const left = width * 0.47, front = length * 0.48;
-    const upper = Math.max(at.y, across(at, -left, front).y, across(at, left, front).y,
-      across(at, -left, -front).y, across(at, left, -front).y);
-    transform.position.set(at.x, upper - rise * 0.5 + reveal, at.z);
-    transform.rotation.set(0, at.yaw, 0);
-    transform.scale.set(width - 0.016, rise, length - 0.016);
-    transform.updateMatrix();
-    mesh.setMatrixAt(index, transform.matrix);
-    color.setScalar(0.79 + random() * 0.26);
-    mesh.setColorAt(index++, color);
-  }
-  for (const { positions, length, width, columns } of courses) {
-    const tile = width / columns;
-    for (const row of positions) {
-      if (row.z >= 918.1 && row.z <= 928.8) continue;
-      const seam = (random() - 0.5) * 0.17;
-      for (let col = 0; col < columns; col += 1) {
-        const left = tile * col - width * 0.5 + (col > 0 ? seam : 0);
-        const right = tile * (col + 1) - width * 0.5 + (col + 1 < columns ? seam : 0);
-        const at = across(row, (left + right) / 2);
-        set(at, right - left, length, 0.44, 0.054);
+  function pave(batch: InariStoneBatch, frames: InariPlacement[], width: number, columns: number,
+    finish: 'flag' | 'step', curb = false): void {
+    for (let row = 0; row < frames.length - 1; row += 1) {
+      const course = stoneCourse(frames[row], frames[row + 1]);
+      const joints = [-width * 0.5];
+      // Long treads occasionally span the full stair. Shift the other joints to break the centre seam.
+      const pieces = finish === 'step' && random() < 0.17 ? 1 : columns;
+      const pitch = width / pieces;
+      const shift = finish === 'flag' && row % 2 ? pitch * 0.45 : 0;
+      for (let col = 1; col <= pieces; col += 1) {
+        const joint = col * pitch - width * 0.5 - shift;
+        if (joint < width * 0.5 - 0.19) joints.push(joint + (random() - 0.5) * (finish === 'step' ? 0.49 : 0.19));
+      }
+      joints.push(width * 0.5);
+      for (let col = 1; col < joints.length; col += 1) batch.slab(course, joints[col - 1], joints[col], finish);
+      const z = (course.near.z + course.far.z) * 0.5;
+      if (curb && z > 902 && z < 944) {
+        const edge = width * 0.5;
+        batch.slab(course, -edge - 0.18, -edge, 'edge');
+        batch.slab(course, edge, edge + 0.18, 'edge');
       }
     }
   }
-  for (const row of edging) {
-    set(across(row, -1.68), 0.18, 0.84, 0.34, 0.083);
-    set(across(row, 1.68), 0.18, 0.84, 0.34, 0.083);
+
+  const courtSouth = INARI_COURT.z - 5.04, courtNorth = INARI_COURT.z + 5.88;
+  const entranceSouth = { ...atZ(entrance.points, courtSouth), yaw: 0 };
+  const entranceNorth = { ...atZ(entrance.points, courtNorth), yaw: 0 };
+  const apron = new InariStoneBatch(50138);
+  pave(apron, trailFrames(entrance.points, atZ(entrance.points, 895), entranceSouth, 0.83), 3.2, 3, 'flag', true);
+  pave(apron, trailFrames(entrance.points, entranceNorth, atZ(entrance.points, 947), 0.83), 3.2, 3, 'flag', true);
+  group.add(apron.mesh('Entrance flags and embedded curbs', material));
+
+  const courtWidth = 8.15, courtX = INARI_COURT.x + 0.85;
+  const court = new InariStoneBatch(50139);
+  pave(court, straightFrames(placement(courtX, courtSouth, 0), placement(courtX, courtNorth, 0), 13), courtWidth, 10, 'flag');
+  const worshipSteps = across(worship, 0, -3.06);
+  pave(court, straightFrames({ ...worshipSteps, yaw: worship.yaw + Math.PI },
+    placement(courtX - courtWidth * 0.5, INARI_COURT.z - 2.95, Math.PI * 0.5), 7), 2.55, 3, 'flag');
+  group.add(court.mesh('Forecourt and worship hall approach', material));
+
+  for (const [lane, pitch, name, seed] of [
+    [west, 0.41, 'West dressed granite stairs', 50140], [east, 0.39, 'East dressed granite stairs', 50141],
+  ] as const) {
+    const stairs = new InariStoneBatch(seed);
+    // Stone gives way to the hillside before the two trails merge.
+    pave(stairs, trailFrames(lane.points, atZ(lane.points, 952), atZ(lane.points, 1027.45), pitch), 2.41, 2, 'step');
+    group.add(stairs.mesh(name, material));
   }
-  for (let row = 0; row < courtRows; row += 1) {
-    const z = INARI_COURT.z + (row - 6) * courtLength + 0.42;
-    for (let col = 0; col < courtColumns; col += 1) {
-      const x = INARI_COURT.x + (col - 4.5) * courtWidth + 0.85 + (row % 2) * courtWidth * 0.5;
-      set(placement(x, z, 0), courtWidth, courtLength, 0.17, 0.031);
-    }
-  }
-  for (let row = 0; row < 5; row += 1) {
-    for (let col = 0; col < 4; col += 1) {
-      set(placement(INARI_INNER_COURT.x + (col - 1.5) * 0.78, 1034.1 + row * 0.71, 0), 0.78, 0.71, 0.22, 0.051);
-    }
-  }
-  mesh.count = index;
-  return mesh;
+
+  const upper = new InariStoneBatch(50142);
+  pave(upper, straightFrames(placement(INARI_INNER_COURT.x, 1033.55, shrine.yaw), across(shrine, 0, -2.44), 5),
+    3.12, 4, 'flag');
+  group.add(upper.mesh('Hill shrine foresteps', material));
+  return group;
 }
 
 export function createInariTrail(wood: THREE.Texture): THREE.Group {
-  const granite = loadCoastTexture('trail-granite.webp');
-  const graniteNormal = loadCoastTexture('trail-granite-normal.webp');
+  const granite = loadCoastTexture('trail-granite.webp', true);
+  const graniteNormal = loadCoastTexture('trail-granite-normal.webp', true);
   graniteNormal.colorSpace = THREE.NoColorSpace;
   const random = coastRandom(835556);
   const main = atZ(entrance.points, 901.3);
   const gate = atZ(entrance.points, 913.2);
+  const worship = placement(204.2, 923.6, -1.06);
+  const shrine = placement(253.9, 1038.9, -0.10);
   const firstRow = [west, east].flatMap((lane, i) =>
     stations(lane.points, i === 0 ? 1.39 : 1.48, 955, 1025).map((at): InariGatePlacement => ({
       ...at, y: at.y - 0.08, scale: 0.98 + random() * 0.12, style: 'path',
@@ -126,14 +138,14 @@ export function createInariTrail(wood: THREE.Texture): THREE.Group {
   const group = new THREE.Group();
   group.name = 'Vermilion trail';
   group.add(
-    stonework(granite, graniteNormal),
+    stonework(granite, graniteNormal, worship, shrine),
     createInariGrove(wood),
     createInariArchitecture({
       gates: [{ ...main, style: 'main' }, ...pair, ...firstRow],
       buildings: [
         { ...gate, y: gate.y - 0.09, kind: 'roumon' },
-        { ...placement(204.2, 923.6, -1.06), kind: 'worship' },
-        { ...placement(253.9, 1038.9, -0.10), kind: 'small' },
+        { ...worship, kind: 'worship' },
+        { ...shrine, kind: 'small' },
       ],
       lanterns: [
         across(main, -4.0, -1.9), across(main, 4.0, -1.9),

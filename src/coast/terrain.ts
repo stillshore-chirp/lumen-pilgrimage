@@ -7,6 +7,7 @@ export type CoastPoint = { x: number; y: number; z: number };
 export const UPLAND_LAKE = { x: 143, z: 754, width: 82, length: 76, level: 71 };
 export const INARI_COURT = { x: 216, z: 923, y: 78.6 };
 export const INARI_INNER_COURT = { x: 253, z: 1035, y: 120.8 };
+const inariShrineLanding = { x: 253.9, z: 1038.15, y: 120.67 };
 export type CoastRestSite = {
   id: string; name: string; kind: 'bench' | 'terrace';
   x: number; z: number; grade: number; lookX: number; lookZ: number;
@@ -698,6 +699,9 @@ export function groundHeight(x: number, z: number): number {
     const footfall = Math.sin(x * 1.19 + z * 0.68) * 0.040 + Math.cos(z * 1.72 - x * 0.63) * 0.028 + erosion;
     height += (trail.grade + footfall - terrain) * blend;
   }
+  // The stairs meet a level stone landing at the small shrine's foundation.
+  const landing = inariTerraceBlend(x, z, inariShrineLanding, 4.5, 4.6);
+  height += (inariShrineLanding.y - height) * landing;
   for (const site of COAST_REST_SITES) {
     const dx = x - site.x, dz = z - site.z;
     if (Math.abs(dx) > 7.6 || Math.abs(dz) > 7.6) continue;
