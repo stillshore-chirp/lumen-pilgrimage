@@ -74,7 +74,7 @@ const forestBounce = /* glsl */`
     float overlook = coastOpening(p, vec2(-14.0, 392.0), vec2(37.0, 34.0));
     float rockSlot = coastOpening(p, vec2(-63.0, 304.0), vec2(17.0, 22.0));
     cover *= 1.0 - max(glade * 0.87, overlook * 0.94);
-    return mix(vec3(1.0), vec3(0.51, 0.59, 0.51), cover) * (1.0 - 0.49 * rockSlot);
+    return mix(vec3(1.0), vec3(0.74, 0.81, 0.72), cover) * (1.0 - 0.35 * rockSlot);
   }
 `;
 
@@ -88,7 +88,7 @@ const directLight = THREE.ShaderChunk.lights_fragment_begin.replace(
   `,
 );
 
-function applyCoastLighting(scene: THREE.Scene): void {
+function applyCoastLighting(scene: THREE.Object3D): void {
   const updated = new Set<THREE.Material>();
   scene.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -122,6 +122,7 @@ function applyCoastLighting(scene: THREE.Scene): void {
 }
 
 export function createCoastLighting(scene: THREE.Scene, sunDirection: THREE.Vector3): {
+  addScenery: (scenery: THREE.Object3D) => void;
   setQuality: (quality: CoastQuality) => void;
   update: (elapsed: number, camera: THREE.PerspectiveCamera) => void;
   dispose: () => void;
@@ -146,6 +147,11 @@ export function createCoastLighting(scene: THREE.Scene, sunDirection: THREE.Vect
   applyCoastLighting(scene);
 
   return {
+    addScenery(scenery) {
+      applyCoastLighting(scenery);
+      sun.shadow.needsUpdate = true;
+      lastShadow = -Infinity;
+    },
     setQuality(quality) {
       const high = quality === 'high';
       if (local.visible === high) return;

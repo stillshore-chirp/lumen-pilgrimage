@@ -138,7 +138,7 @@ function signalLevel() {
   return peak > 0.001 && peak < 0.98 ? peak : 0;
 }
 
-test('the coast renders, wades, swims, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
+test('the coast renders, wades, dives, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
   const page = await newPage();
   const errors = [];
   const recordings = new Set();
@@ -161,9 +161,10 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
   await page.addInitScript(installBrowserProbes);
   try {
     const sceneryAssets = Promise.all([
-      'limestone.webp', 'sand.webp', 'cumulus.webp', 'canopy.webp',
+      'limestone.webp', 'sand.webp', 'cumulus.webp',
       'forest-litter.webp', 'forest-rock.webp', 'forest-mud.webp', 'forest-relief.webp',
       'forest-bark.webp', 'forest-bark-height.webp',
+      'scenery/boulder.glb', 'scenery/ferns.glb', 'scenery/moss.glb', 'scenery/shelf.glb',
     ].map(file =>
       page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/coast-materials/${file}`))));
     const [, loadedAssets] = await Promise.all([page.goto(url, { waitUntil: 'commit' }), sceneryAssets]);
@@ -264,19 +265,43 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
     }, start);
     await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '浅瀬');
     await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '遊泳');
+    const firstWater = await page.evaluate(audioPosition);
+    await page.waitForFunction(z => window.coastProbe.context.listener.positionZ.value < z - 8.0, firstWater.z);
     await page.keyboard.up('w');
     await page.waitForFunction(() => window.coastProbe.context.listener.positionY.value < 0.75);
     const swimming = await page.evaluate(audioPosition);
     assert.ok(swimming.y > 0.4 && swimming.z < start.z - 10);
     await capture(page, 'lagoon-swim');
+    await page.keyboard.down('c');
+    await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '潜水'
+      && window.coastProbe.context.listener.positionY.value < -1.05);
+    await page.keyboard.up('c');
+    const submerged = await page.evaluate(audioPosition);
+    await capture(page, 'lagoon-submerged');
+    await page.keyboard.down('w');
+    await page.waitForFunction(z => window.coastProbe.context.listener.positionZ.value < z - 2.1, submerged.z);
+    await page.keyboard.up('w');
+    assert.ok(await page.evaluate(() => window.coastProbe.context.listener.positionY.value < -0.8));
+    await page.keyboard.press('Space');
+    await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '遊泳'
+      && window.coastProbe.context.listener.positionY.value > 0.57);
+
+    await page.evaluate(setPad, { pressed: [1] });
+    await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '潜水'
+      && window.coastProbe.context.listener.positionY.value < -0.53);
+    await page.evaluate(setPad, { pressed: [0] });
+    await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '遊泳'
+      && window.coastProbe.context.listener.positionY.value > 0.57);
+    await page.evaluate(setPad, { connected: false });
+    const waterAfterDiving = await page.evaluate(audioPosition);
     await page.keyboard.press('f');
     await page.keyboard.down('Space');
-    await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y + 4, swimming.y);
+    await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y + 4, waterAfterDiving.y);
     await page.keyboard.up('Space');
     await page.keyboard.press('f');
     await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '遊泳');
     const afterSplash = await page.evaluate(audioPosition);
-    assert.ok(Math.hypot(afterSplash.x - swimming.x, afterSplash.z - swimming.z) < 0.1);
+    assert.ok(Math.hypot(afterSplash.x - waterAfterDiving.x, afterSplash.z - waterAfterDiving.z) < 0.1);
 
     await page.keyboard.down('s');
     await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '歩行');

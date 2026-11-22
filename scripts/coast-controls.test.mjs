@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { PerspectiveCamera } from 'three';
+import { PerspectiveCamera, Ray, Triangle, Vector3 } from 'three';
 import { COAST_WALKS, FOREST_WALKS, groundHeight, SEA_LEVEL, SPAWN } from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
@@ -77,7 +77,8 @@ function createControls(browser, camera, callbacks = {}) {
   return new CoastControls(camera, browser.canvas, {
     onMovementChange: callbacks.onMovementChange ?? (() => {}),
     onLockChange: callbacks.onLockChange ?? (() => {}),
-    onLockError: callbacks.onLockError ?? (() => {})
+    onLockError: callbacks.onLockError ?? (() => {}),
+    diveObstacleHeight: callbacks.diveObstacleHeight
   });
 }
 
@@ -274,6 +275,182 @@ test('walking wades and swims across the beach, then returns to land', () => {
   }
 });
 
+test('C starts a dive, release holds depth, and Space resurfaces for travel onto land', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const modes = [];
+  const controls = createControls(browser, camera, { onMovementChange: mode => modes.push(mode) });
+  const hold = code => browser.window.dispatch('keydown', { target: browser.canvas, code });
+  const release = code => browser.window.dispatch('keyup', { code });
+  const update = frames => {
+    for (let i = 0; i < frames; i += 1) {
+      controls.update(0.05);
+      assert.ok(camera.position.y > groundHeight(camera.position.x, camera.position.z));
+    }
+  };
+  try {
+    camera.position.set(-12, SEA_LEVEL + 0.63, 49);
+    camera.rotation.set(0, 0, 0);
+    update(2);
+    hold('KeyC');
+    release('KeyC');
+    update(12);
+    assert.equal(controls.currentMovement, 'dive');
+    const diveY = camera.position.y;
+    assert.ok(diveY < SEA_LEVEL - 0.5);
+    update(20);
+    assert.equal(camera.position.y, diveY);
+
+    hold('KeyW');
+    update(10);
+    release('KeyW');
+    assert.ok(camera.position.z < 47.3);
+    assert.equal(camera.position.y, diveY);
+
+    hold('Space');
+    release('Space');
+    update(20);
+    assert.equal(controls.currentMovement, 'swim');
+    assert.ok(Math.abs(camera.position.y - SEA_LEVEL - 0.63) < 1e-6);
+    hold('KeyS');
+    update(140);
+    assert.deepEqual(modes, ['swim', 'dive', 'swim', 'wade', 'walk']);
+    assert.ok(camera.position.z > 68);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('gamepad B descends to the seabed and A surfaces without a jump', () => {
+  const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
+  const browser = createBrowser([{ connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons }]);
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  const setButton = (index, pressed) => { buttons[index] = { pressed, value: Number(pressed) }; };
+  try {
+    camera.position.set(30, SEA_LEVEL + 0.63, 58);
+    setButton(1, true);
+    for (let i = 0; i < 40; i += 1) controls.update(0.05);
+    assert.equal(controls.currentMovement, 'dive');
+    assert.ok(camera.position.y - groundHeight(30, 58) > 0.5);
+    assert.ok(camera.position.y - groundHeight(30, 58) < 0.8);
+    const bottomY = camera.position.y;
+    setButton(1, false);
+    for (let i = 0; i < 20; i += 1) controls.update(0.05);
+    assert.equal(camera.position.y, bottomY);
+    setButton(0, true);
+    for (let i = 0; i < 40; i += 1) controls.update(0.05);
+    assert.equal(controls.currentMovement, 'swim');
+    assert.ok(Math.abs(camera.position.y - SEA_LEVEL - 0.63) < 1e-6);
+    setButton(0, false);
+    controls.update(0.05);
+    setButton(1, true);
+    for (let i = 0; i < 40; i += 1) controls.update(0.05);
+    assert.equal(camera.position.y, bottomY);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('a shelving seabed brings a diver back to the surface before reaching the beach', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const modes = [];
+  const controls = createControls(browser, camera, { onMovementChange: mode => modes.push(mode) });
+  try {
+    camera.position.set(-12, SEA_LEVEL + 0.63, 55);
+    camera.rotation.set(0, 0, 0);
+    controls.update(0.05);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyC' });
+    for (let i = 0; i < 15; i += 1) controls.update(0.05);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyS' });
+    for (let i = 0; i < 110; i += 1) controls.update(0.05);
+    assert.deepEqual(modes, ['swim', 'dive', 'wade', 'walk']);
+    assert.ok(camera.position.z > 68);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('an underwater cliff blocks horizontal travel at the bottom', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    camera.position.set(99, SEA_LEVEL + 0.63, -133.5);
+    camera.rotation.set(0, 0, 0);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyC' });
+    for (let i = 0; i < 80; i += 1) controls.update(0.05);
+    const startY = camera.position.y;
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyS' });
+    for (let i = 0; i < 40; i += 1) controls.update(0.05);
+    assert.equal(controls.currentMovement, 'dive');
+    assert.ok(camera.position.z < -132.5);
+    assert.ok(camera.position.y - startY < 0.2);
+    assert.ok(camera.position.y > groundHeight(camera.position.x, camera.position.z));
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('a submerged rock blocks a deep dive and leaves room to swim over it', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const rockHeight = SEA_LEVEL - 1.65;
+  const rock = new Triangle(new Vector3(-12.8, rockHeight, 49.5), new Vector3(-11.2, rockHeight, 49.5),
+    new Vector3(-12, rockHeight, 48.5));
+  const down = new Ray(new Vector3(), new Vector3(0, -1, 0));
+  const hit = new Vector3();
+  const controls = createControls(browser, camera, {
+    diveObstacleHeight(x, z) {
+      down.origin.set(x, SEA_LEVEL, z);
+      return down.intersectTriangle(rock.a, rock.b, rock.c, false, hit)?.y;
+    },
+  });
+  const hold = code => browser.window.dispatch('keydown', { target: browser.canvas, code });
+  const release = code => browser.window.dispatch('keyup', { code });
+  const update = frames => { for (let i = 0; i < frames; i += 1) controls.update(0.05); };
+  try {
+    camera.position.set(-12, SEA_LEVEL + 0.63, 50.3);
+    camera.rotation.set(0, 0, 0);
+    hold('KeyC');
+    update(25);
+    hold('KeyW');
+    update(15);
+    assert.equal(controls.currentMovement, 'dive');
+    assert.ok(camera.position.y < rockHeight && camera.position.z >= 49.5 && camera.position.z < 49.7);
+
+    release('KeyW');
+    release('KeyC');
+    hold('Space');
+    release('Space');
+    update(25);
+    assert.equal(controls.currentMovement, 'swim');
+    hold('KeyC');
+    release('KeyC');
+    update(15);
+    hold('KeyW');
+    update(3);
+    release('KeyW');
+    assert.ok(camera.position.z < 49.5 && camera.position.z > 48.5);
+    assert.ok(camera.position.y > rockHeight);
+
+    hold('KeyC');
+    update(15);
+    assert.ok(camera.position.y - rockHeight > 0.5 && camera.position.y - rockHeight < 0.8);
+    hold('KeyW');
+    update(8);
+    assert.ok(camera.position.z < 48.5);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
 test('ending flight above deep water settles into swimming at the same horizontal position', () => {
   const browser = createBrowser();
   const camera = new PerspectiveCamera();
@@ -312,6 +489,24 @@ test('dry land, open water and free flight use the faster travel speeds', () => 
     camera.position.set(30, 100, -10);
     controls.toggleFlight();
     assert.ok(Math.abs(travelForHalfSecond() - 10.25) < 1e-6);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('walking near the edge of the ravine tread passes the inside of its bend', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const x = -60.9333, z = 308.4256;
+    camera.position.set(x, groundHeight(x, z) + 1.65, z);
+    camera.rotation.set(0, Math.atan2(-0.3327, -0.9430), 0);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW' });
+    for (let frame = 0; frame < 24; frame += 1) controls.update(1 / 60);
+    assert.ok(camera.position.z > z + 2, 'walking stopped on the worn part of the bend');
+    assert.equal(controls.currentMovement, 'walk');
   } finally {
     controls.dispose();
     browser.cleanup();

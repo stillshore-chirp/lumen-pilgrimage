@@ -4,23 +4,22 @@
 | --- | --- | --- |
 | `sand.webp` | Charlotte Baglioni の [Sand 03](https://polyhaven.com/a/sand_03)（Poly Haven、[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)） | 砂浜と海底に使う。1K Diffuse を WebP に変換し、メタデータを除去 |
 | `limestone.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 断崖と海岸の岩に使う白亜灰色の石灰岩。1200 px 四方の WebP |
-| `canopy.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 林床の葉を表す768 px 四方の WebP |
 | `cumulus.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 積雲4種を収録した透明アトラス。1152 px 四方の WebP |
 | `forest-litter.webp` | Rob Tuytel の [Forest Leaves 02](https://polyhaven.com/a/forest_leaves_02)（Poly Haven、CC0 1.0） | 苔と落ち葉の林床。1K Diffuse を WebP に変換 |
 | `forest-rock.webp` | Rob Tuytel の [Mossy Rock](https://polyhaven.com/a/mossy_rock)（Poly Haven、CC0 1.0） | 岩間と沢の苔むした岩。1K Diffuse を WebP に変換 |
 | `forest-mud.webp` | eye-candy.xyz の [Mud Forest](https://polyhaven.com/a/mud_forest)（Poly Haven、CC0 1.0） | 踏み跡と水際の泥。1K Diffuse を WebP に変換 |
 | `forest-relief.webp` | 上記3素材の Displacement（Poly Haven、CC0 1.0） | 赤に林床、緑に岩、青に泥の凹凸を収録。線形データとして読み込む |
 | `forest-bark.webp`、`forest-bark-height.webp` | Rob Tuytel の [Bark Brown 01](https://polyhaven.com/a/bark_brown_01)（Poly Haven、CC0 1.0） | 近景の幹と板根。1K Diffuse と640 pxの高さを WebP で配布 |
+| `scenery/shelf.glb` | Rob Tuytel の [Coast Rocks 05](https://polyhaven.com/a/coast_rocks_05)（Poly Haven、CC0 1.0） | 潮棚と海底。形状を圧縮し、色・法線・粗さ・AO を同梱 |
+| `scenery/boulder.glb` | Rico Cilliers の [Boulder 01](https://polyhaven.com/a/boulder_01)（Poly Haven、CC0 1.0） | 露出した割れ岩。形状を圧縮し、表面マップを同梱 |
+| `scenery/moss.glb` | Kless Gyzen の [Rock Moss Set 01](https://polyhaven.com/a/rock_moss_set_01)（Poly Haven、CC0 1.0） | 林の岩、沢と岸。岩6種を別のメッシュにし、表面マップを同梱 |
+| `scenery/ferns.glb` | Rico Cilliers と Rob Tuytel の [Fern 02](https://polyhaven.com/a/fern_02)（Poly Haven、CC0 1.0） | 林床のシダ4種。葉の透過マスクを色に組み込み、表面マップを同梱 |
 
 ## 生成時の指示
 
 ### 石灰岩
 
 > Original texture for a 3D tropical limestone cliff wall. Single square high resolution orthographic surface albedo tile, only the gray, blue-gray and subtly buff rock material. A nearly vertical exposed fractured limestone face, straight-on rock scan, 8 meters square. Distinct irregular vertical erosion channels, deep fine cracks shaded graphite blue, prominent angular slabs rising vertically, thin diagonal and occasional horizontal seams cutting across the main vertical weathering, fine granular stone relief at close range. Pale gray mineral streaks, desaturated cool grey walls, warmer ochre only in a few exposed crevices. High frequency mineral detail and branching faults, strongly varied scale from 3cm to 2m. Neutral diffuse daylight, no lighting gradients across the frame, no ground, plants, green moss, sky, overlay, text, edges or borders. Pattern fills frame from all sides and is suitable as a believable repeating base albedo texture for a large game mountain face.
-
-### 樹冠
-
-> Game texture, square seamless-style 2D albedo material tile, close overhead orthographic view of dense intricately overlapping small waxy tropical rainforest foliage. Fill the frame to every edge with many hundreds of small pointed elliptical leaves, individual crisp veins, interconnected darker layer of leaves underneath, a few chartreuse fresh shoots and deep emerald older leaves. Natural subtle brightness variation and fine gaps with darker olive leaves underneath. Detailed photography, green with hints of jade and sunlit young green, even soft high overhead neutral daylight, restrained localized occlusion between leaves. Identical density and neutral light across the entire square so it crops cleanly and can repeat, no single focal point, broad even distribution of leaves, no isolated bough, no large leaves, no sky, no soil, no branches thicker than a leaf stem, no text or framing. Intended as an original repeating diffuse texture for the small irregular 3D crowns of tropical trees. Realistic texture size: approx 2 meters square, leaves around 5–11cm long.
 
 ### 積雲
 

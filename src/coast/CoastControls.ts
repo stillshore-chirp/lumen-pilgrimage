@@ -1,18 +1,28 @@
 import { Vector3, type PerspectiveCamera } from 'three';
 import { COAST_BOUNDS, forestStreamLevel, groundHeight, SEA_LEVEL, smoothstep, SPAWN } from './terrain';
 
-export type CoastMovement = 'walk' | 'wade' | 'swim' | 'flight';
+export type CoastMovement = 'walk' | 'wade' | 'swim' | 'dive' | 'flight';
+
+type DivePhase = 'entering' | 'submerged' | 'surfacing';
 
 export interface CoastControlCallbacks {
   onMovementChange: (movement: CoastMovement) => void;
   onLockChange: (locked: boolean) => void;
   onLockError: () => void;
+  diveObstacleHeight?: (x: number, z: number) => number | undefined;
 }
 
-const EYE_HEIGHT = 1.65;
+export const EYE_HEIGHT = 1.65;
 const WALK_SPEED = 6.4;
 const SWIM_SPEED = 4.1;
 const SWIM_DEPTH = 1.02;
+const DIVE_SPEED = 3.6;
+const DIVE_VERTICAL_SPEED = 3.0;
+const DIVE_ENTRY_DEPTH = 0.72;
+const DIVE_START_DEPTH = 1.55;
+const DIVE_EXIT_DEPTH = 1.15;
+const DIVE_FLOOR_CLEARANCE = 0.68;
+const DIVE_SURFACE_CLEARANCE = 0.16;
 const FLIGHT_SPEED = 20.5;
 const SPRINT_MULTIPLIER = 1.7;
 const LOOK_SPEED = 2.3;
@@ -42,11 +52,14 @@ export class CoastControls {
   private readonly viewDirection = new Vector3();
   private readonly up = new Vector3(0, 1, 0);
   private flying = false;
+  private divePhase: DivePhase | null = null;
   private movementMode: CoastMovement = 'walk';
   private verticalVelocity = 0;
   private jumpQueued = false;
+  private diveQueued = false;
   private previousGamepadFlight = false;
   private previousGamepadJump = false;
+  private previousGamepadDive = false;
   private pointerLockRequestPending = false;
   private inputSuspended = false;
   private disposed = false;
@@ -76,14 +89,23 @@ export class CoastControls {
     this.callbacks.onLockChange(document.pointerLockElement === this.canvas);
   }
 
+  get currentMovement(): CoastMovement {
+    return this.movementMode;
+  }
+
   toggleFlight(): void {
     if (this.disposed) return;
 
     this.flying = !this.flying;
     this.verticalVelocity = 0;
     this.jumpQueued = false;
+    this.diveQueued = false;
 
-    if (!this.flying) {
+    if (this.divePhase !== null) {
+      const { x, z } = this.camera.position;
+      this.camera.position.y = Math.max(this.camera.position.y, this.flightFloorHeight(x, z));
+      this.divePhase = null;
+    } else if (!this.flying) {
       const floor = this.supportHeight(this.camera.position.x, this.camera.position.z) + EYE_HEIGHT;
       this.camera.position.y = Math.max(this.camera.position.y, floor);
     }
@@ -121,7 +143,20 @@ export class CoastControls {
       return;
     }
 
-    this.updateGroundMovement(input.forward, input.right, pace, delta);
+    if (this.divePhase === null && this.diveQueued && input.vertical <= 0) {
+      const { x, y, z } = this.camera.position;
+      const water = this.waterLevel(x, z);
+      const ground = groundHeight(x, z);
+      if (water - ground >= DIVE_START_DEPTH && y <= water + EYE_HEIGHT - SWIM_DEPTH + FOOT_CLEARANCE
+        && this.diveFloorY(x, z, ground) <= water - DIVE_SURFACE_CLEARANCE) {
+        this.divePhase = 'entering';
+        this.verticalVelocity = 0;
+      }
+    }
+    this.setPlanarMovement(input.forward, input.right);
+    if (this.divePhase !== null) this.updateDive(input.vertical, delta);
+    else this.updateGroundMovement(pace, delta);
+    this.diveQueued = false;
   }
 
   dispose(): void {
@@ -152,6 +187,9 @@ export class CoastControls {
       event.preventDefault();
       if (event.code === 'Space' && !event.repeat && !this.keys.has('Space') && !this.flying) {
         this.jumpQueued = true;
+      }
+      if (event.code === 'KeyC' && !event.repeat && !this.keys.has('KeyC') && !this.flying) {
+        this.diveQueued = true;
       }
       this.keys.add(event.code);
     }
@@ -235,6 +273,7 @@ export class CoastControls {
   private clearInput(): void {
     this.keys.clear();
     this.jumpQueued = false;
+    this.diveQueued = false;
   }
 
   private readMovementInput(dt: number): { forward: number; right: number; vertical: number } {
@@ -251,6 +290,7 @@ export class CoastControls {
     if (!gamepad) {
       this.previousGamepadFlight = false;
       this.previousGamepadJump = false;
+      this.previousGamepadDive = false;
       return this.normalizePlanarInput(forward, right, vertical);
     }
 
@@ -266,8 +306,10 @@ export class CoastControls {
     const toggle = this.readButton(gamepad, 3);
     if (toggle && !this.previousGamepadFlight) this.toggleFlight();
     if (ascend && !this.previousGamepadJump && !this.flying) this.jumpQueued = true;
+    if (descend && !this.previousGamepadDive && !this.flying) this.diveQueued = true;
     this.previousGamepadFlight = toggle;
     this.previousGamepadJump = ascend;
+    this.previousGamepadDive = descend;
 
     const lookX = this.applyDeadzone(this.readAxis(gamepad.axes[2]));
     const lookY = this.applyDeadzone(this.readAxis(gamepad.axes[3]));
@@ -283,6 +325,7 @@ export class CoastControls {
     const gamepad = this.getStandardGamepad();
     this.previousGamepadFlight = gamepad !== null && this.readButton(gamepad, 3);
     this.previousGamepadJump = gamepad !== null && this.readButton(gamepad, 0);
+    this.previousGamepadDive = gamepad !== null && this.readButton(gamepad, 1);
   }
 
   private normalizePlanarInput(
@@ -298,16 +341,18 @@ export class CoastControls {
     return { forward, right, vertical: Math.max(-1, Math.min(vertical, 1)) };
   }
 
-  private updateGroundMovement(forwardInput: number, rightInput: number, pace: number, dt: number): void {
+  private setPlanarMovement(forwardInput: number, rightInput: number): void {
     const yaw = this.camera.rotation.y;
     this.forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     this.right.set(Math.cos(yaw), 0, -Math.sin(yaw));
     this.movement.copy(this.forward).multiplyScalar(forwardInput)
       .addScaledVector(this.right, rightInput);
+  }
 
+  private updateGroundMovement(pace: number, dt: number): void {
     const position = this.camera.position;
     const foot = position.y - EYE_HEIGHT;
-    const depth = (forestStreamLevel(position.x, position.z) ?? SEA_LEVEL) - groundHeight(position.x, position.z);
+    const depth = this.waterLevel(position.x, position.z) - groundHeight(position.x, position.z);
     const onSupport = this.verticalVelocity <= 0
       && foot <= this.supportHeight(position.x, position.z) + FOOT_CLEARANCE;
     const jumping = this.jumpQueued && onSupport && depth < SWIM_DEPTH;
@@ -328,6 +373,71 @@ export class CoastControls {
     position.y = followSupport ? floorY : Math.max(floorY, position.y + verticalStep);
     this.verticalVelocity = position.y > floorY ? nextVelocity : 0;
     this.updateMovementMode();
+  }
+
+  private updateDive(verticalInput: number, dt: number): void {
+    const position = this.camera.position;
+    const { x, z } = position;
+    const water = this.waterLevel(x, z);
+    const ground = groundHeight(x, z);
+    const floor = this.diveFloorY(x, z, ground);
+    const ceiling = water - DIVE_SURFACE_CLEARANCE;
+    const step = DIVE_VERTICAL_SPEED * dt;
+    if (this.jumpQueued || verticalInput > 0 || water - ground < DIVE_EXIT_DEPTH || floor > ceiling) {
+      this.divePhase = 'surfacing';
+    } else if (this.divePhase === 'surfacing' && this.diveQueued && water - ground >= DIVE_START_DEPTH) {
+      this.divePhase = 'entering';
+    }
+    this.jumpQueued = false;
+
+    if (this.divePhase === 'surfacing') {
+      const swimY = Math.max(ground, water - SWIM_DEPTH) + EYE_HEIGHT;
+      position.y = Math.min(swimY, Math.max(floor, position.y + step));
+    } else {
+      // Finish the initial dip even for a tap, then keep the chosen depth on release.
+      const entryY = Math.max(floor, water - DIVE_ENTRY_DEPTH);
+      const holdY = this.divePhase === 'entering' ? entryY : ceiling;
+      const target = verticalInput < 0 ? floor : Math.min(holdY, position.y);
+      position.y = Math.max(floor, target, position.y - step);
+      if (position.y <= entryY) this.divePhase = 'submerged';
+    }
+
+    this.movement.multiplyScalar(DIVE_SPEED * dt);
+    this.moveAlongDiveFloor(this.movement.x, this.movement.z);
+    if (this.divePhase === 'surfacing' && position.y >= this.supportHeight(position.x, position.z) + EYE_HEIGHT) {
+      this.divePhase = null;
+    }
+    this.updateMovementMode();
+  }
+
+  private moveAlongDiveFloor(deltaX: number, deltaZ: number): void {
+    const position = this.camera.position;
+    const steps = Math.ceil(Math.hypot(deltaX, deltaZ) / WALK_SAMPLE_DISTANCE);
+    if (steps === 0) return;
+    const dx = deltaX / steps;
+    const dz = deltaZ / steps;
+    const advance = (stepX: number, stepZ: number): boolean => {
+      const x = this.clampX(position.x + stepX);
+      const z = this.clampZ(position.z + stepZ);
+      const distance = Math.hypot(x - position.x, z - position.z);
+      if (distance === 0) return false;
+      const ground = groundHeight(x, z);
+      const water = this.waterLevel(x, z);
+      if (water - ground <= 0.08) return false;
+      const floor = this.diveFloorY(x, z, ground);
+      if ((this.divePhase !== 'surfacing' && floor > water - DIVE_SURFACE_CLEARANCE)
+        || floor > position.y + distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON)) return false;
+      position.set(x, Math.max(position.y, floor), z);
+      return true;
+    };
+
+    for (let step = 0; step < steps; step += 1) {
+      if (advance(dx, dz)) continue;
+      const slide = Math.abs(dx) >= Math.abs(dz)
+        ? advance(dx, 0) || advance(0, dz)
+        : advance(0, dz) || advance(dx, 0);
+      if (!slide) break;
+    }
   }
 
   private updateFlight(
@@ -404,19 +514,28 @@ export class CoastControls {
   }
 
   private supportHeight(x: number, z: number): number {
-    return Math.max(groundHeight(x, z), (forestStreamLevel(x, z) ?? SEA_LEVEL) - SWIM_DEPTH);
+    return Math.max(groundHeight(x, z), this.waterLevel(x, z) - SWIM_DEPTH);
   }
 
   private flightFloorHeight(x: number, z: number): number {
-    return Math.max(groundHeight(x, z), forestStreamLevel(x, z) ?? SEA_LEVEL) + 0.25;
+    return Math.max(groundHeight(x, z), this.waterLevel(x, z)) + 0.25;
+  }
+
+  private waterLevel(x: number, z: number): number {
+    return forestStreamLevel(x, z) ?? SEA_LEVEL;
+  }
+
+  private diveFloorY(x: number, z: number, ground: number): number {
+    return Math.max(ground, this.callbacks.diveObstacleHeight?.(x, z) ?? ground) + DIVE_FLOOR_CLEARANCE;
   }
 
   private updateMovementMode(): void {
     const { x, y, z } = this.camera.position;
-    const water = forestStreamLevel(x, z) ?? SEA_LEVEL;
+    const water = this.waterLevel(x, z);
     const depth = water - groundHeight(x, z);
     let mode: CoastMovement = 'walk';
     if (this.flying) mode = 'flight';
+    else if (this.divePhase !== null) mode = 'dive';
     else if (y <= water + EYE_HEIGHT + 0.03) {
       if (depth >= SWIM_DEPTH) mode = 'swim';
       else if (depth > 0.08) mode = 'wade';

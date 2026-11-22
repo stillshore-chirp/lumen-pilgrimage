@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { LANDSCAPE_BOUNDS, coastRandom, groundHeight, SEA_LEVEL } from '../terrain';
 import { coastNoise } from './coastNoise';
 import { coastSwellGLSL } from './coastSwell';
+import { coastWaterOptics, SEA_WATER_SCATTER } from './coastWaterOptics';
 
 export function createCoastOceanGeometry(): THREE.BufferGeometry {
   // Denser triangles at the beach carry the breaking lip. Open water stays a flat extension.
@@ -169,6 +170,7 @@ export function createCoastOceanMaterial(
   const { minX, maxX, minZ, maxZ } = LANDSCAPE_BOUNDS;
   return new THREE.ShaderMaterial({
     lights: true,
+    side: THREE.DoubleSide,
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.lights),
       uTime: time,
@@ -184,6 +186,7 @@ export function createCoastOceanMaterial(
       uReflection: { value: new THREE.Color(0x4c97c7) },
       uHorizon: { value: new THREE.Color(0x8cbfdf) },
       uWash: { value: new THREE.Color(0xe9fff7) },
+      uUnderwaterScatter: { value: new THREE.Color(SEA_WATER_SCATTER) },
     },
     vertexShader: /* glsl */`
       varying vec3 vSurface;
@@ -215,6 +218,7 @@ export function createCoastOceanMaterial(
     fragmentShader: /* glsl */`
       uniform sampler2D uSand, uWaterDetail;
       uniform vec3 uSun, uLagoon, uWater, uDeep, uReflection, uHorizon, uWash;
+      uniform vec3 uUnderwaterScatter;
       varying vec3 vSurface;
       #include <common>
       #include <packing>
@@ -223,6 +227,29 @@ export function createCoastOceanMaterial(
       #include <shadowmask_pars_fragment>
       ${coastNoise}
       ${shoreBathymetry}
+      ${coastWaterOptics}
+
+      vec3 oceanUnderside(vec3 ray, vec3 normal, vec2 p, float thickness,
+        float sunlit, float wave, vec2 dpdx, vec2 dpdy) {
+        vec3 airRay;
+        float transmission = waterTransmission(ray, normal, airRay);
+        float skyHeight = clamp(airRay.y, 0.0, 1.0);
+        vec3 sky = mix(uHorizon, vec3(0.022, 0.126, 0.36), smoothstep(0.0, 0.76, skyHeight));
+        vec2 clouds = airRay.xz * 4.6 + vec2(skyHeight * 3.2, skyHeight * 2.6);
+        float wisps = coastNoise(clouds) * 0.63 + coastNoise(clouds * 2.17) * 0.25
+          + coastNoise(clouds * 4.61) * 0.12;
+        sky = mix(sky, vec3(0.79, 0.88, 0.87), smoothstep(0.49, 0.71, wisps) * 0.46);
+        float sun = max(dot(airRay, uSun), 0.0);
+        sky += vec3(1.0, 0.94, 0.72) * (0.24 * pow(sun, 18.0) + 1.35 * pow(sun, 220.0)) * sunlit;
+
+        vec3 bounce = reflect(ray, -normal);
+        float bedPath = thickness / max(0.055, -bounce.y);
+        vec2 bedUV = (p + bounce.xz * min(bedPath, 45.0)) * 0.42;
+        vec3 sand = textureGrad(uSand, bedUV, dpdx * 0.42, dpdy * 0.42).rgb;
+        vec3 bed = sand * vec3(0.55, 0.94, 0.80) * (0.85 + wave * 0.22) * (0.54 + sunlit * 0.46);
+        vec3 reflected = mix(uUnderwaterScatter * 0.64, bed, underwaterExtinction(bedPath));
+        return mix(reflected, sky, transmission);
+      }
 
       void main() {
         vec2 p = vSurface.xz;
@@ -260,6 +287,18 @@ export function createCoastOceanMaterial(
         float sunlit = getShadowMask();
         vec2 dpdx = dFdx(p);
         vec2 dpdy = dFdy(p);
+        if (!gl_FrontFacing) {
+          if (thickness <= 0.015) discard;
+          vec2 ripples = 0.035 * vec2(cos(phaseD * 2.49), sin(phaseC * 2.31 + phaseB)) * rippleFade;
+          vec3 opticalNormal = normalize(normal + vec3(ripples.x, 0.0, ripples.y));
+          gl_FragColor = vec4(oceanUnderside(-eye, opticalNormal, p, thickness, sunlit, wave, dpdx, dpdy), 1.0);
+          #include <tonemapping_fragment>
+          // The distant water and the Three.js scene fog share a display-referred color.
+          gl_FragColor.rgb = mix(uUnderwaterScatter, gl_FragColor.rgb, underwaterExtinction(distance));
+          #include <colorspace_fragment>
+          return;
+        }
+
         float teal = smoothstep(2.4, 11.7, depth);
         float blue = smoothstep(12.0, 33.0, depth);
         vec3 water = mix(mix(uLagoon, uWater, teal), uDeep, blue);
