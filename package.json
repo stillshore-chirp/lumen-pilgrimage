@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run build && npm run validate:content && npm run validate:release && npm run validate:harness",
+    "check": "npm run typecheck && npm run build && npm run validate:content && npm run validate:release && npm run validate:harness && npm run test:coast",
+    "test:coast": "node --test scripts/coast-controls.test.mjs scripts/coast-terrain.test.mjs",
+    "test:coast:browser": "node --test scripts/coast-browser.test.mjs",
     "validate:content": "node scripts/validate-content.mjs",
     "validate:release": "node scripts/validate-release.mjs",
     "validate:harness": "node scripts/validate-harness.mjs"
@@ -16,8 +18,9 @@
     "three": "0.184.0"
   },
   "devDependencies": {
+    "@types/three": "^0.184.0",
+    "playwright": "1.65.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.7",
-    "@types/three": "^0.184.0"
+    "vite": "^7.3.7"
   }
 }
