@@ -52,7 +52,7 @@ export class CoastControls {
     this.callbacks = callbacks;
 
     this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.set(0.055, SPAWN.yaw, 0);
+    this.camera.rotation.set(SPAWN.pitch, SPAWN.yaw, 0);
     this.camera.position.set(
       SPAWN.x,
       groundHeight(SPAWN.x, SPAWN.z) + EYE_HEIGHT,

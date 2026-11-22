@@ -1,6 +1,6 @@
 export const SEA_LEVEL = 0;
 export const COAST_BOUNDS = { minX: -104, maxX: 108, minZ: -101, maxZ: 114 };
-export const SPAWN = { x: -18, z: 12, yaw: -0.13 };
+export const SPAWN = { x: -18, z: 19, yaw: -0.15, pitch: 0.085 };
 export const WATERFALL = { x: 18, y: 24, z: -36 };
 export const POOL = { x: 18, y: 2.2, z: -22, radiusX: 8, radiusZ: 10 };
 
@@ -14,8 +14,9 @@ function mound(x: number, z: number, centerX: number, centerZ: number, width: nu
 }
 
 export function shoreline(x: number): number {
+  const inletWidth = x < -17 ? 20 : 22;
   return -49 + 32 * mound(x, 0, -62, 0, 25, 1)
-    + 56 * mound(x, 0, -17, 0, 17, 1)
+    + 56 * mound(x, 0, -17, 0, inletWidth, 1)
     - 15 * mound(x, 0, 44, 0, 47, 1) + 2.5 * Math.sin(x * 0.105 + 0.8);
 }
 
@@ -37,7 +38,16 @@ export function groundHeight(x: number, z: number): number {
     (1 - smoothstep(eastFace - 4, eastFace + 3, z)) * smoothstep(-66, -51, z);
   const westBluff = 12 * mound(x, z, -58, -10, 13, 13) *
     smoothstep(-25, -14, z);
-  const westHeadland = 45 * Math.exp(-(((x + 55) / 17) ** 4 + ((z + 51) / 24) ** 4));
+  const westRimX = -55 + 2.9 * Math.sin((z + 51) * 0.24) + 1.4 * Math.sin((z + 51) * 0.76);
+  const westHeight = 42 + 2.8 * Math.sin((x + z * 0.25) * 0.41) + 1.4 * Math.sin(x * 0.95 - z * 0.2);
+  const westDistance = x - westRimX;
+  const westCore = westHeight * Math.exp(-((westDistance / 16) ** 4 + ((z + 51) / 24) ** 4));
+  // Lower shelves jut out below the caprock. Their crests offset along the coast.
+  const westLedge = (23 + 3 * Math.sin(z * 0.27)) *
+    Math.exp(-((westDistance / 18.6) ** 8 + ((z + 52) / 25) ** 6));
+  const westApron = (12 + 1.9 * Math.sin(z * 0.52 + x * 0.16)) *
+    Math.exp(-((westDistance / 21) ** 6 + ((z + 53) / 27) ** 6));
+  const westHeadland = Math.max(westCore, westLedge, westApron);
   const seaStack = 30 * Math.exp(-(((x + 34) / 9) ** 4 + ((z + 80) / 12) ** 4));
   const ridge = 10 * mound(x, z, 23, 76, 44, 27) + 6 * mound(x, z, -54, 58, 28, 33);
 
