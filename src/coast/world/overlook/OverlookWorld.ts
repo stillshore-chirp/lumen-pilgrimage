@@ -5,6 +5,7 @@ import type { CoastQuality } from '../../CoastWorld';
 import { createCoastAtmosphere, type CoastTimeOfDay } from '../coastAtmosphere';
 import { createCoastLighting } from '../coastLighting';
 import { createCoastSky } from '../coastSky';
+import { createOverlookAirTraffic } from './overlookAirTraffic';
 import { OverlookAudio } from './overlookAudio';
 import { createOverlookCity, createOverlookCityGround } from './overlookCity';
 import { createOverlookDeck, OVERLOOK_DECK_OBSTACLES } from './overlookDeck';
@@ -49,13 +50,14 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
 
   const streets = createOverlookCityGround();
   const traffic = createOverlookTraffic(heightAt);
+  const airTraffic = createOverlookAirTraffic();
   const city = createOverlookCity(heightAt, {
     sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x496178, blocksFootprint: isOverlookRoadway,
   });
   const ground = createOverlookSurface(heightAt, streets, atmosphere.night);
   const deck = createOverlookDeck();
   const scene = new THREE.Scene();
-  scene.add(sky.dome, sky.clouds, ground, deck.group, city.group, traffic.group, createOverlookHillside(heightAt));
+  scene.add(sky.dome, sky.clouds, ground, deck.group, city.group, traffic.group, airTraffic.group, createOverlookHillside(heightAt));
   const twilightFill = new THREE.HemisphereLight(0xa9c7f1, 0x8f8579, 0.27);
   twilightFill.visible = false;
   scene.add(twilightFill);
@@ -83,16 +85,19 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
         city.setTimeOfDay(time);
         deck.setTimeOfDay(time);
         traffic.setTimeOfDay(time);
+        airTraffic.setTimeOfDay(time);
       },
       update(elapsed: number, camera: THREE.PerspectiveCamera) {
         lighting.update(elapsed, camera);
         traffic.update(elapsed);
+        airTraffic.update(elapsed);
         return [];
       },
       dispose() {
         sky.dispose();
         lighting.dispose();
         traffic.dispose();
+        airTraffic.dispose();
         atmosphere.sky.value.dispose();
         streets.texture.dispose();
       },
