@@ -2,17 +2,17 @@
 
 ## 起動と状態遷移
 
-- [main.ts](../src/main.ts) が `#app` を取得する。標準の起動先は海岸探索。クエリが `?scene=expedition` のときは [AppBootstrap](../src/bootstrap/AppBootstrap.ts) から [Game](../src/core/Game.ts) を起動する。`Game` は Three.js のレンダラー、シーン、フレームループを用意し、入力、UI、遠征、保存、描画・音響を接続する。
+- [main.ts](../src/main.ts) が `#app` を取得する。標準の起動先は自然景観探索。クエリが `?scene=expedition` のときは [AppBootstrap](../src/bootstrap/AppBootstrap.ts) から [Game](../src/core/Game.ts) を起動する。`Game` は Three.js のレンダラー、シーン、フレームループを用意し、入力、UI、遠征、保存、描画・音響を接続する。
 - [MenuManager](../src/game/ui/MenuManager.ts) は UI の操作をコマンドとしてキューに積む。`Game` がフレームごとに取り出し、[GameStateMachine](../src/game/state/GameStateMachine.ts) の遷移表に沿って画面と進行状態を切り替える。起動時は Main Menu で待機し、出撃または Continue で遠征が始まる。
 
-## 海岸探索
+## 自然景観探索
 
-- [CoastApp](../src/coast/CoastApp.ts) は、海岸専用のレンダラー、カメラ、画面とフレームループを起動する。従来ゲームへのリンクは同一オリジンでページを遷移する。海岸側は遠征のセーブや設定を読み書きしない。
-- [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形と水面の座標](../src/coast/terrain.ts) を共有する。西の岩棚と東の潮だまりへ向かう散策路は、高さをサンプリングする段階で幅と勾配を作り、接地と描画の両方に反映する。[広葉樹の立体モデル](../src/coast/world/coastTreeMeshes.ts) は幹、枝、葉を生成し、植生の配置は散策路の幅を空ける。岩、砂、林床、積雲の素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
-- 歩行の接地と登坂判定には地形の高さを使い、水深が足の届く範囲を超えると水面から一定の目線で遊泳する。飛行を解除すると同じ水平座標で地表または水面まで降りる。
-- 起動時は「軽量」。両設定でモデル、植生と光源を共有し、内部解像度、影の解像度と更新頻度を切り替える。軽量は影を再利用し、高品質は揺れる葉の影も更新する。
+- [CoastApp](../src/coast/CoastApp.ts) は、景観用のレンダラー、カメラ、画面とフレームループを起動する。従来ゲームへのリンクは同一オリジンでページを遷移する。景観側は遠征のセーブや設定から独立している。
+- [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形、散策路、沢の水位](../src/coast/terrain.ts) を共有する。海岸の周回路と内陸の分岐には地形に沿う勾配を付ける。沢を渡る道と岩間を抜ける道が高所で合流する。[植生](../src/coast/world/coastVegetation.ts) は場所に応じて樹種と密度を変え、散策路や渡渉点を空ける。樹皮や地表の素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
+- 地上の登坂判定に引っかかったときは横方向の移動を試す。急な下りとジャンプは重力で接地させる。海と沢ではその場所の水位を基準に、浅瀬から遊泳へ切り替える。飛行を解除すると同じ水平座標で地表または水面まで降りる。
+- 起動時は「軽量」。[照明](../src/coast/world/coastLighting.ts) は広域の影と林の間接光を共有する。高品質では視点近くを追従する影、地表の凹凸、近くの植生の詳細と内部解像度を追加する。軽量の広域影は視点が別の場所へ移るまで再利用する。
 - [海面](../src/coast/world/coastOcean.ts) は海底の深さを使い、浅瀬で波が盛り上がる位置と崩れた泡を計算する。[波の周期](../src/coast/world/coastSwell.ts) を [CoastAudio](../src/coast/CoastAudio.ts) と共有し、砕波音の位置と強さを寄せ引きに合わせる。
-- 音響は明示操作で開始する。滝の落水と滝つぼのしぶきは別の距離減衰で鳴らす。[伝播の計算](../src/coast/coastAcoustics.ts) は距離による高域の減衰、岩壁による遮蔽、地形に遮られず水面を経由できる短い反射を扱う。どちらの描画設定でも同じ HRTF 音響グラフが続く。
+- 音響は明示操作で開始する。落水と滝つぼのしぶきには別の距離減衰を使い、鳥、虫、沢の瀬には内陸の位置を与える。[伝播の計算](../src/coast/coastAcoustics.ts) は空気による高域の減衰、岩壁による遮蔽と短い反射、岩間の開口を経由する到達音を扱う。どちらの描画設定でも同じ HRTF 音響グラフが続く。
 
 ## 遠征とキャンペーン
 

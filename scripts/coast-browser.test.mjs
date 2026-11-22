@@ -160,7 +160,11 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
   });
   await page.addInitScript(installBrowserProbes);
   try {
-    const sceneryAssets = Promise.all(['limestone.webp', 'sand.webp', 'cumulus.webp', 'canopy.webp'].map(file =>
+    const sceneryAssets = Promise.all([
+      'limestone.webp', 'sand.webp', 'cumulus.webp', 'canopy.webp',
+      'forest-litter.webp', 'forest-rock.webp', 'forest-mud.webp', 'forest-relief.webp',
+      'forest-bark.webp', 'forest-bark-height.webp',
+    ].map(file =>
       page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/coast-materials/${file}`))));
     const [, loadedAssets] = await Promise.all([page.goto(url, { waitUntil: 'commit' }), sceneryAssets]);
     const light = page.getByRole('button', { name: '軽量' });
@@ -201,14 +205,16 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
     const start = await page.evaluate(audioPosition);
     assert.equal(beforeSwitch.contexts, 1);
     assert.equal(beforeSwitch.contextState, 'running');
-    assert.deepEqual([...recordings].sort(), ['birds.ogg', 'foliage.ogg', 'insects.ogg', 'surf.ogg', 'waterfall.ogg', 'waves.ogg']);
+    assert.deepEqual([...recordings].sort(), [
+      'birds.ogg', 'forest-birds.ogg', 'insects.ogg', 'rivulet.ogg', 'surf.ogg', 'waterfall.ogg', 'waves.ogg',
+    ]);
     assert.equal(beforeSwitch.decoded, recordings.size);
     assert.ok(await page.evaluate(() => window.coastProbe.panners.filter(node =>
       node.positionY.value > 18 && node.maxDistance >= 700 && node.panningModel === 'HRTF').length >= 3));
     const positions = beforeSwitch.panners.map((panner, i) => [...panner, initialZ[i]]);
     const reflected = positions.filter(([model, , rolloff, , y]) => model === 'HRTF' && rolloff > 0 && y < 0);
     assert.ok(reflected.length >= 2);
-    assert.equal(beforeSwitch.delays, reflected.length);
+    assert.ok(beforeSwitch.delays > reflected.length, 'rock returns add delays beyond the water reflections');
     assert.ok(reflected.every(([, , , x, y, z]) => positions.some(([, , , dryX, dryY, dryZ]) =>
       x === dryX && -y === dryY && z === dryZ)), 'reflected sources mirror dry sources across the water');
     await page.waitForFunction(z => window.coastProbe.panners.some((node, i) =>
@@ -218,7 +224,9 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
     await high.click();
     assert.equal(await high.getAttribute('aria-pressed'), 'true');
     assert.equal(await canvas.evaluate(node => node.width), viewport.width);
-    assert.deepEqual(await page.evaluate(graph), beforeSwitch);
+    const afterGraph = await page.evaluate(graph);
+    assert.deepEqual({ ...afterGraph, panners: afterGraph.panners.map(voice => voice.slice(0, 3)) },
+      { ...beforeSwitch, panners: beforeSwitch.panners.map(voice => voice.slice(0, 3)) });
     assert.ok(await page.evaluate(() => window.coastProbe.panners.every((node, i) =>
       node === window.coastProbe.originalPanners[i])));
     const afterSwitch = await page.evaluate(audioPosition);
@@ -246,6 +254,9 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
 
     await page.getByRole('button', { name: 'マウス操作を開始' }).click();
     await page.waitForFunction(() => document.pointerLockElement?.classList.contains('coast-view'));
+    await page.keyboard.press('Space');
+    await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y + 0.45, start.y);
+    await page.waitForFunction(y => Math.abs(window.coastProbe.context.listener.positionY.value - y) < 0.03, start.y);
     await page.keyboard.down('w');
     await page.waitForFunction(({ x, z }) => {
       const listener = window.coastProbe.context.listener;
@@ -332,7 +343,7 @@ test('the legacy entry navigates to Hub, saves a run, and continues it after rel
     await page.waitForFunction(key => Boolean(JSON.parse(localStorage.getItem(key))?.expedition), saveKey);
     const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
     await page.goto(url, { waitUntil: 'commit' });
-    await page.getByRole('heading', { name: '海岸探索' }).waitFor();
+    await page.getByRole('heading', { name: '自然景観探索' }).waitFor();
     const afterCoast = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
     assert.deepEqual(afterCoast, saved);
     await enterLegacy();
@@ -343,7 +354,7 @@ test('the legacy entry navigates to Hub, saves a run, and continues it after rel
     for (const key of ['biomeId', 'roomId', 'missionId', 'runSeed']) assert.equal(resumed[key], saved[key], key);
 
     await page.goto(url, { waitUntil: 'commit' });
-    await page.getByRole('heading', { name: '海岸探索' }).waitFor();
+    await page.getByRole('heading', { name: '自然景観探索' }).waitFor();
     await page.evaluate(key => {
       const slot = JSON.parse(localStorage.getItem(key));
       slot.slotId = 1;

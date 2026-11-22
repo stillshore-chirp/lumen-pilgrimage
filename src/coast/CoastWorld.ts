@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import {
-  COAST_FALLS, SEA_LEVEL, coastPlantingDistance, coastRandom, coastTrailDistance, groundHeight, groundSlope,
+  COAST_FALLS, SEA_LEVEL, coastPlantingDistance, coastRandom, coastTrailDistance, forestStreamDistance,
+  groundHeight, groundSlope, smoothstep,
 } from './terrain';
+import { createForestRocks } from './world/coastForestRocks';
+import { createForestWater } from './world/coastForestWater';
+import { createCoastLighting } from './world/coastLighting';
 import { createCoastOceanGeometry, createCoastOceanMaterial } from './world/coastOcean';
 import { createCoastSky } from './world/coastSky';
 import { createCoastTerrain, loadCoastTexture } from './world/coastSurface';
@@ -137,75 +141,67 @@ function createSeabirds(): { mesh: THREE.InstancedMesh; update: (elapsed: number
 export class CoastWorld {
   readonly scene = new THREE.Scene();
   private readonly time = { value: 0 };
-  private readonly sun: THREE.DirectionalLight;
+  private readonly fog = new THREE.Fog(0xa6d0e8, 135, 854);
+  private readonly coastAir = new THREE.Color(0xa6d0e8);
+  private readonly forestAir = new THREE.Color(0x80988e);
+  private readonly lighting: ReturnType<typeof createCoastLighting>;
   private readonly sky: ReturnType<typeof createCoastSky>;
+  private readonly terrain: ReturnType<typeof createCoastTerrain>;
+  private readonly vegetation: ReturnType<typeof createCoastVegetation>;
   private readonly waterfalls: ReturnType<typeof createWaterfalls>;
   private readonly seabirds = createSeabirds();
   private quality: CoastQuality | undefined;
-  private lastShadow = 0;
 
   constructor() {
-    this.scene.fog = new THREE.Fog(0xa6d0e8, 135, 854);
+    this.scene.fog = this.fog;
     const sunDirection = new THREE.Vector3(0.46, 0.70, 0.58).normalize();
     this.sky = createCoastSky(sunDirection);
     this.scene.add(this.sky.dome, this.sky.clouds);
 
-    this.scene.add(new THREE.HemisphereLight(0xd9eeff, 0x718b8e, 1.72));
-    this.scene.add(new THREE.AmbientLight(0xf4f9ed, 0.27));
-    this.sun = new THREE.DirectionalLight(0xfff2d8, 2.8);
-    this.sun.target.position.set(-8, 26, -39);
-    this.sun.position.copy(this.sun.target.position).addScaledVector(sunDirection, 520);
-    this.sun.castShadow = true;
-    const shadow = this.sun.shadow;
-    shadow.camera.left = -225;
-    shadow.camera.right = 206;
-    shadow.camera.top = 255;
-    shadow.camera.bottom = -198;
-    shadow.camera.near = 36;
-    shadow.camera.far = 921;
-    shadow.camera.updateProjectionMatrix();
-    shadow.bias = -0.00015;
-    shadow.normalBias = 0.37;
-    shadow.radius = 2.8;
-    shadow.autoUpdate = false;
-    this.scene.add(this.sun, this.sun.target);
-
     const stone = loadCoastTexture('limestone.webp', true);
     const sand = loadCoastTexture('sand.webp', true);
     const canopy = loadCoastTexture('canopy.webp', true);
-    this.scene.add(createCoastTerrain(stone, sand, canopy), createShoreRocks(stone));
+    this.terrain = createCoastTerrain(stone, sand, canopy);
+    this.scene.add(this.terrain.mesh, createShoreRocks(stone), createForestRocks(this.terrain.mossRock));
     const ocean = new THREE.Mesh(createCoastOceanGeometry(),
       createCoastOceanMaterial(this.time, sunDirection, sand));
     ocean.name = 'Clear shoals and open sea';
     ocean.rotation.x = -Math.PI / 2;
     ocean.position.set(0, SEA_LEVEL, -230);
     ocean.receiveShadow = true;
-    this.scene.add(ocean, createCoastVegetation(this.time, coastPlantingDistance));
+    this.vegetation = createCoastVegetation(this.time, coastPlantingDistance, forestStreamDistance);
+    this.scene.add(ocean, this.vegetation, createForestWater(this.time));
 
     this.waterfalls = createWaterfalls(COAST_FALLS, this.time);
     this.scene.add(this.waterfalls.group, this.seabirds.mesh);
+    this.lighting = createCoastLighting(this.scene, sunDirection);
     this.setQuality('light');
   }
 
   setQuality(quality: CoastQuality): void {
     if (quality === this.quality) return;
     this.quality = quality;
-    const shadow = this.sun.shadow;
-    const size = quality === 'high' ? 2304 : 1152;
-    shadow.map?.dispose();
-    shadow.map = null;
-    shadow.mapSize.set(size, size);
-    shadow.needsUpdate = true;
+    this.lighting.setQuality(quality);
+    this.terrain.setQuality(quality);
+    this.vegetation.setQuality(quality);
   }
 
   update(elapsed: number, camera: THREE.PerspectiveCamera): void {
     this.time.value = elapsed;
     this.sky.dome.position.copy(camera.position);
+    const { x, y, z } = camera.position;
+    const inside = smoothstep(127, 194, z) * (1 - smoothstep(152, 219, Math.abs(x)));
+    const humidAir = inside * (1 - 0.83 * smoothstep(346, 392, z)) * (1 - smoothstep(51, 83, y));
+    this.fog.color.copy(this.coastAir).lerp(this.forestAir, humidAir);
+    this.fog.near = 135 - humidAir * 95;
+    this.fog.far = 854 - humidAir * 433;
     this.waterfalls.update(elapsed);
     this.seabirds.update(elapsed);
-    if (this.quality === 'high' && elapsed - this.lastShadow >= 0.18) {
-      this.sun.shadow.needsUpdate = true;
-      this.lastShadow = elapsed;
-    }
+    this.vegetation.update(camera);
+    this.lighting.update(elapsed, camera);
+  }
+
+  dispose(): void {
+    this.lighting.dispose();
   }
 }

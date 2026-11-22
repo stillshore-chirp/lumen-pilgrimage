@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { coastRandom, groundHeight } from '../terrain';
 
-const GOLDEN_ANGLE = 2.39996323;
+export const GOLDEN_ANGLE = 2.39996323;
 const UP = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 
@@ -12,14 +12,18 @@ const treeProfiles = {
     bark: 0x70624c, leaf: 0x607c3d, blade: 0.165, halfWidth: 0.32 },
   windPruned: { seed: 63197, trunk: 0.069, lean: 0.36, forks: 5, base: 0.38, spread: 0.81, lift: 0.22,
     bark: 0x595247, leaf: 0x536d3b, blade: 0.143, halfWidth: 0.26 },
+  buttressed: { seed: 684931, trunk: 0.152, lean: -0.18, forks: 7, base: 0.29, spread: 1.18, lift: 0.27,
+    bark: 0x655b4c, leaf: 0x46642e, blade: 0.161, halfWidth: 0.33 },
+  sapling: { seed: 412822, trunk: 0.043, lean: 0.08, forks: 4, base: 0.52, spread: 0.76, lift: 0.25,
+    bark: 0x6a6d5f, leaf: 0x4d7840, blade: 0.161, halfWidth: 0.23 },
 };
 
 export type TreeForm = keyof typeof treeProfiles;
-type Detail = 'near' | 'middle';
+type Detail = 'near' | 'middle' | 'distant';
 type Stem = { points: THREE.Vector3[]; radii: number[] };
 type Shoot = { base: THREE.Vector3; tip: THREE.Vector3; size: number; shade: number };
 
-class Surface {
+export class PlantSurface {
   private readonly positions: number[] = [];
   private readonly colors: number[] = [];
   private readonly indices: number[] = [];
@@ -50,11 +54,11 @@ class Surface {
   }
 }
 
-function limbDirection(angle: number): THREE.Vector3 {
+export function plantDirection(angle: number): THREE.Vector3 {
   return new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
 }
 
-function addStem(surface: Surface, stem: Stem, bark: THREE.Color, sides: number, phase: number): void {
+export function addStem(surface: PlantSurface, stem: Stem, bark: THREE.Color, sides: number, phase: number, baseShade = 1): void {
   const rings: number[][] = [];
   const facing = new THREE.Vector3();
   const across = new THREE.Vector3();
@@ -75,7 +79,7 @@ function addStem(surface: Surface, stem: Stem, bark: THREE.Color, sides: number,
       const radius = stem.radii[i] * (1 + groove);
       const point = center.clone().addScaledVector(facing, Math.cos(angle) * radius)
         .addScaledVector(across, Math.sin(angle) * radius);
-      const shade = (0.79 + 0.20 * Math.sin(angle * 3 + phase + center.y * 2.6))
+      const shade = baseShade * (0.79 + 0.20 * Math.sin(angle * 3 + phase + center.y * 2.6))
         * (0.76 + 0.38 * THREE.MathUtils.smoothstep(center.y, -0.02, 0.45));
       ring.push(surface.point(point, bark, shade));
     }
@@ -89,7 +93,7 @@ function addStem(surface: Surface, stem: Stem, bark: THREE.Color, sides: number,
   }
 }
 
-function makeSkeleton(form: TreeForm): { trunk: Stem; limbs: Stem[]; twigs: Stem[]; shoots: Shoot[] } {
+function makeSkeleton(form: TreeForm): { trunk: Stem; limbs: Stem[]; twigs: Stem[]; vines: Stem[]; shoots: Shoot[] } {
   const profile = treeProfiles[form];
   const random = coastRandom(profile.seed);
   const trunkCenter = (y: number) => {
@@ -104,29 +108,32 @@ function makeSkeleton(form: TreeForm): { trunk: Stem; limbs: Stem[]; twigs: Stem
   };
   const limbs: Stem[] = [];
   const twigs: Stem[] = [];
+  const vines: Stem[] = [];
   const shoots: Shoot[] = [];
   for (let i = 0; i <= profile.forks; i += 1) {
     const leader = i === profile.forks;
     const level = leader ? 0.89 : i / (profile.forks - 1);
     const angle = i * GOLDEN_ANGLE + (random() - 0.5) * 0.70;
-    const out = limbDirection(angle);
-    const lateral = limbDirection(angle + Math.PI * 0.5);
+    const out = plantDirection(angle);
+    const lateral = plantDirection(angle + Math.PI * 0.5);
     const forkHeight = leader ? 0.92 : profile.base + level * (0.73 - profile.base) + (random() - 0.5) * 0.09;
     const root = trunkCenter(forkHeight);
-    const reach = leader ? 0.21 : profile.spread * (0.71 + random() * 0.36) * (1 - level * 0.30);
+    const fork = form === 'buttressed' && i === 0;
+    const reach = leader ? 0.21 : profile.spread * (0.66 + random() * 0.48) * (1 - level * 0.35) * (fork ? 0.79 : 1);
     const rise = leader ? 0.15 : profile.lift * (0.73 + random() * 0.60);
     const branch = (t: number) => root.clone().addScaledVector(out, reach * t)
-      .addScaledVector(UP, rise * t ** 0.77)
-      .addScaledVector(lateral, Math.sin(t * 2.4) * reach * 0.13)
+      .addScaledVector(UP, fork ? 0.66 * t ** 1.62 : rise * t ** 0.77 + Math.sin(t * 3.7) * 0.025)
+      .addScaledVector(lateral, Math.sin(t * 2.4) * reach * 0.19)
       .addScaledVector(X_AXIS, profile.lean * t * 0.34);
-    const radius = profile.trunk * (0.61 - level * 0.29);
+    const radius = profile.trunk * (fork ? 0.84 : 0.64 - level * 0.29);
     limbs.push({ points: [0, 0.23, 0.53, 0.77, 1].map(branch),
       radii: [1, 0.75, 0.49, 0.27, 0.045].map(factor => radius * factor) });
 
-    for (let j = 0; j < 4; j += 1) {
-      const t = 0.32 + j * 0.20 + random() * 0.054;
+    const twigCount = form === 'sapling' ? 3 : 4;
+    for (let j = 0; j < twigCount; j += 1) {
+      const t = 0.29 + j * 0.63 / (twigCount - 1) + random() * 0.054;
       const twigBase = branch(t);
-      const direction = limbDirection(angle + (j % 2 ? -1 : 1) * (0.43 + random() * 0.90));
+      const direction = plantDirection(angle + (j % 2 ? -1 : 1) * (0.43 + random() * 0.90));
       const short = (0.17 + random() * 0.22) * (1 - level * 0.30);
       const twigMid = twigBase.clone().addScaledVector(direction, short * 0.54)
         .addScaledVector(UP, 0.025 + random() * 0.072);
@@ -135,90 +142,122 @@ function makeSkeleton(form: TreeForm): { trunk: Stem; limbs: Stem[]; twigs: Stem
       twigs.push({ points: [twigBase, twigMid, twigEnd], radii: [radius * (1 - t * 0.59) * 0.49, radius * 0.19, 0.0014] });
 
       for (const base of [twigMid, twigEnd]) {
-        const fan = limbDirection(angle + (random() - 0.5) * 3.0);
-        const size = 0.74 + random() * 0.56;
-        const tip = base.clone().addScaledVector(fan, size * 0.18).addScaledVector(UP, 0.065 * random());
-        shoots.push({ base, tip, size, shade: 0.58 + base.y * 0.28 + t * 0.30 + random() * 0.16 });
+        const fan = plantDirection(angle + (random() - 0.5) * 3.0);
+        const size = 0.70 + random() * 0.72;
+        const tip = base.clone().addScaledVector(fan, size * 0.19).addScaledVector(UP, (random() - 0.27) * 0.09);
+        shoots.push({ base, tip, size, shade: 0.51 + base.y * 0.26 + t * 0.34 + random() * 0.20 });
+      }
+      if (form === 'buttressed' && j === 2 && i % 3 === 0) {
+        const drop = 0.17 + random() * 0.30;
+        const vine = (u: number) => twigMid.clone().addScaledVector(UP, -u * drop)
+          .addScaledVector(out, 0.05 * Math.sin(u * 4.0))
+          .addScaledVector(lateral, 0.028 * Math.sin(u * 7.0));
+        vines.push({ points: [0, 0.15, 0.34, 0.55, 0.78, 1].map(vine),
+          radii: [0.0058, 0.0048, 0.0042, 0.0036, 0.0027, 0.001] });
       }
     }
     const last = branch(1);
     shoots.push({ base: last, tip: last.clone().addScaledVector(out, 0.19).addScaledVector(UP, 0.04),
       size: 1.12 + random() * 0.32, shade: 0.90 + level * 0.27 });
   }
-  return { trunk, limbs, twigs, shoots };
+  return { trunk, limbs, twigs, vines, shoots };
 }
 
-function addLeaf(surface: Surface, base: THREE.Vector3, tip: THREE.Vector3, normal: THREE.Vector3,
-  halfWidth: number, color: THREE.Color, shade: number, folded: boolean): void {
+function addLeaf(surface: PlantSurface, base: THREE.Vector3, tip: THREE.Vector3, normal: THREE.Vector3,
+  halfWidth: number, color: THREE.Color, shade: number, level: Detail | 'horizon'): void {
   const axis = tip.clone().sub(base);
   const across = new THREE.Vector3().crossVectors(normal, axis).normalize().multiplyScalar(halfWidth);
-  const middle = base.clone().lerp(tip, 0.42);
-  const ridge = surface.point(middle.clone().addScaledVector(normal, halfWidth * 0.34), color, shade * 1.09, 0.5, 0.42);
-  const left = surface.point(middle.clone().add(across), color, shade * 0.90, 0, 0.42);
-  const right = surface.point(middle.clone().sub(across), color, shade, 1, 0.42);
   const a = surface.point(base, color, shade * 0.85, 0.5, 0);
   const b = surface.point(tip, color, shade * 1.12, 0.5, 1);
-  if (folded) {
-    const heel = base.clone().lerp(tip, 0.19);
-    const heelLeft = surface.point(heel.clone().addScaledVector(across, 0.61), color, shade * 0.92, 0.195, 0.19);
-    const heelRight = surface.point(heel.clone().addScaledVector(across, -0.62), color, shade * 0.96, 0.81, 0.19);
-    const shoulder = base.clone().lerp(tip, 0.69).addScaledVector(normal, -halfWidth * 0.24);
-    const tipLeft = surface.point(shoulder.clone().addScaledVector(across, 0.73), color, shade * 0.98, 0.135, 0.69);
-    const tipRight = surface.point(shoulder.clone().addScaledVector(across, -0.68), color, shade * 1.03, 0.84, 0.69);
-    const outline = [a, heelRight, right, tipRight, b, tipLeft, left, heelLeft];
-    for (let i = 0; i < outline.length; i += 1) {
-      surface.triangle(ridge, outline[i], outline[(i + 1) % outline.length]);
-    }
-  } else {
+  if (level === 'distant' || level === 'horizon') {
+    const middle = base.clone().lerp(tip, 0.45);
+    const ridge = surface.point(middle.clone().addScaledVector(normal, halfWidth * 0.29), color, shade * 1.08, 0.5, 0.45);
+    const left = surface.point(middle.clone().add(across), color, shade * 0.93, 0, 0.45);
+    const right = surface.point(middle.clone().sub(across), color, shade, 1, 0.45);
     surface.triangle(a, ridge, left);
     surface.triangle(a, right, ridge);
     surface.triangle(left, ridge, b);
     surface.triangle(ridge, right, b);
+    return;
   }
+
+  // The midrib arches through the whole blade and the shoulders roll down gently into its edge.
+  const steps = level === 'near' ? [0.13, 0.28, 0.47, 0.65, 0.82] : [0.26, 0.54, 0.77];
+  const curl = Math.sin(base.x * 35.8 + tip.z * 58.1);
+  let previousLeft = a;
+  let previousCenter = a;
+  let previousRight = a;
+  for (const t of steps) {
+    const width = Math.sin(t ** 0.84 * Math.PI) ** 0.83;
+    const bow = base.clone().lerp(tip, t).addScaledVector(normal, halfWidth * 0.42 * Math.sin(t * Math.PI))
+      .addScaledVector(across, t * (1 - t) * curl * 0.17);
+    const tint = shade * (0.84 + t * 0.33);
+    const center = surface.point(bow, color, tint * 1.07, 0.5, t);
+    const edge = (sign: number) => bow.clone().addScaledVector(across, sign * width * (1 + curl * sign * 0.09))
+      .addScaledVector(normal, halfWidth * width * (-0.27 + sign * curl * t * 0.31));
+    const left = surface.point(edge(1), color, tint * 0.95, 0, t);
+    const right = surface.point(edge(-1), color, tint, 1, t);
+    surface.triangle(previousLeft, center, left);
+    surface.triangle(previousRight, right, center);
+    if (previousCenter !== a) {
+      surface.triangle(previousLeft, previousCenter, center);
+      surface.triangle(previousRight, center, previousCenter);
+    }
+    previousLeft = left;
+    previousCenter = center;
+    previousRight = right;
+  }
+  surface.triangle(previousLeft, previousCenter, b);
+  surface.triangle(previousCenter, previousRight, b);
 }
 
 function createTreeDetail(form: TreeForm, skeleton: ReturnType<typeof makeSkeleton>, detail: Detail) {
   const profile = treeProfiles[form];
-  const wood = new Surface();
-  const leaves = new Surface(true);
+  const wood = new PlantSurface();
+  const leaves = new PlantSurface(true);
   const bark = new THREE.Color(profile.bark);
   const leafColor = new THREE.Color(profile.leaf);
   const near = detail === 'near';
+  const distant = detail === 'distant';
+  const trunkSteps = distant ? [0, 4, 7, 10] : [0, 2, 4, 6, 8, 10];
   const trunk = near ? skeleton.trunk : {
-    points: skeleton.trunk.points.filter((_, i) => i % 2 === 0),
-    radii: skeleton.trunk.radii.filter((_, i) => i % 2 === 0),
+    points: trunkSteps.map(i => skeleton.trunk.points[i]),
+    radii: trunkSteps.map(i => skeleton.trunk.radii[i]),
   };
-  addStem(wood, trunk, bark, near ? 10 : 5, 0.3);
+  addStem(wood, trunk, bark, near ? 12 : distant ? 4 : 7, 0.3);
   skeleton.limbs.forEach((limb, i) => addStem(wood, near ? limb : {
     points: [limb.points[0], limb.points[2], limb.points[4]],
     radii: [limb.radii[0], limb.radii[2], limb.radii[4]],
-  }, bark, near ? 7 : 3, i * 1.43));
+  }, bark, near ? 7 : 4, i * 1.43));
   if (near) {
     skeleton.twigs.forEach((twig, i) => addStem(wood, twig, bark, 4, i * 2.7));
+    skeleton.vines.forEach((vine, i) => addStem(wood, vine, bark, 4, i * 3.37, 0.68));
   }
 
   const random = coastRandom(profile.seed + 3170);
-  for (const shoot of skeleton.shoots) {
+  for (let index = 0; index < skeleton.shoots.length; index += 1) {
+    const shoot = skeleton.shoots[index];
     const direction = shoot.tip.clone().sub(shoot.base).setY(0).normalize();
     const lateral = new THREE.Vector3().crossVectors(UP, direction);
-    const leavesPerShoot = 6;
+    const leavesPerShoot = 7;
     for (let leaf = 0; leaf < leavesPerShoot; leaf += 1) {
       const t = (leaf + 1) / leavesPerShoot;
       const sign = leaf % 2 === 0 ? -1 : 1;
-      const blade = profile.blade * shoot.size * (1.24 - t * 0.50) * (0.58 + random() * 0.78);
+      const blade = profile.blade * shoot.size * (1.24 - t * 0.50) * (0.59 + random() * 0.61);
       const width = blade * (profile.halfWidth + random() * 0.07);
       const fanning = sign * (0.47 + random() * 0.47);
       const rise = (random() - 0.48) * 0.85;
       const shade = shoot.shade * (0.84 + random() * 0.32);
       const twist = (random() - 0.5) * 1.46;
-      if (!near && leaf !== 0 && leaf !== 3) continue;
-      const scale = near ? 1 : 1.76;
+      if (distant && (index % 2 !== 0 || (leaf !== 0 && leaf !== 3))) continue;
+      if (!distant && !near && leaf !== 0 && leaf !== 2 && leaf !== 5) continue;
+      const scale = near ? 0.73 : distant ? 1.92 : 1.07;
       const base = shoot.base.clone().lerp(shoot.tip, t);
       const tip = base.clone().addScaledVector(lateral, blade * fanning * scale)
         .addScaledVector(direction, blade * (1.02 - Math.abs(fanning) * 0.62) * scale)
         .addScaledVector(UP, blade * rise);
       const normal = UP.clone().applyAxisAngle(tip.clone().sub(base).normalize(), twist);
-      addLeaf(leaves, base, tip, normal, width * scale, leafColor, shade, near);
+      addLeaf(leaves, base, tip, normal, width * scale * (distant ? 1.51 : 1.02), leafColor, shade, detail);
     }
     if (near) {
       addStem(wood, { points: [shoot.base, shoot.tip], radii: [0.003, 0.0008] }, bark, 3, 0);
@@ -229,14 +268,14 @@ function createTreeDetail(form: TreeForm, skeleton: ReturnType<typeof makeSkelet
 
 export function createCoastTreeMeshes(form: TreeForm) {
   const skeleton = makeSkeleton(form);
-  return (['near', 'middle'] as const).map(detail => createTreeDetail(form, skeleton, detail));
+  return (['near', 'middle', 'distant'] as const).map(detail => createTreeDetail(form, skeleton, detail));
 }
 
-// At long range the leaf fans still have depth and gaps, with one folded blade for a whole shoot.
-export function createDistantCoastTreeMesh(): THREE.BufferGeometry {
+// The skyline keeps an uneven, porous crown while distant tiles use one material and one draw.
+export function createHorizonTreeMesh(): THREE.BufferGeometry {
   const form = 'spreading';
   const { trunk, limbs, shoots } = makeSkeleton(form);
-  const surface = new Surface();
+  const surface = new PlantSurface();
   const bark = new THREE.Color(treeProfiles[form].bark);
   const leaf = new THREE.Color(treeProfiles[form].leaf);
   const indices = [0, 3, 7, 10];
@@ -245,17 +284,11 @@ export function createDistantCoastTreeMesh(): THREE.BufferGeometry {
     addStem(surface, { points: [limb.points[0], limb.points[4]], radii: [limb.radii[0], limb.radii[4]] }, bark, 3, 0.4);
   }
   shoots.forEach((shoot, index) => {
-    if (index % 2 > 0) return;
+    if (index % 3 !== 0) return;
     const axis = shoot.tip.clone().sub(shoot.base).normalize();
-    const middle = shoot.base.clone().addScaledVector(axis, 0.20 * shoot.size);
-    const width = new THREE.Vector3().crossVectors(UP, axis).multiplyScalar(0.18 * shoot.size);
-    const tip = shoot.base.clone().addScaledVector(axis, 0.43 * shoot.size).addScaledVector(UP, 0.035);
-    const a = surface.point(shoot.base, leaf, shoot.shade * 0.75);
-    const b = surface.point(middle.clone().add(width), leaf, shoot.shade);
-    const c = surface.point(tip, leaf, shoot.shade * 1.08);
-    const d = surface.point(middle.clone().sub(width).addScaledVector(UP, 0.09), leaf, shoot.shade * 0.92);
-    surface.triangle(a, b, c);
-    surface.triangle(a, c, d);
+    const normal = UP.clone().applyAxisAngle(axis, Math.sin(index * 2.39) * 1.08);
+    const tip = shoot.base.clone().addScaledVector(axis, 0.41 * shoot.size);
+    addLeaf(surface, shoot.base, tip, normal, 0.185 * shoot.size, leaf, shoot.shade, 'horizon');
   });
   return surface.geometry();
 }
@@ -263,24 +296,29 @@ export function createDistantCoastTreeMesh(): THREE.BufferGeometry {
 type RootPlacement = { x: number; y: number; z: number; width: number; height: number; yaw: number; form: TreeForm };
 
 export function createCoastRoots(trees: RootPlacement[], origin: THREE.Vector3): THREE.BufferGeometry {
-  const surface = new Surface();
+  const surface = new PlantSurface();
   const bark = new THREE.Color();
   for (const tree of trees) {
     const profile = treeProfiles[tree.form];
     bark.setHex(profile.bark);
-    for (let root = 0; root < 4; root += 1) {
+    if (tree.form === 'sapling') continue;
+    const large = tree.form === 'buttressed';
+    const rootCount = large ? 6 : 4;
+    const steps = large ? 5 : 4;
+    for (let root = 0; root < rootCount; root += 1) {
       const angle = tree.yaw + root * GOLDEN_ANGLE;
-      const length = tree.width * (0.22 + 0.19 * Math.sin(root * 9.1 + tree.yaw) ** 2);
+      const sinuosity = Math.sin(root * 9.1 + tree.yaw);
+      const length = tree.width * ((large ? 0.39 : 0.24) + 0.23 * sinuosity ** 2);
       const ribs: number[][] = [];
       const width = profile.trunk * tree.width;
-      for (let step = 0; step < 4; step += 1) {
-        const t = step / 3;
-        const heading = angle + t * 0.24;
+      for (let step = 0; step < steps; step += 1) {
+        const t = step / (steps - 1);
+        const heading = angle + t * 0.38 * sinuosity;
         const x = tree.x + Math.cos(heading) * length * t;
         const z = tree.z + Math.sin(heading) * length * t;
-        const spread = width * (0.52 * (1 - t) + 0.03);
-        const relief = step === 0 ? tree.y + tree.height * 0.14
-          : groundHeight(x, z) + tree.height * 0.077 * (1 - t) ** 2 - 0.36 * t * t;
+        const spread = width * (0.56 * (1 - t) + 0.03);
+        const relief = step === 0 ? tree.y + tree.height * (large ? 0.19 : 0.12)
+          : groundHeight(x, z) + tree.height * (large ? 0.105 : 0.061) * (1 - t) ** 1.9 - 0.22 * t * t;
         const crest = new THREE.Vector3(x, relief, z).sub(origin);
         const side = (sign: number) => {
           const leftX = x + sign * Math.sin(heading) * spread;

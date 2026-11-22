@@ -38,14 +38,14 @@ export class CoastApp {
     const canvas = this.renderer.domElement;
     canvas.className = 'coast-view';
     canvas.tabIndex = 0;
-    canvas.setAttribute('aria-label', '海岸の探索画面');
+    canvas.setAttribute('aria-label', '海岸と密林の探索画面');
 
     const ui = document.createElement('div');
     ui.className = 'coast-ui';
     ui.innerHTML = `
       <header class="coast-header">
         <div class="coast-title">
-          <h1>海岸探索</h1>
+          <h1>自然景観探索</h1>
           <span class="coast-mode">歩行</span>
         </div>
         <a class="coast-legacy" href="?scene=expedition">従来のゲームへ <span aria-hidden="true">↗</span></a>
@@ -59,13 +59,16 @@ export class CoastApp {
           </div>
           <details>
             <summary>操作方法</summary>
+            <p>浜を背にして林へ進むと、沢と岩間に分かれます。</p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
-            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
+            <p><kbd>Space</kbd> ジャンプ</p>
+            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
-              <p><kbd>Y</kbd> 歩行／飛行 <span class="coast-divider">·</span> <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
+              <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
+              <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
             </details>
           </details>
           <p class="coast-lock-message" role="status" hidden></p>
@@ -73,8 +76,8 @@ export class CoastApp {
         <section class="coast-panel coast-settings" aria-label="描画と音">
           <div class="coast-row" role="group" aria-label="描画品質">
             <span class="coast-label">描画</span>
-            <button type="button" class="coast-light" aria-pressed="true">軽量</button>
-            <button type="button" class="coast-high" aria-pressed="false">高品質</button>
+            <button type="button" class="coast-light" aria-pressed="true" title="広域の影と軽い植生描画">軽量</button>
+            <button type="button" class="coast-high" aria-pressed="false" title="細かな木漏れ日、地表の凹凸と手前の下草">高品質</button>
           </div>
           <div class="coast-row coast-sound">
             <button type="button" class="coast-audio">環境音を開始</button>
@@ -196,6 +199,7 @@ export class CoastApp {
     this.resize.disconnect();
     this.controls.dispose();
     this.audio.dispose();
+    this.world.dispose();
     this.renderer.dispose();
   };
 }

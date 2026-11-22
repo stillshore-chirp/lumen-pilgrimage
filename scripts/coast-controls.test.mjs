@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera } from 'three';
-import { COAST_WALKS, groundHeight, SEA_LEVEL, SPAWN } from '../src/coast/terrain.ts';
+import { COAST_WALKS, FOREST_WALKS, groundHeight, SEA_LEVEL, SPAWN } from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
 // Vite resolves the extensionless terrain import in the app. Resolve that same file in the Node test.
@@ -132,6 +132,93 @@ test('low flight meets a cliff without snapping the camera upward', () => {
   }
 });
 
+test('a diagonal at the edge of the east trail slides along the traversable axis', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const x = 133;
+    const z = -13;
+    camera.position.set(x, groundHeight(x, z) + 1.65, z);
+    camera.rotation.set(0, 0, 0);
+    for (const code of ['KeyW', 'KeyA']) browser.window.dispatch('keydown', { target: browser.canvas, code });
+    controls.update(0.015);
+    assert.ok(Math.hypot(camera.position.x - x, camera.position.z - z) > 0.04,
+      'a diagonal input stalled even though part of the movement was walkable');
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('a steep descent can be entered and lands at the surface', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const x = 115;
+    const z = -6;
+    camera.position.set(x, groundHeight(x, z) + 1.65, z);
+    camera.rotation.set(0, 0, 0);
+    for (const code of ['KeyW', 'KeyA']) browser.window.dispatch('keydown', { target: browser.canvas, code });
+    controls.update(0.015);
+    assert.ok(camera.position.x < x - 0.04 && camera.position.z < z - 0.04);
+    for (const code of ['KeyW', 'KeyA']) browser.window.dispatch('keyup', { code });
+    for (let frame = 0; frame < 30; frame += 1) controls.update(0.05);
+    assert.ok(Math.abs(camera.position.y - groundHeight(camera.position.x, camera.position.z) - 1.65) < 1e-6);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('Space jumps once per press, lands, and works again after releasing', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const startY = camera.position.y;
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
+    let apex = startY;
+    for (let frame = 0; frame < 120; frame += 1) {
+      browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space', repeat: true });
+      controls.update(1 / 60);
+      apex = Math.max(apex, camera.position.y);
+      if (frame > 55) assert.ok(Math.abs(camera.position.y - startY) < 1e-6, 'held Space triggered another jump');
+    }
+    assert.ok(apex - startY > 1.0 && apex - startY < 1.5, `jump height: ${apex - startY}`);
+    browser.window.dispatch('keyup', { code: 'Space' });
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
+    controls.update(1 / 60);
+    assert.ok(camera.position.y > startY + 0.08);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('gamepad A jumps on land and Space does not lift a swimmer out of deep water', () => {
+  const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
+  const browser = createBrowser([{ connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons }]);
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const startY = camera.position.y;
+    buttons[0] = { pressed: true, value: 1 };
+    controls.update(1 / 60);
+    assert.ok(camera.position.y > startY + 0.08);
+    buttons[0] = { pressed: false, value: 0 };
+    camera.position.set(30, 0.63, -10);
+    for (let frame = 0; frame < 25; frame += 1) controls.update(0.05);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
+    controls.update(0.05);
+    assert.ok(Math.abs(camera.position.y - 0.63) < 1e-6);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
 test('gamepad Y toggles on press edges and does not trigger while focus is lost', () => {
   const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
   const gamepad = { connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons };
@@ -231,30 +318,49 @@ test('dry land, open water and free flight use the faster travel speeds', () => 
   }
 });
 
-test('the main walking controls can complete both coastal circuits without flying', () => {
+test('the main walking controls complete the coastal and forest paths without flying', () => {
   const browser = createBrowser();
   const camera = new PerspectiveCamera();
   const modes = [];
   const controls = createControls(browser, camera, { onMovementChange: mode => modes.push(mode) });
+  const walkThrough = (id, points) => {
+    for (const point of points) {
+      for (let frame = 0; frame < 48; frame += 1) {
+        const dx = point.x - camera.position.x;
+        const dz = point.z - camera.position.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance < 0.035) break;
+        camera.rotation.set(0, Math.atan2(-dx, -dz), 0);
+        controls.update(Math.min(0.05, distance / 6.4));
+      }
+      assert.ok(Math.hypot(point.x-camera.position.x, point.z-camera.position.z) < 0.08,
+        `${id} trail is blocked near (${Math.round(point.x)}, ${Math.round(point.z)})`);
+    }
+  };
   try {
     browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW' });
+    const [approach, ravine, ford, headwater] = FOREST_WALKS;
+    const entrance = approach.points[0];
+    const coastAccess = [...COAST_WALKS[0].points].reverse();
+    const startOfForest = coastAccess.findIndex(point => Math.hypot(point.x - entrance.x, point.z - entrance.z) < 0.08);
+    assert.ok(startOfForest > 0);
+    walkThrough('beach to forest', coastAccess.slice(0, startOfForest + 1));
+    walkThrough(approach.id, approach.points);
+    walkThrough(ravine.id, ravine.points);
+    walkThrough(ford.id, [...ford.points].reverse());
+    const creekFork = headwater.points[0];
+    walkThrough('fork to headwater', ford.points.slice(0,
+      ford.points.findIndex(point => Math.hypot(point.x - creekFork.x, point.z - creekFork.z) < 0.08) + 1));
+    walkThrough(headwater.id, headwater.points);
+
     for (const { id, points } of COAST_WALKS) {
       const start = points[0];
       camera.position.set(start.x, groundHeight(start.x, start.z) + 1.65, start.z);
-      for (const point of points.slice(1)) {
-        for (let frame = 0; frame < 16; frame += 1) {
-          const dx = point.x - camera.position.x;
-          const dz = point.z - camera.position.z;
-          const distance = Math.hypot(dx, dz);
-          if (distance < 0.035) break;
-          camera.rotation.set(0, Math.atan2(-dx, -dz), 0);
-          controls.update(Math.min(0.05, distance / 6.4));
-        }
-        assert.ok(Math.hypot(point.x-camera.position.x, point.z-camera.position.z) < 0.08,
-          `${id} trail is blocked near (${Math.round(point.x)}, ${Math.round(point.z)})`);
-      }
+      walkThrough(id, points.slice(1));
     }
-    assert.deepEqual(modes, []);
+    assert.ok(modes.includes('wade'), 'the forest ford did not enter shallow water');
+    assert.equal(modes.at(-1), 'walk');
+    assert.ok(modes.every(mode => mode === 'walk' || mode === 'wade'));
   } finally {
     controls.dispose();
     browser.cleanup();
