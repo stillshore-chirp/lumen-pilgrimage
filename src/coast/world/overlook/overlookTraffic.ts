@@ -4,27 +4,69 @@ import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { seededDetail } from './overlookModel';
 
 type HeightAt = (x: number, z: number) => number;
-type RoadPlan = { halfWidth: number; speed: number; waypoints: Array<[number, number]>; overpass?: boolean };
+type RoadPlan = {
+  halfWidth: number;
+  speed: number;
+  waypoints: Array<[number, number]>;
+  lanes?: 2;
+  soundWeight?: number;
+};
 
 const roadPlans: RoadPlan[] = [
   // Valley approach to the central business district.
-  { halfWidth: 36, speed: 41, waypoints: [
-    [70, -1000], [215, -1320], [475, -1660], [710, -2000], [930, -2250], [1120, -2680],
+  { halfWidth: 36, speed: 34, soundWeight: 1.2, waypoints: [
+    [-110, -525], [-40, -755], [70, -1000], [215, -1320], [475, -1660], [710, -2000], [930, -2250], [1120, -2680],
     [1210, -3060], [1300, -3330], [1470, -3610], [1550, -3980], [1780, -4340], [2190, -4640],
     [2440, -5150], [2580, -5490], [2950, -5940], [3490, -6370], [3740, -7000], [3970, -7480],
     [4560, -8400], [5400, -8950],
   ] },
   // A long arterial leads through the eastern grid toward the far edge of the basin.
-  { halfWidth: 23, speed: 30, waypoints: [
-    [1680, -1140], [2340, -1620], [3190, -2210], [4290, -2980], [5460, -3810], [6550, -4570],
+  { halfWidth: 23, speed: 30, soundWeight: 0.8, waypoints: [
+    [664, -522], [930, -695], [1290, -900], [1680, -1140], [2340, -1620], [3190, -2210], [4290, -2980], [5460, -3810], [6550, -4570],
     [7770, -5410], [8860, -6190], [10070, -7010], [11220, -7810], [12380, -8620],
   ] },
   // Cross-town viaduct passes over the valley approach and continues behind the skyline.
-  { halfWidth: 26, speed: 33, overpass: true, waypoints: [
+  { halfWidth: 26, speed: 30, soundWeight: 1.05, waypoints: [
     [-2300, -1790], [-1480, -2080], [-840, -2200], [-160, -2370], [410, -2560], [680, -2750],
     [805, -3060], [890, -3340], [1020, -3760], [1240, -4060], [1580, -4380], [1780, -4590],
     [2080, -4770], [2500, -4850], [2930, -4930], [3530, -5160], [4200, -5560], [5120, -6090],
     [6060, -6430], [8130, -6550], [9300, -6870],
+  ] },
+  // Western valley road, running south from the lower foothills.
+  { halfWidth: 18, speed: 23, lanes: 2, soundWeight: 0.85, waypoints: [
+    [-721, -520], [-725, -750], [-680, -1210], [-610, -1640], [-655, -2260], [-700, -2850], [-850, -3350], [-1150, -4300],
+    [-1450, -5120], [-1660, -6020], [-1720, -6880], [-1920, -7630], [-2190, -8380], [-2370, -9660],
+  ] },
+  // Inner western distributor follows the gentler ground between the valley roads.
+  { halfWidth: 17, speed: 21, lanes: 2, soundWeight: 0.75, waypoints: [
+    [-225, -510], [-205, -800], [-235, -1330], [-250, -1860], [-170, -2340], [70, -2790], [230, -3290], [410, -3760],
+    [410, -4230], [620, -4850], [1010, -5600], [1440, -6190], [1580, -6800], [1510, -7620], [1830, -8860],
+  ] },
+  // The inner eastern bypass skirts the central ridges in a series of long bends.
+  { halfWidth: 22, speed: 26, soundWeight: 0.95, waypoints: [
+    [302, -509], [520, -860], [710, -1130], [940, -1430], [1110, -1740], [1530, -2250], [1620, -2610], [1920, -3190], [2150, -3520],
+    [2410, -3900], [2740, -4530], [2890, -4860], [3140, -5400], [3440, -5840], [3880, -6370],
+    [4310, -7130], [4630, -7780], [5090, -8340], [5570, -8780], [6070, -9590],
+  ] },
+  // Eastern distributor between the wide arterial and the inner bypass.
+  { halfWidth: 19, speed: 25, lanes: 2, soundWeight: 0.8, waypoints: [
+    [557, -543], [980, -850], [1300, -1150], [1660, -1490], [1890, -1880], [2080, -2300], [2250, -2710],
+    [2400, -2900], [2770, -3280], [3210, -3450], [3680, -3500], [4070, -3620],
+    [4290, -3820], [4540, -4190], [4950, -4690], [5690, -5180], [6350, -5640], [6800, -6100],
+    [7260, -6620], [7950, -7170], [8270, -7650], [8940, -8080],
+  ] },
+  // A cross-basin belt links the foothill roads before the principal skyline.
+  { halfWidth: 23, speed: 28, soundWeight: 1.05, waypoints: [
+    [-3340, -3610], [-2210, -3650], [-1350, -3500], [-570, -3460], [210, -3480], [810, -3510],
+    [1540, -3590], [2190, -3890], [2920, -4140], [3450, -4290], [3980, -4310], [4650, -4350],
+    [5250, -4530], [5750, -4740], [6040, -5090], [6510, -5190], [6830, -5190], [7030, -4990], [7140, -4720],
+    [7460, -4570], [8340, -4800],
+  ] },
+  // A second transverse route emerges beyond the skyline between the far districts.
+  { halfWidth: 20, speed: 26, lanes: 2, waypoints: [
+    [-3700, -7570], [-2650, -7480], [-1590, -7520], [-570, -7470], [390, -7230], [1200, -7310],
+    [1850, -7520], [2520, -7870], [3220, -8090], [3980, -8050], [4700, -7900], [5350, -7870],
+    [6060, -8090], [6810, -8440], [7810, -8780], [8990, -9070], [10100, -9440],
   ] },
 ];
 
@@ -32,7 +74,7 @@ function createCenterline(plan: RoadPlan) {
   const curve = new THREE.CatmullRomCurve3(plan.waypoints.map(([x, z]) => new THREE.Vector3(x, 0, z)));
   curve.arcLengthDivisions = 80 * plan.waypoints.length;
   const length = curve.getLength();
-  const count = Math.ceil(length / 14);
+  const count = Math.ceil(length / 18);
   const centers = curve.getSpacedPoints(count);
   const lastIndex = centers.length - 1;
   const frames = centers.map((center, i) => {
@@ -90,16 +132,37 @@ export function isOverlookRoadway(x: number, z: number, padding = 0): boolean {
   return intersectsRoad(x, z, padding);
 }
 
-function gradeRoad(road: Centerline, heightAt: HeightAt): Road {
+function clearanceAt(x: number, z: number, halfWidth: number, earlierRoads: ReadonlyMap<Centerline, Road>): number {
+  let height = -Infinity;
+  for (let column = Math.floor((x - halfWidth) / cellSize); column <= Math.floor((x + halfWidth) / cellSize); column += 1) {
+    for (let row = Math.floor((z - halfWidth) / cellSize); row <= Math.floor((z + halfWidth) / cellSize); row += 1) {
+      const segments = roadCells.get(`${column}:${row}`);
+      if (!segments) continue;
+      for (const { road, i } of segments) {
+        const lower = earlierRoads.get(road);
+        if (!lower) continue;
+        const a = road.frames[i], b = road.frames[i + 1];
+        const dx = b.x - a.x, dz = b.z - a.z;
+        const along = THREE.MathUtils.clamp(((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz), 0, 1);
+        const width = road.plan.halfWidth + halfWidth;
+        if ((x - a.x - along * dx) ** 2 + (z - a.z - along * dz) ** 2 <= width * width) {
+          const deck = THREE.MathUtils.lerp(lower.heights[i], lower.heights[i + 1], along);
+          height = Math.max(height, deck + 17);
+        }
+      }
+    }
+  }
+  return height;
+}
+
+function gradeRoad(road: Centerline, heightAt: HeightAt, earlierRoads: ReadonlyMap<Centerline, Road>): Road {
   const { plan, frames, step } = road;
   const heights = Float32Array.from(frames, ({ x, z, nx, nz }) => {
     const shoulder = plan.halfWidth * 0.54;
     const ground = Math.max(heightAt(x, z), heightAt(x + nx * shoulder, z + nz * shoulder),
       heightAt(x - nx * shoulder, z - nz * shoulder),
       heightAt(x + nx * plan.halfWidth, z + nz * plan.halfWidth), heightAt(x - nx * plan.halfWidth, z - nz * plan.halfWidth));
-    const intersection = Math.hypot(x - 2280, z + 4810);
-    const bridge = plan.overpass ? 24 * (1 - THREE.MathUtils.smoothstep(intersection, 120, 490)) : 0;
-    return ground + 3.6 + bridge;
+    return Math.max(ground + 3.6, clearanceAt(x, z, plan.halfWidth, earlierRoads));
   });
   // Lift the road out of hollows with a continuous grade between terrain sample peaks.
   const grade = 0.058 * step;
@@ -131,15 +194,23 @@ const lampSpacing = 78;
 
 function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
   const positions: number[] = [], uv: number[] = [], indices: number[] = [];
-  const walls: number[] = [];
-  const columns = [-1, -0.48, 0, 0.48, 1];
+  const laneStyles: number[] = [];
+  const walls: number[] = [], wallIndices: number[] = [];
+  const columns = [-1, 0, 1];
   for (const { plan, frames, heights, step } of roads) {
     const base = positions.length / 3;
+    const wallBase = walls.length / 3;
     for (const [i, { x, z, nx, nz }] of frames.entries()) {
       for (const fraction of columns) {
         const offset = fraction * plan.halfWidth;
         positions.push(x + nx * offset, heights[i] + 0.42 * (1 - Math.abs(fraction)), z + nz * offset);
         uv.push(fraction, i * step);
+        laneStyles.push(Number(plan.lanes === 2));
+      }
+      for (const side of [-1, 1]) {
+        const offset = side * plan.halfWidth;
+        walls.push(x + nx * offset, heights[i] + 0.7, z + nz * offset,
+          x + nx * offset, heights[i] - 3.1, z + nz * offset);
       }
       if (i === 0) continue;
       const stride = columns.length;
@@ -147,19 +218,14 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
         const a = base + (i - 1) * stride + c, b = a + stride;
         indices.push(a, a + 1, b, b, a + 1, b + 1);
       }
-      for (const [column, side] of [[0, -1], [stride - 1, 1]]) {
-        const a = (base + (i - 1) * stride + column) * 3, b = a + stride * 3;
-        const first = side > 0 ? a : b, last = side > 0 ? b : a;
-        const [ax, ay, az] = positions.slice(first, first + 3);
-        const [bx, by, bz] = positions.slice(last, last + 3);
-        walls.push(ax, ay + 0.7, az, ax, ay - 3.1, az, bx, by - 3.1, bz,
-          ax, ay + 0.7, az, bx, by - 3.1, bz, bx, by + 0.7, bz);
-      }
+      const a = wallBase + (i - 1) * 4, b = a + 4;
+      wallIndices.push(b, b + 1, a + 1, b, a + 1, a, a + 2, a + 3, b + 3, a + 2, b + 3, b + 2);
     }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geometry.setAttribute('laneStyle', new THREE.Float32BufferAttribute(laneStyles, 1));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
@@ -167,12 +233,16 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
   const material = new THREE.MeshStandardMaterial({ roughness: 0.87 });
   material.onBeforeCompile = shader => {
     shader.uniforms.uRoadNight = night;
-    shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vTrafficUv;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTrafficUv = uv;');
+    shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
+      attribute float laneStyle;
+      varying vec2 vTrafficUv;
+      varying float vLaneStyle;
+    `).replace('#include <begin_vertex>', '#include <begin_vertex>\nvTrafficUv = uv;\nvLaneStyle = laneStyle;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uRoadNight;
         varying vec2 vTrafficUv;
+        varying float vLaneStyle;
         float paintLine(float center, float width, float feather) {
           float lateral = abs(vTrafficUv.x) - center;
           return smoothstep(-width - feather, -width + feather, lateral)
@@ -183,7 +253,7 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
         float lateral = abs(vTrafficUv.x);
         float chainage = vTrafficUv.y;
         float feather = max(0.008, fwidth(vTrafficUv.x) * 0.45);
-        vec3 asphalt = vec3(0.081, 0.088, 0.092) * (0.95 + 0.05 * sin(chainage * 0.17));
+        vec3 asphalt = vec3(0.062, 0.069, 0.075) * (0.95 + 0.05 * sin(chainage * 0.17));
         vec3 shoulder = vec3(0.18, 0.16, 0.126);
         diffuseColor.rgb = mix(asphalt, shoulder, smoothstep(0.83, 0.97, lateral));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.115, 0.113, 0.08), 1.0 - smoothstep(0.06, 0.102, lateral));
@@ -192,6 +262,7 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
         float edge = paintLine(0.79, 0.011, feather) * 0.67;
         float median = paintLine(0.116, 0.011, feather) * 0.61;
         float lanes = max(paintLine(0.33, 0.014, feather), paintLine(0.55, 0.014, feather));
+        lanes = mix(lanes, paintLine(0.44, 0.014, feather), vLaneStyle);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.47, 0.49, 0.49), max(edge, lanes * dash * fadeDashes));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.51, 0.36, 0.14), median);
       `)
@@ -201,14 +272,15 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
         float lightAcross = (lateral - 0.68) / 0.34;
         float roadPool = exp(-lightAcross * lightAcross * 1.45 - fromLamp * fromLamp * 12.0);
         float edgeReflection = (lateral - 0.84) * 7.0;
-        float warmReflection = roadPool * 0.19 + exp(-edgeReflection * edgeReflection) * 0.037;
-        totalEmissiveRadiance += uRoadNight * warmReflection * vec3(1.0, 0.41, 0.12);
+        float warmReflection = roadPool * 0.21 + exp(-edgeReflection * edgeReflection) * 0.047;
+        totalEmissiveRadiance += uRoadNight * warmReflection * vec3(1.0, 0.46, 0.17);
       `);
   };
   const surface = new THREE.Mesh(geometry, material);
   surface.name = 'Asphalt, lane markings, and streetlight reflections';
   const wallGeometry = new THREE.BufferGeometry();
   wallGeometry.setAttribute('position', new THREE.Float32BufferAttribute(walls, 3));
+  wallGeometry.setIndex(wallIndices);
   wallGeometry.computeVertexNormals();
   const fascias = new THREE.Mesh(wallGeometry, new THREE.MeshStandardMaterial({ color: 0x918979, roughness: 0.92 }));
   fascias.name = 'Concrete viaduct fascias';
@@ -239,14 +311,14 @@ const lightsVertex = /* glsl */`
     if (vTraffic > 0.5) {
       vec2 facing = (cameraPosition.xz - world.xz) / max(1.0, length(cameraPosition.xz - world.xz));
       vec3 direction = vec3(heading.x, 0.0, heading.y);
-      float visibility = smoothstep(-0.42, 0.38, dot(heading, facing) * (axle < 1.5 ? 1.0 : -1.0));
+      float visibility = smoothstep(-0.51, 0.37, dot(heading, facing) * (axle < 1.5 ? 1.0 : -1.0));
       vec4 ahead = projectionMatrix * viewMatrix * vec4(world + 45.0 * direction, 1.0);
       vec2 motion = ahead.xy / ahead.w - clip.xy / clip.w;
       motion *= vec2(projectionMatrix[1][1] / projectionMatrix[0][0], -1.0);
       vAxis = motion / max(length(motion), 0.00001);
-      vColor = axle < 1.5 ? vec3(1.0, 0.89, 0.66) : vec3(1.0, 0.105, 0.043);
-      vOpacity *= 1.15 * visibility;
-      size = clamp(6.0 + 9900.0 / max(820.0, eyeDistance), 6.5, 13.8);
+      vColor = axle < 1.5 ? vec3(0.96, 0.98, 1.0) : vec3(1.0, 0.049, 0.024);
+      vOpacity *= 1.38 * visibility;
+      size = clamp(5.4 + 10700.0 / max(820.0, eyeDistance), 6.1, 13.2);
     }
     gl_PointSize = size * uPixelFactor;
     gl_Position = clip;
@@ -267,7 +339,7 @@ const lightsFragment = /* glsl */`
     float halo = exp(-22.0 * rad2);
     float tail = exp(-202.0 * tangentSpace.y * tangentSpace.y)
       * smoothstep(-0.47, -0.065, tangentSpace.x) * (1.0 - smoothstep(-0.08, 0.13, tangentSpace.x));
-    float alpha = head * 0.85 + halo * 0.15 + tail * 0.40 * vTraffic;
+    float alpha = head * 0.91 + halo * 0.15 + tail * 0.33 * vTraffic;
     gl_FragColor = vec4(vColor, vOpacity * alpha);
     #include <colorspace_fragment>
   }
@@ -343,16 +415,18 @@ type Vehicle = {
 function createVehicles(roads: Road[], random: () => number) {
   const vehicles: Vehicle[] = [], extra: Vehicle[] = [];
   for (const road of roads) {
+    const lanes = road.plan.lanes === 2 ? [0.28, 0.62] : [0.24, 0.43, 0.64];
+    const spacingByLane = road.plan.lanes === 2 ? [134, 157] : [146, 122, 171];
     for (const direction of [-1, 1]) {
-      for (const fraction of [0.24, 0.43, 0.64]) {
-        const count = Math.floor(road.length / (fraction === 0.43 ? 142 : 186));
+      for (const [lane, fraction] of lanes.entries()) {
+        const count = Math.floor(road.length / spacingByLane[lane]);
         const spacing = road.length / count;
         const speed = road.plan.speed * direction * (0.85 + 0.26 * random() + (0.61 - fraction) * 0.23);
         const phase = random() * spacing;
         for (let i = 0; i < count; i += 1) {
           const truck = random() < 0.12;
           const h = truck ? 3.7 : 1.9 + random() * 0.65;
-          const list = fraction === 0.43 && i % 2 === 0 ? extra : vehicles;
+          const list = lane === 1 && i % 2 === 0 ? extra : vehicles;
           list.push({ road, speed, lane: road.plan.halfWidth * fraction * direction, h,
             phase: i * spacing + phase - random() * spacing * 0.74,
             w: truck ? 3.2 : 2.5, length: truck ? 15 + random() * 4 : 5.8 + random() * 2.6,
@@ -364,10 +438,32 @@ function createVehicles(roads: Road[], random: () => number) {
   return { vehicles: vehicles.concat(extra), lightCount: vehicles.length };
 }
 
+type SoundCorridor = {
+  readonly points: readonly { x: number; y: number; z: number }[];
+  readonly weight: number;
+};
+
 export function createOverlookTraffic(heightAt: HeightAt) {
   const group = new THREE.Group();
   group.name = 'Basin expressways and traffic';
-  const graded = roads.map(road => gradeRoad(road, heightAt));
+  // Approaches are graded first. A later road crosses above any earlier deck in its path.
+  const earlierRoads = new Map<Centerline, Road>();
+  const graded = roads.map(road => {
+    const finished = gradeRoad(road, heightAt, earlierRoads);
+    earlierRoads.set(road, finished);
+    return finished;
+  });
+  const soundCorridors: readonly SoundCorridor[] = graded.flatMap(road => {
+    const weight = road.plan.soundWeight;
+    if (weight === undefined) return [];
+    const segments = Math.round(road.length / 285);
+    const sample: RoadPoint = { x: 0, y: 0, z: 0, nx: 0, nz: 0 };
+    const points = Array.from({ length: segments + 1 }, (_, i) => {
+      sampleRoad(road, road.length * (i / segments), sample);
+      return { x: sample.x, y: sample.y + 0.42, z: sample.z };
+    });
+    return [{ points, weight }];
+  });
   const night = { value: 0 };
   const { surface, fascias } = roadwaySurface(graded, night);
   const box = new THREE.BoxGeometry(1, 1, 1);
@@ -398,7 +494,7 @@ export function createOverlookTraffic(heightAt: HeightAt) {
 
   group.add(surface, fascias, poles, bodies, lamps, movingLights);
   const point: RoadPoint = { x: 0, y: 0, z: 0, nx: 0, nz: 0 };
-  const body = new THREE.Object3D();
+  const matrices = bodies.instanceMatrix.array;
   let elapsed = 0;
   function update(time: number): void {
     elapsed = time;
@@ -410,11 +506,16 @@ export function createOverlookTraffic(heightAt: HeightAt) {
       const dx = point.nz * direction, dz = -point.nx * direction;
       const x = point.x + point.nx * car.lane, z = point.z + point.nz * car.lane;
       const y = point.y + 0.42 * (1 - Math.abs(car.lane / car.road.plan.halfWidth));
-      body.position.set(x, y + car.h * 0.5, z);
-      body.rotation.y = Math.atan2(dx, dz);
-      body.scale.set(car.w, car.h, car.length);
-      body.updateMatrix();
-      bodies.setMatrixAt(i, body.matrix);
+      // Write the changing entries of the column-major instance matrix directly.
+      const offset = i * 16;
+      matrices[offset] = dz * car.w;
+      matrices[offset + 2] = -dx * car.w;
+      matrices[offset + 5] = car.h;
+      matrices[offset + 8] = dx * car.length;
+      matrices[offset + 10] = dz * car.length;
+      matrices[offset + 12] = x;
+      matrices[offset + 13] = y + car.h * 0.5;
+      matrices[offset + 14] = z;
       if (night.value === 0) continue;
 
       // Paired vehicle lamps occlude with terrain and are visible according to facing.
@@ -455,7 +556,7 @@ export function createOverlookTraffic(heightAt: HeightAt) {
   setQuality('light');
 
   return {
-    group, update, setTimeOfDay, setQuality,
+    group, soundCorridors, update, setTimeOfDay, setQuality,
     dispose() {
       for (const geometry of [surface.geometry, fascias.geometry, box, lamps.geometry, movingLights.geometry])
         geometry.dispose();
