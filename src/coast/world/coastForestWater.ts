@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FOREST_STREAM, groundHeight } from '../terrain';
+import { FOREST_STREAM, groundHeight, smoothstep } from '../terrain';
 import { coastNoise } from './coastNoise';
 import { coastWaterOptics, STREAM_WATER_SCATTER } from './coastWaterOptics';
 
@@ -12,13 +12,16 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
   let travelled = 0;
 
   function addRow(x: number, y: number, z: number, halfWidth: number, along: number): void {
+    const drop = 1 - smoothstep(0.1, 2.4, Math.abs(x - 86.7));
+    const chuteWidth = (1 - 0.26 * drop) * Math.max(0.025, halfWidth);
     for (let column = 0; column <= across; column += 1) {
       const span = column / across;
-      const bank = z + (span * 2 - 1) * Math.max(0.025, halfWidth);
-      const drop = Math.max(0, 1 - Math.abs((x - 86.7) / 2.2));
-      const pitch = drop * (0.32 * Math.sin(span * 8.4 + x * 0.6) + 0.18 * Math.cos(span * 14.1));
-      positions.push(x, y + 0.018 + pitch, bank);
-      depths.push(Math.max(0, y - groundHeight(x, bank)));
+      const bank = z + (span * 2 - 1) * chuteWidth;
+      const pitch = drop * (0.13 * Math.sin(span * 8.4 + x * 0.6) + 0.054 * Math.cos(span * 18.3)
+        - 0.13 * (span * 2 - 1) ** 2);
+      const level = y + 0.018 + pitch;
+      positions.push(x, level, bank);
+      depths.push(Math.max(0, level - groundHeight(x, bank)));
       uvs.push(along, span);
     }
     const row = depths.length / (across + 1) - 1;
@@ -89,23 +92,27 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
         float resolved = 1.0 - smoothstep(0.5, 3.2, fwidth(moving.x * 15.0));
         float waterHeightDetail = 0.006 * ripples + 0.0005 * thinWaves * resolved;
 
-        vec2 chute = vec2(vStreamUV.x * 1.8 + uForestWaterTime * 6.9, moving.y * 5.4 + ripples * 0.5);
-        float strands = coastNoise(vec2(chute.x * 0.28, chute.y * 1.9));
-        float flecks = coastNoise(chute * vec2(1.24, 1.48));
-        float cascade = smoothstep(0.36, 0.78, strands * 0.67 + flecks * 0.33) * brokenWater;
+        float slide = vStreamUV.x + uForestWaterTime * 7.3;
+        vec2 chute = vec2(slide, moving.y + 0.25 * ripples);
+        float swirls = coastNoise(chute * vec2(1.0, 2.5));
+        float strands = coastNoise(chute * vec2(0.72, 7.2) + swirls * 0.39);
+        float flecks = coastNoise(chute * vec2(4.9, 14.0));
+        float runFoam = smoothstep(0.20, 0.81, swirls * 0.44 + strands * 0.38 + flecks * 0.18);
+        float cascade = (0.17 + 0.83 * runFoam) * brokenWater;
         vec2 fromImpact = (vStreamPoint.xz - vec2(84.85, 297.1)) / vec2(2.68, 1.72);
-        float splash = exp(-dot(fromImpact, fromImpact)) * (0.30 + 0.70 * flecks);
+        float splash = exp(-dot(fromImpact, fromImpact)) * (0.31 + 0.45 * swirls + 0.24 * flecks);
+        float frayed = smoothstep(0.017 + 0.042 * swirls, 0.12 + 0.052 * strands, min(vStreamUV.y, 1.0 - vStreamUV.y));
         float bank = 1.0 - smoothstep(0.08, 0.32, min(vStreamUV.y, 1.0 - vStreamUV.y));
         float coverage = smoothstep(0.015, 0.14, vStreamDepth);
         float trace = 0.14 * bank * smoothstep(0.54, 0.87, coastNoise(moving * vec2(0.98, 6.51)));
-        float foam = clamp(cascade * (0.52 + 0.43 * flecks) + splash * 0.71 + trace, 0.0, 1.0);
+        float foam = clamp(cascade * (0.60 + 0.35 * flecks) + splash * 0.83 + trace, 0.0, 1.0);
         vec3 view = normalize(cameraPosition - vStreamPoint);
-        float fresnel = pow(1.0 - clamp(view.y + (ripples - 0.5) * 0.12, 0.0, 1.0), 4.0);
+        float fresnel = pow(1.0 - clamp(dot(view, normalize(vStreamNormal)) + (ripples - 0.5) * 0.12, 0.0, 1.0), 4.0);
         vec3 bottomTint = mix(vec3(0.08, 0.20, 0.125), vec3(0.017, 0.12, 0.097),
           smoothstep(0.02, 1.05, vStreamDepth));
         vec3 skyTint = mix(vec3(0.10, 0.19, 0.155), vec3(0.36, 0.51, 0.58), ripples * ripples);
         diffuseColor.rgb = mix(mix(bottomTint, skyTint, fresnel), vec3(0.75, 0.88, 0.85), foam);
-        diffuseColor.a *= coverage * min(0.95, 0.19 + 0.51 * fresnel + 0.69 * foam);
+        diffuseColor.a *= coverage * mix(1.0, frayed, brokenWater) * min(0.95, 0.19 + 0.48 * fresnel + 0.74 * foam);
         vec3 streamUnderside = vec3(0.0);
         if (!gl_FrontFacing) {
           vec3 normalToAir = normalize(vStreamNormal + vec3(0.15 * (0.5 - ripples), 0.0, 0.035 * thinWaves * resolved));
@@ -123,7 +130,10 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
           diffuseColor.a = coverage;
         }
       `)
-      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance += vec3(0.19, 0.24, 0.23) * foam * max(brokenWater, splash);
+      `)
+      .replace('#include <normal_fragment_maps>',  `#include <normal_fragment_maps>
         vec3 waterTangentX = dFdx(-vViewPosition);
         vec3 waterTangentY = dFdy(-vViewPosition);
         vec3 waterCrossX = cross(waterTangentY, normal);

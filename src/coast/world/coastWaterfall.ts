@@ -1,20 +1,20 @@
 import * as THREE from 'three';
-import { coastRandom, groundHeight, SEA_LEVEL, type CoastWaterfall } from '../terrain';
+import { coastRandom, coastWaterLevel, groundHeight, type CoastWaterfall } from '../terrain';
 import { coastNoise } from './coastNoise';
 import { createCascadeGeometry, type CascadeImpact } from './coastCascadeGeometry';
 
-const sun = new THREE.Vector3(0.46, 0.70, 0.58).normalize();
+const defaultSun = new THREE.Vector3(0.46, 0.70, 0.58).normalize();
 
-function currentMaterial(time: THREE.IUniform<number>): THREE.ShaderMaterial {
+function currentMaterial(time: THREE.IUniform<number>, sun: THREE.Vector3): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       uTime: time,
       uSun: { value: sun },
-      uWater: { value: new THREE.Color(0x328698) },
-      uWhite: { value: new THREE.Color(0xf1fdfa) },
+      uWater: { value: new THREE.Color(0x43899a) },
+      uWhite: { value: new THREE.Color(0xeaf5f3) },
     },
-    transparent: true, depthWrite: false, fog: true,
+    transparent: true, depthWrite: false, fog: true, side: THREE.DoubleSide, forceSinglePass: true,
     vertexShader: /* glsl */`
       uniform float uTime;
       attribute vec4 aFlow, aWater;
@@ -26,7 +26,7 @@ function currentMaterial(time: THREE.IUniform<number>): THREE.ShaderMaterial {
         vWater = aWater;
         float wave = sin(aFlow.x * 8.0 + aFlow.y * 4.1 - uTime * 8.0 + aWater.w);
         float pulse = sin(aFlow.x * 19.3 - aFlow.y * 6.2 - uTime * 19.3);
-        vec3 point = position + normal * aWater.y * (0.123 * wave + 0.062 * pulse);
+        vec3 point = position + normal * aWater.y * (0.080 * wave + 0.033 * pulse);
         vPoint = (modelMatrix * vec4(point, 1.0)).xyz;
         vNormal = mat3(modelMatrix) * normal;
         vec4 mvPosition = modelViewMatrix * vec4(point, 1.0);
@@ -42,38 +42,39 @@ function currentMaterial(time: THREE.IUniform<number>): THREE.ShaderMaterial {
       #include <fog_pars_fragment>
       ${coastNoise}
       void main() {
-        float clock = vFlow.x - uTime;
-        float offset = vWater.w;
+        float age = vFlow.x - uTime;
         float across = vFlow.y;
-        float cloud = coastNoise(vec2(across * 0.47 + offset, clock * 3.5));
-        float slip = coastNoise(vec2(across * 0.83 - offset, clock * 1.8)) - 0.5;
-        vec2 stream = vec2(across + 0.38 * slip, clock + 0.11 * cloud);
-        float ropes = coastNoise(stream * vec2(2.52, 4.15) + offset);
-        float fibres = coastNoise(stream * vec2(7.3, 10.4) - offset);
-        float beads = coastNoise(stream * vec2(21.0, 36.0) + offset);
-        // Keep the fine droplets from turning into crawling pixels from the beach.
-        beads = mix(beads, 0.5, smoothstep(0.42, 1.12, fwidth(stream.x * 21.0)));
-        float lace = smoothstep(0.30, 0.76, ropes * 0.39 + fibres * 0.29 + beads * 0.19 + cloud * 0.13);
         float air = vWater.y;
-        float lowFall = smoothstep(0.07, 0.75, vFlow.z);
-        float foamFray = smoothstep(0.14, 0.78, ropes * 0.49 + beads * 0.51);
-        float ragged = 0.15 + 0.47 * (1.0 - foamFray) * (0.71 + 0.29 * air);
-        float opacity = (0.52 + 0.43 * lace)
-          * smoothstep(0.035, ragged, vWater.x)
-          * mix(0.79 + 0.20 * beads, 1.0, air) * vFlow.w;
-        opacity *= 1.0 - 0.79 * vWater.z * (1.0 - smoothstep(0.2, 0.86, ropes));
+        float seed = vWater.w;
+        float drift = coastNoise(vec2(across * 0.68 + seed, age * 2.9));
+        float channel = coastNoise(vec2(across * 0.91 + seed * 1.3, vFlow.x * 0.92));
+        vec2 flow = vec2(across + 0.36 * (drift - 0.5) + 0.39 * channel + seed,
+          age + 0.16 * drift + 0.19 * channel);
+        float swirls = coastNoise(flow * vec2(1.80, 3.25));
+        float strands = coastNoise(flow * vec2(5.1, 4.0) + swirls * 0.52);
+        float flecks = coastNoise(flow * vec2(14.5, 18.0) - seed);
+        // Filter the smallest spray detail before its cells become subpixel.
+        float resolution = max(fwidth(flow.x * 14.5), fwidth(flow.y * 18.0));
+        flecks = mix(flecks, 0.5, smoothstep(0.35, 1.5, resolution));
 
-        vec3 eye = normalize(cameraPosition - vPoint);
-        vec3 normal = normalize(vNormal + vec3(0.20 * slip, 0.15 * (fibres - 0.5), -0.21 * slip));
-        float face = 0.47 + 0.53 * max(dot(normal, uSun), 0.0);
-        float fresnel = pow(1.0 - max(dot(normal, eye), 0.0), 3.5);
-        float gleam = pow(max(dot(normal, normalize(eye + uSun)), 0.0), 65.0);
-        float bubbles = smoothstep(0.57, 0.88, beads) * (0.32 + 0.68 * air);
-        float milk = clamp(0.08 + 0.55 * lace + 0.23 * air + 0.13 * lowFall + 0.21 * bubbles
-          + fresnel * 0.16 + vWater.z * 0.11, 0.0, 1.0);
-        vec3 blue = uWater * (0.68 + 0.41 * face + 0.32 * cloud) + vec3(0.055, 0.077, 0.082) * fresnel;
-        vec3 white = uWhite * (0.68 + 0.22 * face + 0.27 * cloud);
-        gl_FragColor = vec4(mix(blue, white, milk) + uWhite * gleam * (0.27 + 0.48 * beads), opacity);
+        float foam = smoothstep(0.26, 0.83, swirls * 0.50 + strands * 0.34 + flecks * 0.16);
+        float turbulence = smoothstep(0.43, 0.83, swirls + flecks * 0.20);
+        float fringe = 1.0 - smoothstep(0.67 + 0.16 * foam, 0.85 + 0.15 * turbulence, vWater.x);
+        float aerated = clamp((0.33 + foam * 0.79) * air + turbulence * 0.15 + foam * 0.13, 0.0, 1.0);
+
+        vec3 view = normalize(cameraPosition - vPoint);
+        vec3 normal = normalize(vNormal + vec3(0.13 * (strands - 0.5), 0.07 * (drift - 0.5), -0.13 * (strands - 0.5)));
+        normal *= gl_FrontFacing ? 1.0 : -1.0;
+        float facing = clamp(dot(normal, view), 0.0, 1.0);
+        float fresnel = 0.026 + 0.974 * pow(1.0 - facing, 5.0);
+        float sky = 0.62 + 0.38 * smoothstep(-0.25, 0.86, reflect(-view, normal).y);
+        float lit = 0.68 + 0.30 * max(dot(normal, uSun), 0.0);
+        float glint = pow(max(dot(normal, normalize(view + uSun)), 0.0), 53.0) * fresnel;
+        vec3 clear = uWater * (0.47 + 0.28 * swirls) + uWhite * fresnel * sky * 0.49;
+        vec3 bubbles = uWhite * (lit * (0.74 + 0.26 * turbulence) + 0.10 * flecks);
+        float opacity = vFlow.w * fringe * (0.29 + 0.59 * aerated + 0.27 * fresnel);
+        opacity *= 1.0 - vWater.z * (0.56 - 0.28 * turbulence) * smoothstep(0.45, 1.0, vWater.x);
+        gl_FragColor = vec4(mix(clear, bubbles, aerated) + uWhite * glint * 0.39, min(0.95, opacity));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
@@ -82,10 +83,11 @@ function currentMaterial(time: THREE.IUniform<number>): THREE.ShaderMaterial {
   });
 }
 
-function impactFoam(fall: CoastWaterfall, time: THREE.IUniform<number>): THREE.Mesh {
-  const { width, impact, direction } = fall;
-  const rows = 40;
-  const cols = 40;
+function impactFoam(fall: CoastWaterfall, width: number, time: THREE.IUniform<number>): THREE.Mesh {
+  const { impact, direction } = fall;
+  const level = coastWaterLevel(impact.x, impact.z);
+  const rows = 24;
+  const cols = 25;
   const geometry = new THREE.PlaneGeometry(1, 1, cols, rows);
   const positions = geometry.attributes.position;
   const samples = new Float32Array(positions.count);
@@ -94,8 +96,8 @@ function impactFoam(fall: CoastWaterfall, time: THREE.IUniform<number>): THREE.M
     const along = (positions.getY(i) * 5.7 + 1.05) * width;
     const x = impact.x + direction.x * along - direction.z * across;
     const z = impact.z + direction.z * along + direction.x * across;
-    positions.setXYZ(i, x, SEA_LEVEL + 0.047, z);
-    samples[i] = Math.max(-2, Math.min(2, SEA_LEVEL - groundHeight(x, z)));
+    positions.setXYZ(i, x, level + 0.064, z);
+    samples[i] = Math.max(-2, Math.min(2, coastWaterLevel(x, z) - groundHeight(x, z)));
   }
   geometry.setAttribute('aDepth', new THREE.BufferAttribute(samples, 1));
   const material = new THREE.ShaderMaterial({
@@ -188,19 +190,19 @@ function billowTexture(): THREE.DataTexture {
   return texture;
 }
 
-function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, mist: boolean): THREE.Mesh {
+function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, sun: THREE.Vector3, mist: boolean): THREE.Mesh {
   const origin: number[] = [];
   const motion: number[] = [];
   const plume: number[] = [];
   const aspect: number[] = [];
   const random = coastRandom(mist ? 180723 : 562911);
-  const floor = (x: number, z: number) => Math.max(SEA_LEVEL, groundHeight(x, z));
+  const floor = (x: number, z: number) => Math.max(coastWaterLevel(x, z), groundHeight(x, z));
   for (const { fall, impact } of inputs) {
     const { width, point, kind } = impact;
     const { x, z } = fall.direction;
     const pool = kind === 'pool';
     const shear = kind === 'shear';
-    const count = (mist ? { pool: 24, ledge: 12, shear: 6 } : { pool: 93, ledge: 31, shear: 11 })[kind];
+    const count = (mist ? { pool: 24, ledge: 9, shear: 5 } : { pool: 80, ledge: 21, shear: 10 })[kind];
     for (let i = 0; i < count; i += 1) {
       const spread = (random() + random() - 1) * width * (mist ? 1.28 : 0.64);
       const along = width * (random() - 0.30) * (mist ? 0.63 : 0.35);
@@ -208,11 +210,11 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, mist: bo
       const pz = point.z + z * along + x * spread;
       const py = Math.max(point.y - 0.38, floor(px, pz)) + (mist ? 0.55 + width * random() * 0.29 : 0.22);
       const sideways = (random() - 0.5) * (mist ? 2.45 : 12.8);
-      const forward = mist ? 1.25 + random() * 2.06 : random() * 10.9 - 2.28;
+      const forward = mist ? 0.56 + random() * 1.48 : random() * 7.1 - 1.45;
       const vx = x * forward - z * sideways;
       const vz = z * forward + x * sideways;
       const vy = shear ? -(mist ? 2.7 + random() * 5.8 : 9.1 + random() * 12.4)
-        : mist ? 0.35 + random() * 1.85 : 3.9 + random() * (pool ? 12.1 : 8.2);
+        : mist ? 0.33 + random() * 1.36 : 2.2 + random() * (pool ? 8.3 : 5.2);
       let life = shear ? 0.63 + random() * 1.06 : mist ? 3.0 + random() * 3.4 : vy * 0.204 + 0.10;
       if (!mist) {
         for (let t = 0.06; t < life; t += 0.06) {
@@ -223,8 +225,8 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, mist: bo
       }
       origin.push(px, py, pz);
       motion.push(vx, vy, vz);
-      const size = mist ? width * (0.48 + random() * 1.42) * (shear ? 0.51 : 1) : 0.075 + random() ** 2 * 0.22;
-      const opacity = mist ? (pool ? 0.33 : shear ? 0.12 : 0.25) * (0.66 + random() * 0.33)
+      const size = mist ? width * (0.44 + random() * 1.12) * (shear ? 0.51 : 1) : 0.044 + random() ** 2 * 0.113;
+      const opacity = mist ? (pool ? 0.27 : shear ? 0.10 : 0.23) * (0.66 + random() * 0.33)
         : 0.52 + random() * 0.43;
       plume.push(life, random(), size, opacity);
       aspect.push(mist ? 1.45 + random() * 0.85 : 2 + random() * 4.0, random() * Math.PI * 2);
@@ -326,22 +328,27 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, mist: bo
   return mesh;
 }
 
-export function createWaterfalls(falls: CoastWaterfall[], time: THREE.IUniform<number>): {
+export function createWaterfalls(
+  falls: CoastWaterfall[], time: THREE.IUniform<number>, sun = defaultSun,
+): {
   group: THREE.Group;
   update: (elapsed: number) => void;
 } {
   const group = new THREE.Group();
   group.name = 'Waterfalls, drifting spray and rainbows';
-  const current = currentMaterial(time);
+  const current = currentMaterial(time, sun);
   const sprays: SprayInputs[] = [];
   for (const [index, fall] of falls.entries()) {
     const { geometry, impacts } = createCascadeGeometry(fall, index);
     const water = new THREE.Mesh(geometry, current);
     water.name = 'Feeder runs and falling currents';
     water.renderOrder = 1;
-    group.add(water, impactFoam(fall, time));
-    for (const impact of impacts) sprays.push({ fall, impact });
+    group.add(water);
+    for (const impact of impacts) {
+      if (impact.kind === 'pool') group.add(impactFoam(fall, impact.width, time));
+      sprays.push({ fall, impact });
+    }
   }
-  group.add(sprayMesh(sprays, time, false), sprayMesh(sprays, time, true));
+  group.add(sprayMesh(sprays, time, sun, false), sprayMesh(sprays, time, sun, true));
   return { group, update: elapsed => { time.value = elapsed; } };
 }
