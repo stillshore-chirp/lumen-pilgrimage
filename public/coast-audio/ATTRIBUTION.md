@@ -7,7 +7,7 @@
 - 波が岩に打ち寄せる録音「Water on Rocks.ogg」— Dsw4
 - ライセンス: [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
 - Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Water_on_Rocks.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/8/8a/Water_on_Rocks.ogg)
-- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。沖合の波音として再生。
+- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。海につながる浅瀬の寄せ波と引き波に使用。
 
 ## `surf.ogg`
 

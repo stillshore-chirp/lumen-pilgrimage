@@ -189,7 +189,7 @@ export class CoastApp {
     this.controls.update(dt);
     this.camera.getWorldDirection(this.forward);
     this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
-    this.audio.update(this.camera.position, this.forward, this.up, this.elapsed);
+    this.audio.update(this.camera.position, this.forward, this.up, this.elapsed, this.controls.currentMovement);
     this.world.update(this.elapsed, this.camera);
     this.renderer.render(this.world.scene, this.camera);
     this.frameId = requestAnimationFrame(this.render);
