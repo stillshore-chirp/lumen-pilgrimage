@@ -174,6 +174,10 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
     }
     assert.equal(await light.getAttribute('aria-pressed'), 'true');
     assert.equal(await page.evaluate(() => window.coastProbe.context), null);
+    const fonts = await page.evaluate(() =>
+      ['.coast-title h1', '.coast-mode', '.coast-legacy', '.coast-panel button', '.coast-panel kbd']
+        .map(selector => getComputedStyle(document.querySelector(selector)).fontSize));
+    assert.deepEqual(fonts, ['38px', '24px', '26px', '24px', '22px']);
     await capture(page, 'lagoon-light');
 
     await page.getByRole('button', { name: '環境音を開始' }).click();

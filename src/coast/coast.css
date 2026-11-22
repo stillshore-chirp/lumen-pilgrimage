@@ -50,7 +50,7 @@
 
 .coast-title h1 {
   margin: 0;
-  font-size: 19px;
+  font-size: 38px;
   font-weight: 650;
   letter-spacing: 0.08em;
 }
@@ -59,7 +59,7 @@
   border-left: 1px solid #bfe2dc45;
   padding-left: 12px;
   color: #bce2d5;
-  font-size: 12px;
+  font-size: 24px;
 }
 
 .coast-legacy {
@@ -68,7 +68,7 @@
   padding: 10px 13px;
   pointer-events: auto;
   text-decoration: none;
-  font-size: 13px;
+  font-size: 26px;
 }
 
 .coast-legacy span {
@@ -78,13 +78,18 @@
 
 .coast-dock {
   align-items: flex-end;
+  max-block-size: min(56dvh, 560px);
 }
 
 .coast-panel {
   border-radius: 14px;
   padding: 11px 13px;
   pointer-events: auto;
-  font-size: 12px;
+  font-size: 24px;
+  max-inline-size: 100%;
+  max-block-size: min(56dvh, 560px);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .coast-row {
@@ -98,6 +103,10 @@
   margin: 7px 0 0;
   color: #d9e9e4;
   line-height: 1.6;
+}
+
+.coast-panel p:empty {
+  margin: 0;
 }
 
 .coast-guide details {
@@ -114,7 +123,7 @@
   border: 1px solid #bfe2dc4d;
   border-radius: 9px;
   padding: 5px 10px;
-  min-height: 32px;
+  min-height: 44px;
   color: inherit;
   background: #ffffff0d;
   font: inherit;
@@ -155,7 +164,7 @@
   border-radius: 4px;
   padding: 0 3px;
   margin-right: 2px;
-  font-size: 11px;
+  font-size: 22px;
   line-height: 1.45;
 }
 
@@ -170,7 +179,7 @@
 }
 
 .coast-volume input {
-  width: 66px;
+  width: 96px;
   margin: 0;
   accent-color: #c8eddf;
 }
@@ -203,21 +212,28 @@
   margin: 12vh auto;
   padding: 24px;
   color: #e4f2ec;
+  font-size: 32px;
 }
 
 .coast-error a {
   color: #bbf1dc;
 }
 
-@media (max-width: 670px) {
+@media (max-width: 900px) {
   .coast-dock {
     flex-wrap: wrap;
-    align-items: flex-start;
     justify-content: flex-start;
     gap: 8px;
+    overflow: auto;
   }
 
   .coast-panel {
     padding: 8px 10px;
+  }
+}
+
+@media (max-width: 580px) {
+  .coast-header {
+    flex-wrap: wrap;
   }
 }
