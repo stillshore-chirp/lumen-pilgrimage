@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { coastPlantingDistance, coastRandom, groundHeight, groundSlope, inariWoodland } from '../terrain';
+import { coastPlantingDistance, coastRandom, groundHeight, groundSlope, inariCanopyScale, inariWoodland } from '../terrain';
 
 const up = new THREE.Vector3(0, 1, 0);
 
@@ -100,7 +100,9 @@ export function createInariGrove(wood: THREE.Texture): THREE.Group {
       const spread = 0.74 + (height - 0.80) * 0.53;
       tree.position.set(x, groundHeight(x, z) - 0.14, z);
       tree.rotation.set(0, random() * Math.PI * 2, (random() - 0.5) * 0.08);
-      tree.scale.set(spread, height, spread);
+      const growthScale = inariCanopyScale(x, z);
+      const width = spread * (0.54 + 0.46 * growthScale);
+      tree.scale.set(width, height * growthScale, width);
       tree.updateMatrix();
       groves[Math.floor(random() * groves.length)].push(tree.matrix.clone());
     }

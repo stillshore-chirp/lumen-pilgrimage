@@ -235,6 +235,13 @@ export function inariWoodland(x: number, z: number): number {
     * smoothstep(886, 909, z) * (1 - smoothstep(1046, 1078, z));
 }
 
+export function inariCanopyScale(x: number, z: number): number {
+  if (x < 207 || x > 264 || z < 877 || z > 958) return 1;
+  const gateGlade = Math.hypot((x - 231) / 24, (z - 899) / 22);
+  const stairsGlade = Math.hypot((x - 244) / 20, (z - 939) / 19);
+  return 0.20 + 0.80 * smoothstep(0.48, 1, Math.min(gateGlade, stairsGlade));
+}
+
 const inlandRidges = [
   { x: -114, z: 204, width: 39, length: 68, height: 31 },
   { x: -101, z: 304, width: 29, length: 50, height: 37 },

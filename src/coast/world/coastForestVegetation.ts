@@ -1,6 +1,6 @@
 import {
   coastRandom, coastTrailDistance, FOREST_WALKS, UPLAND_LAKE, UPLAND_WALKS, groundHeight, groundSlope,
-  inariWoodland, smoothstep, uplandLakeRadius,
+  inariCanopyScale, inariWoodland, smoothstep, uplandLakeRadius,
 } from '../terrain';
 import type { FloorForm } from './coastPlantMeshes';
 import type { TreeForm } from './coastTreeMeshes';
@@ -53,7 +53,11 @@ export function plantForest(trailDistance: PlantingDistance, streamDistance: Pla
     const slope = groundSlope(x, z, 1.54);
     if (slope > (form === 'windPruned' ? 1.70 : 1.24)) return;
     const canopy = clearance < width + 2.3 ? Math.max(height, form === 'sapling' ? 4.4 : 8.9) : height;
-    trees.push({ ...makePlant(x, z, width, canopy, treeRandom, -0.16 - slope * 0.14), form });
+    const growthScale = inariCanopyScale(x, z);
+    trees.push({
+      ...makePlant(x, z, width * (0.50 + 0.50 * growthScale), canopy * growthScale, treeRandom, -0.16 - slope * 0.14),
+      form,
+    });
   }
 
   // Taller trunks and low forks give the first two clearings a distinct silhouette.
