@@ -1,15 +1,19 @@
 import { Vector3, type PerspectiveCamera } from 'three';
-import { COAST_BOUNDS, groundHeight, POOL, SEA_LEVEL, SPAWN } from './terrain';
+import { COAST_BOUNDS, groundHeight, SEA_LEVEL, smoothstep, SPAWN } from './terrain';
+
+export type CoastMovement = 'walk' | 'wade' | 'swim' | 'flight';
 
 export interface CoastControlCallbacks {
-  onFlightChange: (flying: boolean) => void;
+  onMovementChange: (movement: CoastMovement) => void;
   onLockChange: (locked: boolean) => void;
   onLockError: () => void;
 }
 
 const EYE_HEIGHT = 1.65;
 const WALK_SPEED = 4.4;
-const FLIGHT_SPEED = 7.5;
+const SWIM_SPEED = 2.65;
+const SWIM_DEPTH = 1.02;
+const FLIGHT_SPEED = 13;
 const SPRINT_MULTIPLIER = 1.7;
 const LOOK_SPEED = 2.3;
 const MOUSE_SENSITIVITY = 0.0022;
@@ -20,14 +24,9 @@ const MAX_DELTA = 0.05;
 const WALK_SAMPLE_DISTANCE = 0.15;
 const MAX_WALK_SLOPE = 0.95;
 const WALK_SLOPE_EPSILON = 0.000001;
-const WALKABLE_SEA_CLEARANCE = 0.08;
-const POOL_WALK_CLEARANCE = 0.16;
 const BOUNDS_PADDING = 0.35;
-const MAX_FLIGHT_HEIGHT = 110;
+const MAX_FLIGHT_HEIGHT = 255;
 const GAMEPAD_DEADZONE = 0.16;
-const POOL_SAFE_LANDING_RADIUS = 14;
-
-type SafeLanding = { x: number; z: number };
 
 export class CoastControls {
   private readonly camera: PerspectiveCamera;
@@ -40,6 +39,7 @@ export class CoastControls {
   private readonly viewDirection = new Vector3();
   private readonly up = new Vector3(0, 1, 0);
   private flying = false;
+  private movementMode: CoastMovement = 'walk';
   private verticalVelocity = 0;
   private previousGamepadFlight = false;
   private pointerLockRequestPending = false;
@@ -78,10 +78,10 @@ export class CoastControls {
     this.verticalVelocity = 0;
 
     if (!this.flying) {
-      this.moveToSafeLandingIfNeeded();
+      const floor = this.supportHeight(this.camera.position.x, this.camera.position.z) + EYE_HEIGHT;
+      this.camera.position.y = Math.max(this.camera.position.y, floor);
     }
-
-    this.callbacks.onFlightChange(this.flying);
+    this.updateMovementMode();
   }
 
   requestLock(): void {
@@ -115,7 +115,7 @@ export class CoastControls {
       return;
     }
 
-    this.updateWalking(input.forward, input.right, pace, delta);
+    this.updateGroundMovement(input.forward, input.right, pace, delta);
   }
 
   dispose(): void {
@@ -285,7 +285,7 @@ export class CoastControls {
     return { forward, right, vertical: Math.max(-1, Math.min(vertical, 1)) };
   }
 
-  private updateWalking(forwardInput: number, rightInput: number, pace: number, dt: number): void {
+  private updateGroundMovement(forwardInput: number, rightInput: number, pace: number, dt: number): void {
     const yaw = this.camera.rotation.y;
     this.forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     this.right.set(Math.cos(yaw), 0, -Math.sin(yaw));
@@ -293,11 +293,14 @@ export class CoastControls {
       .addScaledVector(this.right, rightInput);
 
     if (this.movement.lengthSq() > 0) {
-      this.movement.multiplyScalar(WALK_SPEED * pace * dt);
-      this.moveOnWalkableGround(this.movement.x, this.movement.z);
+      const depth = SEA_LEVEL - groundHeight(this.camera.position.x, this.camera.position.z);
+      const water = smoothstep(0.12, SWIM_DEPTH, depth);
+      const speed = WALK_SPEED * pace * (1 - water) + SWIM_SPEED * water;
+      this.movement.multiplyScalar(speed * dt);
+      this.moveAlongSupport(this.movement.x, this.movement.z);
     }
 
-    const floorY = groundHeight(this.camera.position.x, this.camera.position.z) + EYE_HEIGHT;
+    const floorY = this.supportHeight(this.camera.position.x, this.camera.position.z) + EYE_HEIGHT;
     if (this.camera.position.y <= floorY) {
       this.camera.position.y = floorY;
       this.verticalVelocity = 0;
@@ -306,6 +309,7 @@ export class CoastControls {
       this.camera.position.y = Math.max(floorY, this.camera.position.y + this.verticalVelocity * dt);
       if (this.camera.position.y <= floorY) this.verticalVelocity = 0;
     }
+    this.updateMovementMode();
   }
 
   private updateFlight(
@@ -340,7 +344,7 @@ export class CoastControls {
     this.camera.position.y = Math.max(safeFloor, Math.min(requestedY, MAX_FLIGHT_HEIGHT));
   }
 
-  private moveOnWalkableGround(deltaX: number, deltaZ: number): void {
+  private moveAlongSupport(deltaX: number, deltaZ: number): void {
     const startX = this.camera.position.x;
     const startZ = this.camera.position.z;
     const candidateX = this.clampX(startX + deltaX);
@@ -354,14 +358,14 @@ export class CoastControls {
     const allowedHeightDelta = distance / steps * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON);
     let lastX = startX;
     let lastZ = startZ;
-    let lastHeight = groundHeight(startX, startZ);
+    let lastHeight = this.supportHeight(startX, startZ);
 
     for (let step = 1; step <= steps; step += 1) {
       const fraction = step / steps;
       const x = startX + actualDeltaX * fraction;
       const z = startZ + actualDeltaZ * fraction;
-      const height = groundHeight(x, z);
-      if (!this.isWalkable(x, z, height) || Math.abs(height - lastHeight) > allowedHeightDelta) break;
+      const height = this.supportHeight(x, z);
+      if (Math.abs(height - lastHeight) > allowedHeightDelta) break;
       lastX = x;
       lastZ = z;
       lastHeight = height;
@@ -371,48 +375,25 @@ export class CoastControls {
     this.camera.position.z = lastZ;
   }
 
-  private isWalkable(x: number, z: number, terrain = groundHeight(x, z)): boolean {
-    if (terrain < SEA_LEVEL + WALKABLE_SEA_CLEARANCE) return false;
-
-    const poolRadius = Math.hypot((x - POOL.x) / POOL.radiusX, (z - POOL.z) / POOL.radiusZ);
-    return poolRadius >= 1.22 || terrain >= POOL.y - POOL_WALK_CLEARANCE;
+  private supportHeight(x: number, z: number): number {
+    return Math.max(groundHeight(x, z), SEA_LEVEL - SWIM_DEPTH);
   }
 
   private flightFloorHeight(x: number, z: number): number {
-    const terrainFloor = groundHeight(x, z) + 0.25;
-    const seaFloor = SEA_LEVEL + 0.2;
-    const poolRadius = Math.hypot((x - POOL.x) / POOL.radiusX, (z - POOL.z) / POOL.radiusZ);
-    const poolFloor = poolRadius < 1.22 ? POOL.y + 0.25 : Number.NEGATIVE_INFINITY;
-    return Math.max(terrainFloor, seaFloor, poolFloor);
+    return Math.max(groundHeight(x, z) + 0.25, SEA_LEVEL + 0.25);
   }
 
-  private moveToSafeLandingIfNeeded(): void {
-    const x = this.camera.position.x;
-    const z = this.camera.position.z;
-    if (!this.isWalkable(x, z)) {
-      const landing = this.findNearestWalkablePoint(x, z);
-      this.camera.position.x = landing.x;
-      this.camera.position.z = landing.z;
+  private updateMovementMode(): void {
+    const depth = SEA_LEVEL - groundHeight(this.camera.position.x, this.camera.position.z);
+    let mode: CoastMovement = 'walk';
+    if (this.flying) mode = 'flight';
+    else if (this.camera.position.y <= SEA_LEVEL + EYE_HEIGHT + 0.03) {
+      if (depth >= SWIM_DEPTH) mode = 'swim';
+      else if (depth > 0.08) mode = 'wade';
     }
-
-    const floorY = groundHeight(this.camera.position.x, this.camera.position.z) + EYE_HEIGHT;
-    if (this.camera.position.y < floorY) this.camera.position.y = floorY;
-  }
-
-  private findNearestWalkablePoint(originX: number, originZ: number): SafeLanding {
-    const angleCount = 16;
-    const radiusStep = 0.5;
-    for (let radius = radiusStep; radius <= POOL_SAFE_LANDING_RADIUS; radius += radiusStep) {
-      for (let angleIndex = 0; angleIndex < angleCount; angleIndex += 1) {
-        const angle = angleIndex * (Math.PI * 2 / angleCount);
-        const x = this.clampX(originX + Math.cos(angle) * radius);
-        const z = this.clampZ(originZ + Math.sin(angle) * radius);
-        if (!this.isWalkable(x, z)) continue;
-        return { x, z };
-      }
-    }
-
-    return { x: SPAWN.x, z: SPAWN.z };
+    if (mode === this.movementMode) return;
+    this.movementMode = mode;
+    this.callbacks.onMovementChange(mode);
   }
 
   private getStandardGamepad(): Gamepad | null {

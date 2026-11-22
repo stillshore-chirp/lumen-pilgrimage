@@ -1,33 +1,37 @@
 import {
-  ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Vector3, WebGLRenderer,
+  NeutralToneMapping, PCFShadowMap, PerspectiveCamera, Vector3, WebGLRenderer,
 } from 'three';
 import { CoastAudio } from './CoastAudio';
-import { CoastControls } from './CoastControls';
+import { CoastControls, type CoastMovement } from './CoastControls';
 import { CoastWorld, type CoastQuality } from './CoastWorld';
 import './coast.css';
 
 const qualitySettings = {
-  low: { resolution: 0.8, far: 600 },
-  normal: { resolution: 1.6, far: 1050 },
-} satisfies Record<CoastQuality, { resolution: number; far: number }>;
+  light: 0.80,
+  high: 1.75,
+} satisfies Record<CoastQuality, number>;
+
+const movementLabels: Record<CoastMovement, string> = {
+  walk: '歩行', wade: '浅瀬', swim: '遊泳', flight: '自由飛行',
+};
 
 export class CoastApp {
   private readonly renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   private readonly world = new CoastWorld();
   private readonly audio = new CoastAudio();
-  private readonly camera = new PerspectiveCamera(56, 1, 0.12);
+  private readonly camera = new PerspectiveCamera(60, 1, 0.12, 2500);
   private readonly forward = new Vector3();
   private readonly controls: CoastControls;
   private readonly resize: ResizeObserver;
-  private quality: CoastQuality = 'low';
+  private quality: CoastQuality = 'light';
   private lastFrame = 0;
   private elapsed = 0;
   private frameId = 0;
 
   constructor(private readonly mount: HTMLElement) {
     this.mount.classList.add('coast');
-    this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMapping = NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
     const canvas = this.renderer.domElement;
@@ -64,8 +68,8 @@ export class CoastApp {
         <section class="coast-panel coast-settings" aria-label="描画と音">
           <div class="coast-row" role="group" aria-label="描画品質">
             <span class="coast-label">描画</span>
-            <button type="button" class="coast-low" aria-pressed="true">ローポリ</button>
-            <button type="button" class="coast-normal" aria-pressed="false">通常</button>
+            <button type="button" class="coast-light" aria-pressed="true">軽量</button>
+            <button type="button" class="coast-high" aria-pressed="false">高品質</button>
           </div>
           <div class="coast-row coast-sound">
             <button type="button" class="coast-audio">環境音を開始</button>
@@ -83,9 +87,9 @@ export class CoastApp {
     const flight = ui.querySelector<HTMLButtonElement>('.coast-flight')!;
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
     this.controls = new CoastControls(this.camera, canvas, {
-      onFlightChange: flying => {
-        mode.textContent = flying ? '自由飛行' : '歩行';
-        flight.setAttribute('aria-pressed', String(flying));
+      onMovementChange: movement => {
+        mode.textContent = movementLabels[movement];
+        flight.setAttribute('aria-pressed', String(movement === 'flight'));
       },
       onLockChange: locked => {
         this.mount.classList.toggle('coast-locked', locked);
@@ -113,20 +117,18 @@ export class CoastApp {
   }
 
   private bindQuality(ui: HTMLElement): void {
-    const low = ui.querySelector<HTMLButtonElement>('.coast-low')!;
-    const normal = ui.querySelector<HTMLButtonElement>('.coast-normal')!;
+    const light = ui.querySelector<HTMLButtonElement>('.coast-light')!;
+    const high = ui.querySelector<HTMLButtonElement>('.coast-high')!;
     const apply = (quality: CoastQuality) => {
       this.quality = quality;
-      const settings = qualitySettings[quality];
       this.world.setQuality(quality);
-      this.camera.far = settings.far;
       this.resizeViewport();
-      low.setAttribute('aria-pressed', String(quality === 'low'));
-      normal.setAttribute('aria-pressed', String(quality === 'normal'));
+      light.setAttribute('aria-pressed', String(quality === 'light'));
+      high.setAttribute('aria-pressed', String(quality === 'high'));
     };
-    low.addEventListener('click', () => apply('low'));
-    normal.addEventListener('click', () => apply('normal'));
-    apply('low');
+    light.addEventListener('click', () => apply('light'));
+    high.addEventListener('click', () => apply('high'));
+    apply('light');
   }
 
   private bindAudio(ui: HTMLElement): void {
@@ -159,8 +161,8 @@ export class CoastApp {
   private resizeViewport(): void {
     const width = Math.max(1, this.mount.clientWidth);
     const height = Math.max(1, this.mount.clientHeight);
-    const resolution = qualitySettings[this.quality].resolution;
-    const pixelRatio = this.quality === 'low'
+    const resolution = qualitySettings[this.quality];
+    const pixelRatio = this.quality === 'light'
       ? Math.min(window.devicePixelRatio, 1) * resolution
       : Math.min(window.devicePixelRatio, resolution);
     if (this.renderer.getPixelRatio() !== pixelRatio) this.renderer.setPixelRatio(pixelRatio);

@@ -1,5 +1,5 @@
 import type { Vector3 } from 'three';
-import { POOL, WATERFALL } from './terrain';
+import { COAST_FALLS, COAST_GROVES, groundHeight, shoreline, type CoastPoint } from './terrain';
 
 type AudioAsset = 'waves' | 'waterfall' | 'foliage' | 'birds' | 'insects';
 type FilterSpec = { type: BiquadFilterType; frequency: number };
@@ -12,6 +12,14 @@ type EmitterSpec = {
   rolloff: number;
   filters: FilterSpec[];
 };
+
+function positionOf(point: CoastPoint): [number, number, number] {
+  return [point.x, point.y, point.z];
+}
+
+function grovePosition(grove: { x: number; z: number }, elevation: number): [number, number, number] {
+  return [grove.x, groundHeight(grove.x, grove.z) + elevation, grove.z];
+}
 
 const ASSET_FILES: Record<AudioAsset, string> = {
   waves: 'waves.ogg',
@@ -232,32 +240,36 @@ export class CoastAudio {
     if (this.started) return;
     const nodeStart = this.graphNodes.length;
     const playerStart = this.players.length;
+    const [mainFall, westFall] = COAST_FALLS;
     const emitters: EmitterSpec[] = [
       // Foreground surf follows the starting cove; the far point opens toward the sea.
-      { asset: 'waves', position: [-19, 0.8, 2], gain: 0.72, refDistance: 9, maxDistance: 145, rolloff: 0.8,
+      { asset: 'waves', position: [-19, 0.8, shoreline(-19) - 3.5], gain: 0.72, refDistance: 9, maxDistance: 145, rolloff: 0.8,
         filters: [{ type: 'lowpass', frequency: 6500 }] },
       { asset: 'waves', position: [18, 0.8, -58], gain: 0.34, refDistance: 17, maxDistance: 240, rolloff: 0.72,
         filters: [{ type: 'lowpass', frequency: 4800 }] },
-      { asset: 'waterfall', position: [WATERFALL.x, WATERFALL.y, WATERFALL.z], gain: 0.7,
+      { asset: 'waterfall', position: positionOf(mainFall.path[mainFall.path.length - 5]), gain: 0.7,
         refDistance: 12, maxDistance: 190, rolloff: 0.82,
         filters: [{ type: 'lowpass', frequency: 8500 }] },
       // A high-passed branch of the fall recording gives the pool a lighter spray layer.
-      { asset: 'waterfall', position: [POOL.x + 1.5, 2.8, POOL.z - 1], gain: 0.32,
+      { asset: 'waterfall', position: [mainFall.impact.x, 2.8, mainFall.impact.z], gain: 0.32,
         refDistance: 5, maxDistance: 74, rolloff: 1.12,
         filters: [{ type: 'highpass', frequency: 580 }, { type: 'lowpass', frequency: 9800 }] },
-      { asset: 'foliage', position: [-70, 8, 48], gain: 0.34, refDistance: 10, maxDistance: 96, rolloff: 1.05,
+      { asset: 'waterfall', position: [westFall.impact.x, 3.1, westFall.impact.z], gain: 0.44,
+        refDistance: 12, maxDistance: 190, rolloff: 0.82,
+        filters: [{ type: 'lowpass', frequency: 8500 }] },
+      { asset: 'foliage', position: grovePosition(COAST_GROVES.west, 5), gain: 0.34, refDistance: 10, maxDistance: 96, rolloff: 1.05,
         filters: [{ type: 'highpass', frequency: 420 }, { type: 'lowpass', frequency: 8200 }] },
-      { asset: 'foliage', position: [80, 9, 54], gain: 0.34, refDistance: 10, maxDistance: 96, rolloff: 1.05,
+      { asset: 'foliage', position: grovePosition(COAST_GROVES.east, 5), gain: 0.34, refDistance: 10, maxDistance: 96, rolloff: 1.05,
         filters: [{ type: 'highpass', frequency: 420 }, { type: 'lowpass', frequency: 8200 }] },
-      { asset: 'birds', position: [-64, 12, 42], gain: 0.74, refDistance: 7, maxDistance: 108, rolloff: 0.88,
+      { asset: 'birds', position: grovePosition(COAST_GROVES.west, 9), gain: 0.74, refDistance: 7, maxDistance: 108, rolloff: 0.88,
         filters: [{ type: 'highpass', frequency: 700 }, { type: 'lowpass', frequency: 9200 }] },
-      { asset: 'birds', position: [72, 15, 61], gain: 0.74, refDistance: 7, maxDistance: 108, rolloff: 0.88,
+      { asset: 'birds', position: grovePosition(COAST_GROVES.east, 12), gain: 0.74, refDistance: 7, maxDistance: 108, rolloff: 0.88,
         filters: [{ type: 'highpass', frequency: 700 }, { type: 'lowpass', frequency: 9200 }] },
-      { asset: 'birds', position: [-27, 7, 32], gain: 0.53, refDistance: 8, maxDistance: 83, rolloff: 0.94,
+      { asset: 'birds', position: grovePosition(COAST_GROVES.shore, 7), gain: 0.53, refDistance: 8, maxDistance: 83, rolloff: 0.94,
         filters: [{ type: 'highpass', frequency: 700 }, { type: 'lowpass', frequency: 9200 }] },
-      { asset: 'insects', position: [-84, 1.8, 57], gain: 0.58, refDistance: 6, maxDistance: 92, rolloff: 0.82,
+      { asset: 'insects', position: grovePosition(COAST_GROVES.west, 1.8), gain: 0.58, refDistance: 6, maxDistance: 92, rolloff: 0.82,
         filters: [{ type: 'highpass', frequency: 1050 }, { type: 'lowpass', frequency: 7400 }] },
-      { asset: 'insects', position: [58, 1.8, 66], gain: 0.58, refDistance: 6, maxDistance: 92, rolloff: 0.82,
+      { asset: 'insects', position: grovePosition(COAST_GROVES.east, 1.8), gain: 0.58, refDistance: 6, maxDistance: 92, rolloff: 0.82,
         filters: [{ type: 'highpass', frequency: 1050 }, { type: 'lowpass', frequency: 7400 }] },
     ];
 

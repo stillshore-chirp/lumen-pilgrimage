@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera } from 'three';
-import { groundHeight } from '../src/coast/terrain.ts';
+import { groundHeight, SEA_LEVEL, SPAWN } from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
 // Vite resolves the extensionless terrain import in the app. Resolve that same file in the Node test.
@@ -75,7 +75,7 @@ function createBrowser(gamepads = []) {
 
 function createControls(browser, camera, callbacks = {}) {
   return new CoastControls(camera, browser.canvas, {
-    onFlightChange: callbacks.onFlightChange ?? (() => {}),
+    onMovementChange: callbacks.onMovementChange ?? (() => {}),
     onLockChange: callbacks.onLockChange ?? (() => {}),
     onLockError: callbacks.onLockError ?? (() => {})
   });
@@ -86,8 +86,8 @@ test('walking approaches a steep cliff without crossing it or losing ground cont
   const camera = new PerspectiveCamera();
   const controls = createControls(browser, camera);
   try {
-    const startX = 25;
-    const steepZ = -31;
+    const startX = 111;
+    const steepZ = -141.9;
     assert.ok(groundHeight(startX, steepZ) > 0.08, 'slope fixture must start on dry ground');
     camera.position.set(startX, groundHeight(startX, steepZ) + 1.65, steepZ);
     camera.rotation.x = 0;
@@ -96,12 +96,12 @@ test('walking approaches a steep cliff without crossing it or losing ground cont
     for (let frame = 0; frame < 10; frame += 1) controls.update(0.001);
     assert.equal(camera.position.z, steepZ, 'small frame steps climbed a slope above the walk limit');
 
-    const startZ = -29.5;
+    const startZ = -140.5;
     camera.position.set(startX, groundHeight(startX, startZ) + 1.65, startZ);
     for (let frame = 0; frame < 40; frame += 1) controls.update(0.05);
 
     assert.ok(camera.position.z < startZ - 0.1, `player did not approach the cliff: ${camera.position.z}`);
-    assert.ok(camera.position.z > -31, `player crossed the cliff: ${camera.position.z}`);
+    assert.ok(camera.position.z > steepZ, `player crossed the cliff: ${camera.position.z}`);
     assert.ok(Math.abs(camera.position.y - groundHeight(camera.position.x, camera.position.z) - 1.65) < 1e-6);
   } finally {
     controls.dispose();
@@ -114,8 +114,8 @@ test('low flight meets a cliff without snapping the camera upward', () => {
   const camera = new PerspectiveCamera();
   const controls = createControls(browser, camera);
   try {
-    const x = 25;
-    const z = -32.6;
+    const x = 111;
+    const z = -144.5;
     const startY = groundHeight(x, z) + 1.65;
     camera.position.set(x, startY, z);
     camera.rotation.x = 0;
@@ -137,8 +137,8 @@ test('gamepad Y toggles on press edges and does not trigger while focus is lost'
   const gamepad = { connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons };
   const browser = createBrowser([gamepad]);
   const camera = new PerspectiveCamera();
-  const flightChanges = [];
-  const controls = createControls(browser, camera, { onFlightChange: flying => flightChanges.push(flying) });
+  const modes = [];
+  const controls = createControls(browser, camera, { onMovementChange: mode => modes.push(mode) });
   const setY = pressed => { buttons[3] = { pressed, value: Number(pressed) }; };
 
   try {
@@ -149,13 +149,58 @@ test('gamepad Y toggles on press edges and does not trigger while focus is lost'
     controls.update(0);
     browser.window.dispatch('focus');
     controls.update(0);
-    assert.deepEqual(flightChanges, [true]);
+    assert.deepEqual(modes, ['flight']);
 
     setY(false);
     controls.update(0);
     setY(true);
     controls.update(0);
-    assert.deepEqual(flightChanges, [true, false]);
+    assert.deepEqual(modes, ['flight', 'walk']);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('walking wades and swims across the beach, then returns to land', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const modes = [];
+  const controls = createControls(browser, camera, { onMovementChange: mode => modes.push(mode) });
+  const move = (key, frames) => {
+    browser.window.dispatch('keydown', { target: browser.canvas, code: key });
+    for (let i = 0; i < frames; i += 1) controls.update(0.05);
+    browser.window.dispatch('keyup', { target: browser.canvas, code: key });
+  };
+  try {
+    move('KeyW', 133);
+    assert.deepEqual(modes, ['wade', 'swim']);
+    assert.ok(groundHeight(camera.position.x, camera.position.z) < SEA_LEVEL - 1.1);
+    assert.ok(camera.position.y > SEA_LEVEL + 0.4 && camera.position.y < SEA_LEVEL + 1);
+    move('KeyS', 152);
+    assert.deepEqual(modes, ['wade', 'swim', 'wade', 'walk']);
+    assert.ok(camera.position.z >= SPAWN.z - 1.0);
+    assert.ok(Math.abs(camera.position.y - groundHeight(camera.position.x, camera.position.z) - 1.65) < 1e-6);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('ending flight above deep water settles into swimming at the same horizontal position', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const modes = [];
+  const controls = createControls(browser, camera, { onMovementChange: mode => modes.push(mode) });
+  try {
+    controls.toggleFlight();
+    camera.position.set(30, 12, -10);
+    controls.toggleFlight();
+    for (let i = 0; i < 60; i += 1) controls.update(0.05);
+    assert.equal(modes.at(-1), 'swim');
+    assert.equal(camera.position.x, 30);
+    assert.equal(camera.position.z, -10);
+    assert.ok(camera.position.y > SEA_LEVEL && camera.position.y < SEA_LEVEL + 1);
   } finally {
     controls.dispose();
     browser.cleanup();
