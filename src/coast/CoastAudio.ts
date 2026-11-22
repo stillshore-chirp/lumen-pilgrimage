@@ -1,7 +1,8 @@
 import type { Vector3 } from 'three';
 import type { CoastMovement } from './CoastControls';
 import {
-  COAST_FALLS, COAST_GROVES, forestStreamLevel, groundHeight, SEA_LEVEL, smoothstep, type CoastPoint,
+  COAST_FALLS, COAST_GROVES, COAST_REST_SITES, coastWaterLevel, forestStreamLevel, groundHeight,
+  SEA_LEVEL, smoothstep, UPLAND_FALL, type CoastPoint,
 } from './terrain';
 import { airCutoff, listenerTerrain, soundReach, terrainArrival, terrainOcclusion, waterReflection } from './coastAcoustics';
 import {
@@ -11,8 +12,9 @@ import {
 import { CoastFoley } from './CoastFoley';
 import { COAST_SWELL_PERIOD } from './world/coastSwell';
 
-type AudioAsset = 'waves' | 'surf' | 'waterfall' | 'birds' | 'forestBirds' | 'insects' | 'rivulet';
+type AudioAsset = 'waves' | 'surf' | 'waterfall' | 'birds' | 'forestBirds' | 'shelterBirds' | 'insects' | 'rivulet';
 type FilterSpec = { type: BiquadFilterType; frequency: number };
+type ShelterCallTiming = { firstDelay: number; pause: number };
 type EmitterSpec = {
   asset: AudioAsset;
   position: [number, number, number];
@@ -23,7 +25,7 @@ type EmitterSpec = {
   filters: FilterSpec[];
   waterReflection?: number;
   rockResponse?: boolean;
-  birdCalls?: boolean;
+  birdCalls?: true | ShelterCallTiming;
 };
 type DelayedArrival = { gain: GainNode; delay: DelayNode; surface: BiquadFilterNode };
 type ShoreVoice = {
@@ -60,6 +62,7 @@ const ASSET_FILES: Record<AudioAsset, string> = {
   waterfall: 'waterfall.ogg',
   birds: 'birds.ogg',
   forestBirds: 'forest-birds.ogg',
+  shelterBirds: 'shelter-birds.ogg',
   insects: 'insects.ogg',
   rivulet: 'rivulet.ogg',
 };
@@ -69,6 +72,27 @@ const SCHEDULE_AHEAD_SECONDS = 2;
 const SCHEDULER_INTERVAL_MS = 500;
 const SURF_EXCERPT_SECONDS = 4.2;
 const SURF_START_PHASE = 0.285;
+const SHELTER_PHRASE_SECONDS = 2;
+const SHELTER_PHRASE_COUNT = 4;
+
+function shelterBirdEmitters(): EmitterSpec[] {
+  const perch = (
+    position: [number, number, number], gain: number, maxDistance: number, timing: ShelterCallTiming,
+  ): EmitterSpec => ({
+    asset: 'shelterBirds', position, gain, maxDistance, refDistance: 11, rolloff: 1.16,
+    birdCalls: timing, rockResponse: true,
+    filters: [{ type: 'highpass', frequency: 820 }, { type: 'lowpass', frequency: 5500 }],
+  });
+  return COAST_REST_SITES.filter(site => site.kind === 'shelter').flatMap(site => {
+    const inland = site.id === 'lake-shelter';
+    const close = { x: site.x + (inland ? -11 : 12), z: site.z + 11 };
+    const across = { x: site.x + (inland ? 20 : -23), z: site.z + (inland ? -21 : 22) };
+    return [
+      perch(grovePosition(close, 5.8), 0.75, 39, { firstDelay: 1.2, pause: 13 }),
+      perch(grovePosition(across, 8.7), 0.57, 54, { firstDelay: 7.2, pause: 22 }),
+    ];
+  });
+}
 
 function wildlifeEmitters(): EmitterSpec[] {
   const perch = (
@@ -93,6 +117,7 @@ function wildlifeEmitters(): EmitterSpec[] {
     perch('forestBirds', { x: 52, z: 274 }, 9, 0.88, 75),
     perch('forestBirds', { x: -45, z: 329 }, 7, 1.0, 79),
     perch('forestBirds', { x: 13, z: 369 }, 8, 0.9, 73),
+    ...shelterBirdEmitters(),
     insectPatch(COAST_GROVES.west, 0.16, 36),
     insectPatch(COAST_GROVES.east, 0.17, 38),
     insectPatch({ x: 5, z: 204 }, 0.29, 36),
@@ -114,6 +139,12 @@ function streamEmitters(): EmitterSpec[] {
       asset: 'rivulet', position: [x, surface + 0.42, z], gain, refDistance: 7, maxDistance: range,
       rolloff: 1.1, rockResponse: true, filters: [{ type: 'lowpass', frequency: 9600 }],
     }];
+  });
+  const impact = UPLAND_FALL.impact;
+  riffles.push({
+    asset: 'waterfall', position: [impact.x, impact.y + 0.85, impact.z], gain: 0.46, refDistance: 12,
+    maxDistance: 184, rolloff: 0.92, rockResponse: true,
+    filters: [{ type: 'highpass', frequency: 280 }, { type: 'lowpass', frequency: 6100 }],
   });
   const x = 85;
   const z = 297.5;
@@ -257,7 +288,8 @@ class VariationLoop {
 /** A perch plays a short field-recorded phrase, then pauses before the next call. */
 class BirdCalls {
   audible = false;
-  private nextCall: number;
+  private nextCall: number | undefined;
+  private previousPhrase: number | undefined;
   private source: AudioBufferSourceNode | undefined;
   private envelope: GainNode | undefined;
 
@@ -265,17 +297,20 @@ class BirdCalls {
     private readonly context: AudioContext,
     private readonly buffer: AudioBuffer,
     private readonly input: AudioNode,
+    private readonly shelter?: ShelterCallTiming,
   ) {
-    this.nextCall = context.currentTime + 0.3 + Math.random() * 1.8;
+    if (!shelter) this.nextCall = context.currentTime + 0.3 + Math.random() * 1.8;
   }
 
   schedule(now: number): void {
-    if (!this.audible || this.source || now < this.nextCall) return;
+    if (!this.audible || this.source) return;
+    this.nextCall ??= now + (this.shelter?.firstDelay ?? 0) + Math.random() * 2.1;
+    if (now < this.nextCall) return;
     const source = this.context.createBufferSource();
     const envelope = this.context.createGain();
     const rate = 0.95 + Math.random() * 0.1;
-    const duration = Math.min(this.buffer.duration, 2.6 + Math.random() * 2.6);
-    const offset = Math.random() * (this.buffer.duration - duration);
+    const duration = Math.min(this.buffer.duration, this.shelter ? SHELTER_PHRASE_SECONDS : 2.6 + Math.random() * 2.6);
+    const offset = this.shelter ? this.pickPhrase() : Math.random() * (this.buffer.duration - duration);
     const start = now + 0.05;
     const end = start + duration / rate;
     source.buffer = this.buffer;
@@ -293,8 +328,16 @@ class BirdCalls {
     };
     this.source = source;
     this.envelope = envelope;
-    this.nextCall = end + 2.1 + Math.random() * 6.9;
+    this.nextCall = end + (this.shelter?.pause ?? 2.1) + Math.random() * (this.shelter ? 11 : 6.9);
     source.start(start, offset, duration);
+  }
+
+  private pickPhrase(): number {
+    const previous = this.previousPhrase;
+    const phrase = previous === undefined ? Math.floor(Math.random() * SHELTER_PHRASE_COUNT)
+      : (previous + 1 + Math.floor(Math.random() * (SHELTER_PHRASE_COUNT - 1))) % SHELTER_PHRASE_COUNT;
+    this.previousPhrase = phrase;
+    return phrase * SHELTER_PHRASE_SECONDS;
   }
 
   dispose(): void {
@@ -378,7 +421,7 @@ export class CoastAudio {
     listener.upZ.value = up.z;
     if (context.state !== 'running' || context.currentTime < this.nextPropagationUpdate) return;
     this.nextPropagationUpdate = context.currentTime + 0.113;
-    const waterLevel = forestStreamLevel(position.x, position.z) ?? SEA_LEVEL;
+    const waterLevel = coastWaterLevel(position.x, position.z);
     const immersion = smoothstep(-0.03, 0.62, waterLevel - position.y);
     this.medium?.input.frequency.setTargetAtTime(19_000 * 0.037 ** immersion, context.currentTime, 0.08);
     this.medium?.level.gain.setTargetAtTime(1 - 0.4 * immersion, context.currentTime, 0.09);
@@ -628,7 +671,8 @@ export class CoastAudio {
         if (!buffer) throw new Error(`The ${emitter.asset} recording is not decoded`);
         const { input, voice } = this.createEmitter(context, emitter);
         if (emitter.birdCalls) {
-          voice.recording = new BirdCalls(context, buffer, input);
+          const timing = emitter.birdCalls === true ? undefined : emitter.birdCalls;
+          voice.recording = new BirdCalls(context, buffer, input, timing);
         } else {
           voice.recording = new VariationLoop(context, buffer, input);
         }
