@@ -132,6 +132,93 @@ test('low flight meets a cliff without snapping the camera upward', () => {
   }
 });
 
+test('a diagonal at the edge of the east trail slides along the traversable axis', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const x = 133;
+    const z = -13;
+    camera.position.set(x, groundHeight(x, z) + 1.65, z);
+    camera.rotation.set(0, 0, 0);
+    for (const code of ['KeyW', 'KeyA']) browser.window.dispatch('keydown', { target: browser.canvas, code });
+    controls.update(0.015);
+    assert.ok(Math.hypot(camera.position.x - x, camera.position.z - z) > 0.04,
+      'a diagonal input stalled even though part of the movement was walkable');
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('a steep descent can be entered and lands at the surface', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const x = 115;
+    const z = -6;
+    camera.position.set(x, groundHeight(x, z) + 1.65, z);
+    camera.rotation.set(0, 0, 0);
+    for (const code of ['KeyW', 'KeyA']) browser.window.dispatch('keydown', { target: browser.canvas, code });
+    controls.update(0.015);
+    assert.ok(camera.position.x < x - 0.04 && camera.position.z < z - 0.04);
+    for (const code of ['KeyW', 'KeyA']) browser.window.dispatch('keyup', { code });
+    for (let frame = 0; frame < 30; frame += 1) controls.update(0.05);
+    assert.ok(Math.abs(camera.position.y - groundHeight(camera.position.x, camera.position.z) - 1.65) < 1e-6);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('Space jumps once per press, lands, and works again after releasing', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const startY = camera.position.y;
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
+    let apex = startY;
+    for (let frame = 0; frame < 120; frame += 1) {
+      browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space', repeat: true });
+      controls.update(1 / 60);
+      apex = Math.max(apex, camera.position.y);
+      if (frame > 55) assert.ok(Math.abs(camera.position.y - startY) < 1e-6, 'held Space triggered another jump');
+    }
+    assert.ok(apex - startY > 1.0 && apex - startY < 1.5, `jump height: ${apex - startY}`);
+    browser.window.dispatch('keyup', { code: 'Space' });
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
+    controls.update(1 / 60);
+    assert.ok(camera.position.y > startY + 0.08);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('gamepad A jumps on land and Space does not lift a swimmer out of deep water', () => {
+  const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
+  const browser = createBrowser([{ connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons }]);
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    const startY = camera.position.y;
+    buttons[0] = { pressed: true, value: 1 };
+    controls.update(1 / 60);
+    assert.ok(camera.position.y > startY + 0.08);
+    buttons[0] = { pressed: false, value: 0 };
+    camera.position.set(30, 0.63, -10);
+    for (let frame = 0; frame < 25; frame += 1) controls.update(0.05);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
+    controls.update(0.05);
+    assert.ok(Math.abs(camera.position.y - 0.63) < 1e-6);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
 test('gamepad Y toggles on press edges and does not trigger while focus is lost', () => {
   const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
   const gamepad = { connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons };

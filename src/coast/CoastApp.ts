@@ -61,11 +61,13 @@ export class CoastApp {
             <summary>操作方法</summary>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
-            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
+            <p><kbd>Space</kbd> ジャンプ</p>
+            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
-              <p><kbd>Y</kbd> 歩行／飛行 <span class="coast-divider">·</span> <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
+              <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
+              <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
             </details>
           </details>
           <p class="coast-lock-message" role="status" hidden></p>
