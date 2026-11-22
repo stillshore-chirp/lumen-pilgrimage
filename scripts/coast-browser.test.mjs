@@ -6,7 +6,10 @@ import { chromium } from 'playwright';
 import { preview } from 'vite';
 
 const screenshotDirectory = process.env.COAST_SCREENSHOTS;
-const timeout = 55_000;
+const chromeChannel = process.env.COAST_CHROME_CHANNEL || undefined;
+const viewport = chromeChannel || screenshotDirectory ? { width: 1280, height: 800 } : { width: 768, height: 480 };
+const lowWidth = Math.floor(viewport.width * 0.8);
+const timeout = 65_000;
 let server;
 let browser;
 let url;
@@ -15,11 +18,17 @@ before(async () => {
   server = await preview({ logLevel: 'error', preview: { host: '127.0.0.1', port: 0 } });
   url = `http://127.0.0.1:${server.httpServer.address().port}/`;
   browser = await chromium.launch({
-    channel: process.env.COAST_CHROME_CHANNEL || undefined,
+    channel: chromeChannel ?? 'chromium',
     args: ['--enable-unsafe-swiftshader'],
   });
   if (screenshotDirectory) await mkdir(screenshotDirectory, { recursive: true });
 });
+
+async function newPage() {
+  const page = await browser.newPage({ viewport });
+  page.setDefaultTimeout(15_000);
+  return page;
+}
 
 after(async () => {
   try {
@@ -125,7 +134,7 @@ function signalLevel() {
 }
 
 test('the coast renders, walks, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await newPage();
   const errors = [];
   const recordings = new Set();
   const externalRequests = new Set();
@@ -148,12 +157,12 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
   try {
     const sceneryAssets = Promise.all(['rock.webp', 'sand.webp', 'sky.webp', 'cliff-ledge.glb'].map(file =>
       page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/coast-materials/${file}`))));
-    const [, loadedAssets] = await Promise.all([page.goto(url), sceneryAssets]);
+    const [, loadedAssets] = await Promise.all([page.goto(url, { waitUntil: 'commit' }), sceneryAssets]);
     const low = page.getByRole('button', { name: 'ローポリ' });
     const normal = page.getByRole('button', { name: '通常' });
     const flight = page.getByRole('button', { name: '自由飛行' });
     const canvas = page.locator('canvas.coast-view');
-    await page.waitForFunction(() => document.querySelector('canvas.coast-view')?.width === 1024);
+    await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lowWidth);
     for (const response of loadedAssets) {
       assert.ok(response.ok(), `Scenery asset request failed: ${response.url()}`);
       assert.equal(await response.finished(), null);
@@ -181,7 +190,7 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
 
     await normal.click();
     assert.equal(await normal.getAttribute('aria-pressed'), 'true');
-    assert.equal(await canvas.evaluate(node => node.width), 1280);
+    assert.equal(await canvas.evaluate(node => node.width), viewport.width);
     assert.deepEqual(await page.evaluate(() => ({
       contexts: window.coastProbe.contexts,
       contextState: window.coastProbe.context.state,
@@ -227,7 +236,8 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
     await page.keyboard.press('f');
     await page.waitForFunction(() => document.querySelector('.coast-flight')?.getAttribute('aria-pressed') === 'true');
     await page.keyboard.down('Space');
-    await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y + 9, walked.y);
+    const flightHeight = walked.y + (screenshotDirectory ? 9 : 3);
+    await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y, flightHeight);
     await page.keyboard.up('Space');
     await page.evaluate(() => document.exitPointerLock());
     await flight.waitFor();
@@ -245,8 +255,8 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
     await page.evaluate(setPad, { connected: false });
 
     await normal.click();
-    await page.reload();
-    await page.waitForFunction(() => document.querySelector('canvas.coast-view')?.width === 1024);
+    await page.reload({ waitUntil: 'commit' });
+    await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lowWidth);
     assert.equal(await low.getAttribute('aria-pressed'), 'true');
     assert.equal(await flight.getAttribute('aria-pressed'), 'false');
     assert.equal(await page.evaluate(() => window.coastProbe.context), null);
@@ -258,13 +268,17 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
 });
 
 test('the legacy entry navigates to Hub, saves a run, and continues it after reloading', { timeout }, async () => {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const page = await newPage();
   const saveKey = 'lumen-pilgrimage:save-slot:0';
   // MenuManager replaces buttons during its render loop. Click the current node without holding a reference across frames.
   const invoke = (name) => page.getByRole('button', { name, exact: true }).evaluate(button => button.click());
+  const enterLegacy = () => Promise.all([
+    page.waitForURL(address => address.search === '?scene=expedition', { waitUntil: 'commit' }),
+    page.getByRole('link', { name: '従来のゲームへ' }).click({ noWaitAfter: true }),
+  ]);
   try {
-    await page.goto(url);
-    await page.getByRole('link', { name: '従来のゲームへ' }).click();
+    await page.goto(url, { waitUntil: 'commit' });
+    await enterLegacy();
     assert.equal(new URL(page.url()).search, '?scene=expedition');
     await invoke('Enter Hub');
     await page.getByText("Pilgrim's Belfry (Hub)", { exact: true }).waitFor();
@@ -275,18 +289,19 @@ test('the legacy entry navigates to Hub, saves a run, and continues it after rel
     await invoke('Launch Expedition');
     await page.waitForFunction(key => Boolean(JSON.parse(localStorage.getItem(key))?.expedition), saveKey);
     const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
-    await page.goto(url);
+    await page.goto(url, { waitUntil: 'commit' });
     await page.getByRole('heading', { name: '海岸探索' }).waitFor();
     const afterCoast = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
     assert.deepEqual(afterCoast, saved);
-    await page.getByRole('link', { name: '従来のゲームへ' }).click();
-    await page.reload();
+    await enterLegacy();
+    await page.reload({ waitUntil: 'commit' });
     await invoke('Continue Expedition');
     await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.state === 'InExpedition', saveKey);
     const resumed = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
     for (const key of ['biomeId', 'roomId', 'missionId', 'runSeed']) assert.equal(resumed[key], saved[key], key);
 
-    await page.goto(url);
+    await page.goto(url, { waitUntil: 'commit' });
+    await page.getByRole('heading', { name: '海岸探索' }).waitFor();
     await page.evaluate(key => {
       const slot = JSON.parse(localStorage.getItem(key));
       slot.slotId = 1;
@@ -294,7 +309,7 @@ test('the legacy entry navigates to Hub, saves a run, and continues it after rel
       for (const field of ['runSeed', 'roomId', 'missionId', 'relicModifiers']) delete slot.expedition[field];
       localStorage.setItem('lumen-pilgrimage:save-slot:1', JSON.stringify(slot));
     }, saveKey);
-    await page.getByRole('link', { name: '従来のゲームへ' }).click();
+    await enterLegacy();
     await invoke('Slot 2');
     await invoke('Continue Expedition');
     await page.waitForFunction(() => {

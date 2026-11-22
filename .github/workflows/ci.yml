@@ -28,7 +28,7 @@ jobs:
         run: npm run check
 
       - name: Install Chromium for coastal smoke tests
-        run: npx playwright install --with-deps chromium --only-shell
+        run: npx playwright install --with-deps chromium --no-shell
 
       - name: Smoke-test the built app in Chromium
         run: npm run test:coast:browser

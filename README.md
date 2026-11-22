@@ -65,7 +65,7 @@ npm run check
 海岸のブラウザテストはビルド後に次のコマンドで実行します。インストール済みの Google Chrome を使う場合は `COAST_CHROME_CHANNEL=chrome npm run test:coast:browser` で実行できます。
 
 ```sh
-npx playwright install chromium --only-shell
+npx playwright install chromium --no-shell
 npm run test:coast:browser
 ```
 
