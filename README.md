@@ -54,7 +54,7 @@ WebXR セッションを試すには、対応ブラウザとヘッドセット�
 npm run check
 ```
 
-型チェック、Vite の本番ビルド、コンテンツ・リリース・ハーネスの検証、海岸地形と操作の回帰テストを実行します。[CI](.github/workflows/ci.yml) は同じ検証に加えて Chromium でビルド済みアプリのスモークテストを実行します。
+型チェック、Vite の本番ビルド、コンテンツ・リリース・ハーネスの検証、海岸地形と操作の回帰テストを実行します。[CI](.github/workflows/ci.yml) でも同じコマンドを実行します。
 
 - `npm run validate:content` は、コンテンツの最低件数、ID の重複と参照、biome の room graph、開発用・旧仕様の文言を静的に確認します。
 - `npm run validate:release` は、`src/` の旧実装への参照と、`dist/` のデバッグ・旧実装の痕跡を確認します。単独で実行する場合は、先に `npm run build` で `dist/` を生成してください。
@@ -62,7 +62,7 @@ npm run check
 
 `dist/` のローカル確認には、ビルド後に `npm exec -- vite preview` を使います。入力、保存、XR の操作確認は [遠征検証Skill](.agents/skills/verify-expedition/SKILL.md) を参照してください。
 
-海岸のブラウザテストはビルド後に次のコマンドで実行します。インストール済みの Google Chrome を使う場合は `COAST_CHROME_CHANNEL=chrome npm run test:coast:browser` で実行できます。
+海岸のブラウザテストはビルド後に MacBook の Google Chrome で `COAST_CHROME_CHANNEL=chrome npm run test:coast:browser` を実行します。Playwright の Chromium を使う場合は、次のコマンドで準備と実行ができます。
 
 ```sh
 npx playwright install chromium --no-shell
