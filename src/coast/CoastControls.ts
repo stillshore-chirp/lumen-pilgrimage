@@ -315,7 +315,8 @@ export class CoastControls {
     if (this.inputSuspended) return false;
     const { target } = event;
     const active = document.activeElement;
-    if (target instanceof Element && target === active && target.closest('.coast-ui :is(button[type="button"], summary)')
+    if (target instanceof Element && target === active
+      && target.closest('.coast-ui :is(button[type="button"], summary, input[type="range"])')
       && !target.closest('dialog')) {
       return !event.defaultPrevented && !event.ctrlKey && !event.metaKey && !event.altKey
         && this.isPlanarControlKey(event.code);

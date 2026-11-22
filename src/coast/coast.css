@@ -161,7 +161,8 @@
   line-height: 1.45;
 }
 
-.coast-sound {
+.coast-sound,
+.coast-view-settings {
   margin-top: 8px;
 }
 
@@ -171,10 +172,15 @@
   gap: 6px;
 }
 
-.coast-volume input {
+.coast-panel input[type="range"] {
   width: 96px;
   margin: 0;
   accent-color: #c8eddf;
+}
+
+.coast-fov-value {
+  min-inline-size: 3ch;
+  font-variant-numeric: tabular-nums;
 }
 
 .coast-reticle {

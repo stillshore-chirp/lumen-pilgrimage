@@ -14,6 +14,7 @@ const qualitySettings = {
   light: 0.80,
   high: 1.75,
 } satisfies Record<CoastQuality, number>;
+const FOV_STORAGE_KEY = 'lumen-pilgrimage:fov';
 
 const movementLabels: Record<CoastMovement, string> = {
   walk: '歩行', wade: '浅瀬', swim: '遊泳', dive: '潜水', flight: '自由飛行',
@@ -113,11 +114,17 @@ export class CoastApp {
           </details>
           <p class="coast-lock-message" role="status" hidden></p>
         </section>
-        <section class="coast-panel coast-settings" aria-label="描画と音">
+        <section class="coast-panel coast-settings" aria-label="設定">
           <div class="coast-row" role="group" aria-label="描画品質">
             <span class="coast-label">描画</span>
             <button type="button" class="coast-light" aria-pressed="true" title="広域の影と軽い植生描画">軽量</button>
             <button type="button" class="coast-high" aria-pressed="false" title="細かな木漏れ日、地表の凹凸と手前の下草">高品質</button>
+          </div>
+          <div class="coast-row coast-view-settings">
+            <label class="coast-label" for="coast-fov">視野角</label>
+            <input id="coast-fov" type="range" min="40" max="95" step="1">
+            <span class="coast-fov-value" aria-hidden="true"></span>
+            <button type="button" class="coast-fov-reset">既定に戻す</button>
           </div>
           <div class="coast-row coast-sound">
             <button type="button" class="coast-audio">環境音を開始</button>
@@ -179,6 +186,7 @@ export class CoastApp {
     window.addEventListener('keydown', this.onTravelKey);
 
     this.bindQuality(ui);
+    this.bindFieldOfView(ui);
     this.bindAudio(ui, this.audio);
     this.resize = new ResizeObserver(() => this.resizeViewport());
     this.resize.observe(this.mount);
@@ -234,6 +242,43 @@ export class CoastApp {
     light.addEventListener('click', () => apply('light'));
     high.addEventListener('click', () => apply('high'));
     apply('light');
+  }
+
+  private bindFieldOfView(ui: HTMLElement): void {
+    const slider = ui.querySelector<HTMLInputElement>('#coast-fov')!;
+    const value = ui.querySelector<HTMLElement>('.coast-fov-value')!;
+    const reset = ui.querySelector<HTMLButtonElement>('.coast-fov-reset')!;
+    const defaultFov = this.camera.fov;
+    let initialFov = defaultFov;
+    try {
+      const saved = Number(window.localStorage.getItem(FOV_STORAGE_KEY));
+      if (Number.isInteger(saved) && saved >= Number(slider.min) && saved <= Number(slider.max)) initialFov = saved;
+    } catch {
+      // Storage can be unavailable in restricted browser contexts.
+    }
+
+    const apply = (fov: number) => {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+      slider.valueAsNumber = fov;
+      slider.setAttribute('aria-valuetext', `${fov}度`);
+      value.textContent = `${fov}°`;
+    };
+    const save = (fov: number | null) => {
+      try {
+        if (fov === null) window.localStorage.removeItem(FOV_STORAGE_KEY);
+        else window.localStorage.setItem(FOV_STORAGE_KEY, String(fov));
+      } catch {
+        // Adjustments remain available for the current page.
+      }
+    };
+    slider.addEventListener('input', () => apply(slider.valueAsNumber));
+    slider.addEventListener('change', () => save(slider.valueAsNumber));
+    reset.addEventListener('click', () => {
+      apply(defaultFov);
+      save(null);
+    });
+    apply(initialFov);
   }
 
   private bindAudio(ui: HTMLElement, audio: ExplorationAudio): void {
