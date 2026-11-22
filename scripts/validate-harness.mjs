@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -10,8 +10,7 @@ const currentDocs = [
   'README.md',
   harnessGuide,
   'docs/architecture.md',
-  'plans/TEMPLATE.md',
-  'plans/reforge-roadmap.md'
+  'plans/TEMPLATE.md'
 ];
 const errors = [];
 
@@ -77,12 +76,11 @@ function checkSkill(doc, source) {
 
 function run() {
   const { scripts } = JSON.parse(read('package.json'));
-  const skills = readdirSync(repositoryPath(skillRoot), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => `${skillRoot}/${entry.name}/SKILL.md`);
-  if (skills.length === 0) {
-    errors.push(`${skillRoot}: no repository skills found`);
-  }
+  const skills = existsSync(resolve(root, skillRoot))
+    ? readdirSync(repositoryPath(skillRoot), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `${skillRoot}/${entry.name}/SKILL.md`)
+    : [];
 
   const links = new Map();
   for (const doc of [...currentDocs, ...skills]) {

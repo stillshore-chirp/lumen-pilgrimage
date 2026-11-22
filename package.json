@@ -7,11 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run build && npm run validate:content && npm run validate:release && npm run validate:harness && npm run test:coast",
+    "check": "npm run build && npm run validate:harness && npm run test:coast",
     "test:coast": "node --test scripts/coast-controls.test.mjs scripts/coast-terrain.test.mjs scripts/coast-acoustics.test.mjs",
     "test:coast:browser": "node --test scripts/coast-browser.test.mjs",
-    "validate:content": "node scripts/validate-content.mjs",
-    "validate:release": "node scripts/validate-release.mjs",
     "validate:harness": "node scripts/validate-harness.mjs"
   },
   "dependencies": {

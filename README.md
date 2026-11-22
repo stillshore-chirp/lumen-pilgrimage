@@ -1,6 +1,6 @@
-# Lumen Pilgrimage: Reforge
+# Lumen Pilgrimage
 
-Three.js と TypeScript で開発している探索プロトタイプです。Chrome で海岸から密林の沢、内陸の湖、稜線と朱の参道を巡り、丘陵展望台から盆地の市街地を一望できます。従来のアクション探索ゲームでは、Hub での出撃準備、遠征の戦闘・報酬選択・保存・再開を操作できます。WebXR ではセッション管理と Hub 端末のレイ選択を実装しています。
+Three.js と TypeScript で開発している自然景観探索プロトタイプです。Chrome で海岸から密林の沢、内陸の湖、稜線と朱の参道を巡り、丘陵展望台から盆地の市街地を一望できます。
 
 ## 起動と操作
 
@@ -44,49 +44,31 @@ Vite が表示したローカル URL を MacBook の Chrome で開くと、砂�
 
 素材の出典・再配布条件は [録音素材のクレジット](public/coast-audio/ATTRIBUTION.md)、[景観素材のクレジット](public/coast-materials/ATTRIBUTION.md)、[丘陵展望台の地形と街路の出典](public/coast-overlook/ATTRIBUTION.md) を参照してください。
 
-### 従来の遠征ゲーム
-
-自然景観探索の右上にある「従来のゲームへ」から開きます。URL に `?scene=expedition` を付けて直接開くこともできます。どちらも同じオリジンの既存セーブを使用します。
-
-1. Main Menu でセーブスロットを選択し、`Enter Hub` を押します。`New Game` は選択中のスロットの遠征データと恒久進行を初期化します。
-2. Hub の `Expedition Prep` で解放済みの biome・装備とミッションを選び、`Launch Expedition` で出撃します。モードは Main Menu の `Mode Select` から選べます。
-3. 遠征中は選択スロットに進行が自動保存されます。ページを再読み込みして同じスロットを選択し、`Continue Expedition` から保存済みの遠征を再開できます。
-
-| 場面 | 入力 | 操作 |
-| --- | --- | --- |
-| Hub | `Q` / `E` | 端末の切り替え / 起動 |
-| 遠征 | 左クリックまたは `Space` / 右クリック | 主武器で攻撃 / ガード |
-| 遠征 | `F` / `Q` | パリィ / 副手段の使用 |
-| 遠征 | 左 `Shift` / `R` | ダッシュ / Ash Sight |
-| 遠征 | `A`・`D` / `E` | 報酬候補の切り替え / 決定。通常時の `E` は装備の切り替え |
-
-WebXR セッションを試すには、対応ブラウザとヘッドセットを使い、セキュアコンテキストでページを開きます。接続中のコントローラーのレイで Hub の端末を選択できます。端末の起動と戦闘には現時点でデスクトップ入力を使います。[WebXR Device API](https://www.w3.org/TR/webxr/#idl-index)
-
 ## 検証と配布ビルド
 
 ```sh
 npm run check
 ```
 
-型チェック、Vite の本番ビルド、コンテンツ・リリース・ハーネスの検証、景観の地形・操作・音の回帰テストを実行します。[CI](.github/workflows/ci.yml) でも同じコマンドを実行します。
+型チェック、本番ビルド、ハーネス文書の静的検査、探索の地形・操作・音の回帰テストを実行します。[CI](.github/workflows/ci.yml) でも同じコマンドを実行します。
 
-- `npm run validate:content` は、コンテンツの最低件数、ID の重複と参照、biome の room graph、開発用・旧仕様の文言を静的に確認します。
-- `npm run validate:release` は、`src/` の旧実装への参照と、`dist/` のデバッグ・旧実装の痕跡を確認します。単独で実行する場合は、先に `npm run build` で `dist/` を生成してください。
-- `npm run validate:harness` は、現行文書のリポジトリ内リンク、記載された npm スクリプト、Skill の配置とメタデータを確認します。
+- `npm run build` は型チェックと Vite の本番ビルドを行います。
+- `npm run validate:harness` は現行文書のリポジトリ内リンクと、記載された npm スクリプト名を確認します。
+- `npm run test:coast` は探索の移動・地形・音響の単体テストを実行します。
 
-`dist/` のローカル確認には、ビルド後に `npm exec -- vite preview` を使います。入力、保存、XR の操作確認は [遠征検証Skill](.agents/skills/verify-expedition/SKILL.md) を参照してください。
+`dist/` のローカル確認には、ビルド後に `npm exec -- vite preview` を使います。
 
-海岸のブラウザテストはビルド後に MacBook の Google Chrome で `COAST_CHROME_CHANNEL=chrome npm run test:coast:browser` を実行します。Playwright の Chromium を使う場合は、次のコマンドで準備と実行ができます。
+景観探索のブラウザテストはビルド後に MacBook の Google Chrome で `COAST_CHROME_CHANNEL=chrome npm run test:coast:browser` を実行します。Playwright の Chromium を使う場合は、次のコマンドで準備と実行ができます。
 
 ```sh
 npx playwright install chromium --no-shell
 npm run test:coast:browser
 ```
 
-テストは二つの散策路の周回、移動速度、文字サイズ、描画切替とリロード、歩行・遊泳・飛行、模擬パッド入力、音の開始と再開・ミュート・定位と反射の設定、昼夜切替と二つのワールド間のファストトラベル、既存ゲームの保存と Continue を確認します。実機ではゲームパッドの両スティックと上下・モード切替を試し、ヘッドホンでは滝との距離や視点を変えて定位と音割れ・途切れの有無を確認します。ヘッドセットを使う既存の WebXR 操作は遠征検証 Skill の手順で確認できます。
+ブラウザテストは、海岸と丘陵展望台の描画、移動・遊泳・飛行、ゲームパッド入力、環境音、描画品質、ワールド間移動と時間帯の引き継ぎを確認します。過去の直接起動 URL で開いた場合も自然景観探索が起動することを確認します。実機ではゲームパッドの両スティックと上下・モード切替を試し、ヘッドホンでは滝との距離や視点を変えて定位と音割れ・途切れの有無を確認します。
 
 ## 開発資料
 
-- [設計](docs/architecture.md) に、入力、遠征、保存、描画・音響の現行の接続を記載しています。
-- [エージェントハーネス](docs/agent-harness.md) に、リポジトリ指示、検証Skill、Codexのワークツリー設定の配置を記載しています。
-- [Reforge ロードマップ](plans/reforge-roadmap.md) に、ゲームとしての到達目標と残る実装課題を記載しています。`plans/` 内の個別計画と進捗 JSON は、作成時点の記録です。
+- [設計](docs/architecture.md) に、探索の起動、操作、ワールド間移動、描画・音響の接続を記載しています。
+- [エージェントハーネス](docs/agent-harness.md) に、リポジトリ指示と静的検査の入口を記載しています。
+- `plans/` 内の個別計画と進捗 JSON は、作成時点の記録です。
