@@ -1,5 +1,7 @@
 # Task: reforge-phase4-continue-resume-boss-stub
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Phase 4 継続として、continue 復帰時に run 状態（mission/room/relic/vitals）を再適用し、Ember/Moon の boss encounter stub と HUD phase readout を追加する。
 

@@ -1,5 +1,7 @@
 # reforge-phase6-arena-device-runtime
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 boss phase ごとの `arenaMutationSummary` を、HUD の文字列だけでなく gameplay 側で扱えるデータ駆動の arena device runtime へ拡張し、今後の geometry/VFX 接続先を確立する。
 

@@ -1,5 +1,7 @@
 # Task: reforge-phase1-foundation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Lumen Pilgrimage を ritual/glyph 中心デモから、Reforge の基盤（state machine + menu/hub skeleton + input abstraction + save/settings + perf HUD）へ移行する。
 

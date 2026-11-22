@@ -1,5 +1,7 @@
 # reforge-phase5-run-summary-stats
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 DreamExporter 廃止後の代替として、run 中の戦闘統計を収集して要約できる `StatsTracker` / `RunSummaryBuilder` を導入し、HUD へ可視化する。
 

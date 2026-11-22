@@ -1,5 +1,7 @@
 # Reforge Phase 5: Accessibility / Controls Menu Foundation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Main Menu に `Accessibility` と `Controls` 導線を追加し、VR/flat 共通で必要な操作・快適性設定を永続化可能にする。
 

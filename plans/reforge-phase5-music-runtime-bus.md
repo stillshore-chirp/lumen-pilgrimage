@@ -1,5 +1,7 @@
 # Reforge Phase 5: Music Runtime Bus Wiring
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 `MusicDirector` が算出する stem mix（exploration / threat / combat / clutch / boss）をランタイムの音響層へ接続し、HUD 表示と実オーディオ遷移の責務を分離した状態で同期させる。
 

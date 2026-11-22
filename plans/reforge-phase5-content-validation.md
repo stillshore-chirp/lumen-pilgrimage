@@ -1,5 +1,7 @@
 # Reforge Phase 5: Content Validation Gate
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 - Reforge のデータ駆動コンテンツ（biome / mission / loadout / relic / boss contract）が最小実装基準を満たしているかを、リリース前に機械検証できるようにする。
 - release build に debug 文言が混入していないかをチェックし、ship 前の見落としを減らす。

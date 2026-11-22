@@ -10,6 +10,9 @@ const currentDocs = [
   'README.md',
   harnessGuide,
   'docs/architecture.md',
+  'docs/exploration.md',
+  'docs/verification.md',
+  'plans/README.md',
   'plans/TEMPLATE.md'
 ];
 const errors = [];

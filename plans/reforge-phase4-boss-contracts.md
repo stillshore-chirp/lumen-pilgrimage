@@ -1,5 +1,7 @@
 # Task: reforge-phase4-boss-contracts
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Phase 4 の boss-approach 実装を stub 表示から進め、biome ごとの multi-phase behavior contract をデータ駆動で導入する。
 

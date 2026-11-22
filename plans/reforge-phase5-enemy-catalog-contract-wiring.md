@@ -1,5 +1,7 @@
 # Task Plan: Reforge Phase 5 Enemy Catalog / Contract Wiring
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 0. Metadata
 - Task ID: reforge-phase5-enemy-catalog-contract-wiring
 - Branch: current working branch

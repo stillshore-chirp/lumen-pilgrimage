@@ -1,5 +1,7 @@
 # Task: reforge-phase5-save-slots
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Main Menu から save slot を選択できるようにし、slot ごとに campaign/meta/continue 状態を独立して保持・復帰できる基盤を追加する。
 

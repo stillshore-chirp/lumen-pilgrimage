@@ -1,5 +1,7 @@
 # Reforge Phase 5: Music Director Foundation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 - biome / combat / boss phase に応じて探索・脅威・戦闘・クラッチ stem をデータ駆動で切り替える `MusicDirector` 基盤を導入し、HUD へ現在のミックス状態を可視化する。
 

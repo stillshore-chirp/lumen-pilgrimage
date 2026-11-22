@@ -1,5 +1,7 @@
 # Reforge Phase 4: Dedicated Boss Actor Foundation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 0. Metadata
 - Task ID: reforge-phase4-dedicated-boss-actor-foundation
 - Branch: work

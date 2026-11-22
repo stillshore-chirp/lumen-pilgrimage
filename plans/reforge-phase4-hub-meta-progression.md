@@ -1,5 +1,7 @@
 # Task: reforge-phase4-hub-meta-progression
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Phase 4 継続として、Hub 側で恒久成長（通貨表示・unlock/craft プレースホルダ）を操作できる UI を実装し、save slot の永続データへ接続する。
 

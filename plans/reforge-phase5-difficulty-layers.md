@@ -1,5 +1,7 @@
 # Task: reforge-phase5-difficulty-layers
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Pilgrim / Trial / Martyr の 3 段階 difficulty layer を設定可能にし、run 内の敵耐久・被ダメージ・攻撃圧へ反映する。
 

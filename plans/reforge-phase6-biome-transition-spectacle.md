@@ -1,5 +1,7 @@
 # reforge-phase6-biome-transition-spectacle
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 `WorldAssembler` を Phase 6 向けに拡張し、biome 遷移時に light sweep / altar flare / caustic proxy をデータ駆動で再生できるようにする。hub と expedition の切替が「色替えだけ」に見えない土台を作る。
 

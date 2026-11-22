@@ -1,5 +1,7 @@
 # Task: reforge-phase5-encounter-variety-expansion
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Phase 5 の encounter variety を拡張し、既存 8 系統に加えて推奨ミッション系統をデータ定義へ取り込み、run 中のミッション回転で戦術変化を増やす。
 

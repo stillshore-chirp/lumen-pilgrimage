@@ -1,5 +1,7 @@
 # Task: lumen-pilgrimage-webxr
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Three.js r184 + TypeScript で WebXR VR 対応の Lumen Pilgrimage 体験を実装し、指定ファイル構成に沿った最小実装を完成させる。
 

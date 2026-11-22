@@ -1,5 +1,7 @@
 # reforge-phase6-world-assembler-foundation
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 hub / expedition の見た目遷移を `Game` の分岐ロジックから分離し、biome ごとの背景・fog・light をデータ駆動で切り替える `WorldAssembler` 基盤を導入する。
 

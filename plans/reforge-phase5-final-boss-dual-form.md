@@ -1,5 +1,7 @@
 # reforge-phase5-final-boss-dual-form
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Final Zone のボスを 2 form 構成としてデータ駆動で表現し、phase 進行に応じて UI 表示名が切り替わる基盤を導入する。
 

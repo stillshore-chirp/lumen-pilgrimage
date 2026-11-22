@@ -1,5 +1,7 @@
 # Task: reforge-phase4-encounter-director
 
+> **旧ゲームの履歴**です。現行の仕様と開発資料は [README](../README.md) から参照できます。
+
 ## 目的
 Phase 4 の最初の到達点として、EncounterDirector を導入し、biome/sector/room 進行を戦闘サンドボックスに接続する。
 
