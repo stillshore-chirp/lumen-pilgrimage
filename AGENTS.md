@@ -4,10 +4,10 @@
 
 ## 開発の入口
 
-- 起動手順、現行の操作範囲、検証コマンドは [README.md](README.md) を参照してください。
-- 自然景観探索の起動、操作、ワールド間移動、描画・音響の接続は [docs/architecture.md](docs/architecture.md) を参照してください。
-- Issue・PRの記載とリポジトリ指示・静的検査の保守は [docs/agent-harness.md](docs/agent-harness.md) を参照してください。
-- リポジトリ内に作業計画を残す場合は [plans/TEMPLATE.md](plans/TEMPLATE.md) を使えます。
+- [README.md](README.md) に、起動手順と利用者・開発者向けの文書案内があります。
+- 変更内容に対応する文書を [正本と更新先](docs/agent-harness.md#正本と更新先) で確認し、該当箇所を更新してください。
+- [Issue・PRの記載](docs/agent-harness.md#issueprの記載) と、文書や参照を変えたときの [静的検査](docs/agent-harness.md#更新と検証) はハーネスガイドを参照してください。
+- リポジトリ内に作業計画を残す場合は [作業計画テンプレート](plans/TEMPLATE.md) を使えます。
 
 ## 変更時に確認する契約
 
@@ -21,7 +21,6 @@
 
 ## 検証
 
-- CI の型チェック・ビルド・静的検査と単体テストは `npm run check` を使ってください。探索の起動・描画・操作・音響・ワールド間移動を変更した場合は、ビルド後に `npm run test:coast:browser` も実行してください。ブラウザの準備は [README の検証手順](README.md#検証と配布ビルド) を参照してください。
+- CI の型チェック・ビルド・静的検査と単体テストは `npm run check` を使ってください。探索の起動・描画・操作・音響・ワールド間移動を変更した場合は、ビルド後に `npm run test:coast:browser` も実行してください。ブラウザの準備は [検証と配布ビルド](docs/verification.md) を参照してください。
 - 文書やリポジトリ指示の静的検査には `npm run validate:harness` を使ってください。操作や描画の変更では、対象に応じたブラウザでの確認結果も記録してください。
 - 探索ロジックや地形の変更で既存検証が拾えない回帰条件は、対象に近い検証に追加してください。
-- 操作、セットアップ、モジュール間の契約を変更した場合は、対応する README または設計文書を更新してください。
