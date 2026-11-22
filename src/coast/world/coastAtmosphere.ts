@@ -9,6 +9,7 @@ const moonlitWater = new THREE.Color(0.12, 0.18, 0.28);
 
 interface CoastAtmosphereOptions {
   nightHorizon?: THREE.ColorRepresentation;
+  nightGlow?: { color: THREE.ColorRepresentation; direction: THREE.Vector3 };
   starVisibility?: number;
   moonDirection?: THREE.Vector3;
   aerialDistanceScale?: number;
@@ -121,6 +122,8 @@ export function createCoastAtmosphere(daySunDirection: THREE.Vector3, options: C
     night,
     surfaceLight,
     nightHorizon: { value: new THREE.Color(options.nightHorizon ?? 0x293a55) },
+    nightGlow: { value: new THREE.Color(options.nightGlow?.color ?? 0x000000) },
+    nightGlowDirection: { value: (options.nightGlow?.direction ?? new THREE.Vector3(0, 0, -1)).clone().normalize() },
     starVisibility: { value: options.starVisibility ?? 1 },
     aerialDistanceScale: { value: options.aerialDistanceScale ?? 1 },
     submersion: { value: 0 },
@@ -140,6 +143,7 @@ export type CoastAtmosphere = ReturnType<typeof createCoastAtmosphere>;
 export const coastSkyGlsl = /* glsl */`
   uniform sampler2D uCoastSky;
   uniform vec3 uCoastSunDirection, uCoastSolarColor, uCoastNightHorizon, uCoastSurfaceLight;
+  uniform vec3 uCoastNightGlow, uCoastNightGlowDirection;
   uniform float uCoastNight;
 
   vec3 coastNightSky(vec3 direction) {
@@ -147,8 +151,10 @@ export const coastSkyGlsl = /* glsl */`
     float airMass = exp(-elevation * 5.5);
     float moonAngle = dot(direction, uCoastSunDirection);
     float halo = exp((moonAngle - 1.0) * 31.0) * 0.035 + exp((moonAngle - 1.0) * 480.0) * 0.13;
+    float glowAzimuth = max(0.0, dot(direction.xz, uCoastNightGlowDirection.xz));
+    float glow = pow(glowAzimuth, 5.0) * exp(-elevation * 18.0);
     return mix(vec3(0.006, 0.011, 0.026), uCoastNightHorizon, airMass)
-      + vec3(0.62, 0.76, 1.0) * halo;
+      + vec3(0.62, 0.76, 1.0) * halo + uCoastNightGlow * glow;
   }
 
   vec3 coastSkyRadiance(vec3 direction) {
@@ -188,6 +194,8 @@ export function bindCoastSky(uniforms: Record<string, THREE.IUniform>, atmospher
   uniforms.uCoastSolarColor = atmosphere.solarColor;
   uniforms.uCoastNight = atmosphere.night;
   uniforms.uCoastNightHorizon = atmosphere.nightHorizon;
+  uniforms.uCoastNightGlow = atmosphere.nightGlow;
+  uniforms.uCoastNightGlowDirection = atmosphere.nightGlowDirection;
   uniforms.uCoastSurfaceLight = atmosphere.surfaceLight;
 }
 

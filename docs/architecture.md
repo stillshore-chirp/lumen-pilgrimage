@@ -8,7 +8,7 @@
 ## 自然景観探索
 
 - [CoastApp](../src/coast/CoastApp.ts) は、景観用のレンダラー、カメラ、画面とフレームループを起動する。[移動先の定義](../src/coast/coastDestinations.ts) は両ワールドの着地点と到着時の向きを持つ。同じワールドでは入力と移動状態をリセットして着地点へ移動する。ワールドを渡るときは、移動先と時間帯を URL に渡してページを読み込む。景観側は遠征のセーブや設定から独立している。
-- `?world=overlook` では [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) が丘陵展望台を起動する。標高データで広域と周辺の地形を作り、公開街路データに沿って建物と街灯を配置する。デッキと造形は独自制作。地上移動はテラスの柵、建物、ベンチ、望遠鏡に沿って制限する。 [地理データの出典](../public/coast-overlook/ATTRIBUTION.md)
+- `?world=overlook` では [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) が丘陵展望台を起動する。標高データで広域と周辺の地形を作り、公開街路データに沿って建物と街灯を配置する。[高層街区](../src/coast/world/overlook/overlookSkyline.ts) と [幹線交通](../src/coast/world/overlook/overlookTraffic.ts) は展望デッキからの眺めに合わせて配置した。幹線の周囲では建物の敷地を空け、車体とライトは道路の高さと走行方向に追従する。地上移動はテラスの柵、建物、ベンチ、望遠鏡に沿って制限する。 [地理データの出典](../public/coast-overlook/ATTRIBUTION.md)
 - [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形、散策路、沢の水位](../src/coast/terrain.ts) を共有する。道の縦断勾配を滑らかにつなぎ、周囲の地面に応じて横断勾配を付ける。西の岩棚、東の潮棚、林内の分岐と沢は、地形と [岩・シダの配置](../src/coast/world/coastLandmarks.ts) を合わせて組む。素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
 - 地上の登坂判定に引っかかったときは横方向の移動を試す。急な下りとジャンプは重力で接地させる。遊泳と潜水は海・沢・湖の水位を参照し、潜水時に水底への進入を止める。水底が浅くなると浮上し、岸で接地する。水中の視界は深さで減衰し、水面の裏側と水底に届く光を描く。
 - 密林の高所から峠、湖の周回路、稜線へつながる。[朱の参道](../src/coast/world/coastInariTrail.ts) は湖の周回路から分かれ、地形の二つの歩行路に沿って石段と鳥居を置く。山の鞍部と樹冠の高さを調整し、南東から楼門や前庭、石段の入口に日が入る。小社からの下り道は稜線への道に合流する。路肩の地形、ベンチと屋外休憩所の座標、視界を空ける範囲を地形定義に持つ。[休憩所](../src/coast/world/coastRestAreas.ts) は地形に合わせて木製ベンチと低い石の縁を置く。

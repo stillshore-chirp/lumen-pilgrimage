@@ -4,7 +4,7 @@
 
 米国特許商標庁の資料では、参考にした施設の名称は米国商標登録第3,687,943号で、指定商品にはゲームソフトが含まれます。出所・提携・公認の混同を避けるため、画面上の名称は「丘陵展望台」としました。 [米国特許商標庁の資料](https://tmng-al.uspto.gov/resting2/api/casedoc/cms/case/99640852/office-action/OfficeAction8617576.pdf#page=21) · [15 U.S.C. §1125](https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title15-section1125)
 
-公共の場所から見える建築の絵画・写真などを扱う米国著作権法の規定と、図面、写真、彫刻、ロゴやゲーム用モデルの利用条件を確認しました。展望台、パビリオン、市街の建物と窓明かりは独自に造形しました。 [17 U.S.C. §120](https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title17-section120) · [米国著作権局の建築著作物の資料](https://www.copyright.gov/circs/circ41.pdf)
+公共の場所から見える建築の絵画・写真などを扱う米国著作権法の規定と、図面、写真、彫刻、ロゴやゲーム用モデルの利用条件を確認しました。展望台、パビリオン、市街の建物と窓明かりは独自に造形しました。高層街区の位置・規模と車が走る幹線は、展望台からの眺めに合わせて構成しました。 [17 U.S.C. §120](https://uscode.house.gov/view.xhtml?req=granuleid:USC-prelim-title17-section120) · [米国著作権局の建築著作物の資料](https://www.copyright.gov/circs/circ41.pdf)
 
 ## 地形と街路
 
