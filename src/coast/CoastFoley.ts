@@ -7,10 +7,10 @@ type ContactVoice = { panner: PannerNode; gain: GainNode; source?: AudioBufferSo
 const CONTACTS: Record<Contact, {
   duration: number; body: number; grit: number; color: number; decay: number; gain: number;
 }> = {
-  sand: { duration: 0.23, body: 0.55, grit: 0.38, color: 890, decay: 27, gain: 0.34 },
-  gravel: { duration: 0.26, body: 0.35, grit: 0.91, color: 3_200, decay: 27, gain: 0.28 },
-  leaves: { duration: 0.34, body: 0.26, grit: 0.78, color: 1_700, decay: 13, gain: 0.32 },
-  wade: { duration: 0.31, body: 0.62, grit: 0.72, color: 2_300, decay: 13, gain: 0.36 },
+  sand: { duration: 0.23, body: 0.55, grit: 0.38, color: 890, decay: 27, gain: 0.68 },
+  gravel: { duration: 0.26, body: 0.35, grit: 0.91, color: 3_200, decay: 27, gain: 0.56 },
+  leaves: { duration: 0.34, body: 0.26, grit: 0.78, color: 1_700, decay: 13, gain: 0.62 },
+  wade: { duration: 0.31, body: 0.62, grit: 0.72, color: 2_300, decay: 13, gain: 0.44 },
   stroke: { duration: 0.36, body: 0.70, grit: 0.48, color: 1_480, decay: 12, gain: 0.36 },
   bubbles: { duration: 0.39, body: 0.34, grit: 0.29, color: 610, decay: 9, gain: 0.31 },
   splash: { duration: 0.61, body: 0.72, grit: 0.97, color: 3_750, decay: 10, gain: 0.44 },
