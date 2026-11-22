@@ -141,12 +141,14 @@ export function createOverlookSurface(
         float paleGravel = rockyPatch * smoothstep(0.32, 0.77, chips);
         diffuseColor.rgb = mix(diffuseColor.rgb * (0.88 + 0.22 * chips), vec3(0.36, 0.30, 0.21),
           soilDetail * paleGravel * 0.58);
-        vec3 block = mix(vec3(0.26, 0.255, 0.23), vec3(0.36, 0.345, 0.308), coastNoise(soil * 0.34));
-        diffuseColor.rgb = mix(diffuseColor.rgb, block, cityGround.r * 0.86);
-        diffuseColor.rgb *= 1.0 - cityGround.g * (0.19 + cityGround.b * 0.17);
+        float planting = coastNoise(soil * 0.0055) * coastNoise(soil * 0.019);
+        vec3 block = mix(vec3(0.16, 0.169, 0.153), vec3(0.265, 0.247, 0.221), coastNoise(soil * 0.082));
+        block = mix(block, vec3(0.094, 0.131, 0.080), planting * 0.94);
+        diffuseColor.rgb = mix(diffuseColor.rgb, block, cityGround.r * 0.94);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.066, 0.074, 0.078), cityGround.g * (0.55 + cityGround.b * 0.28));
       `)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        float hillRelief = soilDetail * (0.044 * chips + 0.071 * paleGravel);
+        float hillRelief = soilDetail * (0.018 * chips + 0.035 * paleGravel);
         vec3 tangentX = dFdx(-vViewPosition);
         vec3 tangentY = dFdy(-vViewPosition);
         vec3 acrossX = cross(tangentY, normal);
@@ -156,8 +158,8 @@ export function createOverlookSurface(
         normal = normalize(max(abs(orientation), 1e-8) * normal - hillGradient);
       `)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += uHillNight * vec3(0.054, 0.030, 0.010)
-          * (cityGround.b * 0.5 + cityGround.r * 0.39);
+        totalEmissiveRadiance += uHillNight * vec3(0.044, 0.023, 0.008)
+          * (cityGround.b * 0.45 + cityGround.r * 0.34);
       `);
   };
   const mesh = new THREE.Mesh(geometry, material);

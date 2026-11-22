@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createOverlookSkyline, type SkylineLight } from './overlookSkyline';
+import { createOverlookSkyline, OVERLOOK_DISTRICTS, type SkylineLight } from './overlookSkyline';
 
 const minX = -23000;
 const minZ = -26000;
@@ -24,21 +24,32 @@ export function createOverlookCityGround() {
 
 type TimeOfDay = 'day' | 'night';
 type Quality = 'light' | 'high';
+type BuildingForm = 'flat' | 'pitched' | 'terraced';
 
 type Building = {
   x: number; y: number; z: number;
   width: number; height: number; depth: number;
   yaw: number; color: THREE.Color;
-  pitch: boolean; variant: number;
+  variant: number; facade: number;
 };
 
 const roofs = {
   plaster: [0xd3c4b2, 0xc4bfae, 0xa7a29a, 0xdbd4bd, 0xddd6cb, 0xb9b8ad],
   shingle: [0x807a72, 0x716965, 0x92908a, 0x73645e, 0x929296, 0xa69381],
   terracotta: [0xa17159, 0x986654, 0xad7860, 0xa77861, 0x8d6b5b, 0xb4866d],
-  commercial: [0xd7d1c4, 0xa6abb0, 0xc6c4b8, 0x969995, 0xc4bab1, 0xb9b9b1],
   industrial: [0xbec3c0, 0xe0d8cc, 0x9e9d97, 0xcfd4d3, 0xb2ada5, 0xc6bab4],
+  masonry: [0xbcb6aa, 0xa1978e, 0xa3978d, 0xb6aaa3, 0x8e8380, 0xc0b7a6],
+  offices: [0x7a929f, 0x8296a2, 0x667d8d, 0x859a9d, 0x92999d, 0x99928a],
 } as const;
+
+const midriseDistricts = [
+  [OVERLOOK_DISTRICTS.west, 1190, 1020, 48],
+  [OVERLOOK_DISTRICTS.midtown, 870, 850, 56],
+  [OVERLOOK_DISTRICTS.central, 1540, 1200, 73],
+  [OVERLOOK_DISTRICTS.east, 1250, 1070, 65],
+  [OVERLOOK_DISTRICTS.south, 2170, 1500, 43],
+  [[8300, -5200], 1600, 1150, 43],
+] as const;
 
 const cityAir = /* glsl */`
   uniform float uNight;
@@ -47,10 +58,16 @@ const cityAir = /* glsl */`
   float cityTransmittance(vec3 world) {
     float distanceToEye = distance(world, cameraPosition);
     float layer = exp(-max(0.0, world.y + cameraPosition.y) * 0.0010);
-    return exp(-distanceToEye * mix(0.000058, 0.000042, uNight) * (0.60 + 1.12 * layer));
+    return exp(-distanceToEye * mix(0.000040, 0.000038, uNight) * (0.55 + 1.12 * layer));
   }
   vec3 cityInAir(vec3 color, float transmission) {
     return mix(mix(uCityDayHaze, uCityNightHaze, uNight), color, transmission);
+  }
+
+  float windowRandom(vec2 cell) {
+    vec3 p = fract(vec3(cell.xyx) * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
   }
 `;
 
@@ -60,16 +77,19 @@ const towersVertex = /* glsl */`
   varying vec3 vCityColor;
   varying vec4 vFacade;
   varying float vTransmission;
+  varying float vSkyReflection;
   uniform vec3 uCitySun;
   ${cityAir}
   void main() {
     vec3 world = (modelMatrix * vec4(position, 1.0)).xyz;
     float sun = max(0.0, dot(normal, uCitySun));
-    float dayExposure = 0.72 + sun * 0.84 + max(normal.y, 0.0) * 0.16;
-    float nightExposure = 0.13 + max(normal.y, 0.0) * 0.13;
-    vCityColor = color * mix(dayExposure, nightExposure, uNight);
+    float roof = max(normal.y, 0.0);
+    vec3 daylight = vec3(0.57, 0.65, 0.75) + sun * vec3(0.97, 0.86, 0.69) + roof * 0.19;
+    vec3 nightlight = vec3(0.11, 0.16, 0.24) + roof * 0.095;
+    vCityColor = color * mix(daylight, nightlight, uNight);
     vFacade = cityFacade;
     vTransmission = cityTransmittance(world);
+    vSkyReflection = pow(1.0 - clamp(dot(normalize(cameraPosition - world), normal), 0.0, 1.0), 2.6);
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
   }
 `;
@@ -78,13 +98,8 @@ const towersFragment = /* glsl */`
   varying vec3 vCityColor;
   varying vec4 vFacade;
   varying float vTransmission;
+  varying float vSkyReflection;
   ${cityAir}
-
-  float windowRandom(vec2 cell) {
-    vec3 p = fract(vec3(cell.xyx) * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y) * p.z);
-  }
 
   void main() {
     vec3 color = vCityColor;
@@ -97,14 +112,15 @@ const towersFragment = /* glsl */`
       float resolved = 1.0 - smoothstep(0.65, 2.2, max(pixel.x, pixel.y));
       float pane = mix(0.34, panes.x * panes.y, resolved);
       float local = windowRandom(floor(window));
-      float floorSuite = windowRandom(floor(window * vec2(0.20, 0.365)));
-      float occupancy = mix(0.17 + 0.47 * floorSuite, smoothstep(0.43, 0.75, local * 0.77 + floorSuite * 0.52), resolved);
-      float tint = windowRandom(floor(window * vec2(0.29, 0.49)) + vec2(13.0));
-      vec3 light = mix(vec3(0.88, 0.55, 0.25), vec3(0.34, 0.57, 0.76), smoothstep(0.25, 0.80, tint));
-      color *= 1.0 - pane * mix(0.57, 0.33, uNight);
-      color += uNight * pane * occupancy * light * (0.30 + 0.42 * floorSuite);
+      float floorSuite = windowRandom(floor(window * vec2(0.12, 0.19)));
+      float occupancy = mix(0.10 + 0.66 * floorSuite, smoothstep(0.46, 0.76, local * 0.68 + floorSuite * 0.53), resolved);
+      float tint = windowRandom(floor(window * vec2(0.09, 0.14)) + vec2(13.0));
+      vec3 light = mix(vec3(1.04, 0.69, 0.36), vec3(0.58, 0.73, 0.93), smoothstep(0.24, 0.85, tint));
+      vec3 glazing = color * (0.58 + local * 0.095) + vec3(0.074, 0.143, 0.230) * (0.35 + 0.80 * vSkyReflection);
+      color = mix(color, glazing, pane * (1.0 - uNight));
+      color += uNight * pane * occupancy * light * (0.36 + 0.46 * floorSuite);
     }
-    color += vFacade.w * uNight * vec3(0.30, 0.49, 0.67);
+    color += vFacade.w * uNight * vec3(0.48, 0.76, 1.0);
     gl_FragColor = vec4(cityInAir(color, vTransmission), 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -117,7 +133,10 @@ const blocksVertex = /* glsl */`
   attribute vec2 cityHeading;
   attribute vec3 cityColor;
   attribute float cityVariant;
+  attribute float cityWindowScale;
   varying vec3 vCityColor;
+  varying vec3 vBlockFace;
+  varying float vBlockTransmission;
   uniform vec3 uCitySun;
   ${cityAir}
   void main() {
@@ -127,26 +146,44 @@ const blocksVertex = /* glsl */`
       p.y,
       p.z * cityHeading.x - p.x * cityHeading.y
     );
-    vec3 n = normalize(normal / cityScale);
+    vec3 localNormal = normalize(normal / cityScale);
+    vec3 n = localNormal;
     n = vec3(n.x * cityHeading.x + n.z * cityHeading.y, n.y, n.z * cityHeading.x - n.x * cityHeading.y);
     float facing = max(0.0, dot(n, uCitySun));
     float roof = smoothstep(0.18, 0.77, n.y);
-    vec3 walls = mix(cityColor, vec3(0.46, 0.40, 0.343), 0.19);
-    vec3 base = mix(walls, cityColor, roof);
-    float sunlight = 0.64 + facing * 0.85 + roof * 0.14;
-    float shade = mix(0.56, 1.0, smoothstep(0.0, 0.95, position.y + roof * 0.2));
-    vec3 day = base * sunlight * shade;
-    vec3 dark = base * (0.092 + roof * 0.050) + vec3(0.006, 0.010, 0.018);
-    dark += (1.0 - roof) * vec3(0.011, 0.006, 0.001) * cityVariant;
-    vCityColor = cityInAir(mix(day, dark, uNight), cityTransmittance(world));
+    vec3 day = cityColor * (vec3(0.53, 0.62, 0.73) + facing * vec3(0.86, 0.78, 0.65) + roof * 0.10);
+    day *= mix(0.54, 1.0, smoothstep(0.0, 0.46, position.y + roof * 0.2));
+    vec3 dark = cityColor * (vec3(0.097, 0.108, 0.142) + roof * 0.062) + vec3(0.004, 0.008, 0.016);
+    vCityColor = mix(day, dark, uNight);
+    float across = abs(localNormal.x) > 0.5 ? p.z : p.x;
+    vBlockFace = vec3(across * cityWindowScale + cityVariant * 81.0, world.y * 0.252, cityWindowScale * (1.0 - roof));
+    vBlockTransmission = cityTransmittance(world);
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
   }
 `;
 
 const blocksFragment = /* glsl */`
   varying vec3 vCityColor;
+  varying vec3 vBlockFace;
+  varying float vBlockTransmission;
+  ${cityAir}
   void main() {
-    gl_FragColor = vec4(vCityColor, 1.0);
+    vec3 color = vCityColor;
+    if (vBlockFace.z > 0.1) {
+      vec2 cell = vBlockFace.xy;
+      vec2 footprint = min(fwidth(cell), vec2(0.5));
+      float resolved = 1.0 - smoothstep(0.30, 0.50, max(footprint.x, footprint.y));
+      vec2 opening = 1.0 - smoothstep(vec2(0.34, 0.25) - footprint * 0.4,
+        vec2(0.42, 0.34) + footprint * 0.4, abs(fract(cell) - 0.5));
+      float pane = mix(0.48, opening.x * opening.y, resolved);
+      float occupancy = windowRandom(floor(cell / vec2(6.1, 2.6)));
+      float lit = mix(0.15 + occupancy * 0.19, smoothstep(0.34, 0.81, windowRandom(floor(cell)) * (0.76 + occupancy * 0.4)), resolved);
+      vec3 reflectedSky = vec3(0.071, 0.125, 0.174);
+      vec3 electric = mix(vec3(0.94, 0.54, 0.22), vec3(0.52, 0.73, 0.93), step(0.61, occupancy));
+      color = mix(color, color * 0.47 + reflectedSky, pane * (1.0 - uNight));
+      color += electric * lit * pane * uNight * 0.64;
+    }
+    gl_FragColor = vec4(cityInAir(color, vBlockTransmission), 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -189,7 +226,8 @@ const nightPointsVertex = /* glsl */`
     gl_PointSize = clamp(size * coreSize * uCityPixelFactor, 1.3, 6.5 * uCityPixelFactor);
     vLamp = color;
     float distanceFade = 1.0 - 0.30 * smoothstep(6800.0, 21000.0, distanceToEye);
-    vPower = cityTransmittance(world) * (0.34 + cityPower * 0.68) * min(1.0, size * 0.90) * distanceFade;
+    float streetPower = lightKind < 0.5 ? 0.60 : lightKind < 3.5 ? 0.66 : 1.0;
+    vPower = cityTransmittance(world) * (0.34 + cityPower * 0.68) * min(1.0, size * 0.90) * distanceFade * streetPower;
     gl_Position = projectionMatrix * view;
   }
 `;
@@ -223,6 +261,26 @@ function flatGeometry(): THREE.BufferGeometry {
   return geometry;
 }
 
+function terracedGeometry(flat: THREE.BufferGeometry): THREE.BufferGeometry {
+  const base = flat.getAttribute('position');
+  const indices = flat.index!.array;
+  const positions: number[] = [];
+  const levels = [
+    { width: 1.00, depth: 1.00, from: 0, to: 0.17 },
+    { width: 0.82, depth: 0.87, from: 0.17, to: 0.92 },
+    { width: 0.48, depth: 0.60, from: 0.92, to: 1.00 },
+  ];
+  for (const { width, depth, from, to } of levels) {
+    for (const index of indices) {
+      positions.push(base.getX(index) * width, THREE.MathUtils.lerp(from, to, base.getY(index)), base.getZ(index) * depth);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function pitchedGeometry(): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
   const positions: number[] = [];
@@ -246,7 +304,7 @@ function tileKey(x: number, z: number): string {
   return `${Math.floor(x / 4500)}:${Math.floor(z / 4500)}`;
 }
 
-function append<T>(map: Map<string, T[]>, key: string, item: T): void {
+function append<Key, T>(map: Map<Key, T[]>, key: Key, item: T): void {
   const tile = map.get(key);
   if (tile) tile.push(item);
   else map.set(key, [item]);
@@ -262,6 +320,7 @@ function createBlocks(items: Building[], material: THREE.ShaderMaterial, shape: 
   const directions = new Float32Array(items.length * 2);
   const colors = new Float32Array(items.length * 3);
   const variety = new Float32Array(items.length);
+  const facades = new Float32Array(items.length);
   const bounds = new THREE.Box3();
   const point = new THREE.Vector3();
   for (const [i, block] of items.entries()) {
@@ -270,6 +329,7 @@ function createBlocks(items: Building[], material: THREE.ShaderMaterial, shape: 
     directions.set([Math.cos(block.yaw), Math.sin(block.yaw)], i * 2);
     colors.set([block.color.r, block.color.g, block.color.b], i * 3);
     variety[i] = block.variant;
+    facades[i] = block.facade;
     bounds.expandByPoint(point.set(block.x, block.y, block.z));
   }
   bounds.expandByScalar(100);
@@ -279,9 +339,10 @@ function createBlocks(items: Building[], material: THREE.ShaderMaterial, shape: 
   geometry.setAttribute('cityHeading', new THREE.InstancedBufferAttribute(directions, 2));
   geometry.setAttribute('cityColor', new THREE.InstancedBufferAttribute(colors, 3));
   geometry.setAttribute('cityVariant', new THREE.InstancedBufferAttribute(variety, 1));
+  geometry.setAttribute('cityWindowScale', new THREE.InstancedBufferAttribute(facades, 1));
   geometry.instanceCount = items.length;
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = items[0].pitch ? 'Pitched residential roofs' : 'Inferred buildings on street frontages';
+  mesh.name = 'Inferred buildings on street frontages';
   return mesh;
 }
 
@@ -331,6 +392,7 @@ export type OverlookCityOptions = {
   sunDirection?: THREE.Vector3;
   dayHaze?: THREE.ColorRepresentation;
   nightHaze?: THREE.ColorRepresentation;
+  blocksFootprint?: (x: number, z: number, padding: number) => boolean;
 };
 
 export function createOverlookCity(heightAt: (x: number, z: number) => number, options: OverlookCityOptions = {}) {
@@ -362,14 +424,14 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
-  const skyline = createOverlookSkyline(heightAt);
+  const skyline = createOverlookSkyline(heightAt, options.blocksFootprint);
   const landmarkMesh = new THREE.Mesh(skyline.geometry, skylineMaterial);
   landmarkMesh.name = 'Skyline landmarks';
   group.add(landmarkMesh);
   mainLamps.add(createPoints(skyline.lights, pointsMaterial));
 
   const ready = loadPlacements().then(view => {
-    const buildingTiles = new Map<string, Building[]>();
+    const buildingTiles = new Map<`${0 | 1}:${BuildingForm}:${string}`, Building[]>();
     const lampTiles = new Map<string, SkylineLight[]>();
     const closeToLandmark = (x: number, z: number, padding: number) => skyline.exclusions.some(exclusion =>
       (x - exclusion.x) ** 2 + (z - exclusion.z) ** 2 < (exclusion.radius + padding) ** 2,
@@ -384,7 +446,8 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       const w = view.getUint8(offset + 4), d = view.getUint8(offset + 5);
       const use = view.getUint8(offset + 7);
       const distance = Math.hypot(x, z);
-      if (distance < 525 || closeToLandmark(x, z, Math.min(w, d) * 0.4)) continue;
+      const footprint = Math.max(w, d) * 0.68;
+      if (distance < 525 || closeToLandmark(x, z, footprint) || options.blocksFootprint?.(x, z, footprint)) continue;
 
       const ground = heightAt(x, z);
       if (ground < 1 || ground > 587) continue;
@@ -394,28 +457,35 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       if (highest - lowest > step * 0.77) continue;
 
       const random = randomUnit(seed, 641);
-      const nearby = distance < 5600;
-      const pitch = nearby && use === 0 && random > 0.20;
-      const urban = use !== 0;
-      const business = Math.exp(-(((x - 4650) / 1500) ** 2 + ((z + 7540) / 1020) ** 2));
-      const highStreet = Math.exp(-(((z + 6280) / 410) ** 2 + ((x + 5000) / 6500) ** 2));
-      const restrained = use === 2 ? 0.22 : random;
-      const h = (urban ? 5.4 + restrained ** 1.80 * 14 : 3.5 + random ** 2 * 6.4) +
-        (business * (7 + restrained ** 3 * 47) + highStreet * restrained * 16);
-      const palette = use === 2 ? roofs.industrial : use === 1 ? roofs.commercial :
-        random > 0.92 ? roofs.terracotta : random > 0.43 ? roofs.shingle : roofs.plaster;
+      const nearby = distance < 8000;
       const variant = randomUnit(seed, 3464);
+      let district = 0, rise = 0;
+      for (const [[centerX, centerZ], width, depth, height] of midriseDistricts) {
+        const influence = Math.exp(-(((x - centerX) / width) ** 2 + ((z - centerZ) / depth) ** 2));
+        district = Math.max(district, influence);
+        rise = Math.max(rise, influence * height);
+      }
+      const boulevard = Math.exp(-(((z + 5680) / 525) ** 2 + ((x + 1900) / 6200) ** 2));
+      const midrise = use !== 2 && (use === 1 || variant < district * 0.78 + boulevard * 0.22);
+      const office = midrise && random < 0.56;
+      const form: BuildingForm = midrise && nearby && variant < 0.68 && rise > 10 ? 'terraced'
+        : !midrise && use === 0 && nearby && district < 0.38 && variant > 0.65 ? 'pitched' : 'flat';
+      const h = midrise ? 8 + random ** 1.5 * 16 + rise * (0.24 + 0.77 * random) + boulevard * (5 + variant * 17)
+        : use === 2 ? 7.3 + 10.8 * random + district * 6 : 4.4 + random ** 1.66 * 7.9;
+      const palette = office ? roofs.offices : midrise ? roofs.masonry : use === 2 ? roofs.industrial
+        : random > 0.96 ? roofs.terracotta : random > 0.53 ? roofs.shingle : roofs.plaster;
       const color = new THREE.Color(palette[Math.min(palette.length - 1, Math.floor(variant * palette.length))]);
-      color.multiplyScalar(0.85 + randomUnit(seed, 1675) * 0.31);
+      color.multiplyScalar(0.78 + randomUnit(seed, 1675) * 0.31);
       const feet = lowest - 3.0;
       const yaw = -view.getUint8(offset + 6) / 256 * Math.PI;
       const tile = tileKey(x, z);
-      const detail = !nearby && business < 0.31 && randomUnit(seed, 757) < (distance > 11000 ? 0.56 : 0.30);
-      append(buildingTiles, `${detail ? '1' : '0'}${pitch ? 'p' : 'f'}:${tile}`, {
-        x, y: feet, z, width: w, depth: d, height: h + ground - feet, yaw, color, pitch, variant,
+      const detail = !nearby && district < 0.31 && randomUnit(seed, 757) < (distance > 11000 ? 0.56 : 0.30);
+      append(buildingTiles, `${detail ? 1 : 0}:${form}:${tile}`, {
+        x, y: feet, z, width: w, depth: d, height: h + ground - feet, yaw, color, variant,
+        facade: midrise ? (office ? 0.33 : 0.25) : 0,
       });
-      if (variant > 0.76 && distance < 16500 && (urban || random > 0.45)) {
-        append(lampTiles, `${urban || !detail ? '0' : '1'}:${tile}`, {
+      if (!midrise && variant > 0.81 && distance < 16500 && (use === 2 || random > 0.45)) {
+        append(lampTiles, `${!detail ? '0' : '1'}:${tile}`, {
           x: x + Math.sin(yaw) * d * 0.53, z: z + Math.cos(yaw) * d * 0.53,
           y: ground + Math.min(h * 0.72, 9.2), kind: 0, power: 0.42 + variant * 0.45,
         });
@@ -427,16 +497,18 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       const z = minZ + view.getUint16(offset + 2, true);
       const kind = view.getUint8(offset + 4), power = view.getUint8(offset + 5) / 255;
       const ground = heightAt(x, z);
-      if (ground < 1 || ground > 520 || Math.hypot(x, z) < 615 || closeToLandmark(x, z, -14)) continue;
+      if (ground < 1 || ground > 520 || Math.hypot(x, z) < 615 || closeToLandmark(x, z, -14)
+        || options.blocksFootprint?.(x, z, 0)) continue;
       const extra = kind === 1 && power < 0.54 && Math.hypot(x, z) > 3700;
       append(lampTiles, `${extra ? '1' : '0'}:${tileKey(x, z)}`, {
         x, y: ground + (kind === 1 ? 6 : kind === 2 ? 8 : 4.4), z, kind, power,
       });
     }
     const flat = flatGeometry();
-    const pitched = pitchedGeometry();
+    const shapes = { flat, pitched: pitchedGeometry(), terraced: terracedGeometry(flat) };
     for (const [key, buildings] of buildingTiles) {
-      const mesh = createBlocks(buildings, blockMaterial, key[1] === 'p' ? pitched : flat);
+      const form = key.split(':', 2)[1] as BuildingForm;
+      const mesh = createBlocks(buildings, blockMaterial, shapes[form]);
       (key[0] === '1' ? extraRoofs : group).add(mesh);
     }
     for (const [key, lamps] of lampTiles) {
