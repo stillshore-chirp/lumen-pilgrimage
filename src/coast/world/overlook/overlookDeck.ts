@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OverlookModel, overlookFinishes, seededDetail, type OverlookFinishes } from './overlookModel';
 import { addOverlookPavilion } from './overlookPavilion';
 import { DECK_FRONT, DECK_LEVEL, DECK_SIDE } from './overlookTerrain';
+import { addOverlookUpperDeck } from './overlookUpperDeck';
 
 const benchLocations = [[-22.5, -10.2], [22.5, -10.2], [-29.2, 4.7], [29.2, 4.7]] as const;
 const viewerLocations = [[-19.3, -21.17, 0.14], [18.7, -21.17, -0.56]] as const;
@@ -273,7 +274,8 @@ function addViewer(model: OverlookModel, finish: OverlookFinishes, x: number, z:
   place(new THREE.BoxGeometry(0.056, 0.013, 0.007).translate(0, -0.082, 0.21), finish.iron);
 }
 
-function addLampPools(group: THREE.Group, model: OverlookModel, finish: OverlookFinishes): THREE.Group {
+function addLampPools(group: THREE.Group, model: OverlookModel, finish: OverlookFinishes,
+  upperPools: readonly THREE.BufferGeometry[]): THREE.Group {
   const resolution = 64;
   const pixels = new Uint8Array(resolution ** 2 * 4);
   for (let y = 0; y < resolution; y += 1) {
@@ -319,6 +321,7 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
   for (const [x, z] of [[-33.55, -6], [33.55, -6], [-33.55, 11], [33.55, 11]]) {
     pools.mesh(new THREE.PlaneGeometry(5.8, 5.8).rotateX(-Math.PI / 2).translate(x, 0.017, z), haze, false);
   }
+  for (const pool of upperPools) pools.mesh(pool, wash, false);
   pools.finish(lamps);
   for (const x of [-5.68, 5.68]) {
     const lamp = new THREE.PointLight(0xffbf7d, 108, 11.5, 2);
@@ -351,7 +354,8 @@ export function createOverlookDeck(): { group: THREE.Group; setTimeOfDay(time: '
   for (const [x, z] of benchLocations) addBench(model, finish, x, z);
   for (const [x, z, yaw] of viewerLocations) addViewer(model, finish, x, z, yaw);
   addOverlookPavilion(model, finish);
-  const lamps = addLampPools(group, model, finish);
+  const upperPools = addOverlookUpperDeck(model, finish);
+  const lamps = addLampPools(group, model, finish, upperPools);
   model.finish(group);
   lamps.visible = false;
   return {

@@ -130,7 +130,7 @@ export class CoastApp {
     `;
     ui.querySelector('h1')!.textContent = overlook ? description.label : '自然景観探索';
     ui.querySelector('.coast-guide-description')!.textContent = overlook
-      ? '南のデッキから盆地の市街地を見渡せます。柵に沿って東西のテラスへ歩けます。'
+      ? '南のデッキから盆地の市街地を見渡せます。東側の階段から2階展望デッキへ上がれます。'
       : '海に向かって左は岩浜、右は潮だまり。浜を背にすると森の入口に休憩所があり、道は湖と稜線へ続きます。';
     if (overlook) {
       ui.querySelectorAll('.coast-water-guide').forEach(node => node.remove());

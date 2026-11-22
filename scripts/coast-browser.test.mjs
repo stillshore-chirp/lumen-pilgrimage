@@ -447,6 +447,91 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
   }
 });
 
+test('the overlook plays quiet spatial audio and its upper deck can be reached and left on foot', { timeout }, async () => {
+  const page = await newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(installBrowserProbes);
+  const button = name => page.getByRole('button', { name, exact: true });
+
+  async function pointStickAt(x, z) {
+    const pose = await page.evaluate(audioPosition);
+    const distance = Math.hypot(x - pose.x, z - pose.z);
+    const horizontal = Math.hypot(pose.fx, pose.fz);
+    const dx = (x - pose.x) / distance, dz = (z - pose.z) / distance;
+    const fx = pose.fx / horizontal, fz = pose.fz / horizontal;
+    // Feed the intended walking vector through the controller's axial deadzone.
+    const stick = axis => Math.sign(axis) * (0.16 + Math.abs(axis) * 0.84);
+    await page.evaluate(setPad, { axes: [stick(-fz * dx + fx * dz), stick(-(fx * dx + fz * dz)), 0, 0] });
+  }
+
+  async function walkTo(x, z) {
+    await pointStickAt(x, z);
+    try {
+      await page.waitForFunction(([x, z]) => {
+        const listener = window.coastProbe.context.listener;
+        return Math.hypot(listener.positionX.value - x, listener.positionZ.value - z) < 0.27;
+      }, [x, z]);
+    } finally {
+      await page.evaluate(setPad, { connected: false });
+    }
+  }
+
+  try {
+    await page.goto(`${url}?world=overlook&place=east-terrace&time=night`, { waitUntil: 'commit' });
+    await button('環境音を開始').waitFor();
+    assert.equal(await page.evaluate(() => window.coastProbe.contexts), 0);
+    await button('環境音を開始').click();
+    await button('環境音を再開').waitFor();
+    await page.waitForFunction(() => window.coastProbe.decoded === 3
+      && window.coastProbe.panners.filter(panner => panner.panningModel === 'HRTF').length >= 6
+      && window.coastProbe.peak() > 0.001 && window.coastProbe.peak() < 0.24);
+
+    const mute = button('ミュート');
+    await mute.click();
+    assert.equal(await mute.getAttribute('aria-pressed'), 'true');
+    await page.waitForFunction(() => window.coastProbe.peak() < 0.0001);
+    await mute.click();
+    await button('昼').click();
+    await page.waitForFunction(() => window.coastProbe.peak() > 0.001);
+
+    const lower = (await page.evaluate(audioPosition)).y;
+    await walkTo(25.85, -4);
+    await walkTo(25.85, 4.2);
+    assert.ok(Math.abs((await page.evaluate(audioPosition)).y - lower - 3.6) < 0.12);
+    await walkTo(25.85, 13.5);
+    await walkTo(21, 13.5);
+    const upper = await page.evaluate(audioPosition);
+    assert.ok(Math.abs(upper.y - lower - 7.2) < 0.12);
+    await pointStickAt(upper.x, 9.5);
+    await page.waitForFunction(() => window.coastProbe.context.listener.positionZ.value < 12.65);
+    await page.waitForTimeout(360);
+    await page.evaluate(setPad, { connected: false });
+    const rail = await page.evaluate(audioPosition);
+    assert.ok(rail.z > 12.30 && Math.abs(rail.y - upper.y) < 0.10);
+    await walkTo(21, 13.5);
+    await walkTo(25.85, 13.5);
+    await walkTo(25.85, -4);
+    assert.ok(Math.abs((await page.evaluate(audioPosition)).y - lower) < 0.12);
+
+    await button('夜').click();
+    await button('ファストトラベル').click();
+    await page.getByRole('dialog').getByRole('button', { name: '2階展望デッキ', exact: true }).click();
+    await page.waitForURL(address => address.searchParams.get('place') === 'upper-deck'
+      && address.searchParams.get('time') === 'night');
+    await page.waitForFunction(expectedHeight => {
+      const listener = window.coastProbe.context.listener;
+      return Math.hypot(listener.positionX.value - 17.4, listener.positionZ.value - 13.35) < 0.10
+        && Math.abs(listener.positionY.value - expectedHeight) < 0.10;
+    }, upper.y);
+    assert.equal(await page.evaluate(() => window.coastProbe.contexts), 1);
+    await capture(page, 'overlook-upper-deck-night');
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
 test('retired expedition URLs open exploration without exposing the old entry', { timeout }, async () => {
   const page = await newPage();
   try {

@@ -39,8 +39,10 @@ function addWing(model: OverlookModel, finish: OverlookFinishes, side: number): 
   model.block(finish.shadowStone, x, 6.70, wingZ - 0.015, 14.43, 0.13, 18.22);
   model.block(finish.cream, x, 6.91, wingZ - 0.025, 14.55, 0.32, 18.28);
   model.block(finish.cream, x, 7.13, wingZ - 0.035, 14.91, 0.13, 18.53);
-  model.block(finish.limestone, x, 7.41, wingZ + 0.26, 13.79, 0.43, 17.45);
-  model.block(finish.cream, x, 7.69, wingZ + 0.26, 13.95, 0.13, 17.54);
+  if (side < 0) {
+    model.block(finish.limestone, x, 7.41, wingZ + 0.26, 13.79, 0.43, 17.45);
+    model.block(finish.cream, x, 7.69, wingZ + 0.26, 13.95, 0.13, 17.54);
+  }
 
   for (const offset of [-4.64, -1.54, 1.54, 4.64]) {
     addWindow(model, finish, x + offset, 3.55, 12.38, 1.48, 3.55);
@@ -54,6 +56,14 @@ function addWing(model: OverlookModel, finish: OverlookFinishes, side: number): 
   }
 
   const endX = side * 21.7;
+  if (side > 0) {
+    // Leave the city-facing half of the east roof open for the upper terrace.
+    const rearZ = 26.95;
+    model.block(finish.limestone, x, 7.59, rearZ, 13.82, 0.80, 6.65);
+    model.block(finish.cream, x, 8.04, rearZ, 14.08, 0.14, 6.88);
+    model.block(finish.copperSeam, x, 8.13, rearZ, 14.05, 0.06, 6.86);
+    return;
+  }
   model.block(finish.limestone, endX, 8.3, wingZ + 0.08, 3.45, 1.49, 16.83);
   model.block(finish.cream, endX, 9.065, wingZ + 0.08, 3.65, 0.17, 16.97);
   model.block(finish.limestone, endX, 9.28, wingZ + 0.08, 2.96, 0.30, 16.32);

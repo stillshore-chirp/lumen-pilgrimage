@@ -11,16 +11,17 @@ import { createOverlookDeck, OVERLOOK_DECK_OBSTACLES } from './overlookDeck';
 import { createOverlookHillside } from './overlookHillside';
 import { createOverlookSurface, DECK_LEVEL, loadOverlookTerrain } from './overlookTerrain';
 import { createOverlookTraffic, isOverlookRoadway } from './overlookTraffic';
+import { blocksUpperDeckWalking, isUpperDeck, overlookDeckGround } from './overlookUpperDeck';
 
 const DAY_SUN = new THREE.Vector3(-0.66, 0.51, -0.55).normalize();
 const bounds = { minX: -34.35, maxX: 34.35, minZ: -23.15, maxZ: 23.75 };
 
 function insidePavilion(x: number, z: number): boolean {
-  return Math.abs(x) < 24.35 && z > 8.20;
+  return Math.abs(x) < 24.35 && z > 8.20 && !isUpperDeck(x, z);
 }
 
 function blocksDeckWalking(x: number, z: number, foot: number): boolean {
-  if (insidePavilion(x, z)) return true;
+  if (insidePavilion(x, z) || blocksUpperDeckWalking(x, z, foot)) return true;
   return foot < DECK_LEVEL + 1.08 && OVERLOOK_DECK_OBSTACLES.some(
     box => x >= box.minX && x <= box.maxX && z >= box.minZ && z <= box.maxZ,
   );
@@ -55,7 +56,7 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
   return {
     audio: new OverlookAudio(traffic.soundCorridors, heightAt),
     navigation: {
-      bounds, spawn: EXPLORATION_WORLDS[1].places[0], groundHeight: () => DECK_LEVEL,
+      bounds, spawn: EXPLORATION_WORLDS[1].places[0], groundHeight: overlookDeckGround,
       flightCeiling: DECK_LEVEL + 105, blocksWalking: blocksDeckWalking, blocksFlight: insidePavilion,
     },
     world: {
