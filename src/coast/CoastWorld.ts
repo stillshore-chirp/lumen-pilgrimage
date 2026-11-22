@@ -1,13 +1,17 @@
 import * as THREE from 'three';
+import type { CoastBirdCue } from './coastBirdCue';
 import {
   COAST_FALLS, COAST_REST_SITES, SEA_LEVEL, UPLAND_FALL, coastPlantingDistance, coastRandom, coastTrailDistance,
   forestStreamDistance, groundHeight, groundSlope, inlandWaterLevel, smoothstep,
 } from './terrain';
+import { COAST_SUN_DIRECTION, createCoastAtmosphere } from './world/coastAtmosphere';
+import { createCoastBirdLife } from './world/coastBirdLife';
 import { createForestRocks } from './world/coastForestRocks';
 import { createForestWater } from './world/coastForestWater';
+import { createInariTrail } from './world/coastInariTrail';
 import { createCoastLandmarks, createCoastSeagrass, createCreekFlowers } from './world/coastLandmarks';
 import { createCoastLighting } from './world/coastLighting';
-import { createCoastOceanGeometry, createCoastOceanMaterial } from './world/coastOcean';
+import { createCoastOcean } from './world/coastOcean';
 import { createCoastRestAreas } from './world/coastRestAreas';
 import { loadCoastScenery } from './world/coastSceneryAssets';
 import { createCoastSky } from './world/coastSky';
@@ -92,58 +96,6 @@ function createShoreRocks(stone: THREE.Texture): THREE.Group {
   return props;
 }
 
-function createSeabirds(): { mesh: THREE.InstancedMesh; update: (elapsed: number) => void } {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute([
-    0,0,0.33, -0.21,0,-0.39, 0,0,-0.15,
-    0,0,0.33, 0,0,-0.15, 0.21,0,-0.39,
-    -0.07,0,-0.10, -0.49,0.08,0.02, -1.02,0.06,-0.38,
-    -0.07,0,-0.10, -1.02,0.06,-0.38, -0.33,0,-0.29,
-    0.07,0,-0.10, 1.02,0.06,-0.38, 0.49,0.08,0.02,
-    0.07,0,-0.10, 0.33,0,-0.29, 1.02,0.06,-0.38,
-  ], 3));
-  const time = { value: 0 };
-  const material = new THREE.MeshBasicMaterial({ color: 0xf5f5df, side: THREE.DoubleSide });
-  material.onBeforeCompile = shader => {
-    shader.uniforms.uFlightTime = time;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uFlightTime;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-        float flap = sin(uFlightTime*6.8 + float(gl_InstanceID)*2.399);
-        transformed.y += abs(position.x)*flap*0.42;
-      `);
-  };
-  const flocks = [
-    { x: -56, z: -125, y: 29, radius: 37, count: 14, size: 0.65 },
-    { x: 39, z: -287, y: 68, radius: 66, count: 16, size: 0.93 },
-  ];
-  const mesh = new THREE.InstancedMesh(geometry, material, flocks.reduce((total, flock) => total+flock.count, 0));
-  mesh.name = 'Seabird flocks';
-  mesh.frustumCulled = false;
-  const shape = new THREE.Object3D();
-  return {
-    mesh,
-    update(elapsed) {
-      time.value = elapsed;
-      let index = 0;
-      for (const flock of flocks) {
-        const angle = elapsed*0.069 + flock.x;
-        for (let bird = 0; bird < flock.count; bird += 1) {
-          const phase = angle + bird*0.057 + 0.11*Math.sin(bird*8.69);
-          const radius = flock.radius + bird*0.91 + 6*Math.sin(bird*2.399);
-          shape.position.set(flock.x + Math.cos(phase)*radius, flock.y + 6.3*Math.sin(phase*0.74+bird*1.34),
-            flock.z + Math.sin(phase)*radius);
-          shape.rotation.set(0.07, -phase, Math.sin(phase+bird)*0.15);
-          shape.scale.setScalar(flock.size * (0.66+0.40*Math.sin(bird*3.17)**2));
-          shape.updateMatrix();
-          mesh.setMatrixAt(index++, shape.matrix);
-        }
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-    },
-  };
-}
-
 export class CoastWorld {
   readonly scene = new THREE.Scene();
   private readonly time = { value: 0 };
@@ -153,42 +105,39 @@ export class CoastWorld {
   private readonly uplandAir = new THREE.Color(0xa4c9db);
   private readonly seaScattering = new THREE.Color(SEA_WATER_SCATTER);
   private readonly streamScattering = new THREE.Color(STREAM_WATER_SCATTER);
+  private readonly atmosphere = createCoastAtmosphere(COAST_SUN_DIRECTION);
   private readonly lighting: ReturnType<typeof createCoastLighting>;
   private readonly sky: ReturnType<typeof createCoastSky>;
   private readonly terrain: ReturnType<typeof createCoastTerrain>;
   private readonly vegetation: ReturnType<typeof createCoastVegetation>;
   private readonly waterfalls: ReturnType<typeof createWaterfalls>;
+  private readonly ocean: ReturnType<typeof createCoastOcean>;
   private readonly lake: ReturnType<typeof createUplandLake>;
-  private readonly seabirds = createSeabirds();
+  private readonly birds = createCoastBirdLife();
   private quality: CoastQuality | undefined;
   private disposed = false;
   private diveObstacles: ((x: number, z: number) => number | undefined) | undefined;
 
   constructor() {
     this.scene.fog = this.fog;
-    const sunDirection = new THREE.Vector3(0.46, 0.70, 0.58).normalize();
-    this.sky = createCoastSky(sunDirection);
+    this.sky = createCoastSky(this.atmosphere);
     this.scene.add(this.sky.dome, this.sky.clouds);
 
     const stone = loadCoastTexture('limestone.webp', true);
     const sand = loadCoastTexture('sand.webp', true);
     this.terrain = createCoastTerrain(stone, sand, this.time);
     this.scene.add(this.terrain.mesh, createShoreRocks(stone), createForestRocks(this.terrain.mossRock));
-    const ocean = new THREE.Mesh(createCoastOceanGeometry(),
-      createCoastOceanMaterial(this.time, sunDirection, sand));
-    ocean.name = 'Clear shoals and open sea';
-    ocean.rotation.x = -Math.PI / 2;
-    ocean.position.set(0, SEA_LEVEL, -230);
-    ocean.receiveShadow = true;
+    this.ocean = createCoastOcean(this.time, this.atmosphere, sand);
     this.vegetation = createCoastVegetation(this.time, coastPlantingDistance, forestStreamDistance);
-    this.lake = createUplandLake(this.time, sunDirection);
+    this.lake = createUplandLake(this.time, this.atmosphere);
     const wood = loadCoastTexture('forest-bark.webp', true);
-    this.scene.add(ocean, this.lake.mesh, this.vegetation, createForestWater(this.time), createCoastSeagrass(this.time),
-      createCreekFlowers(), createCoastRestAreas(COAST_REST_SITES, wood, stone), createUplandTrailDetails(this.time, wood));
+    this.scene.add(this.ocean.mesh, this.lake.mesh, this.vegetation, createForestWater(this.time), createCoastSeagrass(this.time),
+      createCreekFlowers(), createCoastRestAreas(COAST_REST_SITES, wood, stone), createUplandTrailDetails(this.time, wood),
+      createInariTrail(wood));
 
-    this.waterfalls = createWaterfalls([...COAST_FALLS, UPLAND_FALL], this.time);
-    this.scene.add(this.waterfalls.group, this.seabirds.mesh);
-    this.lighting = createCoastLighting(this.scene, sunDirection);
+    this.waterfalls = createWaterfalls([...COAST_FALLS, UPLAND_FALL], this.time, COAST_SUN_DIRECTION);
+    this.scene.add(this.waterfalls.group, this.birds.group);
+    this.lighting = createCoastLighting(this.scene, this.atmosphere);
     void loadCoastScenery().then(scenery => {
       if (this.disposed) return;
       const landmarks = createCoastLandmarks(scenery);
@@ -211,12 +160,12 @@ export class CoastWorld {
     this.lighting.setQuality(quality);
     this.terrain.setQuality(quality);
     this.vegetation.setQuality(quality);
+    this.ocean.setQuality(quality);
     this.lake.setQuality(quality);
   }
 
-  update(elapsed: number, camera: THREE.PerspectiveCamera): void {
+  update(elapsed: number, camera: THREE.PerspectiveCamera): readonly CoastBirdCue[] {
     this.time.value = elapsed;
-    this.sky.dome.position.copy(camera.position);
     const { x, y, z } = camera.position;
     const inside = smoothstep(127, 194, z) * (1 - smoothstep(152, 219, Math.abs(x)));
     const humidAir = inside * (1 - 0.83 * smoothstep(346, 392, z)) * (1 - smoothstep(51, 83, y));
@@ -228,10 +177,11 @@ export class CoastWorld {
     const inlandWater = inlandWaterLevel(x, z);
     const depth = (inlandWater ?? SEA_LEVEL) - y;
     const underwater = depth > 0.10;
+    const submersion = smoothstep(0.01, 0.24, depth);
+    this.atmosphere.submersion.value = submersion;
     this.sky.dome.visible = this.sky.clouds.visible = !underwater;
     this.scene.background = underwater ? this.fog.color : null;
     if (depth > 0) {
-      const submersion = smoothstep(0.01, 0.24, depth);
       const openWater = inlandWater === undefined;
       this.fog.color.lerp(openWater ? this.seaScattering : this.streamScattering, submersion);
       this.fog.near = THREE.MathUtils.lerp(this.fog.near, 2.0, submersion);
@@ -239,14 +189,16 @@ export class CoastWorld {
       this.fog.far = THREE.MathUtils.lerp(this.fog.far, visibility, submersion);
     }
     this.waterfalls.update(elapsed);
-    this.seabirds.update(elapsed);
     this.vegetation.update(camera);
     this.lighting.update(elapsed, camera);
+    return this.birds.update(elapsed, camera.position);
   }
 
   dispose(): void {
     this.disposed = true;
+    this.ocean.mesh.dispose();
     this.lake.mesh.dispose();
     this.lighting.dispose();
+    this.atmosphere.sky.value.dispose();
   }
 }
