@@ -1,108 +1,30 @@
-# Architecture: Lumen Pilgrimage Reforge (Phase 4)
+# Lumen Pilgrimage: Reforge の設計
 
-## レイヤー責務
+## 起動と状態遷移
 
-- `bootstrap/`: 起動シーケンス。
-- `core/`: Game 本体、レンダーループ、構成。
-- `engine/input`: Desktop/XR の入力抽象。
-- `engine/audio`: biome / phase / pressure 連動の音響ミックス制御。
-- `engine/render`: world 側の light / particle spectacle 制御（postprocess 非依存）。
-- `engine/save`: セーブデータ（expedition + meta progression）と設定保存。
-- `engine/debug`: Perf HUD。
-- `game/state`: game state machine。
-- `game/items`: 武器/副手段/sigil/relic のデータ定義と relic stat modifier。
-- `game/director`: 敵圧制御、reward 選択、room 進行制御、boss arena mutation 制御。
-- `game/encounters`: mission / biome room rule / room-tag spawn table のデータ定義。
-- `game/sandbox`: 戦闘サンドボックス進行。
-- `game/ui`: HUD / menu / VR wrist UI。
-- `world/hub`: Hub の最小 3D シーン。
+- [main.ts](../src/main.ts) が `#app` を取得し、[AppBootstrap](../src/bootstrap/AppBootstrap.ts) から [Game](../src/core/Game.ts) を起動する。`Game` は Three.js のレンダラー、シーン、フレームループを用意し、入力、UI、遠征、保存、描画・音響を接続する。
+- [MenuManager](../src/game/ui/MenuManager.ts) は UI の操作をコマンドとしてキューに積む。`Game` がフレームごとに取り出し、[GameStateMachine](../src/game/state/GameStateMachine.ts) の遷移表に沿って画面と進行状態を切り替える。起動時は Main Menu で待機し、出撃または Continue で遠征が始まる。
 
-## 主な依存
+## 遠征とキャンペーン
 
-- `AppBootstrap`
-  - `Game`
-- `Game`
-  - `GameLoop`
-  - `GameStateMachine`
-  - `DesktopActionAdapter`
-  - `XRActionAdapter`
-  - `MusicDirector`
-  - `SaveManager`
-  - `SettingsStore`
-  - `PerfHud`
-  - `HudManager`
-  - `MenuManager`
-  - `VrWristUi`
-  - `CombatSandboxDirector`
-  - `ParticleDirector`
-  - `PilgrimsBelfryScene`
-- `CombatSandboxDirector`
-  - `EncounterDirector`
-  - `EnemyCoordinator`
-  - `RewardDirector`
-  - `BossActorDirector`
-  - `ArenaMutationDirector`
-  - `MissionTypes`
-  - `EncounterRuleSet`
-  - `WeaponDefs`
-  - `OffhandDefs`
-  - `SigilDefs`
-  - `RelicDefs`
+- [CombatSandboxDirector](../src/game/sandbox/CombatSandboxDirector.ts) は遠征の戦闘状態を更新し、HUD に体力・資源、攻撃予告、報酬、ボスのフェーズ、戦績を渡す。Campaign、Contracts、Boss Rush、Endless Collapse は、同じ戦闘処理にモード別の補正を適用する。
+- [EncounterDirector](../src/game/director/EncounterDirector.ts) はルームの接続、ミッションが優先するルート、攻略時間、被ダメージなどから次のルームを選ぶ。同順位の候補選択には `runSeed` から初期化した乱数を使う。ミッション、ルーム、敵の出現、ボス契約の定義は [`game/encounters/`](../src/game/encounters/) にある。
+- [CampaignState](../src/game/state/CampaignState.ts) は解放済みの biome と次の目標を表す。攻略結果から次の biome を解放する処理は、現行の遠征経路に未接続。
 
-## 分岐条件
+## 入力と WebXR
 
-- XR セッション中は `XRActionAdapter.isPresenting()` により目標 FPS と objective 文言を切替。
-- 非 XR 時は Desktop 入力スナップショットを `CombatSandboxDirector` に渡し、攻撃/ガード/パリィ/副手段を処理。
-- `CombatSandboxDirector` は rising edge を使い、押下継続で多重発火しない。
-- 敵ごとに telegraph lead を持ち、telegraph 中のみ parry 成功。成功時は stagger と Focus/Overburn 報酬を返す。
-- `EnemyCoordinator` が melee token / ranged pressure budget を評価し、同時攻撃数を制御する。
-- wave clear 後は `EncounterDirector` が room graph を辿って次 room を選択し、mission contract の routeBias と clear pace / 被ダメ結果を合成した優先順位で risk・recovery 分岐を評価する。
-- wave spawn は `EncounterSpawnTables` が biome + room tags + sector から算出し、linear 固定 wave を置き換える。
-- relic 取得後は `RelicEffects` を通じて dash cost、guard 被ダメ、room clear Focus 回復、parry 報酬などに補正を適用する。
-- `SaveManager` は slot0 を `loadOrCreate` し、sandbox の expedition 進行を 1 秒間隔で保存する。snapshot には routeStyle と relicModifiers を含め、旧形式セーブは default modifiers で後方互換を維持する。
-- `SaveManager` は expedition snapshot に `roomId` を含めて保存し、旧 save（roomId 未保存）を読み込む場合は空文字で互換復帰する。
-- `SaveManager` は expedition snapshot に `missionId` を含めて保存し、旧 save（missionId 未保存）は missionName 互換復帰を許容する。
-- `MenuManager` は `SaveManager` の expedition snapshot を読み、Hub の Continue 情報として biome/sector/room/vitals/relic を表示する。
-- `MenuManager` は MainMenu/Hub/MetaUpgrade コマンドキュー（continue/new-game/enter-hub/launch-expedition/unlock/craft/open-settings/open-credits）を公開し、`Game` が毎 tick で消費して遷移を決定する。
-- `MenuManager` は Hub で Weapons/Offhands/Sigils の解放済み・未解放を定義全体と比較して表示し、MetaUpgrade の unlock 反映を出撃前に確認できる。
-- `MenuManager` は MainMenu / Settings / Credits の各パネルを描画し、settings 操作用コマンド（toggle/ui-scale/volume/back）を `Game` へ通知する。
-- `Game` は Settings 変更を `SettingsStore` へ即時保存し、UI scale（Menu/HUD/PerfHud）・AudioListener master volume・XR comfort 表示・hub の reduce flashing 挙動へ反映する。
-- `Game` は Hub で `MetaUpgrade` へ遷移し、unlock/craft コマンドを `SaveManager.updateMetaProgress` へ接続して保存値を更新する。
-- mission は `MissionTypes` でデータ駆動定義し、sandbox でローテーション表示しつつ route bias を EncounterDirector へ注入する。
-- `Game` は起動時に Continue snapshot を `CombatSandboxDirector` へ注入し、mission/room/vitals/relic を run 状態へ再適用する。
-- `Game` は起動直後に MainMenu で待機し、Continue / New Game の明示選択を受けるまで expedition 更新/自動保存を開始しない。
-- `SaveManager` は `metaProgress`（通貨 + unlock 状態）を save slot に保存し、旧 save 互換として `metaProgress` 欠落時は default 値を補完する。
-- `SaveManager.resetSlot` は New Game の slot 初期化を担い、既存 continue snapshot と meta progression を安全に再生成する。
-- `CombatSandboxDirector` は `boss-approach` room tag を検知すると `BossContracts` から biome 別 contract を読み込み、時間 + Overburn 条件で phase を進行し、phase ごとの攻撃間隔/telegraph/被ダメ補正を適用する。
-- `CombatSandboxDirector` は `ArenaMutationDirector` を通じて boss phase の `arenaMutationSummary` を biome 固有 device 状態（強度％）へ変換し、HUD と objective へ反映する。
-- `CombatSandboxDirector` は `MusicDirector` へ enemy pressure / overburn / boss phase を入力し、exploration/threat/combat/clutch/boss stem ミックスを算出して HUD 表示へ反映する。
-- `CombatSandboxDirector` は loadout availability から pool 数（W/O/S の解放数/総数）を算出し、HUD へ表示する。
+- [DesktopActionAdapter](../src/engine/input/DesktopActionAdapter.ts) はキーボードとマウスの入力を `ActionState` に変換する。`Game` はこの入力を戦闘と Hub 端末の起動に使う。方向入力のうち左右は報酬選択に使われ、プレイヤーの座標を更新する処理は未接続。
+- [XRActionAdapter](../src/engine/input/XRActionAdapter.ts) はコントローラーからレイを作り、[PilgrimsBelfryScene](../src/world/hub/PilgrimsBelfryScene.ts) が最も近いヒットから Hub 端末を選ぶ。端末の起動と戦闘を XR コントローラーのボタンで行う経路は未接続。
+- [SessionBootstrap](../src/bootstrap/SessionBootstrap.ts) はセッションの開始・終了と表示状態を追跡し、`local-floor` を設定する。参照空間の取得は Three.js のセッション処理が担う。
 
-- `ParticleDirector` は `ArenaDeviceVisualHooks` の channel 圧と biome preset weight を合成し、hazard/focus/guard/overburn それぞれの additive particle emitter を駆動する。XR path でも camera shake や composer を使わず world 側 pulse を提供する。
-- `XRActionAdapter` は接続済み controller（left/right）から pointer ray を生成し、`PilgrimsBelfryScene` は複数rayヒット時に最短距離を採用して Hub terminal selection を更新する（HMD前方固定rayは不使用）。
-- State 遷移は `GameStateMachine` の遷移表にない遷移を拒否。
+## 描画と音響
 
-## 拡張ポイント
+- [HudManager](../src/game/ui/HudManager.ts) と `MenuManager` は DOM UI を描画する。`PilgrimsBelfryScene` が Hub のシーンを持ち、[WorldAssembler](../src/world/WorldAssembler.ts) は biome に応じて背景色・霧・照明を切り替える。戦闘中のプレイヤー・敵のモデルとルーム別のジオメトリは未接続。
+- ボス戦の環境効果は照明や [ParticleDirector](../src/engine/render/ParticleDirector.ts) のエミッターに反映される。照明の一部は biome 別のプリセットで指定した座標を使う。
+- [MusicDirector](../src/engine/audio/MusicDirector.ts) が戦闘状況から音楽の各ステムの音量を計算し、[AudioDirector](../src/engine/audio/AudioDirector.ts) が Web Audio のゲインを更新する。現在の起動経路にステム音源の登録は未接続。
 
-- `WeaponDefs` / `OffhandDefs` / `SigilDefs` / `RelicDefs` に archetype を追加して戦術幅を段階拡張。
-- `CombatSandboxDirector` を `PlayerCombat` / `DamageSystem` / `GuardSystem` / `EncounterDirector` に分割し、本番戦闘へ移行。
-- `ActionMap` を起点に、weapon-alt/lock-on/active-sigil の個別入力を Desktop/XR 双方へ等価拡張。
-- `EncounterDirector` の route 選択を mission type / contract modifier と接続し、探索導線の性格を調整。
-- `RewardDirector` は `LootTables` を参照し、biome/route/rewardWeight から tier を決定して候補 relic を抽選。
-- `PilgrimsBelfryScene` を Hub 機能（craft, codex, mode select）へ分解。
+## 保存と再開
 
-## レガシー撤去状況
-
-旧 `RitualState` / `GlyphSystem` / `DreamExporter` / `FlatCodexPanel` / `VrCodexPanel` / `Sanctuary` 系実装は `src/` から削除済み。
-
-ランタイムは `src/main.ts` → `AppBootstrap` → `Game` の単一経路のみを保持し、ritual/glyph 依存をコードベース上から排除した。
-
-- `DifficultyState` は Pilgrim/Trial/Martyr を定義し、CombatSandboxDirector の enemy health/damage/attack interval/telegraph 補正に適用する。
-
-## World Assembler (Phase 6 foundation)
-
-`src/world/WorldAssembler.ts` が scene の背景色・fog・key/fill light を管理し、`src/content/biomes/BiomeMoodDefs.ts` のデータ定義から hub + 5 biomes + final zone の mood を切り替える。
-
-- hub (`pilgrims-belfry`) と expedition biome で `Game` から `enterHub` / `enterExpedition` を呼び分ける。
-- `ArenaDeviceVisualHooks` の channel 圧（hazard/focus/guard/overburn）を `applyArenaVisualHooks` で light intensity へ合成し、boss phase 圧の world 側フィードバック基盤を提供する。
-- 未知 biome は `resolveBiomeMood` の fallback で hub mood へ退避し、セーブ互換性を壊さない。
+- `Game` が3つのスロットを提供し、[SaveManager](../src/engine/save/SaveManager.ts) がスロットごとの状態、解放、恒久進行、遠征スナップショットを `localStorage` に保存する。遠征中は約1秒ごとに更新し、Continue でルーム、ミッション、ルート、体力・資源、レリックを復元する。
+- 旧スナップショットで欠けている `runSeed`、`roomId`、`missionId`、`relicModifiers` と、スロットの `metaProgress` は既定値を補う。再開時のルート抽選は保存済みの `runSeed` から再初期化する。抽選途中の状態は保存していない。
+- [SettingsStore](../src/engine/save/SettingsStore.ts) は設定を別の `localStorage` キーに保存する。UI スケール、音量、点滅低減、難易度などは `Game` が関連する処理へ反映する。

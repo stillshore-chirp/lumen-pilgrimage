@@ -7,9 +7,10 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run build && npm run validate:content && npm run validate:release",
+    "check": "npm run typecheck && npm run build && npm run validate:content && npm run validate:release && npm run validate:harness",
     "validate:content": "node scripts/validate-content.mjs",
-    "validate:release": "node scripts/validate-release.mjs"
+    "validate:release": "node scripts/validate-release.mjs",
+    "validate:harness": "node scripts/validate-harness.mjs"
   },
   "dependencies": {
     "three": "0.184.0"

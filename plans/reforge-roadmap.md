@@ -1,46 +1,13 @@
-# Task: lumen-pilgrimage-reforge-roadmap
+# Reforge ロードマップ
 
-## 目的
-Lumen Pilgrimage を ritual/glyph 中心デモから、XR/flat 正式対応のアクション探索ゲームへ段階移行する。
+Lumen Pilgrimage を、Hub での準備、複数の biome の攻略、最終エリア、クリア後の反復プレイまでつながるアクション探索ゲームへ発展させる。デスクトップと WebXR の両方で、主要な操作を完結できることを目標とする。
 
-## 非目標
-- 既存デモ表現の温存
-- 進行報酬を JSON export や常設説明パネルへ依存させる設計
+[README](../README.md) と [設計文書](../docs/architecture.md) が現行の操作と実装を説明する。各 Phase の計画と [進捗スナップショット](reforge-progress.json) は当時の記録として参照する。
 
-## 対象範囲
-- Phase 1: 基盤再編（state/input/save/hub）
-- Phase 2: プレイヤー操作と戦闘 sandbox
-- Phase 3: encounter 量産へ向けた敵圧制御と mission データ化
-- Phase 4 以降: biome/campaign/postgame/perf 仕上げ
-
-## マイルストーン
-- [x] Phase 1: 基盤再編
-- [x] Phase 2: 戦闘 sandbox（guard/parry/telegraph 含む）
-- [x] Phase 3: enemy coordinator + mission/reward/relic 基盤
-- [ ] Phase 4: Hub 完成 + Ember Ossuary + Moon Reservoir（EncounterDirector 着手済み）
-- [ ] Phase 5: 残り biome + campaign 完成
-- [ ] Phase 6: 美術/照明/音響の総仕上げ
-- [ ] Phase 7: postgame（contracts/boss rush/endless）
-- [ ] Phase 8: 性能最適化 + QA + release
-
-## 受け入れ条件
-- [x] ritual/glyph/export 依存を主経路から分離
-- [x] combat sandbox で攻防ループを確認可能
-- [x] enemy pressure / mission variety / reward relic 基盤をデータ駆動で実装
-- [ ] campaign クリア可能状態
-- [ ] hub + 5 biomes + final zone + 反復モードを実装
-
-## 検証コマンド
-- `npm run typecheck`
-- `npm run build`
-
-## 既知 blocker
-- Hub 恒久成長 UI、biome boss 実装、continue 復帰時の状態再適用が未着手（room graph と snapshot 拡張は実装済み）
-
-## Feature Flag / Rollback
-- sandbox は `Game` の `CombatSandboxDirector` 接続で制御可能
-- mission/coordinator 連携は `CombatSandboxDirector` 内で局所的に無効化可能
-
-## 再開コマンド
-- `cd /workspace/lumen-pilgrimage && git status -sb`
-- `npm run dev`
+| 領域 | 実装済みの基盤 | 残る到達条件 |
+| --- | --- | --- |
+| Hub と遠征 | 出撃準備、分岐する room graph、戦闘・報酬、保存・再開 | 攻略結果を次の出撃や恒久進行に接続し、通しで確認する |
+| キャンペーン | 5 biome と最終エリアの定義、biome 別のボス契約 | 攻略による biome 解放から最終エリアのクリアまでをつなぐ |
+| 美術・音響 | biome 別の環境設定、ボス戦の照明・パーティクル・音響ミックス | 実際のルーム形状やハザード、音源を組み込み、プレイ中の視認性と音の変化を確認する |
+| 反復モード | モード選択とモード別の戦闘補正 | Contracts、Boss Rush、Endless Collapse の開始から終了・再挑戦までの流れを確認する |
+| WebXR と配布 | セッション状態、Hub 端末のレイ選択、配布ビルドの静的検証 | コントローラーでの決定と戦闘を接続し、対応端末で操作と性能を確認する |
