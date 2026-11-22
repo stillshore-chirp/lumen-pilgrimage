@@ -290,7 +290,7 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
   falloff.magFilter = falloff.minFilter = THREE.LinearFilter;
   falloff.needsUpdate = true;
   const haze = new THREE.MeshBasicMaterial({
-    color: 0xeaa55e, alphaMap: falloff, opacity: 0.44, depthWrite: false,
+    color: 0xeaa55e, alphaMap: falloff, opacity: 0.20, depthWrite: false,
     transparent: true, blending: THREE.AdditiveBlending,
   });
   const lamps = new THREE.Group();
@@ -298,19 +298,19 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
   const pools = new OverlookModel();
   const wash = haze.clone();
   wash.color.setHex(0xffb960);
-  wash.opacity = 0.72;
+  wash.opacity = 0.34;
   for (const { x, z, yaw } of wallLamps) {
     const nx = Math.sin(yaw), nz = Math.cos(yaw);
     model.block(finish.bronze, x + 0.418 * nx, 0.586, z + 0.418 * nz, 0.49, 0.105, 0.145, yaw);
     model.block(finish.frosted, x + 0.442 * nx, 0.533, z + 0.442 * nz, 0.36, 0.027, 0.093, yaw);
 
     // A half-disc starts under the hood and spreads over the floor on the inner side.
-    const floor = new THREE.PlaneGeometry(5.45, 3.65);
+    const floor = new THREE.PlaneGeometry(3.6, 2.35);
     const uv = floor.getAttribute('uv');
     for (let i = 0; i < uv.count; i += 1) uv.setY(i, uv.getY(i) * 0.5);
-    pools.mesh(floor.rotateX(-Math.PI / 2).rotateY(yaw).translate(x + 2.29 * nx, 0.014, z + 2.29 * nz), wash, false);
+    pools.mesh(floor.rotateX(-Math.PI / 2).rotateY(yaw).translate(x + 1.64 * nx, 0.014, z + 1.64 * nz), wash, false);
 
-    const wall = new THREE.PlaneGeometry(2.86, 0.56);
+    const wall = new THREE.PlaneGeometry(1.95, 0.56);
     const wallUv = wall.getAttribute('uv'), positions = wall.getAttribute('position');
     for (let i = 0; i < wallUv.count; i += 1) {
       if (wallUv.getY(i) === 1) positions.setX(i, positions.getX(i) * 0.17);
@@ -319,12 +319,12 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
     pools.mesh(wall.rotateY(yaw).translate(x + 0.384 * nx, 0.276, z + 0.384 * nz), wash, false);
   }
   for (const [x, z] of [[-33.55, -6], [33.55, -6], [-33.55, 11], [33.55, 11]]) {
-    pools.mesh(new THREE.PlaneGeometry(5.8, 5.8).rotateX(-Math.PI / 2).translate(x, 0.017, z), haze, false);
+    pools.mesh(new THREE.PlaneGeometry(3.8, 3.8).rotateX(-Math.PI / 2).translate(x, 0.017, z), haze, false);
   }
   for (const pool of upperPools) pools.mesh(pool, wash, false);
   pools.finish(lamps);
   for (const x of [-5.68, 5.68]) {
-    const lamp = new THREE.PointLight(0xffbf7d, 154, 14.5, 2);
+    const lamp = new THREE.PointLight(0xffbf7d, 50, 9.5, 2);
     lamp.position.set(x, 3.37, 7.97);
     lamps.add(lamp);
   }
@@ -362,8 +362,8 @@ export function createOverlookDeck(): { group: THREE.Group; setTimeOfDay(time: '
     group,
     setTimeOfDay(time) {
       const night = time === 'night';
-      finish.frosted.emissiveIntensity = night ? 2.25 : 0.04;
-      finish.window.emissiveIntensity = night ? 1.08 : 0;
+      finish.frosted.emissiveIntensity = night ? 0.80 : 0.04;
+      finish.window.emissiveIntensity = night ? 0.36 : 0;
       lamps.visible = night;
     },
   };

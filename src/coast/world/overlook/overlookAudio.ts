@@ -1,4 +1,5 @@
 import { MathUtils, type Vector3 } from 'three';
+import { REFRACTION_SHELF_HZ, thermalLowShelfDb, thermalRayLift } from '../../coastAcoustics';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 
 type SoundPoint = Readonly<{ x: number; y: number; z: number }>;
@@ -9,13 +10,15 @@ type TrafficVoice = {
   weight: number;
   panner: PannerNode;
   filter: BiquadFilterNode;
+  atmosphere: BiquadFilterNode;
   level: GainNode;
 };
 
 const ASSET_DIRECTORY = `${import.meta.env.BASE_URL}coast-overlook/`;
 const BIRD_PHRASE_SECONDS = 2.5;
 const BIRD_PHRASE_COUNT = 4;
-const TRAFFIC_GAIN = { day: 0.33, night: 0.20 };
+// Source activity drops at night. The receiver-side spectrum follows propagation separately.
+const TRAFFIC_GAIN = { day: 0.33, night: 0.18 };
 
 function roadSections(points: readonly SoundPoint[]): RoadSection[] {
   return points.map((point, i) => {
@@ -97,6 +100,7 @@ export class OverlookAudio {
   setTimeOfDay(time: CoastTimeOfDay): void {
     if (this.time === time) return;
     this.time = time;
+    this.nextPropagation = 0;
     const context = this.context;
     if (!context || !this.trafficBus || !this.insectBus || !this.birdBus) return;
     const now = context.currentTime;
@@ -177,11 +181,14 @@ export class OverlookAudio {
       filter.type = 'lowpass';
       filter.frequency.value = 1000;
       filter.Q.value = -3;
+      const atmosphere = context.createBiquadFilter();
+      atmosphere.type = 'lowshelf';
+      atmosphere.frequency.value = REFRACTION_SHELF_HZ;
       const level = context.createGain();
       level.gain.value = 0;
-      filter.connect(level).connect(panner).connect(trafficBus);
+      filter.connect(atmosphere).connect(level).connect(panner).connect(trafficBus);
       this.loop(context, traffic, filter, (index * 23.7) % traffic.duration, 1 - index * 0.011);
-      this.traffic.push({ road: sections, weight, panner, filter, level });
+      this.traffic.push({ road: sections, weight, panner, filter, atmosphere, level });
     }
 
     // The terrace edges have low chaparral. A source there falls away when the listener flies upward.
@@ -219,9 +226,11 @@ export class OverlookAudio {
     let power = 0;
     let x = 0, y = 0, z = 0;
     let cutoff = 0;
+    let lowBand = 0;
     for (const { point, length } of voice.road) {
-      const distance = Math.max(100, Math.hypot(point.x - listener.x, point.y - listener.y, point.z - listener.z));
-      const blocked = this.terrainScreen(listener, point, distance);
+      const horizontal = Math.hypot(point.x - listener.x, point.z - listener.z);
+      const distance = Math.max(100, Math.hypot(horizontal, point.y - listener.y));
+      const blocked = this.terrainScreen(listener, point, distance, thermalRayLift(horizontal, this.time));
       // Sum acoustic power along the road; a long line loses about 3 dB per distance doubling.
       const contribution = length / distance ** 2 * Math.exp(-distance / 5500) * 0.075 ** blocked;
       power += contribution;
@@ -229,16 +238,18 @@ export class OverlookAudio {
       y += contribution * point.y;
       z += contribution * point.z;
       cutoff += contribution * Math.max(210, 4300 / (1 + distance / 1250) ** 1.12 * 0.25 ** blocked);
+      lowBand += contribution * thermalLowShelfDb(distance, this.time, 2300);
     }
     if (power <= 0) return;
     voice.panner.positionX.setTargetAtTime(x / power, now, 0.18);
     voice.panner.positionY.setTargetAtTime(y / power, now, 0.18);
     voice.panner.positionZ.setTargetAtTime(z / power, now, 0.18);
     voice.filter.frequency.setTargetAtTime(cutoff / power, now, 0.18);
+    voice.atmosphere.gain.setTargetAtTime(lowBand / power, now, 0.25);
     voice.level.gain.setTargetAtTime(Math.min(0.65, 0.84 * Math.sqrt(460 * power * voice.weight)), now, 0.22);
   }
 
-  private terrainScreen(listener: SoundPoint, source: SoundPoint, distance: number): number {
+  private terrainScreen(listener: SoundPoint, source: SoundPoint, distance: number, rayLift: number): number {
     let obstruction = 0;
     // Finer sampling near the deck captures sudden rises in the land immediately below the listener.
     const samples = Math.ceil(10 + Math.sqrt(distance) * 0.6);
@@ -246,7 +257,7 @@ export class OverlookAudio {
       const fraction = (i / samples) ** 1.65;
       const x = MathUtils.lerp(listener.x, source.x, fraction);
       const z = MathUtils.lerp(listener.z, source.z, fraction);
-      const y = MathUtils.lerp(listener.y, source.y, fraction);
+      const y = MathUtils.lerp(listener.y, source.y, fraction) + 4 * rayLift * fraction * (1 - fraction);
       obstruction = Math.max(obstruction, this.heightAt(x, z) - y);
     }
     return MathUtils.smoothstep(obstruction, 1, 23);

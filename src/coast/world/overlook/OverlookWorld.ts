@@ -31,20 +31,14 @@ function blocksDeckWalking(x: number, z: number, foot: number): boolean {
 export async function loadOverlookScene(): Promise<OverlookScene> {
   const heightAt = await loadOverlookTerrain();
   const atmosphere = createCoastAtmosphere(DAY_SUN, {
-    nightHorizon: 0x6484a5,
-    nightZenith: 0x688ab3,
-    nightGlow: { color: 0x494039, direction: new THREE.Vector3(0.16, 0, -0.987) },
+    nightHorizon: 0x1b2330,
+    nightZenith: 0x141824,
+    nightGlow: { color: 0x100e0d, direction: new THREE.Vector3(0.16, 0, -0.987) },
+    starVisibility: 0.085,
     aerialDistanceScale: 0.22,
     moonDirection: new THREE.Vector3(-0.77, 0.48, -0.42),
   });
-  // The sky dome uses its own palette so surface lighting keeps the basin's aerial tint.
-  const sky = createCoastSky({
-    ...atmosphere,
-    nightHorizon: { value: new THREE.Color(0x354762) },
-    nightZenith: { value: new THREE.Color(0x23314f) },
-    nightGlow: { value: new THREE.Color(0x271e19) },
-    starVisibility: { value: 0.10 },
-  }, 0.13);
+  const sky = createCoastSky(atmosphere, 0.10);
   sky.clouds.scale.setScalar(2.70);
   sky.clouds.position.y = 425;
 
@@ -52,16 +46,13 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
   const traffic = createOverlookTraffic(heightAt);
   const airTraffic = createOverlookAirTraffic();
   const city = createOverlookCity(heightAt, {
-    sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x496178, blocksFootprint: isOverlookRoadway,
+    sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x272c35, blocksFootprint: isOverlookRoadway,
   });
   const ground = createOverlookSurface(heightAt, streets, atmosphere.night);
   const deck = createOverlookDeck();
   const scene = new THREE.Scene();
   scene.add(sky.dome, sky.clouds, ground, deck.group, city.group, traffic.group, airTraffic.group, createOverlookHillside(heightAt));
-  const twilightFill = new THREE.HemisphereLight(0xa9c7f1, 0x8f8579, 0.27);
-  twilightFill.visible = false;
-  scene.add(twilightFill);
-  const lighting = createCoastLighting(scene, atmosphere, heightAt);
+  const lighting = createCoastLighting(scene, atmosphere, heightAt, { nightIntensityScale: 0.28 });
   await Promise.all([streets.ready, city.ready]);
 
   return {
@@ -79,7 +70,6 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
       },
       setTimeOfDay(time: CoastTimeOfDay) {
         atmosphere.setTimeOfDay(time);
-        twilightFill.visible = time === 'night';
         sky.setTimeOfDay(time);
         lighting.setTimeOfDay(time);
         city.setTimeOfDay(time);

@@ -119,7 +119,7 @@ const directLight = THREE.ShaderChunk.lights_fragment_begin.replace(
 );
 
 function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
-  updated: WeakSet<THREE.Material>): void {
+  updated: WeakSet<THREE.Material>, nightIntensityScale: number): void {
   scene.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
     const materials: THREE.Material[] = Array.isArray(object.material) ? object.material : [object.material];
@@ -172,14 +172,15 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
             .replaceAll('getShadowMask()', 'coastSunShadow()');
         }
         if (!standard) return;
+        shader.uniforms.uCoastNightIntensityScale = { value: nightIntensityScale };
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', `#include <common>\n${forestBounce}`)
+          .replace('#include <common>', `#include <common>\nuniform float uCoastNightIntensityScale;\n${forestBounce}`)
           .replace('#include <lights_fragment_begin>', directLight)
           .replace('#include <lights_fragment_end>', `
             float canopy = coastCanopyCover(vCoastWorldPoint);
             float up = dot(geometryNormal, vec3(viewMatrix[1]));
             vec3 canopyTint = mix(vec3(0.67, 0.76, 0.62), vec3(0.72, 0.77, 0.85), uCoastNight);
-            vec3 bounce = mix(vec3(0.17, 0.21, 0.10), vec3(0.039, 0.053, 0.072), uCoastNight);
+            vec3 bounce = mix(vec3(0.17, 0.21, 0.10), vec3(0.039, 0.053, 0.072) * uCoastNightIntensityScale, uCoastNight);
             irradiance *= mix(vec3(1.0), canopyTint, canopy);
             irradiance += bounce * canopy * (0.73 - 0.27 * up);
             #include <lights_fragment_end>`);
@@ -189,7 +190,8 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
   });
 }
 
-export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosphere, heightAt = groundHeight): {
+export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosphere, heightAt = groundHeight,
+  { nightIntensityScale = 1 }: { nightIntensityScale?: number } = {}): {
   addScenery: (scenery: THREE.Object3D) => void;
   setQuality: (quality: CoastQuality) => void;
   setTimeOfDay: (time: CoastTimeOfDay) => void;
@@ -224,11 +226,11 @@ export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosph
     point.addScaledVector(lightUp, Math.round(v / texel) * texel - v);
   };
   scene.add(skyFill, bounce, sun, sun.target, local, local.target);
-  applyCoastLighting(scene, atmosphere, materials);
+  applyCoastLighting(scene, atmosphere, materials, nightIntensityScale);
 
   return {
     addScenery(scenery) {
-      applyCoastLighting(scenery, atmosphere, materials);
+      applyCoastLighting(scenery, atmosphere, materials, nightIntensityScale);
       sun.shadow.needsUpdate = true;
       lastShadow = -Infinity;
     },
@@ -247,12 +249,12 @@ export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosph
       const night = time === 'night';
       const lightColor = atmosphere.solarColor.value;
       sun.color.copy(lightColor).multiplyScalar(1 / Math.max(lightColor.r, lightColor.b));
-      sun.intensity = night ? 0.57 : 4.1;
+      sun.intensity = night ? 0.57 * nightIntensityScale : 4.1;
       skyFill.color.setHex(night ? 0xa3bfef : 0xc6d9f5);
       skyFill.groundColor.setHex(night ? 0xa0aac0 : 0xa28d6c);
-      skyFill.intensity = night ? 0.49 : 1.38;
+      skyFill.intensity = night ? 0.49 * nightIntensityScale : 1.38;
       bounce.color.setHex(night ? 0xb2c0db : 0xd5d4b0);
-      bounce.intensity = night ? 0.14 : 0.11;
+      bounce.intensity = night ? 0.14 * nightIntensityScale : 0.11;
       lightRight.set(0, 1, 0).cross(sunDirection).normalize();
       lightUp.copy(sunDirection).cross(lightRight).normalize();
       broadAnchor.set(Infinity, Infinity, Infinity);
