@@ -141,7 +141,7 @@ export function createInariTrail(wood: THREE.Texture): THREE.Group {
         placement(211.5, 925.3, 0.23), placement(224.1, 924.6, -0.63),
         placement(249.6, 1036.7, 0.24), placement(257.9, 1036.6, -0.26),
       ],
-    }, wood, granite),
+    }, granite, graniteNormal),
   );
   return group;
 }
