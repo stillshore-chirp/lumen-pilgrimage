@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {
   COAST_FALLS, SEA_LEVEL, coastPlantingDistance, coastRandom, coastTrailDistance, groundHeight, groundSlope,
 } from './terrain';
-import { createCoastOceanMaterial } from './world/coastOcean';
+import { createCoastOceanGeometry, createCoastOceanMaterial } from './world/coastOcean';
 import { createCoastSky } from './world/coastSky';
 import { createCoastTerrain, loadCoastTexture } from './world/coastSurface';
 import { createCoastVegetation } from './world/coastVegetation';
@@ -174,7 +174,7 @@ export class CoastWorld {
     const sand = loadCoastTexture('sand.webp', true);
     const canopy = loadCoastTexture('canopy.webp', true);
     this.scene.add(createCoastTerrain(stone, sand, canopy), createShoreRocks(stone));
-    const ocean = new THREE.Mesh(new THREE.PlaneGeometry(4890, 4700),
+    const ocean = new THREE.Mesh(createCoastOceanGeometry(),
       createCoastOceanMaterial(this.time, sunDirection, sand));
     ocean.name = 'Clear shoals and open sea';
     ocean.rotation.x = -Math.PI / 2;
