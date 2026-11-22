@@ -18,7 +18,8 @@ const landmarks: readonly { name: string; rocks: readonly Rock[]; ferns?: readon
       ['rockShelf', -74, -42, -2.48, 0.94, 1.17], ['moss02', -90, -53, -0.7, 2.74, 3.38],
     ],
     ferns: [[-46, 54, 3.4, 15, 1.25], [-55, 35, 2.8, 10, 1.4], [-61, 21, 3.5, 14, 1.4],
-      [-64.5, -0.4, 4.25, 16, 1.14], [-71, -17, 4.4, 17, 1.1], [-76.5, -25.5, 3.2, 12, 1.35]],
+      [-64.5, -0.4, 4.25, 16, 1.55], [-68, 6, 2.85, 15, 1.55], [-71, -17, 4.4, 17, 1.4],
+      [-76.5, -25.5, 3.2, 12, 1.45]],
   },
   {
     name: 'Tidal shelves and the eastern cliff foot',
@@ -31,7 +32,8 @@ const landmarks: readonly { name: string; rocks: readonly Rock[]; ferns?: readon
       ['moss03', 80.7, -11.6, 1.7, 2.28, 3.15], ['moss06', 81.1, -19.1, -0.2, 1.79, 2.4],
       ['rockShelf', 73.0, -32.7, -0.95, 1.28, 1.1], ['moss05', 91.9, -36.4, 1.59, 2.92, 3.7],
     ],
-    ferns: [[53, 43, 2.9, 12, 1.06], [70.5, 17.2, 2.5, 11, 1.22], [82, -13, 3.1, 12, 1.35]],
+    ferns: [[53, 43, 2.9, 12, 1.06], [55, 30, 1.8, 13, 1.27], [62, 41, 2.3, 12, 1.38],
+      [70.5, 17.2, 2.5, 11, 1.22], [82, -13, 3.1, 12, 1.35]],
   },
   {
     name: 'Enclosed forest approach and the buttress-root fork',
@@ -48,7 +50,8 @@ const landmarks: readonly { name: string; rocks: readonly Rock[]; ferns?: readon
     ],
     ferns: [[-35, 152, 5.3, 20, 1.5], [-20, 162, 4.25, 19, 1.65], [-16, 182, 5.1, 24, 1.68],
       [-1, 194, 4.5, 23, 1.59], [-20, 204, 4.3, 19, 1.65], [-14, 218, 4.9, 26, 1.68],
-      [-4, 225, 6.8, 27, 1.73], [8, 225, 3.9, 18, 1.62], [18, 231, 5.0, 21, 1.59]],
+      [-6.4, 222, 2.1, 15, 2.25], [3.4, 213.2, 2.0, 14, 1.84], [-4, 225, 6.8, 27, 1.73],
+      [8, 225, 3.9, 18, 1.62], [18, 231, 5.0, 21, 1.59]],
   },
   {
     name: 'Broken ledges around the ford and the plunge pool',
@@ -220,7 +223,8 @@ export function createCreekFlowers(): THREE.Group {
   const random = coastRandom(812352);
   const stemMaterial = new THREE.MeshStandardMaterial({ color: 0x48623a, roughness: 0.78 });
   const bractMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.53 });
-  const bases = [[-1.8, 222.8], [0.1, 224.8], [2.7, 227.5], [29.2, 249.5], [31.8, 251.3], [43.6, 251.9]];
+  const bases = [[-7.4, 221], [-3.8, 222.8], [2.7, 227.5], [3.3, 213.1],
+    [29.2, 249.5], [31.8, 251.3], [43.6, 251.9]];
   const crimson = new THREE.Color(0xd0462b);
   const gold = new THREE.Color(0xe4bd44);
   for (const [x, z] of bases) {

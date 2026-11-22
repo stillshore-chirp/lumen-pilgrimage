@@ -74,7 +74,7 @@ const forestBounce = /* glsl */`
     float overlook = coastOpening(p, vec2(-14.0, 392.0), vec2(37.0, 34.0));
     float rockSlot = coastOpening(p, vec2(-63.0, 304.0), vec2(17.0, 22.0));
     cover *= 1.0 - max(glade * 0.87, overlook * 0.94);
-    return mix(vec3(1.0), vec3(0.61, 0.69, 0.61), cover) * (1.0 - 0.37 * rockSlot);
+    return mix(vec3(1.0), vec3(0.74, 0.81, 0.72), cover) * (1.0 - 0.35 * rockSlot);
   }
 `;
 
