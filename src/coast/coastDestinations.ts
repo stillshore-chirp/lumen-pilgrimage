@@ -27,6 +27,7 @@ export const EXPLORATION_WORLDS = [
       { id: 'main-deck', label: '中央展望デッキ', x: -7, z: -20.9, yaw: -0.64, pitch: -0.16 },
       { id: 'west-terrace', label: '西テラス', x: -29, z: -21.2, yaw: 0.07, pitch: -0.10 },
       { id: 'east-terrace', label: '東テラス', x: 29, z: -21.2, yaw: -0.82, pitch: -0.10 },
+      { id: 'upper-deck', label: '2階展望デッキ', x: 17.4, z: 13.35, yaw: -0.42, pitch: -0.16 },
     ],
   },
 ] as const satisfies readonly { id: ExplorationWorldId; label: string; places: readonly CoastDestination[] }[];

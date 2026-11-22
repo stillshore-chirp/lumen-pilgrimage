@@ -1,19 +1,26 @@
 import * as THREE from 'three';
+import { seededDetail } from './overlookModel';
 
 type Point = [number, number];
 type Ring = { elevation: number; outline: Point[]; ridge?: number[]; offset?: Point };
 type Surface = { color: THREE.ColorRepresentation; facade?: number; glow?: number };
 
-export type SkylineLight = { x: number; y: number; z: number; kind: number; power: number };
+export type SkylineLight = { x: number; y: number; z: number; kind: number; power: number; temperature?: number };
 
-// Positions are in the overlook's local metre grid. The three cores leave
-// breathing room over the valley and connect to a lower commercial ridge.
+// Commercial cores share the local metre grid with street frontage and street lighting.
 export const OVERLOOK_DISTRICTS = {
+  campus: [360, -2630],
+  exchange: [2220, -3020],
+  parkway: [4160, -3670],
+  gateway: [6250, -3090],
   west: [640, -3860],
   midtown: [1660, -3890],
   central: [3000, -5440],
   east: [4890, -4900],
   south: [4100, -7350],
+  westRidge: [1730, -7460],
+  eastRidge: [6550, -7800],
+  horizon: [7700, -10650],
 } as const;
 
 const diagonalGrid = -0.53;
@@ -97,7 +104,7 @@ class CityGeometry {
   }
 }
 
-type TowerForm = 'terraced' | 'glass' | 'residential' | 'slab';
+type TowerForm = 'terraced' | 'glass' | 'residential' | 'slab' | 'ribbed' | 'split';
 type Tower = [x: number, z: number, width: number, depth: number, height: number, form: TowerForm, color: number, yaw?: number];
 
 const limestone = 0xc7bba6;
@@ -112,17 +119,25 @@ const oxide = 0x88766d;
 const concrete = 0xb2aba1;
 
 const towers: Tower[] = [
+  // Clinics and laboratories on the wide streets between the campus and civic center.
+  [-82, -3010, 76, 57, 281, 'ribbed', sand, 0.04],
+  [70, -3370, 89, 62, 259, 'slab', oxide, 0.04],
+  [155, -3070, 81, 57, 249, 'terraced', limestone, 0.04],
+  [278, -3280, 98, 75, 340, 'glass', steel, 0.04],
+  [450, -3020, 84, 61, 212, 'ribbed', concrete, 0.04],
+  [532, -3300, 89, 72, 280, 'terraced', sand, 0.05],
+
   // Lower westward steps and the civic district.
   [-1510, -4710, 98, 78, 131, 'slab', sand, 0.02],
   [-1240, -4500, 73, 57, 180, 'residential', concrete, 0.04],
   [-1050, -4740, 69, 61, 223, 'terraced', limestone, 0.04],
   [-850, -4320, 76, 68, 141, 'slab', blueGray, 0.05],
   [-615, -4710, 83, 69, 171, 'glass', copper, 0.04],
-  [-460, -4110, 74, 57, 169, 'residential', pearl, 0.04],
+  [-460, -4110, 74, 57, 169, 'slab', pearl, 0.04],
   [-205, -4480, 71, 61, 239, 'glass', steel, 0.04],
   [-170, -3840, 72, 46, 121, 'slab', sand, 0.03],
   [65, -4185, 98, 72, 273, 'terraced', charcoal, 0.04],
-  [250, -3615, 76, 53, 146, 'residential', sand, 0.04],
+  [250, -3615, 76, 53, 146, 'ribbed', sand, 0.04],
   [355, -3920, 95, 81, 300, 'glass', marine, 0.05],
   [465, -3710, 90, 73, 258, 'slab', blueGray, 0.04],
   [568, -4340, 103, 80, 308, 'terraced', concrete, 0.04],
@@ -134,48 +149,48 @@ const towers: Tower[] = [
 
   // Lower high street in front of the main core.
   [1390, -4130, 85, 73, 173, 'terraced', pearl, 0.02],
-  [1430, -3550, 64, 47, 179, 'residential', concrete, 0.07],
+  [1430, -3550, 64, 47, 179, 'ribbed', concrete, 0.07],
   [1610, -4110, 105, 61, 227, 'slab', steel, 0.055],
   [1718, -4310, 115, 75, 232, 'terraced', charcoal, 0.04],
   [1860, -3920, 79, 53, 208, 'glass', copper, 0.06],
   [1930, -4230, 83, 67, 161, 'slab', concrete, 0.025],
-  [2040, -4530, 116, 76, 238, 'residential', limestone, -0.12],
+  [2040, -4530, 116, 76, 238, 'ribbed', limestone, -0.12],
 
   // Central blocks, alternating glass curtain walls and masonry towers.
   [2140, -5300, 121, 96, 358, 'terraced', charcoal],
-  [2270, -4970, 133, 86, 270, 'residential', limestone],
+  [2270, -4970, 133, 86, 270, 'ribbed', limestone],
   [2315, -5770, 102, 95, 408, 'glass', steel],
   [2445, -5380, 108, 100, 405, 'terraced', sand],
   [2535, -5060, 118, 91, 306, 'slab', blueGray],
   [2600, -5915, 111, 100, 400, 'slab', copper],
-  [2685, -4700, 114, 77, 248, 'residential', pearl],
+  [2685, -4700, 114, 77, 248, 'slab', pearl],
   [2800, -6025, 129, 91, 529, 'terraced', charcoal],
   [2730, -5205, 101, 83, 383, 'glass', marine],
   [2970, -5780, 99, 113, 484, 'slab', concrete],
   [3010, -4890, 110, 81, 297, 'terraced', sand],
   [3185, -6105, 137, 94, 512, 'glass', steel],
-  [3305, -5180, 107, 87, 330, 'residential', pearl],
+  [3305, -5180, 107, 87, 330, 'split', pearl],
   [3540, -5200, 108, 73, 269, 'slab', sand],
   [3570, -5630, 106, 91, 460, 'terraced', charcoal],
   [3650, -5975, 110, 65, 350, 'slab', blueGray],
-  [3885, -5395, 108, 79, 284, 'residential', concrete],
+  [3885, -5395, 108, 79, 284, 'ribbed', concrete],
   [3930, -5830, 113, 81, 407, 'terraced', limestone],
   [4050, -6130, 123, 73, 369, 'glass', copper],
   [4345, -5740, 88, 67, 246, 'slab', steel],
 
   // The eastern terraces step down around an open valley.
-  [4210, -4890, 118, 69, 216, 'residential', concrete, -0.10],
+  [4210, -4890, 118, 69, 216, 'terraced', concrete, -0.10],
   [4380, -5100, 109, 77, 279, 'slab', charcoal, -0.10],
   [4530, -4830, 107, 76, 321, 'glass', steel, -0.14],
   [4685, -5150, 112, 91, 401, 'terraced', limestone, -0.22],
-  [4785, -4635, 123, 74, 224, 'residential', sand, -0.15],
+  [4785, -4635, 123, 74, 224, 'ribbed', sand, -0.15],
   [4940, -5275, 103, 89, 391, 'slab', blueGray, -0.18],
   [5040, -4530, 91, 60, 278, 'glass', copper, -0.10],
-  [5060, -5100, 116, 75, 348, 'residential', pearl, -0.15],
+  [5060, -5100, 116, 75, 348, 'split', pearl, -0.15],
   [5375, -5680, 100, 71, 262, 'slab', steel, -0.10],
   [5440, -5585, 109, 84, 310, 'terraced', limestone],
   [5695, -5820, 89, 76, 201, 'slab', sand],
-  [6035, -5690, 93, 70, 232, 'residential', steel],
+  [6035, -5690, 93, 70, 232, 'glass', steel],
   [6245, -5570, 119, 76, 277, 'glass', blueGray],
   [6505, -5720, 96, 81, 294, 'terraced', copper],
   [6735, -5480, 106, 73, 209, 'residential', limestone],
@@ -183,11 +198,11 @@ const towers: Tower[] = [
 
   // Distant office belt east of the valley, beyond the closest high-rises.
   [7270, -5450, 135, 101, 224, 'slab', sand],
-  [7515, -4970, 114, 83, 276, 'residential', oxide, -0.24],
+  [7515, -4970, 114, 83, 276, 'ribbed', oxide, -0.24],
   [7765, -5400, 138, 98, 342, 'terraced', steel, -0.19],
   [7920, -5010, 120, 94, 322, 'glass', marine, -0.21],
   [8295, -5190, 143, 125, 414, 'terraced', concrete, -0.20],
-  [8515, -4870, 134, 78, 309, 'residential', pearl, -0.14],
+  [8515, -4870, 134, 78, 309, 'split', pearl, -0.14],
   [8720, -5240, 132, 96, 365, 'slab', copper, -0.24],
   [8970, -5280, 102, 92, 265, 'glass', steel, -0.15],
   [9280, -5100, 112, 104, 213, 'terraced', sand, -0.12],
@@ -195,16 +210,118 @@ const towers: Tower[] = [
   // South-bank silhouettes behind the nearer cores.
   [3380, -7720, 125, 86, 292, 'terraced', concrete],
   [3655, -7200, 106, 77, 295, 'slab', steel],
-  [3810, -7860, 139, 115, 345, 'residential', sand],
+  [3810, -7860, 139, 115, 345, 'ribbed', sand],
   [4005, -7350, 120, 95, 414, 'glass', blueGray],
   [4295, -7030, 107, 81, 423, 'terraced', copper],
   [4500, -7700, 123, 83, 397, 'slab', charcoal],
   [4660, -8200, 104, 77, 326, 'terraced', limestone],
   [4815, -7350, 92, 87, 293, 'glass', steel],
   [5080, -7710, 110, 72, 270, 'slab', sand],
-  [5300, -7420, 102, 79, 236, 'residential', concrete],
+  [5300, -7420, 102, 79, 236, 'terraced', concrete],
   [5490, -8020, 88, 75, 229, 'terraced', steel],
 ];
+
+type CommercialGrid = {
+  center: readonly [number, number];
+  spacing: number;
+  yaw: number;
+  roofHeights: readonly number[][];
+  styles: readonly (readonly [TowerForm, number])[];
+};
+
+// Each row follows a local street. Empty lots leave plazas, junctions and gaps in the roofline.
+const commercialGrids: CommercialGrid[] = [
+  {
+    // University offices, clinics and a hotel around the near western square.
+    center: OVERLOOK_DISTRICTS.campus, spacing: 157, yaw: 0.04,
+    roofHeights: [
+      [160, 205, 286, 0, 231, 330, 186],
+      [234, 314, 0, 397, 287, 372, 258],
+      [190, 270, 321, 243, 443, 328, 0],
+      [0, 218, 185, 218, 0, 197, 173],
+    ],
+    styles: [['ribbed', limestone], ['terraced', pearl], ['glass', steel], ['ribbed', copper], ['slab', oxide]],
+  }, {
+    // Trading floors and hotel wings gather around the principal interchange.
+    center: OVERLOOK_DISTRICTS.exchange, spacing: 179, yaw: -0.36,
+    roofHeights: [
+      [214, 0, 286, 0, 367, 298, 191],
+      [288, 370, 454, 381, 546, 0, 303],
+      [223, 329, 416, 0, 367, 480, 278],
+      [0, 185, 264, 230, 0, 304, 221],
+    ],
+    styles: [['glass', marine], ['terraced', concrete], ['split', steel], ['slab', charcoal], ['ribbed', limestone]],
+  }, {
+    // Offices and hotels on either side of an open parkway below the eastern shoulder.
+    center: OVERLOOK_DISTRICTS.parkway, spacing: 169, yaw: -0.24,
+    roofHeights: [
+      [215, 310, 0, 344, 190, 240],
+      [285, 379, 0, 327, 405, 0],
+      [275, 0, 0, 268, 365, 287],
+      [211, 295, 223, 0, 225, 0],
+    ],
+    styles: [['ribbed', limestone], ['glass', marine], ['terraced', sand], ['split', steel], ['slab', blueGray]],
+  }, {
+    // The long easterly grid faces the arterial with research and corporate campuses.
+    center: OVERLOOK_DISTRICTS.gateway, spacing: 196, yaw: -0.19,
+    roofHeights: [
+      [193, 303, 366, 0, 270, 351, 206, 0, 291],
+      [0, 362, 490, 342, 558, 423, 330, 0, 350],
+      [242, 423, 0, 374, 469, 0, 298, 311, 261],
+      [191, 0, 264, 321, 0, 352, 240, 0, 0],
+    ],
+    styles: [['split', blueGray], ['glass', steel], ['slab', copper], ['glass', marine], ['terraced', sand]],
+  }, {
+    // Pale stone archive and municipal towers behind the civic district.
+    center: OVERLOOK_DISTRICTS.westRidge, spacing: 213, yaw: 0.12,
+    roofHeights: [
+      [240, 288, 0, 344, 275, 237, 0],
+      [252, 372, 451, 375, 433, 291, 259],
+      [320, 0, 323, 298, 0, 353, 255],
+      [0, 276, 237, 0, 226, 240, 210],
+    ],
+    styles: [['ribbed', limestone], ['terraced', sand], ['slab', oxide], ['ribbed', concrete], ['glass', copper]],
+  }, {
+    // Tall office plates, rotated on the other side of the cross-town viaduct.
+    center: OVERLOOK_DISTRICTS.eastRidge, spacing: 221, yaw: -0.56,
+    roofHeights: [
+      [293, 354, 0, 418, 303, 422, 259],
+      [321, 468, 527, 376, 477, 0, 308],
+      [0, 329, 413, 0, 379, 520, 373],
+      [240, 0, 289, 356, 0, 274, 245],
+    ],
+    styles: [['slab', charcoal], ['glass', marine], ['split', steel], ['terraced', blueGray], ['ribbed', concrete]],
+  }, {
+    // Distant commercial roofs continue as separated clusters against the basin rim.
+    center: OVERLOOK_DISTRICTS.horizon, spacing: 278, yaw: -0.24,
+    roofHeights: [
+      [280, 332, 412, 0, 354, 430, 377, 292],
+      [333, 461, 0, 0, 440, 563, 420, 330],
+      [268, 415, 330, 308, 0, 388, 354, 295],
+    ],
+    styles: [['terraced', marine], ['glass', blueGray], ['slab', concrete], ['ribbed', steel], ['split', copper]],
+  },
+];
+
+function commercialTowers(): Tower[] {
+  const lots: Tower[] = [];
+  for (const { center: [x, z], spacing, yaw, roofHeights, styles } of commercialGrids) {
+    const random = seededDetail(Math.imul(x, 27173) + Math.imul(z, 65539));
+    const cosine = Math.cos(yaw), sine = Math.sin(yaw);
+    for (const [row, heights] of roofHeights.entries()) {
+      for (const [column, height] of heights.entries()) {
+        if (height === 0) continue;
+        const u = (column - (heights.length - 1) / 2) * spacing + (random() - 0.5) * 29;
+        const v = (row - (roofHeights.length - 1) / 2) * spacing * 0.88 + (random() - 0.5) * 22;
+        const [form, color] = styles[Math.floor(random() * styles.length)];
+        const width = 60 + height * 0.071 + random() * 29;
+        const depth = width * (0.61 + random() * 0.26);
+        lots.push([x + u * cosine + v * sine, z - u * sine + v * cosine, width, depth, height, form, color, yaw]);
+      }
+    }
+  }
+  return lots;
+}
 
 export function createOverlookSkyline(
   heightAt: (x: number, z: number) => number,
@@ -230,8 +347,8 @@ export function createOverlookSkyline(
     const sample = radius * 0.65;
     const ground = Math.min(heightAt(x, z), heightAt(x - sample, z), heightAt(x + sample, z),
       heightAt(x, z + sample), heightAt(x, z - sample));
-    // Use the greater skyline height in the deeper districts so the view reads across the whole basin.
-    const heightScale = THREE.MathUtils.lerp(0.58, 0.72, THREE.MathUtils.smoothstep(Math.hypot(x, z), 5000, 9700));
+    // Bring out the nearest commercial blocks while preserving a second skyline in the basin beyond.
+    const heightScale = THREE.MathUtils.lerp(0.79, 0.94, THREE.MathUtils.smoothstep(Math.hypot(x, z), 3950, 9900));
     const firstLight = lights.length;
     builder.setLotGround(ground, heightScale);
     shape(x, ground - 3, z);
@@ -410,7 +527,7 @@ export function createOverlookSkyline(
     }
   });
 
-  for (const [x, z, w, d, h, form, color, yaw = diagonalGrid] of towers) {
+  for (const [x, z, w, d, h, form, color, yaw = diagonalGrid] of [...towers, ...commercialTowers()]) {
     const podiumHeight = 10 + Math.min(h * 0.075, 25);
     building(x, z, Math.hypot(w * 0.64, d * 0.65) + 3, (x, y, z) => {
       floor(x, y, z, w * 1.28, d * 1.30, podiumHeight, { color: concrete, facade: 0.66 }, yaw, 6);
@@ -441,6 +558,32 @@ export function createOverlookSkyline(
           { elevation: h - 14, outline: crown, offset },
           { elevation: h + 2, outline: crown, offset, ridge: [5, 4, 12, 11, -3, -4, -5, 3] },
         ], { color: 0x7193a5, glow: 0.24 }, pearl);
+      } else if (form === 'ribbed') {
+        // Light stone mullions in front of the continuous office glazing.
+        floor(x, y + elevation, z, w * 0.96, d * 0.88, h - elevation - 10, { color, facade: 0.64 }, yaw, 8);
+        const cosine = Math.cos(yaw), sine = Math.sin(yaw);
+        for (const along of [-0.40, -0.20, 0, 0.20, 0.40]) {
+          floor(x + along * w * cosine + d * 0.44 * sine, y + elevation, z - along * w * sine + d * 0.44 * cosine,
+            3.3, 3.9, h - elevation - 8, { color: pearl }, yaw);
+        }
+        const ledge = h * 0.64;
+        floor(x, y + ledge, z, w, d * 0.95, 4, { color: limestone, glow: -0.22 }, yaw, 8);
+        floor(x, y + h - 10, z, w, d * 0.94, 7, { color: limestone, glow: -0.21 }, yaw, 8);
+        floor(x, y + h - 3, z, w * 0.75, d * 0.69, 12, { color: charcoal, facade: 0.55 }, yaw, 5);
+      } else if (form === 'split') {
+        // A sky lobby connects the double core beneath the staggered office floors.
+        const cosine = Math.cos(yaw), sine = Math.sin(yaw);
+        const lobby = h * 0.45;
+        floor(x, y + elevation, z, w * 0.96, d, lobby - elevation, { color, facade: 0.58 }, yaw, 7);
+        floor(x, y + lobby, z, w, d * 0.94, 8, { color: pearl, glow: -0.30 }, yaw, 7);
+        for (const [offset, height, width, depth] of [[-0.24, h, w * 0.48, d * 0.88], [0.28, h * 0.82, w * 0.42, d * 0.78]]) {
+          const wingX = x + offset * w * cosine, wingZ = z - offset * w * sine;
+          floor(wingX, y + lobby + 8, wingZ, width, depth, height - lobby - 15, { color, facade: 0.71 }, yaw, 6);
+          floor(wingX, y + height - 7, wingZ, width, depth, 6, { color: pearl, glow: 0.26 }, yaw, 6);
+          floor(wingX, y + height - 1, wingZ, width * 0.86, depth * 0.69, 11, { color: blueGray }, yaw, 5);
+          if (h >= 390) lights.push({ x: wingX, y: y + height - 1, z: wingZ + depth * 0.51, kind: 3,
+            power: 0.43, temperature: offset < 0 ? 0.92 : 0.45 });
+        }
       } else if (form === 'residential') {
         floor(x, y + elevation, z, w * 0.91, d * 0.88, h - elevation, { color, facade: 0.94 }, yaw, 8);
         // Slabs project past the blue-gray recessed windows and read as paired terraces from the deck.
@@ -455,7 +598,7 @@ export function createOverlookSkyline(
         floor(x, y + h - 14, z, w, d, 8, { color: charcoal, glow: 0.16 }, yaw, 3);
         floor(x, y + h - 6, z, w * 0.77, d * 0.79, 15, { color: pearl }, yaw, 3);
       }
-      const beaconHeight = { terraced: 3, glass: 15, residential: 19, slab: 10 };
+      const beaconHeight = { terraced: 3, glass: 15, residential: 19, slab: 10, ribbed: 10, split: 11 };
       if (h >= 310) beacon(x, y + h + beaconHeight[form], z, 0.55);
     });
   }

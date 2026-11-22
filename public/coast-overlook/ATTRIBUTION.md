@@ -16,3 +16,15 @@
 | `overlook-streets.webp`、`overlook-buildings.bin.gz` | U.S. Census Bureau, 2025 TIGER/Line ROADS、郡 FIPS 06037。パブリックドメイン。 [TIGER/Line](https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html) · [元の配布ファイル](https://www2.census.gov/geo/tiger/TIGER2025/ROADS/tl_2025_06037_roads.zip) | 街路を切り出してラスタ化し、街路沿いの建物と街灯を独自に配置。 |
 
 標高サービスの `exportImage` で WGS 84、無圧縮 Float32 GeoTIFF、バイリニア補間を指定しました。広域は経度 −118.549938〜−118.050862、緯度 33.884090〜34.217574 を 641×513、近景は緯度 34.11843・経度 −118.30040 の周囲約 2.1 km 四方を 321×321 で取得しました。 [標高データの変換](../../scripts/prepare-overlook-elevation.py) · [街路データの変換](../../scripts/prepare-overlook-city.py)
+
+## 環境音
+
+録音は帯域と音量を調整し、モノラル 48 kHz の Ogg Opus に変換してローカルから配信します。
+
+| ファイル | 録音・ライセンス | 加工 |
+| --- | --- | --- |
+| `distant-traffic.ogg` | 遠方の幹線道路の録音「Distant Highway Sound.」、Tom_Kaszuba。[Freesound](https://freesound.org/people/Tom_Kaszuba/sounds/658451/) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | 公開試聴音源の 38–149 秒を抽出し、両端を 4 秒重ねて 107 秒のループに加工。 |
+| `hillside-crickets.ogg` | 暖かい夜のコオロギの録音「Crickets - Warm Summer Night - Ambient.wav」、Speziax。[Freesound](https://freesound.org/people/Speziax/sounds/645329/) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | 公開試聴音源の 9–67 秒を抽出し、両端を 4 秒重ねて 54 秒のループに加工。 |
+| `hillside-towhee-calls.ogg` | カリフォルニアムジトウヒチョウ (*Melozone crissalis*) の録音「California Towhee」、© Jonathon Jongsma、XC109663。[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Melozone_crissalis_-_California_Towhee_-_XC109663.ogg) · [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) | 7.1、9.875、29.4、49.56 秒から各 2.5 秒を抽出し、前後にフェードをかけて連結。変換音源は同じ CC BY-SA 3.0 で配布。 |
+
+交通音は複数の道路に沿って分布させ、道路までの距離と丘の地表による遮蔽に応じて音量と高域を落とします。 [FHWA の交通騒音の伝搬資料](https://www.fhwa.dot.gov/environMent/noise/regulations_and_guidance/polguide/polguide02.cfm) · [FHWA の空気吸収と遮蔽の資料](https://www.fhwa.dot.gov/ENVIRonment/noise/noise_barriers/design_construction/design/design03.cfm)
