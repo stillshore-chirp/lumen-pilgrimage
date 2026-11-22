@@ -5,6 +5,8 @@ export const SPAWN = { x: -12, z: 79, yaw: -0.035, pitch: 0.102 };
 export type CoastPoint = { x: number; y: number; z: number };
 
 export const UPLAND_LAKE = { x: 143, z: 754, width: 82, length: 76, level: 71 };
+export const INARI_COURT = { x: 216, z: 923, y: 78.6 };
+export const INARI_INNER_COURT = { x: 253, z: 1035, y: 120.8 };
 export type CoastRestSite = {
   id: string; name: string; kind: 'bench' | 'terrace';
   x: number; z: number; grade: number; lookX: number; lookZ: number;
@@ -135,7 +137,22 @@ function surfaceBedWeight(x: number, z: number, bed: typeof surfaceBeds[number])
 export function coastBedrock(x: number, z: number): number {
   let exposed = 0;
   for (const bed of surfaceBeds) exposed = Math.max(exposed, surfaceBedWeight(x, z, bed));
-  return exposed;
+  return Math.max(exposed, uplandSpillWetness(x, z));
+}
+
+function spillCenter(x: number): number {
+  return 774 + (247 - x) * 0.182 + 0.67 * Math.sin((x - 247) * 0.12);
+}
+
+function headwaterPocket(x: number, z: number): number {
+  const across = 1 - smoothstep(2.8, 6.6, Math.abs(z - spillCenter(x)));
+  return across * smoothstep(251, 259, x) * (1 - smoothstep(264.5, 270.2, x));
+}
+
+export function uplandSpillWetness(x: number, z: number): number {
+  if (x < 190 || x > 273 || z < 757 || z > 799) return 0;
+  const channel = 1 - smoothstep(2.6, 8.4, Math.abs(z - spillCenter(x)));
+  return Math.max(channel * smoothstep(192, 203, x) * (1 - smoothstep(263, 272, x)), headwaterPocket(x, z));
 }
 
 export const FOREST_STREAM = [
@@ -201,6 +218,20 @@ export function inlandWaterLevel(x: number, z: number): number | undefined {
 
 export function coastWaterLevel(x: number, z: number): number {
   return inlandWaterLevel(x, z) ?? SEA_LEVEL;
+}
+
+function inariTerraceBlend(x: number, z: number, court: CoastPoint, width: number, length: number): number {
+  if (Math.abs(x - court.x) > width * 1.18 || Math.abs(z - court.z) > length * 1.18) return 0;
+  const across = Math.abs(x - court.x) / width;
+  const along = Math.abs(z - court.z) / length;
+  const edge = 0.72 * Math.max(across, along) + 0.28 * Math.hypot(across, along);
+  return 1 - smoothstep(0.62, 1.18, edge);
+}
+
+export function inariWoodland(x: number, z: number): number {
+  if (x < 177 || x > 310 || z < 886 || z > 1078) return 0;
+  return smoothstep(177, 208, x) * (1 - smoothstep(259, 310, x))
+    * smoothstep(886, 909, z) * (1 - smoothstep(1046, 1078, z));
 }
 
 const inlandRidges = [
@@ -273,6 +304,20 @@ function uplandHeight(x: number, z: number): number {
       + smoothstep(0.94, 1.22, radius) * 11.5;
     height += (bottom - height) * basin;
   }
+  const spill = uplandSpillWetness(x, z);
+  if (spill > 0) {
+    const fed = Math.max(0, x - 247);
+    const drop = smoothstep(199, 248, x);
+    const apron = 69.5 + 29.8 * drop + fed * 0.32;
+    height -= Math.max(0, height - apron) * spill * 0.63;
+    if (x > 251) {
+      const headwater = 110.9 + Math.max(0, x - 255) * 0.13;
+      height -= Math.max(0, height - headwater) * headwaterPocket(x, z) * 0.96;
+    }
+  }
+  const court = inariTerraceBlend(x, z, INARI_COURT, 22.0, 13.4);
+  const innerCourt = inariTerraceBlend(x, z, INARI_INNER_COURT, 9.2, 7.4);
+  height += (INARI_COURT.y - height) * court + (INARI_INNER_COURT.y - height) * innerCourt;
   return height;
 }
 
@@ -486,6 +531,30 @@ export const UPLAND_WALKS = [
   ], false) },
 ] as const;
 
+const inariFork = [231, 948, 83.9] as const;
+const inariJoin = [251.2, 1030, 118.1] as const;
+const inariEnd = [INARI_INNER_COURT.x, INARI_INNER_COURT.z, INARI_INNER_COURT.y] as const;
+
+/** Two independently walkable stairways climb from the fork to the small hill shrine. */
+export const INARI_WALKS = [
+  { id: 'inari-entrance', points: sampleTrail([
+    valleyApproach, [174, 861, 72.9], [191, 880, 73.2], [202, 893, 75.5], [209, 902, 76.8],
+    [215, 913, 78.5], [217.5, 926, 79.0], [222.1, 937, 81.0], inariFork,
+  ], false) },
+  { id: 'inari-west', points: sampleTrail([
+    inariFork, [228.4, 954.5, 84.2], [230.4, 967, 85.0], [234.0, 981, 88.0],
+    [237.4, 994, 92.0], [241.1, 1008, 99.8], [244, 1020, 109.4], inariJoin, inariEnd,
+  ], false) },
+  { id: 'inari-east', points: sampleTrail([
+    inariFork, [234.2, 953.7, 84.4], [236.3, 966.3, 86.1], [240.0, 979.5, 89.7],
+    [243.8, 993.3, 94.0], [246.7, 1007.7, 101.2], [249.5, 1019.2, 110.9], inariJoin, inariEnd,
+  ], false) },
+  { id: 'inari-return', points: sampleTrail([
+    inariEnd, [246, 1039.3, 119.3], [235, 1037, 112.2], [223, 1031, 104.0], [210, 1026, 97.0],
+    [191, 1015, 88.6], [176, 1001, 84.1], [159, 987, 80.5], [140, 971, 76.3],
+  ], false) },
+] as const;
+
 const TRAIL_CELL = 14;
 const TRAIL_SHOULDER = 7.2;
 const FOREST_TRAIL_SHOULDER = 16;
@@ -503,7 +572,7 @@ function trailCellKey(col: number, row: number): number {
 }
 
 const trailCells = new Map<number, TrailSegment[]>();
-for (const walk of [...COAST_WALKS, ...FOREST_WALKS, ...UPLAND_WALKS]) {
+for (const walk of [...COAST_WALKS, ...FOREST_WALKS, ...UPLAND_WALKS, ...INARI_WALKS]) {
   const forest = walk.id !== 'west' && walk.id !== 'east';
   for (let i = 1; i < walk.points.length; i += 1) {
     const start = walk.points[i - 1];
@@ -513,7 +582,9 @@ for (const walk of [...COAST_WALKS, ...FOREST_WALKS, ...UPLAND_WALKS]) {
     const slot = walk.id === 'ravine' ? 1 - smoothstep(26, 47, Math.abs(centerZ - 303)) : 0;
     const broadShoulder = smoothstep(111, 159, centerZ) * (1 - slot);
     const coastCut = forest ? 0 : smoothstep(28, 63, Math.abs(centerX)) * smoothstep(3, 24, start.y);
-    const shoulder = TRAIL_SHOULDER + (forest ? (FOREST_TRAIL_SHOULDER - TRAIL_SHOULDER) * broadShoulder : 5.4 * coastCut);
+    const narrowTorii = (walk.id === 'inari-west' || walk.id === 'inari-east') && centerZ > 952 && centerZ < 1028;
+    const shoulder = narrowTorii ? 6.8 : TRAIL_SHOULDER
+      + (forest ? (FOREST_TRAIL_SHOULDER - TRAIL_SHOULDER) * broadShoulder : 5.4 * coastCut);
     const dx = end.x - start.x, dz = end.z - start.z;
     const inverseLength = 1 / Math.hypot(dx, dz);
     const sideX = -dz * inverseLength, sideZ = dx * inverseLength;
@@ -690,7 +761,7 @@ const overlookViews = COAST_WALKS.map(({ overlook }) => {
   return { ...overlook, dx: dx / length, dz: dz / length };
 });
 
-const waterfallClearings = COAST_FALLS.map(fall => {
+const waterfallClearings = [...COAST_FALLS, UPLAND_FALL].map(fall => {
   const first = fall.path[0];
   const length = Math.hypot(fall.impact.x - first.x, fall.impact.z - first.z);
   return { ...first, dx: fall.direction.x, dz: fall.direction.z, length, width: fall.width };
@@ -698,6 +769,12 @@ const waterfallClearings = COAST_FALLS.map(fall => {
 
 export function coastPlantingDistance(x: number, z: number): number {
   let distance = coastTrailDistance(x, z);
+  if (z >= 900 && z <= 1060 && x >= 179 && x <= 281) {
+    const court = Math.hypot((x - INARI_COURT.x) * 0.7, z - INARI_COURT.z);
+    const inner = Math.hypot(x - INARI_INNER_COURT.x, z - INARI_INNER_COURT.z);
+    distance = Math.min(distance, Math.max(0, court - 12.8), Math.max(0, inner - 7.1));
+  }
+  if (uplandSpillWetness(x, z) > 0.15) distance = 0;
   for (const site of COAST_REST_SITES) {
     const radius = site.kind === 'terrace' ? 4.5 : 2.7;
     distance = Math.min(distance, Math.max(0, Math.hypot(x - site.x, z - site.z) - radius));

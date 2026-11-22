@@ -478,7 +478,7 @@ function instanceArchitecture(group: THREE.Group, name: string, solids: Solid[],
 
 export function createInariArchitecture(layout: InariArchitectureLayout, wood: THREE.Texture, stone: THREE.Texture): THREE.Group {
   const group = new THREE.Group();
-  group.name = 'Inari approach, gate and hill shrine';
+  group.name = 'Gates, lanterns and hill shrine';
   const materials = finishes(wood, stone);
   for (const style of ['path', 'main'] as const) {
     const gates = layout.gates.filter(gate => (gate.style ?? 'path') === style);

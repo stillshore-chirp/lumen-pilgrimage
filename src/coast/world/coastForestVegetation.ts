@@ -1,6 +1,6 @@
 import {
   coastRandom, coastTrailDistance, FOREST_WALKS, UPLAND_LAKE, UPLAND_WALKS, groundHeight, groundSlope,
-  smoothstep, uplandLakeRadius,
+  inariWoodland, smoothstep, uplandLakeRadius,
 } from '../terrain';
 import type { FloorForm } from './coastPlantMeshes';
 import type { TreeForm } from './coastTreeMeshes';
@@ -97,7 +97,8 @@ export function plantForest(trailDistance: PlantingDistance, streamDistance: Pla
       const patch = cover(x * 0.57 + 49, z * 0.62);
       const ridge = smoothstep(118, 173, height);
       const lakeEdge = (1 - smoothstep(1.02, 1.35, uplandLakeRadius(x, z))) * smoothstep(646, 690, z);
-      if (lakeEdge > 0.73 || uplandRandom() > 0.28 + patch * 0.64 - ridge * 0.37 - lakeEdge * 0.16) continue;
+      const cedarCover = inariWoodland(x, z);
+      if (lakeEdge > 0.73 || uplandRandom() > (0.28 + patch * 0.64 - ridge * 0.37 - lakeEdge * 0.16) * (1 - cedarCover)) continue;
       const size = uplandRandom();
       const form = ridge > 0.67 ? 'windPruned' : size > 0.71 ? 'emergent' : size > 0.33 ? 'spreading' : 'sapling';
       const width = 2.2 + size * 4.05;
