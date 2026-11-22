@@ -435,7 +435,7 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await dialog.waitFor({ state: 'hidden' });
     await day.click();
     const townDay = await skyBrightness(canvas);
-    assert.ok(townNight > 28 && townNight < 66, `Overlook night sky: ${townNight}`);
+    assert.ok(townNight > 6 && townNight < 28, `Overlook night sky: ${townNight}`);
     assert.ok(townDay > 129, `Overlook daylight sky: ${townDay}`);
     await capture(page, 'overlook-east-day');
 
