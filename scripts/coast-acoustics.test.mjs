@@ -15,7 +15,8 @@ const hooks = registerHooks({
     return nextResolve(path, context);
   },
 });
-const { listenerTerrain, terrainArrival, terrainOcclusion } = await import(acousticsUrl);
+const { airCutoff, listenerTerrain, terrainArrival, terrainOcclusion, thermalLowShelfDb, thermalRayLift } =
+  await import(acousticsUrl);
 const {
   buildShorePatches, selectShorePatches, shoreTransmission, shoreWavePoint,
   SHORE_VOICE_COUNT, SHORE_REF_DISTANCE, SHORE_ROLLOFF,
@@ -37,6 +38,24 @@ function firstArrival(listener, source) {
   const distance = separation(listener, source);
   return terrainArrival(listener, source, listenerTerrain(listener), distance, terrainOcclusion(listener, source));
 }
+
+test('calm night changes distant low-band transmission while leaving nearby sources stable', () => {
+  assert.equal(Math.abs(thermalLowShelfDb(40, 'day')), 0);
+  assert.equal(thermalLowShelfDb(40, 'night'), 0);
+  assert.ok(Math.abs(thermalRayLift(40, 'night') - thermalRayLift(40, 'day')) < 0.02);
+  assert.ok(airCutoff(380) < airCutoff(40) * 0.25);
+  assert.ok(thermalLowShelfDb(380, 'night') - thermalLowShelfDb(380, 'day') > 3);
+  assert.ok(thermalLowShelfDb(2200, 'night', 2300) > thermalLowShelfDb(1000, 'night', 2300) + 1.5);
+  assert.ok(thermalRayLift(6000, 'night') <= 14);
+
+  const path = COAST_FALLS[2].path;
+  const fall = path[Math.round((path.length - 1) * 0.65)];
+  const listener = ear(110, 165);
+  const distance = Math.hypot(listener.x - fall.x, listener.z - fall.z);
+  const day = terrainOcclusion(listener, fall, thermalRayLift(distance, 'day'));
+  const night = terrainOcclusion(listener, fall, thermalRayLift(distance, 'night'));
+  assert.ok(day - night > 0.12 && night > 0.35, 'the ridge still screens the distant fall at night');
+});
 
 test('anchored surf covers the outer coast and the west and east paths with a bounded mix', () => {
   const sites = [SPAWN, ...COAST_WALKS.map(walk => walk.overlook),

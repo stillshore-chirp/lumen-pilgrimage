@@ -1,6 +1,21 @@
 import { groundHeight, SEA_LEVEL, smoothstep, type CoastPoint } from './terrain';
+import type { CoastTimeOfDay } from './world/coastAtmosphere';
 
-export function terrainOcclusion(listener: CoastPoint, source: CoastPoint): number {
+export const REFRACTION_SHELF_HZ = 520;
+
+/** Midpoint offset from a straight ray for calm daylight and a weak night inversion. */
+export function thermalRayLift(horizontalDistance: number, time: CoastTimeOfDay): number {
+  // A linear sound speed gradient gives a shallow arc. Its influence is bounded outside the surface layer.
+  const speedGradient = time === 'night' ? 0.016 : -0.010;
+  return Math.max(-14, Math.min(14, speedGradient * horizontalDistance ** 2 / (8 * 343)));
+}
+
+/** Approximate the change in low-band arrivals as near-ground shadowing opens or closes. */
+export function thermalLowShelfDb(distance: number, time: CoastTimeOfDay, fullDistance = 480): number {
+  return (time === 'night' ? 2.7 : -1.1) * smoothstep(60, fullDistance, distance);
+}
+
+export function terrainOcclusion(listener: CoastPoint, source: CoastPoint, rayLift = 0): number {
   const distance = Math.hypot(source.x - listener.x, source.z - listener.z);
   const samples = Math.min(44, Math.max(3, Math.ceil(distance / (distance < 45 ? 1.5 : 3.7))));
   let obstruction = 0;
@@ -8,7 +23,7 @@ export function terrainOcclusion(listener: CoastPoint, source: CoastPoint): numb
     const t = i / samples;
     const x = listener.x + (source.x - listener.x) * t;
     const z = listener.z + (source.z - listener.z) * t;
-    const y = listener.y + (source.y - listener.y) * t;
+    const y = listener.y + (source.y - listener.y) * t + 4 * rayLift * t * (1 - t);
     obstruction = Math.max(obstruction, groundHeight(x, z) - y);
   }
   return smoothstep(0.12, 10, obstruction);
