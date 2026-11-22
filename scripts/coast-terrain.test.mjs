@@ -7,11 +7,19 @@ test('the coast contains a dry approach, tidal edge, and submerged seabed', () =
   assert.ok(x > COAST_BOUNDS.minX && x < COAST_BOUNDS.maxX);
   assert.ok(z > COAST_BOUNDS.minZ && z < COAST_BOUNDS.maxZ);
   assert.ok(groundHeight(x, z) > SEA_LEVEL + 1.5);
-  for (let beachX = -46; beachX <= -22; beachX += 4) {
+  for (let beachX = x - 8; beachX <= x + 8; beachX += 4) {
     const edge = shoreline(beachX);
     assert.ok(groundHeight(beachX, edge - 3) < SEA_LEVEL);
     assert.ok(groundHeight(beachX, edge + 3) > SEA_LEVEL);
   }
+});
+
+test('the sandy inlet opens to sea between headlands', () => {
+  for (let z = -3; z >= COAST_BOUNDS.minZ; z -= 4) {
+    assert.ok(groundHeight(SPAWN.x, z) < SEA_LEVEL);
+  }
+  assert.ok(groundHeight(-55, -51) > 25);
+  assert.ok(groundHeight(-34, -80) > 15);
 });
 
 test('the waterfall descends a bluff into the basin with a dry rim', () => {

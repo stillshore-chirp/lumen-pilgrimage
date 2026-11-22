@@ -1,6 +1,6 @@
 export const SEA_LEVEL = 0;
 export const COAST_BOUNDS = { minX: -104, maxX: 108, minZ: -101, maxZ: 114 };
-export const SPAWN = { x: -30, z: 7, yaw: -0.60 };
+export const SPAWN = { x: -18, z: 12, yaw: -0.13 };
 export const WATERFALL = { x: 18, y: 24, z: -36 };
 export const POOL = { x: 18, y: 2.2, z: -22, radiusX: 8, radiusZ: 10 };
 
@@ -15,6 +15,7 @@ function mound(x: number, z: number, centerX: number, centerZ: number, width: nu
 
 export function shoreline(x: number): number {
   return -49 + 32 * mound(x, 0, -62, 0, 25, 1)
+    + 56 * mound(x, 0, -17, 0, 17, 1)
     - 15 * mound(x, 0, 44, 0, 47, 1) + 2.5 * Math.sin(x * 0.105 + 0.8);
 }
 
@@ -36,9 +37,11 @@ export function groundHeight(x: number, z: number): number {
     (1 - smoothstep(eastFace - 4, eastFace + 3, z)) * smoothstep(-66, -51, z);
   const westBluff = 12 * mound(x, z, -58, -10, 13, 13) *
     smoothstep(-25, -14, z);
+  const westHeadland = 45 * Math.exp(-(((x + 55) / 17) ** 4 + ((z + 51) / 24) ** 4));
+  const seaStack = 30 * Math.exp(-(((x + 34) / 9) ** 4 + ((z + 80) / 12) ** 4));
   const ridge = 10 * mound(x, z, 23, 76, 44, 27) + 6 * mound(x, z, -54, 58, 28, 33);
 
   const basin = Math.hypot((x - POOL.x) / POOL.radiusX, (z - POOL.z) / POOL.radiusZ);
   const poolDepth = 3.8 * (1 - smoothstep(0.58, 1.22, basin));
-  return beach + rise + roughness + fallsBluff + eastBluff + westBluff + ridge - poolDepth;
+  return beach + rise + roughness + fallsBluff + eastBluff + westBluff + westHeadland + seaStack + ridge - poolDepth;
 }
