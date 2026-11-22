@@ -3,7 +3,7 @@ import { FOREST_STREAM, groundHeight, smoothstep } from '../terrain';
 import { coastNoise } from './coastNoise';
 import { coastWaterOptics, STREAM_WATER_SCATTER } from './coastWaterOptics';
 
-export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
+export function createForestWater(time: THREE.IUniform<number>, surfaceLight: THREE.IUniform<THREE.Color>): THREE.Mesh {
   const positions: number[] = [];
   const depths: number[] = [];
   const uvs: number[] = [];
@@ -63,6 +63,7 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
   material.onBeforeCompile = shader => {
     shader.uniforms.uForestWaterTime = time;
     shader.uniforms.uForestWaterScatter = { value: scatter };
+    shader.uniforms.uForestWaterLight = surfaceLight;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         attribute float depthAtBank;
@@ -78,7 +79,7 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uForestWaterTime;
-        uniform vec3 uForestWaterScatter;
+        uniform vec3 uForestWaterScatter, uForestWaterLight;
         varying vec3 vStreamPoint, vStreamNormal;
         varying vec2 vStreamUV;
         varying float vStreamDepth, vStreamSlope;
@@ -131,7 +132,7 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
         }
       `)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += vec3(0.19, 0.24, 0.23) * foam * max(brokenWater, splash);
+        totalEmissiveRadiance += vec3(0.19, 0.24, 0.23) * uForestWaterLight * foam * max(brokenWater, splash);
       `)
       .replace('#include <normal_fragment_maps>',  `#include <normal_fragment_maps>
         vec3 waterTangentX = dFdx(-vViewPosition);
@@ -143,11 +144,11 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
         normal = normalize(max(abs(determinant), 0.000001) * normal - gradient);
       `)
       .replace('#include <opaque_fragment>', `
-        if (!gl_FrontFacing) outgoingLight = streamUnderside;
+        if (!gl_FrontFacing) outgoingLight = streamUnderside * uForestWaterLight;
         #include <opaque_fragment>
       `)
       .replace('#include <tonemapping_fragment>', `#include <tonemapping_fragment>
-        if (!gl_FrontFacing) gl_FragColor.rgb = mix(uForestWaterScatter, gl_FragColor.rgb,
+        if (!gl_FrontFacing) gl_FragColor.rgb = mix(uForestWaterScatter * uForestWaterLight, gl_FragColor.rgb,
           underwaterExtinction(length(cameraPosition - vStreamPoint)));
       `);
   };

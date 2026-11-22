@@ -1,9 +1,13 @@
 import {
-  NeutralToneMapping, PCFShadowMap, PerspectiveCamera, Vector3, WebGLRenderer,
+  NeutralToneMapping, PCFShadowMap, PerspectiveCamera, Vector3, WebGLRenderer, type Scene,
 } from 'three';
 import { CoastAudio } from './CoastAudio';
-import { CoastControls, type CoastMovement } from './CoastControls';
+import { CoastControls, type CoastMovement, type CoastNavigation } from './CoastControls';
+import type { CoastBirdCue } from './coastBirdCue';
+import { EXPLORATION_WORLDS, findDestination, type ExplorationWorldId } from './coastDestinations';
+import { createCoastTravelPanel } from './CoastTravelPanel';
 import { CoastWorld, type CoastQuality } from './CoastWorld';
+import type { CoastTimeOfDay } from './world/coastAtmosphere';
 import './coast.css';
 
 const qualitySettings = {
@@ -15,21 +19,48 @@ const movementLabels: Record<CoastMovement, string> = {
   walk: '歩行', wade: '浅瀬', swim: '遊泳', dive: '潜水', flight: '自由飛行',
 };
 
+interface ExplorationWorld {
+  readonly scene: Scene;
+  setQuality(quality: CoastQuality): void;
+  setTimeOfDay(time: CoastTimeOfDay): void;
+  update(elapsed: number, camera: PerspectiveCamera): readonly CoastBirdCue[];
+  diveObstacleHeight?(x: number, z: number): number | undefined;
+  dispose(): void;
+}
+
+export interface OverlookScene {
+  readonly world: ExplorationWorld;
+  readonly navigation: CoastNavigation;
+}
+
 export class CoastApp {
   private readonly renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  private readonly world = new CoastWorld();
-  private readonly audio = new CoastAudio();
-  private readonly camera = new PerspectiveCamera(60, 1, 0.12, 2500);
+  private readonly world: ExplorationWorld;
+  private readonly worldId: ExplorationWorldId;
+  private readonly audio: CoastAudio | undefined;
+  private readonly camera: PerspectiveCamera;
   private readonly forward = new Vector3();
   private readonly up = new Vector3();
   private readonly controls: CoastControls;
+  private readonly travel: ReturnType<typeof createCoastTravelPanel>;
+  private readonly travelDialog: HTMLDialogElement;
   private readonly resize: ResizeObserver;
+  private time: CoastTimeOfDay;
   private quality: CoastQuality = 'light';
   private lastFrame = 0;
   private elapsed = 0;
   private frameId = 0;
 
-  constructor(private readonly mount: HTMLElement) {
+  constructor(private readonly mount: HTMLElement, overlook?: OverlookScene) {
+    const path = new URLSearchParams(location.search);
+    const description = EXPLORATION_WORLDS[overlook ? 1 : 0];
+    this.worldId = description.id;
+    this.world = overlook?.world ?? new CoastWorld();
+    this.audio = overlook ? undefined : new CoastAudio();
+    this.camera = overlook ? new PerspectiveCamera(54, 1, 0.20, 43500) : new PerspectiveCamera(60, 1, 0.12, 2500);
+    this.time = path.get('time') === 'night' ? 'night' : 'day';
+    const destination = findDestination(this.worldId, path.get('place'));
+    this.world.setTimeOfDay(this.time);
     this.mount.classList.add('coast');
     this.renderer.toneMapping = NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -38,17 +69,19 @@ export class CoastApp {
     const canvas = this.renderer.domElement;
     canvas.className = 'coast-view';
     canvas.tabIndex = 0;
-    canvas.setAttribute('aria-label', '海岸、森、湖と山の探索画面');
+    canvas.setAttribute('aria-label', overlook ? '丘陵の展望デッキの探索画面' : '海岸、森、湖と山の探索画面');
 
     const ui = document.createElement('div');
     ui.className = 'coast-ui';
     ui.innerHTML = `
       <header class="coast-header">
         <div class="coast-title">
-          <h1>自然景観探索</h1>
+          <h1></h1>
           <span class="coast-mode">歩行</span>
         </div>
-        <a class="coast-legacy" href="?scene=expedition">従来のゲームへ <span aria-hidden="true">↗</span></a>
+        <div class="coast-header-actions">
+          <a class="coast-legacy" href="?scene=expedition">従来のゲームへ <span aria-hidden="true">↗</span></a>
+        </div>
       </header>
       <div class="coast-reticle" aria-hidden="true"></div>
       <div class="coast-dock">
@@ -59,17 +92,18 @@ export class CoastApp {
           </div>
           <details>
             <summary>操作方法</summary>
-            <p>海に向かって左は岩浜、右は潮だまり。浜を背にすると森の入口に休憩所があり、道は湖と稜線へ続きます。</p>
+            <p class="coast-guide-description"></p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
             <p>地上で <kbd>Space</kbd> ジャンプ</p>
-            <p>泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
+            <p class="coast-water-guide">泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
+            <p><kbd>T</kbd> ファストトラベル</p>
             <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
               <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
-              <p>泳いでいるとき <kbd>B</kbd> 潜る <kbd>A</kbd> 浮上</p>
+              <p class="coast-water-guide">泳いでいるとき <kbd>B</kbd> 潜る <kbd>A</kbd> 浮上</p>
               <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
             </details>
           </details>
@@ -90,6 +124,16 @@ export class CoastApp {
         </section>
       </div>
     `;
+    ui.querySelector('h1')!.textContent = overlook ? description.label : '自然景観探索';
+    ui.querySelector('.coast-guide-description')!.textContent = overlook
+      ? '南のデッキから盆地の市街地を見渡せます。柵に沿って東西のテラスへ歩けます。'
+      : '海に向かって左は岩浜、右は潮だまり。浜を背にすると森の入口に休憩所があり、道は湖と稜線へ続きます。';
+    if (!this.audio) {
+      ui.querySelector('.coast-settings')!.setAttribute('aria-label', '描画');
+      ui.querySelectorAll('.coast-sound, .coast-audio-message, .coast-water-guide').forEach(node => node.remove());
+      ui.querySelector('.coast-light')!.setAttribute('title', '広域の影と軽い描画');
+      ui.querySelector('.coast-high')!.setAttribute('title', '近くの影と細かな描画');
+    }
     this.mount.append(canvas, ui);
 
     const mode = ui.querySelector<HTMLElement>('.coast-mode')!;
@@ -97,7 +141,7 @@ export class CoastApp {
     const flight = ui.querySelector<HTMLButtonElement>('.coast-flight')!;
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
     this.controls = new CoastControls(this.camera, canvas, {
-      diveObstacleHeight: (x, z) => this.world.diveObstacleHeight(x, z),
+      diveObstacleHeight: (x, z) => this.world.diveObstacleHeight?.(x, z),
       onMovementChange: movement => {
         mode.textContent = movementLabels[movement];
         flight.setAttribute('aria-pressed', String(movement === 'flight'));
@@ -110,7 +154,8 @@ export class CoastApp {
         lockMessage.hidden = false;
         lockMessage.textContent = '視点操作を開始できませんでした。もう一度ボタンを押してください。';
       },
-    });
+    }, overlook?.navigation);
+    if (destination) this.controls.relocate(destination);
     lock.addEventListener('click', () => this.controls.requestLock());
     canvas.addEventListener('click', () => this.controls.requestLock());
     flight.addEventListener('click', () => {
@@ -118,13 +163,58 @@ export class CoastApp {
       canvas.focus({ preventScroll: true });
     });
 
+    this.travel = createCoastTravelPanel({
+      worlds: EXPLORATION_WORLDS, worldId: this.worldId, time: this.time,
+      onOpen: () => this.controls.releaseInput(),
+      onTravel: (worldId, placeId) => this.goTo(worldId, placeId),
+      onTimeOfDay: time => this.setTimeOfDay(time),
+    });
+    this.travel.setPlace(this.worldId, destination?.id ?? description.places[0].id);
+    this.travelDialog = this.travel.element.querySelector('dialog')!;
+    const actions = ui.querySelector('.coast-header-actions')!;
+    actions.prepend(this.travel.element);
+    window.addEventListener('keydown', this.onTravelKey);
+
     this.bindQuality(ui);
-    this.bindAudio(ui);
+    if (this.audio) this.bindAudio(ui, this.audio);
     this.resize = new ResizeObserver(() => this.resizeViewport());
     this.resize.observe(this.mount);
     this.resizeViewport();
     this.frameId = requestAnimationFrame(this.render);
     window.addEventListener('pagehide', this.onPageHide);
+  }
+
+  private readonly onTravelKey = (event: KeyboardEvent): void => {
+    if (event.code !== 'KeyT' || event.repeat || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (this.travelDialog.open || (event.target instanceof Element
+      && event.target.closest('input, textarea, select, [contenteditable]'))) return;
+    event.preventDefault();
+    this.travel.open();
+  };
+
+  private goTo(worldId: string, placeId: string): void {
+    const place = findDestination(worldId, placeId);
+    if (!place) return;
+    const address = new URL(location.href);
+    address.searchParams.set('world', worldId);
+    address.searchParams.set('place', placeId);
+    address.searchParams.set('time', this.time);
+    if (worldId !== this.worldId) {
+      location.assign(address);
+      return;
+    }
+    this.controls.relocate(place);
+    this.travel.setPlace(worldId, placeId);
+    history.replaceState(null, '', address);
+  }
+
+  private setTimeOfDay(time: CoastTimeOfDay): void {
+    this.time = time;
+    this.world.setTimeOfDay(time);
+    this.travel.setTimeOfDay(time);
+    const address = new URL(location.href);
+    address.searchParams.set('time', time);
+    history.replaceState(null, '', address);
   }
 
   private bindQuality(ui: HTMLElement): void {
@@ -142,12 +232,12 @@ export class CoastApp {
     apply('light');
   }
 
-  private bindAudio(ui: HTMLElement): void {
+  private bindAudio(ui: HTMLElement, audio: CoastAudio): void {
     const start = ui.querySelector<HTMLButtonElement>('.coast-audio')!;
     const mute = ui.querySelector<HTMLButtonElement>('.coast-mute')!;
     const volume = ui.querySelector<HTMLInputElement>('.coast-volume input')!;
     const message = ui.querySelector<HTMLElement>('.coast-audio-message')!;
-    const setLevel = () => this.audio.setLevel(volume.valueAsNumber / 100, mute.getAttribute('aria-pressed') === 'true');
+    const setLevel = () => audio.setLevel(volume.valueAsNumber / 100, mute.getAttribute('aria-pressed') === 'true');
     setLevel();
     mute.addEventListener('click', () => {
       mute.setAttribute('aria-pressed', String(mute.getAttribute('aria-pressed') !== 'true'));
@@ -158,7 +248,7 @@ export class CoastApp {
       start.disabled = true;
       message.textContent = '環境音を準備しています。';
       try {
-        await this.audio.start();
+        await audio.start();
         start.textContent = '環境音を再開';
         message.textContent = '環境音を開始しました。';
       } catch {
@@ -186,11 +276,13 @@ export class CoastApp {
     const dt = this.lastFrame === 0 ? 0 : Math.min((now - this.lastFrame) / 1000, 0.05);
     this.lastFrame = now;
     this.elapsed += dt;
-    this.controls.update(dt);
-    this.camera.getWorldDirection(this.forward);
-    this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
+    if (!this.travelDialog.open) this.controls.update(dt);
     const birdCues = this.world.update(this.elapsed, this.camera);
-    this.audio.update(this.camera.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
+    if (this.audio) {
+      this.camera.getWorldDirection(this.forward);
+      this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
+      this.audio.update(this.camera.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
+    }
     this.renderer.render(this.world.scene, this.camera);
     this.frameId = requestAnimationFrame(this.render);
   };
@@ -198,10 +290,11 @@ export class CoastApp {
   private readonly onPageHide = (event: PageTransitionEvent): void => {
     if (event.persisted) return;
     window.removeEventListener('pagehide', this.onPageHide);
+    window.removeEventListener('keydown', this.onTravelKey);
     cancelAnimationFrame(this.frameId);
     this.resize.disconnect();
     this.controls.dispose();
-    this.audio.dispose();
+    this.audio?.dispose();
     this.world.dispose();
     this.renderer.dispose();
   };

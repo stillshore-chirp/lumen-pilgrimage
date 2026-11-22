@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { CoastQuality } from '../CoastWorld';
 import { groundHeight } from '../terrain';
-import { bindCoastSky, coastAerialGlsl, coastSkyGlsl, type CoastAtmosphere } from './coastAtmosphere';
+import { bindCoastSky, coastAerialGlsl, coastSkyGlsl, type CoastAtmosphere, type CoastTimeOfDay } from './coastAtmosphere';
 
 const broadHalfWidth = 230;
 const broadMapSize = 1024;
@@ -133,11 +133,12 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
       updated.add(material);
       const compile = material.onBeforeCompile;
       const programKey = material.customProgramCacheKey();
-      material.customProgramCacheKey = () => `${programKey}|coast-daylight`;
+      material.customProgramCacheKey = () => `${programKey}|coast-lighting`;
       material.onBeforeCompile = (shader, renderer) => {
         compile.call(material, shader, renderer);
         bindCoastSky(shader.uniforms, atmosphere);
         shader.uniforms.uCoastSubmersion = atmosphere.submersion;
+        shader.uniforms.uCoastAerialDistanceScale = atmosphere.aerialDistanceScale;
         // Built-ins expose the final view position after skinning, bending and instancing.
         // The underwater fog retains the dive behavior while air is integrated before tone mapping.
         const addWorldPoint = !water;
@@ -177,8 +178,10 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
           .replace('#include <lights_fragment_end>', `
             float canopy = coastCanopyCover(vCoastWorldPoint);
             float up = dot(geometryNormal, vec3(viewMatrix[1]));
-            irradiance *= mix(vec3(1.0), vec3(0.67, 0.76, 0.62), canopy);
-            irradiance += vec3(0.17, 0.21, 0.10) * canopy * (0.73 - 0.27 * up);
+            vec3 canopyTint = mix(vec3(0.67, 0.76, 0.62), vec3(0.72, 0.77, 0.85), uCoastNight);
+            vec3 bounce = mix(vec3(0.17, 0.21, 0.10), vec3(0.039, 0.053, 0.072), uCoastNight);
+            irradiance *= mix(vec3(1.0), canopyTint, canopy);
+            irradiance += bounce * canopy * (0.73 - 0.27 * up);
             #include <lights_fragment_end>`);
       };
       material.needsUpdate = true;
@@ -186,16 +189,17 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
   });
 }
 
-export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosphere): {
+export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosphere, heightAt = groundHeight): {
   addScenery: (scenery: THREE.Object3D) => void;
   setQuality: (quality: CoastQuality) => void;
+  setTimeOfDay: (time: CoastTimeOfDay) => void;
   update: (elapsed: number, camera: THREE.PerspectiveCamera) => void;
   dispose: () => void;
 } {
   const sunDirection = atmosphere.sun.value;
   const skyFill = new THREE.HemisphereLight(0xc6d9f5, 0xa28d6c, 1.38);
   const bounce = new THREE.AmbientLight(0xd5d4b0, 0.11);
-  const sun = createSunShadow('Sun and broad coast shadows', 4.1, broadHalfWidth, broadMapSize,
+  const sun = createSunShadow('Sun, moon and broad coast shadows', 4.1, broadHalfWidth, broadMapSize,
     790, 0.17, -0.000105, 1.0);
   sun.color.copy(atmosphere.solarColor.value).multiplyScalar(1 / atmosphere.solarColor.value.r);
   sun.target.position.set(0, 16, 92);
@@ -239,11 +243,26 @@ export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosph
         local.shadow.map = null;
       }
     },
+    setTimeOfDay(time) {
+      const night = time === 'night';
+      const lightColor = atmosphere.solarColor.value;
+      sun.color.copy(lightColor).multiplyScalar(1 / Math.max(lightColor.r, lightColor.b));
+      sun.intensity = night ? 0.57 : 4.1;
+      skyFill.color.setHex(night ? 0xa3bfef : 0xc6d9f5);
+      skyFill.groundColor.setHex(night ? 0xa0aac0 : 0xa28d6c);
+      skyFill.intensity = night ? 0.49 : 1.38;
+      bounce.color.setHex(night ? 0xb2c0db : 0xd5d4b0);
+      bounce.intensity = night ? 0.14 : 0.11;
+      lightRight.set(0, 1, 0).cross(sunDirection).normalize();
+      lightUp.copy(sunDirection).cross(lightRight).normalize();
+      broadAnchor.set(Infinity, Infinity, Infinity);
+      lastShadow = -Infinity;
+    },
     update(elapsed, camera) {
       // New shadow-casting tree tiles become visible as the viewer changes valleys.
       if (broadAnchor.distanceToSquared(camera.position) > 27 * 27) {
         broadAnchor.copy(camera.position);
-        const height = Math.max(18, groundHeight(camera.position.x, camera.position.z));
+        const height = Math.max(18, heightAt(camera.position.x, camera.position.z));
         sun.target.position.set(camera.position.x, height, camera.position.z);
         snapToGrid(sun.target.position, broadTexel);
         sun.position.copy(sun.target.position).addScaledVector(sunDirection, 391);
@@ -252,7 +271,7 @@ export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosph
       if (!local.visible || elapsed - lastShadow < windShadowInterval) return;
       lastShadow = elapsed;
       focus.copy(camera.position);
-      focus.y = Math.min(focus.y, Math.max(0, groundHeight(focus.x, focus.z)) + 18);
+      focus.y = Math.min(focus.y, Math.max(0, heightAt(focus.x, focus.z)) + 18);
       snapToGrid(focus, nearTexel);
       local.target.position.copy(focus);
       local.position.copy(focus).addScaledVector(sunDirection, 258);

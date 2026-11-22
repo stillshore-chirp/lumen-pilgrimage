@@ -70,7 +70,7 @@ const lakeShader = {
       float fresnel = waterFresnel(facing);
       vec3 skyDirection = reflect(-view, normalToAir);
       vec3 clearSky = coastSkyRadiance(normalize(vec3(skyDirection.x, max(0.24, skyDirection.y), skyDirection.z)));
-      vec3 sky = mix(vec3(0.075, 0.129, 0.118), clearSky, smoothstep(0.05, 0.52, skyDirection.y));
+      vec3 sky = mix(vec3(0.075, 0.129, 0.118) * uCoastSurfaceLight, clearSky, smoothstep(0.05, 0.52, skyDirection.y));
       float sunlit = getShadowMask();
       if (uLiveReflection > 0.0 && vReflection.w > 0.0) {
         vec2 uv = vReflection.xy / vReflection.w;
@@ -84,15 +84,15 @@ const lakeShader = {
       float glint = waterSunGlint(normalToAir, view, uCoastSunDirection, 0.085 + 0.082 * gust);
       vec2 spray = (p - uSpring) / vec2(8.2, 4.3);
       float foam = exp(-dot(spray, spray)) * smoothstep(0.37, 0.74, gust * 0.54 + 0.27 + pulse * 0.23);
-      vec3 result = mix(sediment * (0.76 + 0.24 * sunlit), sky, fresnel);
+      vec3 result = mix(sediment * uCoastSurfaceLight * (0.76 + 0.24 * sunlit), sky, fresnel);
       result += uCoastSolarColor * glint * sunlit;
-      result = mix(result, vec3(0.67, 0.79, 0.75), foam * 0.61);
+      result = mix(result, vec3(0.67, 0.79, 0.75) * uCoastSurfaceLight, foam * 0.61);
       float alpha = smoothstep(0.02, 0.26, vDepth) * clamp(0.21 + pathLength * 0.084 + fresnel * 0.79, 0.0, 0.97);
       if (!gl_FrontFacing) {
         vec3 throughWater;
         float transmission = waterTransmission(-view, normalToAir, throughWater);
         vec3 throughSky = coastSkyRadiance(throughWater) + coastSunRadiance(throughWater) * sunlit;
-        result = mix(vec3(0.054, 0.24, 0.22), throughSky * vec3(0.64, 0.88, 0.77), transmission);
+        result = mix(vec3(0.054, 0.24, 0.22) * uCoastSurfaceLight, throughSky * vec3(0.64, 0.88, 0.77), transmission);
         alpha = 0.92;
       }
       gl_FragColor = vec4(result, alpha);
@@ -135,9 +135,11 @@ export function createUplandLake(time: THREE.IUniform<number>, atmosphere: Coast
 
   const reflect = mesh.onBeforeRender;
   let lastReflection = -Infinity;
+  let reflectedNight = atmosphere.night.value;
   mesh.onBeforeRender = (renderer, scene, camera, geometry, material, group) => {
-    if (!surface.uniforms.uLiveReflection.value || camera.position.y < level + 0.17
-      || time.value - lastReflection < 0.125) return;
+    if (!surface.uniforms.uLiveReflection.value || camera.position.y < level + 0.17) return;
+    if (reflectedNight === atmosphere.night.value && time.value - lastReflection < 0.125) return;
+    reflectedNight = atmosphere.night.value;
     lastReflection = time.value;
     reflect.call(mesh, renderer, scene, camera, geometry, material, group);
   };

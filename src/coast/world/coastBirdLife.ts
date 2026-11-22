@@ -31,29 +31,29 @@ const ground = (x: number, z: number, yaw: number): Stop => ({
 });
 const water = (x: number, z: number, yaw: number): Stop => ({ point: lift(SEA_LEVEL, x, z), yaw, mode: 'water' });
 const cueCadence: Record<CoastBirdSpecies, [min: number, variation: number, duration: number, gain: number]> = {
-  gull: [21, 23, 1.85, .79],
-  whiteEye: [13, 16, 1.72, .69],
-  bushWarbler: [19, 20, 1.76, .82],
-  thrush: [17, 22, 2.83, .77],
+  gull: [16, 17, 1.85, .79],
+  whiteEye: [10, 13, 1.72, .69],
+  bushWarbler: [14, 15, 1.76, .82],
+  thrush: [12, 17, 2.83, .77],
 };
 
 // Out-of-sight territories on rock ledges, in canopy and in scrub beside the walks.
 const territories: readonly [kind: CoastBirdSpecies, x: number, z: number, height: number, firstCall: number][] = [
   ['gull', -155, 11, .75, 18], ['gull', -83, -48, .72, 32],
   ['gull', 89, -38, .58, 23], ['gull', 141, -5, .72, 11],
-  ['whiteEye', -112, 90, 5.3, 8], ['whiteEye', 79, 86, 4.4, 18],
+  ['whiteEye', -112, 90, 5.3, 11], ['whiteEye', 79, 86, 4.4, 18],
   ['whiteEye', -37, 243, 5.0, 12], ['bushWarbler', -43, 326, 2.5, 6],
   ['thrush', 48, 349, 5.0, 17],
-  ['bushWarbler', 79, 414, 2.6, 9], ['whiteEye', 119, 481, 5.3, 39],
+  ['bushWarbler', 79, 414, 2.6, 9], ['whiteEye', 119, 481, 5.3, 28],
   ['thrush', 53, 554, 6.4, 7], ['bushWarbler', 24, 644, 3.2, 22],
   ['whiteEye', 169, 682, 5.4, 10], ['bushWarbler', 225, 749, 4.8, 19],
   ['thrush', 177, 828, 6.0, 11], ['bushWarbler', 42, 785, 2.9, 18],
   ['thrush', 37, 892, 4.9, 14], ['bushWarbler', -84, 891, 2.65, 18],
-  ['bushWarbler', -67, 1086, 3.1, 43], ['thrush', 59, 1058, 3.6, 8],
+  ['bushWarbler', -67, 1086, 3.1, 34], ['thrush', 59, 1058, 3.6, 8],
   ['bushWarbler', 150, 969, 3.5, 11],
   ['whiteEye', 203, 909, 6.1, 7], ['thrush', 223, 990, 6.2, 17],
   ['bushWarbler', 197, 1026, 3.2, 23],
-  ['whiteEye', -18, 898, 3.4, 38], ['whiteEye', 18, 1091, 4.2, 38],
+  ['whiteEye', -18, 898, 3.4, 29], ['whiteEye', 18, 1091, 4.2, 23],
 ];
 const flapRate: Record<BirdKind, number> = { gull: 3.7, whiteEye: 12.4, thrush: 9.5, bushWarbler: 13, duck: 7.5 };
 
@@ -436,7 +436,7 @@ export function createCoastBirdLife() {
       for (const perch of territorialCalls) {
         if (elapsed < perch.callAt) continue;
         const [minimum, variation, , gain] = cueCadence[perch.species];
-        perch.callAt = elapsed + minimum + 12 + perch.random() * (variation + 12);
+        perch.callAt = elapsed + minimum + 6 + perch.random() * (variation + 7);
         if (distanceToViewer(perch, viewer) < BIRD_CALL_RANGE[perch.species]) {
           const { id, species, x, y, z } = perch;
           calls.push({ id, species, x, y, z, gain: gain * .74 });
@@ -458,7 +458,7 @@ export function createCoastBirdLife() {
         const calling = elapsed >= flight.callAt && strength < .28;
         const cue = calling && distance < BIRD_CALL_RANGE.gull + bird.standingY;
         if (calling) {
-          flight.callAt = elapsed + 44 + 32 * flight.random();
+          flight.callAt = elapsed + 33 + 22 * flight.random();
           flight.callUntil = elapsed + cueCadence.gull[2];
         }
         if (!bird.root.visible && !cue) continue;

@@ -1,6 +1,19 @@
 import * as THREE from 'three';
 
 export const COAST_SUN_DIRECTION = new THREE.Vector3(0.669, 0.556, -0.493).normalize();
+export type CoastTimeOfDay = 'day' | 'night';
+
+const coastMoonDirection = new THREE.Vector3(0.25, 0.38, -0.89).normalize();
+const moonlight = new THREE.Color(0.23, 0.31, 0.46);
+const moonlitWater = new THREE.Color(0.12, 0.18, 0.28);
+
+interface CoastAtmosphereOptions {
+  nightHorizon?: THREE.ColorRepresentation;
+  nightGlow?: { color: THREE.ColorRepresentation; direction: THREE.Vector3 };
+  starVisibility?: number;
+  moonDirection?: THREE.Vector3;
+  aerialDistanceScale?: number;
+}
 
 const solarAngularRadius = THREE.MathUtils.degToRad(0.265);
 const planetRadius = 6360;
@@ -92,15 +105,36 @@ function createSkyTexture(sunDirection: THREE.Vector3): THREE.DataTexture {
   return texture;
 }
 
-export function createCoastAtmosphere(sunDirection: THREE.Vector3) {
-  const [rayleigh, aerosol] = opticalDepth(planetRadius + observerHeight, sunDirection.y);
+export function createCoastAtmosphere(daySunDirection: THREE.Vector3, options: CoastAtmosphereOptions = {}) {
+  const daytime = daySunDirection.clone().normalize();
+  const nighttime = (options.moonDirection ?? coastMoonDirection).clone().normalize();
+  const [rayleigh, aerosol] = opticalDepth(planetRadius + observerHeight, daytime.y);
   const direct = new THREE.Color(extinction(0, rayleigh, aerosol), extinction(1, rayleigh, aerosol),
     extinction(2, rayleigh, aerosol));
+  const sun = { value: daytime.clone() };
+  const solarColor = { value: direct.clone() };
+  const night = { value: 0 };
+  const surfaceLight = { value: new THREE.Color(1, 1, 1) };
   return {
-    sun: { value: sunDirection },
-    sky: { value: createSkyTexture(sunDirection) },
-    solarColor: { value: direct },
+    sun,
+    sky: { value: createSkyTexture(daytime) },
+    solarColor,
+    night,
+    surfaceLight,
+    nightHorizon: { value: new THREE.Color(options.nightHorizon ?? 0x293a55) },
+    nightGlow: { value: new THREE.Color(options.nightGlow?.color ?? 0x000000) },
+    nightGlowDirection: { value: (options.nightGlow?.direction ?? new THREE.Vector3(0, 0, -1)).clone().normalize() },
+    starVisibility: { value: options.starVisibility ?? 1 },
+    aerialDistanceScale: { value: options.aerialDistanceScale ?? 1 },
     submersion: { value: 0 },
+    setTimeOfDay(time: CoastTimeOfDay): void {
+      const dark = time === 'night';
+      night.value = Number(dark);
+      sun.value.copy(dark ? nighttime : daytime);
+      solarColor.value.copy(dark ? moonlight : direct);
+      if (dark) surfaceLight.value.copy(moonlitWater);
+      else surfaceLight.value.setRGB(1, 1, 1);
+    },
   };
 }
 
@@ -108,9 +142,23 @@ export type CoastAtmosphere = ReturnType<typeof createCoastAtmosphere>;
 
 export const coastSkyGlsl = /* glsl */`
   uniform sampler2D uCoastSky;
-  uniform vec3 uCoastSunDirection, uCoastSolarColor;
+  uniform vec3 uCoastSunDirection, uCoastSolarColor, uCoastNightHorizon, uCoastSurfaceLight;
+  uniform vec3 uCoastNightGlow, uCoastNightGlowDirection;
+  uniform float uCoastNight;
+
+  vec3 coastNightSky(vec3 direction) {
+    float elevation = max(0.0, direction.y);
+    float airMass = exp(-elevation * 5.5);
+    float moonAngle = dot(direction, uCoastSunDirection);
+    float halo = exp((moonAngle - 1.0) * 31.0) * 0.035 + exp((moonAngle - 1.0) * 480.0) * 0.13;
+    float glowAzimuth = max(0.0, dot(direction.xz, uCoastNightGlowDirection.xz));
+    float glow = pow(glowAzimuth, 5.0) * exp(-elevation * 18.0);
+    return mix(vec3(0.006, 0.011, 0.026), uCoastNightHorizon, airMass)
+      + vec3(0.62, 0.76, 1.0) * halo + uCoastNightGlow * glow;
+  }
 
   vec3 coastSkyRadiance(vec3 direction) {
+    if (uCoastNight > 0.5) return coastNightSky(direction);
     vec2 horizontalSun = normalize(uCoastSunDirection.xz);
     float azimuthCosine = dot(direction.xz, horizontalSun) / max(length(direction.xz), 0.0001);
     float solarAzimuth = acos(clamp(azimuthCosine, -1.0, 1.0)) / 3.14159265;
@@ -121,10 +169,21 @@ export const coastSkyGlsl = /* glsl */`
 
   vec3 coastSunRadiance(vec3 direction) {
     float chord = length(direction - uCoastSunDirection);
-    float radius = ${(2 * Math.sin(solarAngularRadius / 2)).toPrecision(8)};
+    float radius = uCoastNight > 0.5 ? 0.0065 : ${(2 * Math.sin(solarAngularRadius / 2)).toPrecision(8)};
     float feather = max(fwidth(chord) * 0.65, 0.00005);
     float disc = 1.0 - smoothstep(radius - feather, radius + feather, chord);
     float limb = sqrt(max(0.0, 1.0 - (chord / radius) * (chord / radius)));
+    if (uCoastNight > 0.5) {
+      if (disc <= 0.0) return vec3(0.0);
+      vec3 east = normalize(cross(vec3(0.0, 1.0, 0.0), uCoastSunDirection));
+      vec3 north = cross(uCoastSunDirection, east);
+      vec2 face = vec2(dot(direction, east), dot(direction, north)) / radius;
+      // The larger dark plains remain discernible on the small lunar disc.
+      float maria = 0.32 * exp(-12.0 * dot(face - vec2(-0.34, 0.23), face - vec2(-0.34, 0.23)));
+      maria += 0.36 * exp(-9.0 * dot(face - vec2(0.26, 0.16), face - vec2(0.26, 0.16)));
+      maria += 0.20 * exp(-21.0 * dot(face - vec2(0.33, -0.34), face - vec2(0.33, -0.34)));
+      return vec3(0.91, 0.94, 1.0) * disc * (0.43 + 0.41 * limb - maria);
+    }
     return uCoastSolarColor * (6.0 + 4.0 * limb) * disc;
   }
 `;
@@ -133,10 +192,15 @@ export function bindCoastSky(uniforms: Record<string, THREE.IUniform>, atmospher
   uniforms.uCoastSunDirection = atmosphere.sun;
   uniforms.uCoastSky = atmosphere.sky;
   uniforms.uCoastSolarColor = atmosphere.solarColor;
+  uniforms.uCoastNight = atmosphere.night;
+  uniforms.uCoastNightHorizon = atmosphere.nightHorizon;
+  uniforms.uCoastNightGlow = atmosphere.nightGlow;
+  uniforms.uCoastNightGlowDirection = atmosphere.nightGlowDirection;
+  uniforms.uCoastSurfaceLight = atmosphere.surfaceLight;
 }
 
 export const coastAerialGlsl = /* glsl */`
-  uniform float uCoastSubmersion;
+  uniform float uCoastSubmersion, uCoastAerialDistanceScale;
 
   float coastForestAir(vec3 point) {
     float valley = smoothstep(117.0, 178.0, point.z) * (1.0 - smoothstep(390.0, 493.0, point.z))
@@ -159,11 +223,13 @@ export const coastAerialGlsl = /* glsl */`
     float valleyDensity = (coastForestAir(cameraPosition + ray * 0.17)
       + coastForestAir(cameraPosition + ray * 0.50)
       + coastForestAir(cameraPosition + ray * 0.83)) / 3.0;
-    float opticalDepth = distanceToPoint * (0.00016 + 0.00088 * seaDensity + 0.00165 * valleyDensity);
+    float opticalPath = distanceToPoint * uCoastAerialDistanceScale;
+    float opticalDepth = opticalPath * (0.00016 + 0.00088 * seaDensity + 0.00165 * valleyDensity);
     vec3 transmission = exp(-opticalDepth * vec3(0.89, 1.00, 1.15));
     vec3 sky = coastSkyRadiance(direction);
     // Nearby in-scattering receives both skylight and the local sun-facing aerosol lobe.
-    vec3 inscatter = sky * (0.59 + 0.41 * smoothstep(320.0, 1800.0, distanceToPoint))
+    float distanceFade = smoothstep(320.0, 1800.0, opticalPath);
+    vec3 inscatter = sky * mix(0.59 + 0.41 * distanceFade, 0.45 + 0.37 * distanceFade, uCoastNight)
       * (1.0 - 0.47 * valleyDensity);
     vec3 inAir = radiance * transmission + inscatter * (1.0 - transmission);
     return mix(inAir, radiance, uCoastSubmersion);

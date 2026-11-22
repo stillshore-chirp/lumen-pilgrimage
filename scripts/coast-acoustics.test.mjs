@@ -139,26 +139,30 @@ test('a resident and a flying gull can call from beyond their model culling dist
   assert.ok(calls.some(cue => cue.species === 'gull' && cue.vx !== undefined && separation(cue, listener) > 190));
 });
 
-test('wildlife supplies spatial calls across the saddle, lake, ridge and vermilion trail', () => {
-  const sites = [[98, 422, 34], [54, 550, 34], [213, 743], [32, 876, 34], [-42, 1090, 34], [222, 955]];
-  for (const [x, z, gapLimit] of sites) {
+test('local calls recur along the beach, ravine, saddle, lake, ridge and vermilion trail', () => {
+  const sites = [
+    [SPAWN.x, SPAWN.z, 35, 12], [-63, 298, 6, 23], [98, 422, 7, 23], [54, 550, 7, 25],
+    [213, 743, 8, 20], [32, 876, 7, 28], [-42, 1090, 7, 24], [222, 955, 23, 16],
+  ];
+  for (const [x, z, minimumCalls, gapLimit] of sites) {
     const wildlife = createCoastBirdLife();
     const listener = ear(x, z);
     const sources = new Set();
     const duration = 90;
+    let callCount = 0;
     let lastCall = 0;
     let longestGap = 0;
     for (let elapsed = 0; elapsed <= duration; elapsed += 0.25) {
       for (const cue of wildlife.update(elapsed, listener)) {
         if (separation(cue, listener) > 115 || terrainOcclusion(listener, cue) > 0.42) continue;
         sources.add(cue.id);
+        callCount++;
         longestGap = Math.max(longestGap, elapsed - lastCall);
         lastCall = elapsed;
       }
     }
     assert.ok(sources.size >= 2, `fewer than two local sources reach ${x}, ${z}`);
-    if (gapLimit !== undefined) {
-      assert.ok(Math.max(longestGap, duration - lastCall) <= gapLimit, `call gap exceeds ${gapLimit} s at ${x}, ${z}`);
-    }
+    assert.ok(callCount >= minimumCalls, `fewer than ${minimumCalls} local calls at ${x}, ${z}`);
+    assert.ok(Math.max(longestGap, duration - lastCall) <= gapLimit, `call gap exceeds ${gapLimit} s at ${x}, ${z}`);
   }
 });

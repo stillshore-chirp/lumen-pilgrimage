@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { coastRandom, coastWaterLevel, groundHeight, type CoastWaterfall } from '../terrain';
+import type { CoastAtmosphere } from './coastAtmosphere';
 import { coastNoise } from './coastNoise';
 import { createCascadeGeometry, type CascadeImpact } from './coastCascadeGeometry';
 
-const defaultSun = new THREE.Vector3(0.46, 0.70, 0.58).normalize();
-
-function currentMaterial(time: THREE.IUniform<number>, sun: THREE.Vector3): THREE.ShaderMaterial {
+function currentMaterial(time: THREE.IUniform<number>, atmosphere: CoastAtmosphere): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       uTime: time,
-      uSun: { value: sun },
+      uSun: atmosphere.sun,
+      uLight: atmosphere.surfaceLight,
       uWater: { value: new THREE.Color(0x43899a) },
       uWhite: { value: new THREE.Color(0xeaf5f3) },
     },
@@ -36,7 +36,7 @@ function currentMaterial(time: THREE.IUniform<number>, sun: THREE.Vector3): THRE
     `,
     fragmentShader: /* glsl */`
       uniform float uTime;
-      uniform vec3 uSun, uWater, uWhite;
+      uniform vec3 uSun, uLight, uWater, uWhite;
       varying vec4 vFlow, vWater;
       varying vec3 vPoint, vNormal;
       #include <fog_pars_fragment>
@@ -74,7 +74,7 @@ function currentMaterial(time: THREE.IUniform<number>, sun: THREE.Vector3): THRE
         vec3 bubbles = uWhite * (lit * (0.74 + 0.26 * turbulence) + 0.10 * flecks);
         float opacity = vFlow.w * fringe * (0.29 + 0.59 * aerated + 0.27 * fresnel);
         opacity *= 1.0 - vWater.z * (0.56 - 0.28 * turbulence) * smoothstep(0.45, 1.0, vWater.x);
-        gl_FragColor = vec4(mix(clear, bubbles, aerated) + uWhite * glint * 0.39, min(0.95, opacity));
+        gl_FragColor = vec4((mix(clear, bubbles, aerated) + uWhite * glint * 0.39) * uLight, min(0.95, opacity));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
@@ -83,7 +83,8 @@ function currentMaterial(time: THREE.IUniform<number>, sun: THREE.Vector3): THRE
   });
 }
 
-function impactFoam(fall: CoastWaterfall, width: number, time: THREE.IUniform<number>): THREE.Mesh {
+function impactFoam(fall: CoastWaterfall, width: number, time: THREE.IUniform<number>,
+  light: THREE.IUniform<THREE.Color>): THREE.Mesh {
   const { impact, direction } = fall;
   const level = coastWaterLevel(impact.x, impact.z);
   const rows = 24;
@@ -104,6 +105,7 @@ function impactFoam(fall: CoastWaterfall, width: number, time: THREE.IUniform<nu
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       uTime: time,
+      uLight: light,
       uSeed: { value: impact.x * 0.276 },
       uFoam: { value: new THREE.Color(0xe2fff3) },
       uWater: { value: new THREE.Color(0x4bb6b9) },
@@ -124,7 +126,7 @@ function impactFoam(fall: CoastWaterfall, width: number, time: THREE.IUniform<nu
     `,
     fragmentShader: /* glsl */`
       uniform float uTime, uSeed;
-      uniform vec3 uFoam, uWater;
+      uniform vec3 uFoam, uWater, uLight;
       varying vec2 vPool;
       varying float vDepth;
       #include <fog_pars_fragment>
@@ -147,7 +149,7 @@ function impactFoam(fall: CoastWaterfall, width: number, time: THREE.IUniform<nu
         float boundary = (1.0 - smoothstep(1.07, 1.68, radius)) * smoothstep(-1.03, -0.48, p.y);
         float foam = clamp(splash * (0.57 + 0.42 * grit) + 0.43 * arcs * boundary + 0.65 * torn * wake, 0.0, 1.0);
         float wet = smoothstep(-0.11, 0.30, vDepth);
-        gl_FragColor = vec4(mix(uWater, uFoam, 0.26 + 0.74 * smoothstep(0.0, 0.60, foam)),
+        gl_FragColor = vec4(mix(uWater, uFoam, 0.26 + 0.74 * smoothstep(0.0, 0.60, foam)) * uLight,
           wet * clamp(foam + 0.21 * wake * (1.0 - torn), 0.0, 0.92));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -190,7 +192,8 @@ function billowTexture(): THREE.DataTexture {
   return texture;
 }
 
-function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, sun: THREE.Vector3, mist: boolean): THREE.Mesh {
+function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, atmosphere: CoastAtmosphere,
+  mist: boolean): THREE.Mesh {
   const origin: number[] = [];
   const motion: number[] = [];
   const plume: number[] = [];
@@ -247,7 +250,9 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, sun: THR
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       uTime: time,
-      uSun: { value: sun },
+      uSun: atmosphere.sun,
+      uLight: atmosphere.surfaceLight,
+      uNight: atmosphere.night,
       uBillow: { value: mist ? billowTexture() : null },
       uSpray: { value: new THREE.Color(mist ? 0xe8f6f4 : 0xf3fef8) },
     },
@@ -295,7 +300,8 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, sun: THR
       }
     `,
     fragmentShader: /* glsl */`
-      uniform vec3 uSun, uSpray;
+      uniform vec3 uSun, uLight, uSpray;
+      uniform float uNight;
       uniform sampler2D uBillow;
       varying float vAlpha;
       varying vec2 vSprite;
@@ -310,11 +316,11 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, sun: THR
           float band = clamp((scatter - 0.731) / 0.061, 0.0, 1.0);
           vec3 spectrum = clamp(1.5 - abs(4.15 * band - vec3(0.30, 1.84, 3.31)), 0.0, 1.0);
           float rainbow = sin(band * 3.14159265) * smoothstep(0.02, 0.39, density);
-          light = mix(light, 0.27 + spectrum * 0.81, rainbow * 0.65);
+          light = mix(light, 0.27 + spectrum * 0.81, rainbow * 0.65 * (1.0 - uNight));
         #else
           float density = 1.0 - smoothstep(0.10, 0.96, length((vSprite - 0.5) * 2.0));
         #endif
-        gl_FragColor = vec4(light, density * vAlpha);
+        gl_FragColor = vec4(light * uLight, density * vAlpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
@@ -329,14 +335,14 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, sun: THR
 }
 
 export function createWaterfalls(
-  falls: CoastWaterfall[], time: THREE.IUniform<number>, sun = defaultSun,
+  falls: CoastWaterfall[], time: THREE.IUniform<number>, atmosphere: CoastAtmosphere,
 ): {
   group: THREE.Group;
   update: (elapsed: number) => void;
 } {
   const group = new THREE.Group();
   group.name = 'Waterfalls, drifting spray and rainbows';
-  const current = currentMaterial(time, sun);
+  const current = currentMaterial(time, atmosphere);
   const sprays: SprayInputs[] = [];
   for (const [index, fall] of falls.entries()) {
     const { geometry, impacts } = createCascadeGeometry(fall, index);
@@ -345,10 +351,10 @@ export function createWaterfalls(
     water.renderOrder = 1;
     group.add(water);
     for (const impact of impacts) {
-      if (impact.kind === 'pool') group.add(impactFoam(fall, impact.width, time));
+      if (impact.kind === 'pool') group.add(impactFoam(fall, impact.width, time, atmosphere.surfaceLight));
       sprays.push({ fall, impact });
     }
   }
-  group.add(sprayMesh(sprays, time, sun, false), sprayMesh(sprays, time, sun, true));
+  group.add(sprayMesh(sprays, time, atmosphere, false), sprayMesh(sprays, time, atmosphere, true));
   return { group, update: elapsed => { time.value = elapsed; } };
 }
