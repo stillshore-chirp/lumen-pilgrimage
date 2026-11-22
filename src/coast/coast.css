@@ -32,6 +32,14 @@
   gap: 12px;
 }
 
+.coast-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .coast-title,
 .coast-legacy,
 .coast-panel {
@@ -60,6 +68,7 @@
   padding-left: 12px;
   color: #bce2d5;
   font-size: 24px;
+  white-space: nowrap;
 }
 
 .coast-legacy {
@@ -236,4 +245,137 @@
   .coast-header {
     flex-wrap: wrap;
   }
+
+  .coast-title h1 {
+    font-size: clamp(1.38rem, 5.8vw, 2.38rem);
+  }
+
+  .coast-mode {
+    font-size: clamp(1rem, 4.4vw, 1.5rem);
+  }
+
+  .coast-header-actions {
+    justify-content: flex-start;
+  }
+}
+
+.coast-travel-panel,
+.coast-travel-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coast-travel-panel {
+  flex-wrap: wrap;
+  font-size: clamp(1rem, 2.7vw, 1.375rem);
+}
+
+.coast-travel-panel button {
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid #bfe2dc55;
+  border-radius: 9px;
+  padding: 5px 10px;
+  color: inherit;
+  background: #1e3d3d;
+  font: inherit;
+  line-height: 1.35;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.coast-travel-panel button:hover {
+  border-color: #bfe2dc;
+}
+
+.coast-travel-panel button[aria-pressed="true"] {
+  border-color: #c8eddf;
+  background: #c8eddf;
+  color: #133833;
+  font-weight: 600;
+}
+
+.coast-locked .coast-travel-toggle,
+.coast-locked .coast-travel-time {
+  visibility: hidden;
+}
+
+.coast-travel-dialog {
+  box-sizing: border-box;
+  width: min(35rem, calc(100% - 1.5rem));
+  max-width: none;
+  max-height: calc(100% - 1.5rem);
+  border: 1px solid #bfe2dc55;
+  border-radius: 16px;
+  padding: 0;
+  color: #f6fbf7;
+  background: #102728;
+  box-shadow: 0 12px 40px #041c2470;
+  overscroll-behavior: contain;
+  scroll-padding: 0.75rem;
+  pointer-events: auto;
+}
+
+.coast-travel-dialog::backdrop {
+  background: #071c2375;
+}
+
+.coast-travel-content {
+  display: grid;
+  gap: 0.875rem;
+  padding: 0.875rem;
+}
+
+.coast-travel-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.coast-travel-heading h2 {
+  margin: 0;
+  font-size: 1.2em;
+}
+
+.coast-travel-dialog section {
+  padding-top: 0.75rem;
+  border-top: 1px solid #bfe2dc40;
+}
+
+.coast-travel-dialog h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1em;
+}
+
+.coast-travel-dialog h3 span {
+  margin-inline-start: 0.6em;
+  font-size: 0.8em;
+  font-weight: normal;
+  color: #bce2d5;
+}
+
+.coast-travel-destinations {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(9.25rem, 100%), 1fr));
+  gap: 0.5rem;
+}
+
+.coast-travel-destinations button {
+  padding: 0.5rem 0.625rem;
+  text-align: start;
+  text-wrap: balance;
+}
+
+.coast-travel-destinations button[aria-current="true"] {
+  border-color: #c8eddf;
+}
+
+.coast-travel-destinations span:not([hidden]) {
+  display: block;
+  color: #bce2d5;
+  font-size: 0.75em;
 }

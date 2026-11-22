@@ -138,6 +138,21 @@ function signalLevel() {
   return peak > 0.001 && peak < 0.98 ? peak : 0;
 }
 
+async function skyBrightness(canvas) {
+  return canvas.evaluate(source => new Promise(resolve => requestAnimationFrame(() => {
+    const sample = document.createElement('canvas');
+    sample.width = 16;
+    sample.height = 8;
+    const context = sample.getContext('2d');
+    context.drawImage(source, source.width * 0.35, source.height * 0.16,
+      source.width * 0.30, source.height * 0.15, 0, 0, sample.width, sample.height);
+    const { data } = context.getImageData(0, 0, sample.width, sample.height);
+    let total = 0;
+    for (let i = 0; i < data.length; i += 4) total += data[i] + data[i + 1] + data[i + 2];
+    resolve(total / (sample.width * sample.height * 3));
+  })));
+}
+
 test('the coast renders, wades, dives, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
   const page = await newPage();
   const errors = [];
@@ -346,6 +361,92 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
   }
 });
 
+test('fast travel resets movement, connects the coast and overlook, and preserves rendered time of day', { timeout }, async () => {
+  const page = await newPage();
+  const travel = page.getByRole('button', { name: 'ファストトラベル' });
+  const dialog = page.getByRole('dialog', { name: 'ファストトラベル' });
+  const day = page.getByRole('button', { name: '昼', exact: true });
+  const night = page.getByRole('button', { name: '夜', exact: true });
+  const flight = page.getByRole('button', { name: '自由飛行' });
+  const canvas = page.locator('canvas.coast-view');
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  await page.addInitScript(installBrowserProbes);
+
+  async function arrive(label, world, place, time) {
+    await travel.click();
+    await dialog.getByRole('button', { name: label, exact: true }).click();
+    await page.waitForURL(address => address.searchParams.get('world') === world
+      && address.searchParams.get('place') === place && address.searchParams.get('time') === time,
+    { waitUntil: 'commit' });
+    await dialog.waitFor({ state: 'hidden' });
+    await canvas.waitFor();
+  }
+
+  try {
+    await page.goto(url, { waitUntil: 'commit' });
+    const coastDay = await skyBrightness(canvas);
+    assert.equal(await day.getAttribute('aria-pressed'), 'true');
+    await night.click();
+    const coastNight = await skyBrightness(canvas);
+    assert.ok(coastNight > 5 && coastDay - coastNight > 65, `${coastDay} → ${coastNight}`);
+    await capture(page, 'lagoon-night');
+
+    await page.getByRole('button', { name: 'マウス操作を開始' }).click();
+    await page.waitForFunction(() => document.pointerLockElement?.matches('canvas.coast-view'));
+    await page.keyboard.press('t');
+    await dialog.waitFor();
+    await page.waitForFunction(() => document.pointerLockElement === null);
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden' });
+
+    await page.getByRole('button', { name: '環境音を開始' }).click();
+    await page.getByRole('button', { name: '環境音を再開' }).waitFor();
+    await flight.click();
+    assert.equal(await flight.getAttribute('aria-pressed'), 'true');
+    for (const [label, id, x, z] of [
+      ['密林の休憩所', 'forest', -28.05, 108.65],
+      ['稜線', 'ridge', -109.9, 973.7],
+      ['朱の参道', 'vermilion', 209, 904],
+      ['湖畔', 'lake', 86.8, 701.5],
+    ]) {
+      await arrive(label, 'coast', id, 'night');
+      await page.waitForFunction(([expectedX, expectedZ]) => {
+        const { positionX, positionZ } = window.coastProbe.context.listener;
+        return Math.hypot(positionX.value - expectedX, positionZ.value - expectedZ) < 0.10;
+      }, [x, z]);
+      assert.equal(await flight.getAttribute('aria-pressed'), 'false');
+      assert.equal(await page.locator('.coast-mode').textContent(), '歩行');
+    }
+
+    await arrive('中央展望デッキ', 'overlook', 'main-deck', 'night');
+    await page.getByRole('heading', { name: '丘陵展望台', exact: true }).waitFor();
+    assert.equal(await night.getAttribute('aria-pressed'), 'true');
+    const townNight = await skyBrightness(canvas);
+    await capture(page, 'overlook-night');
+    await arrive('西テラス', 'overlook', 'west-terrace', 'night');
+    await arrive('東テラス', 'overlook', 'east-terrace', 'night');
+    await travel.click();
+    assert.equal(await dialog.getByRole('button', { name: /東テラス/ }).getAttribute('aria-current'), 'true');
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden' });
+    await day.click();
+    const townDay = await skyBrightness(canvas);
+    assert.ok(townNight > 5 && townDay - townNight > 65, `${townDay} → ${townNight}`);
+    await capture(page, 'overlook-east-day');
+
+    await arrive('入り江の浜', 'coast', 'inlet', 'day');
+    await page.getByRole('heading', { name: '自然景観探索' }).waitFor();
+    assert.equal(await day.getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
 test('the legacy entry navigates to Hub, saves a run, and continues it after reloading', { timeout }, async () => {
   const page = await newPage();
   const saveKey = 'lumen-pilgrimage:save-slot:0';
@@ -373,6 +474,7 @@ test('the legacy entry navigates to Hub, saves a run, and continues it after rel
     const afterCoast = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).expedition, saveKey);
     assert.deepEqual(afterCoast, saved);
     await enterLegacy();
+    await page.getByRole('button', { name: 'Continue Expedition', exact: true }).waitFor();
     await page.reload({ waitUntil: 'commit' });
     await invoke('Continue Expedition');
     await page.waitForFunction(key => JSON.parse(localStorage.getItem(key))?.state === 'InExpedition', saveKey);
