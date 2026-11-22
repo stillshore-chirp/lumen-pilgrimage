@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera, Ray, Triangle, Vector3 } from 'three';
-import { COAST_WALKS, FOREST_WALKS, groundHeight, SEA_LEVEL, SPAWN } from '../src/coast/terrain.ts';
+import {
+  COAST_REST_SITES, COAST_WALKS, FOREST_WALKS, UPLAND_WALKS, groundHeight, restSiteYaw, SEA_LEVEL, SPAWN,
+} from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
 // Vite resolves the extensionless terrain import in the app. Resolve that same file in the Node test.
@@ -513,6 +515,46 @@ test('walking near the edge of the ravine tread passes the inside of its bend', 
   }
 });
 
+test('a reachable seat holds walking and jumping while allowing the player to look around and stand', () => {
+  const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
+  const gamepad = { connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons };
+  const browser = createBrowser([gamepad]);
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  const site = COAST_REST_SITES.find(({ id }) => id === 'beach-bench');
+  const yaw = restSiteYaw(site);
+  const x = site.x + 2.1 * Math.sin(yaw), z = site.z + 2.1 * Math.cos(yaw);
+  const advance = () => { for (let frame = 0; frame < 13; frame++) controls.update(0.05); };
+  try {
+    assert.equal(controls.toggleRest(), false);
+    camera.position.set(x, groundHeight(x, z) + 1.65, z);
+    assert.equal(controls.currentRestSite.id, site.id);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyE' });
+    advance();
+    assert.equal(controls.currentMovement, 'rest');
+    assert.ok(camera.position.distanceTo(new Vector3(site.x, site.grade + 1.22, site.z)) < 0.0001);
+    const seated = camera.position.clone();
+    const beforeLook = camera.rotation.y;
+    gamepad.axes = [0, -1, 0.7, 0];
+    buttons[0] = { pressed: true, value: 1 };
+    advance();
+    assert.deepEqual(camera.position, seated);
+    assert.ok(camera.rotation.y < beforeLook - 0.2);
+
+    gamepad.axes = [0, 0, 0, 0];
+    buttons[0] = { pressed: false, value: 0 };
+    buttons[2] = { pressed: true, value: 1 };
+    advance();
+    assert.equal(controls.currentMovement, 'walk');
+    advance();
+    assert.equal(controls.currentMovement, 'walk', 'held X toggled the seat more than once');
+    assert.ok(camera.position.distanceTo(seated) > 1.4);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
 test('the main walking controls complete the coastal and forest paths without flying', () => {
   const browser = createBrowser();
   const camera = new PerspectiveCamera();
@@ -542,6 +584,16 @@ test('the main walking controls complete the coastal and forest paths without fl
     walkThrough('beach to forest', coastAccess.slice(0, startOfForest + 1));
     walkThrough(approach.id, approach.points);
     walkThrough(ravine.id, ravine.points);
+    const [saddle, lake, ridge] = UPLAND_WALKS;
+    walkThrough(saddle.id, saddle.points);
+    walkThrough(lake.id, lake.points);
+    const ridgeStart = ridge.points[0];
+    const lakeToRidge = lake.points.findIndex(point => Math.hypot(point.x - ridgeStart.x, point.z - ridgeStart.z) < 0.06);
+    assert.ok(lakeToRidge > 0);
+    walkThrough('lake to ridge', lake.points.slice(1, lakeToRidge + 1));
+    walkThrough(ridge.id, ridge.points);
+    const oldOverlook = ford.points.at(-1);
+    camera.position.set(oldOverlook.x, groundHeight(oldOverlook.x, oldOverlook.z) + 1.65, oldOverlook.z);
     walkThrough(ford.id, [...ford.points].reverse());
     const creekFork = headwater.points[0];
     walkThrough('fork to headwater', ford.points.slice(0,

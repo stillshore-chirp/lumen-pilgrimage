@@ -67,13 +67,16 @@ const forestBounce = /* glsl */`
   }
 
   vec3 coastIndirectTint(vec2 p) {
-    if (p.y < 104.0 || p.y > 515.0 || abs(p.x) > 217.0) return vec3(1.0);
+    if (p.y < 104.0 || p.y > 1190.0 || abs(p.x) > 435.0) return vec3(1.0);
     float cover = smoothstep(104.0, 159.0, p.y) * (1.0 - smoothstep(432.0, 515.0, p.y));
     cover *= 1.0 - smoothstep(142.0, 217.0, abs(p.x));
     float glade = coastOpening(p, vec2(39.0, 262.0), vec2(27.0, 34.0));
     float overlook = coastOpening(p, vec2(-14.0, 392.0), vec2(37.0, 34.0));
     float rockSlot = coastOpening(p, vec2(-63.0, 304.0), vec2(17.0, 22.0));
     cover *= 1.0 - max(glade * 0.87, overlook * 0.94);
+    float lake = coastOpening(p, vec2(143.0, 754.0), vec2(113.0, 107.0));
+    float upland = smoothstep(458.0, 567.0, p.y) * (1.0 - smoothstep(1045.0, 1190.0, p.y));
+    cover = max(cover, upland * (1.0 - lake) * 0.73);
     return mix(vec3(1.0), vec3(0.74, 0.81, 0.72), cover) * (1.0 - 0.35 * rockSlot);
   }
 `;
@@ -142,6 +145,7 @@ export function createCoastLighting(scene: THREE.Scene, sunDirection: THREE.Vect
   const texel = localHalfWidth * 2 / localMapSize;
   const focus = new THREE.Vector3();
   const broadAnchor = new THREE.Vector3(Infinity, Infinity, Infinity);
+  const bayShadowTarget = sun.target.position.clone();
   let lastShadow = -Infinity;
   scene.add(skyFill, bounce, sun, sun.target, local, local.target);
   applyCoastLighting(scene);
@@ -167,6 +171,10 @@ export function createCoastLighting(scene: THREE.Scene, sunDirection: THREE.Vect
       // New shadow-casting tree tiles become visible as the viewer changes valleys.
       if (broadAnchor.distanceToSquared(camera.position) > 36 * 36) {
         broadAnchor.copy(camera.position);
+        const inland = THREE.MathUtils.smoothstep(camera.position.z, 326, 545);
+        const height = Math.max(18, groundHeight(camera.position.x, camera.position.z));
+        sun.target.position.set(camera.position.x, height, camera.position.z).lerp(bayShadowTarget, 1 - inland);
+        sun.position.copy(sun.target.position).addScaledVector(sunDirection, 463);
         sun.shadow.needsUpdate = true;
       }
       if (!local.visible || elapsed - lastShadow < windShadowInterval) return;

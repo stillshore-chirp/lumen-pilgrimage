@@ -1,8 +1,11 @@
 import * as THREE from 'three';
-import { LANDSCAPE_BOUNDS, coastRandom, groundHeight, SEA_LEVEL } from '../terrain';
+import { coastRandom, groundHeight, SEA_LEVEL } from '../terrain';
 import { coastNoise } from './coastNoise';
 import { coastSwellGLSL } from './coastSwell';
 import { coastWaterOptics, SEA_WATER_SCATTER } from './coastWaterOptics';
+
+// The sea shader only needs the coastal strip, at a higher sampling density than the uplands.
+const OCEAN_BATHYMETRY = { minX: -574, maxX: 574, minZ: -817, maxZ: 695 };
 
 export function createCoastOceanGeometry(): THREE.BufferGeometry {
   // Denser triangles at the beach carry the breaking lip. Open water stays a flat extension.
@@ -55,7 +58,7 @@ function createDepthTexture(): THREE.DataTexture {
   const height = 712;
   const depths = new Float32Array(width * height);
   const data = new Uint8Array(width * height * 4);
-  const { minX, maxX, minZ, maxZ } = LANDSCAPE_BOUNDS;
+  const { minX, maxX, minZ, maxZ } = OCEAN_BATHYMETRY;
   const dx = (maxX - minX) / width;
   const dz = (maxZ - minZ) / height;
   for (let row = 0; row < height; row += 1) {
@@ -167,7 +170,7 @@ const shoreBathymetry = /* glsl */`
 export function createCoastOceanMaterial(
   time: THREE.IUniform<number>, sun: THREE.Vector3, sand: THREE.Texture
 ): THREE.ShaderMaterial {
-  const { minX, maxX, minZ, maxZ } = LANDSCAPE_BOUNDS;
+  const { minX, maxX, minZ, maxZ } = OCEAN_BATHYMETRY;
   return new THREE.ShaderMaterial({
     lights: true,
     side: THREE.DoubleSide,

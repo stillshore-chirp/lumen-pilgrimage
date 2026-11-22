@@ -1,8 +1,29 @@
 export const SEA_LEVEL = 0;
-export const COAST_BOUNDS = { minX: -380, maxX: 390, minZ: -760, maxZ: 517 };
-export const LANDSCAPE_BOUNDS = { minX: -574, maxX: 574, minZ: -817, maxZ: 695 };
+export const COAST_BOUNDS = { minX: -560, maxX: 570, minZ: -760, maxZ: 1240 };
+export const LANDSCAPE_BOUNDS = { minX: -1670, maxX: 1670, minZ: -817, maxZ: 2210 };
 export const SPAWN = { x: -12, z: 79, yaw: -0.035, pitch: 0.102 };
 export type CoastPoint = { x: number; y: number; z: number };
+
+export const UPLAND_LAKE = { x: 143, z: 754, width: 82, length: 76, level: 71 };
+export type CoastRestSite = {
+  id: string; name: string; kind: 'bench' | 'shelter';
+  x: number; z: number; grade: number; lookX: number; lookZ: number; pitch: number;
+};
+
+export const COAST_REST_SITES: readonly CoastRestSite[] = [
+  { id: 'beach-bench', name: '浜のベンチ', kind: 'bench', x: -25.5, z: 75.2, grade: 4.30,
+    lookX: 2, lookZ: -235, pitch: 0.12 },
+  { id: 'shore-shelter', name: '森の入口の東屋', kind: 'shelter', x: -27, z: 111, grade: 11.15,
+    lookX: -79, lookZ: -27, pitch: 0.035 },
+  { id: 'lake-shelter', name: '湖畔の東屋', kind: 'shelter', x: 84, z: 702, grade: 73.85,
+    lookX: 221, lookZ: 787, pitch: 0.075 },
+  { id: 'ridge-bench', name: '稜線のベンチ', kind: 'bench', x: -113.5, z: 976, grade: 183.1,
+    lookX: 533, lookZ: 1334, pitch: -0.058 },
+];
+
+export function restSiteYaw(site: CoastRestSite): number {
+  return Math.atan2(site.lookX - site.x, site.lookZ - site.z);
+}
 
 export function smoothstep(start: number, end: number, value: number): number {
   const t = Math.max(0, Math.min(1, (value - start) / (end - start)));
@@ -163,6 +184,25 @@ export function forestStreamLevel(x: number, z: number): number | undefined {
   return stream && Math.abs(stream.side) < stream.halfWidth ? stream.y : undefined;
 }
 
+export function uplandLakeRadius(x: number, z: number): number {
+  const dx = (x - UPLAND_LAKE.x) / UPLAND_LAKE.width;
+  const dz = (z - UPLAND_LAKE.z) / UPLAND_LAKE.length;
+  const lip = 0.075 * Math.sin(dx * 6.2 + dz * 4.1) + 0.043 * Math.cos(dx * 12.1 - dz * 8.8);
+  return Math.hypot(dx, dz) + lip;
+}
+
+function lakeAt(x: number, z: number): boolean {
+  return z > 645 && z < 862 && Math.abs(x - UPLAND_LAKE.x) < 114 && uplandLakeRadius(x, z) < 1;
+}
+
+export function inlandWaterLevel(x: number, z: number): number | undefined {
+  return lakeAt(x, z) ? UPLAND_LAKE.level : forestStreamLevel(x, z);
+}
+
+export function coastWaterLevel(x: number, z: number): number {
+  return inlandWaterLevel(x, z) ?? SEA_LEVEL;
+}
+
 const inlandRidges = [
   { x: -114, z: 204, width: 39, length: 68, height: 31 },
   { x: -101, z: 304, width: 29, length: 50, height: 37 },
@@ -199,7 +239,44 @@ function inlandHeight(x: number, z: number): number {
   return grade + foldedFloor + ledges + Math.max(ridge, summit) + bank + saddle;
 }
 
+// Individual crests overlap in the view from the valley, with low saddles between them.
+const uplandRidges = [
+  [-223, 618, 125, 144, 68], [275, 628, 112, 166, 55], [-179, 805, 133, 175, 54],
+  [-154, 957, 137, 198, 100], [307, 817, 121, 122, 112], [413, 962, 141, 181, 101],
+  [-329, 1157, 181, 190, 140], [347, 1116, 177, 181, 132],
+  [-43, 1354, 142, 179, 110], [230, 1400, 159, 205, 156], [540, 1315, 241, 260, 151],
+  [-556, 1465, 250, 245, 150], [-240, 1610, 259, 245, 176], [63, 1683, 185, 192, 130],
+  [431, 1751, 268, 247, 197], [769, 1740, 389, 354, 215], [-801, 1698, 322, 318, 190],
+  [-502, 1954, 386, 331, 238], [77, 2025, 325, 286, 214], [746, 2095, 453, 403, 184],
+] as const;
+
+function uplandHeight(x: number, z: number): number {
+  const grade = 50 + (z - 450) * 0.054;
+  const waves = 4.4 * Math.sin(x * 0.018 + z * 0.016) + 3.3 * Math.cos(x * 0.027 - z * 0.028);
+  const ledges = 1.0 * Math.sin(x * 0.139 + z * 0.11) + 0.48 * Math.cos(x * 0.47 + z * 0.31);
+  const wx = x + 11 * Math.sin(z * 0.051 + x * 0.015) + 3.7 * Math.sin(x * 0.16 - z * 0.19);
+  const wz = z + 8 * Math.cos(x * 0.042 + z * 0.023) + 2 * Math.sin(x * 0.39 + z * 0.16);
+  let slopes = 0, crests = 0;
+  for (const [cx, cz, width, length, height] of uplandRidges) {
+    const dx = (wx - cx) / width, dz = (wz - cz) / length;
+    if (Math.abs(dx) > 1.21 || Math.abs(dz) > 1.21) continue;
+    const r = Math.hypot(dx, dz) * 0.84 + Math.max(Math.abs(dx), Math.abs(dz)) * 0.16;
+    slopes += height * 0.25 * (1 - smoothstep(0.41, 1.21, r));
+    crests = Math.max(crests, height * 0.75 * (1 - smoothstep(0.23, 0.94, r)));
+  }
+  let height = grade + waves + ledges + slopes + crests;
+  if (z > 632 && z < 886 && x > 17 && x < 268) {
+    const radius = uplandLakeRadius(x, z);
+    const basin = (1 - smoothstep(0.95, 1.39, radius));
+    const bottom = UPLAND_LAKE.level - 14.6 + smoothstep(0.28, 0.95, radius) * 16.6
+      + smoothstep(0.94, 1.22, radius) * 11.5;
+    height += (bottom - height) * basin;
+  }
+  return height;
+}
+
 function landscapeHeight(x: number, z: number): number {
+  if (z >= 577) return uplandHeight(x, z);
   const shore = z - shoreline(x);
   const shelf = shore * (shore < 0 ? 0.177 : 0.208);
   const beachRipples = (0.1 * Math.sin(z * 0.58 + x * 0.24) + 0.13 * Math.sin(x * 0.14 - z * 0.26))
@@ -283,7 +360,9 @@ function landscapeHeight(x: number, z: number): number {
   const inlandEdge = 222 + 32 * Math.sin(x * 0.016) + 17 * Math.sin(x * 0.061) + 315 * inner;
   const edgeZ = smoothstep(inlandEdge, inlandEdge + 107, z);
   const shelfEdge = Math.max(edgeX, edgeZ);
-  return height * (1 - shelfEdge) - 29 * shelfEdge;
+  const coast = height * (1 - shelfEdge) - 29 * shelfEdge;
+  if (z < 382) return coast;
+  return coast + (uplandHeight(x, z) - coast) * smoothstep(382, 577, z);
 }
 
 type TrailAnchor = readonly [x: number, z: number, y: number];
@@ -358,6 +437,9 @@ export const COAST_WALKS = [
 const forestFork = [-5, 215, 20.7] as const;
 const forestOverlook = [-14, 392, 51] as const;
 const creekFork = [57, 287, 22.0] as const;
+const lakeApproach = [79, 700, 74.4] as const;
+const ridgeApproach = [102, 837, 76.5] as const;
+const valleyApproach = [156, 846, 77.8] as const;
 
 export const FOREST_WALKS = [
   { id: 'approach', points: sampleTrail([
@@ -380,6 +462,29 @@ export const FOREST_WALKS = [
   ], false) },
 ] as const;
 
+export const UPLAND_WALKS = [
+  { id: 'saddle', points: sampleTrail([
+    forestOverlook, [3, 388, 46.9], [25, 394, 37.9], [47, 402, 34.5], [69, 406, 33.5],
+    [93, 416, 32.0], [103, 435, 36.2], [108, 461, 42.2], [111, 486, 45.5], [102, 509, 48.6],
+    [82, 527, 51.4], [48, 547, 53.2], [26, 579, 52.7], [22, 619, 55.1], [36, 654, 58.9],
+    [57, 677, 64.2], [70, 689, 71.7], lakeApproach,
+  ], false) },
+  { id: 'lake', points: sampleTrail([
+    lakeApproach, [91, 681, 75.2], [121, 671, 72.8], [153, 672, 73.3], [182, 686, 74.3],
+    [207, 709, 74.2], [221, 736, 74.7], [234, 762, 78.4], [240, 784, 91.3], [232, 808, 89.4],
+    [210, 827, 82.2], [184, 838, 79.0], valleyApproach, [130, 843, 77.6], ridgeApproach,
+    [72, 826, 76.2], [52, 797, 76.2], [45, 763, 76.6], [51, 734, 75.8], [63, 712, 75.0],
+  ]) },
+  { id: 'ridge', points: sampleTrail([
+    ridgeApproach, [66, 857, 73.6], [35, 879, 77.2], [6, 897, 81.8], [-26, 910, 87.1],
+    [-52, 915, 99.0], [-65, 892, 110.1], [-84, 875, 122.0], [-100, 898, 134.2],
+    [-114, 917, 148.0], [-111, 940, 164.2], [-125, 963, 177.4], [-120.5, 975, 181.8], [-122, 987, 175.5],
+    [-104, 1008, 160.3], [-92, 1035, 143.8], [-83, 1064, 127.0], [-57, 1082, 109.5],
+    [-21, 1094, 95.4], [25, 1081, 86.5], [70, 1057, 80.3], [111, 1019, 80.3],
+    [140, 971, 76.3], [172, 917, 70.7], [166, 869, 71.7], valleyApproach,
+  ], false) },
+] as const;
+
 const TRAIL_CELL = 14;
 const TRAIL_SHOULDER = 7.2;
 const FOREST_TRAIL_SHOULDER = 16;
@@ -397,7 +502,7 @@ function trailCellKey(col: number, row: number): number {
 }
 
 const trailCells = new Map<number, TrailSegment[]>();
-for (const walk of [...COAST_WALKS, ...FOREST_WALKS]) {
+for (const walk of [...COAST_WALKS, ...FOREST_WALKS, ...UPLAND_WALKS]) {
   const forest = walk.id !== 'west' && walk.id !== 'east';
   for (let i = 1; i < walk.points.length; i += 1) {
     const start = walk.points[i - 1];
@@ -508,6 +613,13 @@ export function groundHeight(x: number, z: number): number {
     const footfall = Math.sin(x * 1.19 + z * 0.68) * 0.040 + Math.cos(z * 1.72 - x * 0.63) * 0.028 + erosion;
     height += (trail.grade + footfall - terrain) * blend;
   }
+  for (const site of COAST_REST_SITES) {
+    const dx = x - site.x, dz = z - site.z;
+    if (Math.abs(dx) > 7.6 || Math.abs(dz) > 7.6) continue;
+    const radius = Math.hypot(dx, dz);
+    const clear = site.kind === 'shelter' ? 2.9 : 1.7;
+    height += (site.grade - height) * (1 - smoothstep(clear, clear + 4.6, radius));
+  }
   const stream = sampleForestStream(x, z);
   if (stream) {
     const side = Math.abs(stream.side);
@@ -536,7 +648,7 @@ export type CoastWaterfall = {
   impact: CoastPoint;
 };
 
-function traceWaterfall(x: number, z: number, angle: number, width: number): CoastWaterfall {
+function traceWaterfall(x: number, z: number, angle: number, width: number, level = SEA_LEVEL): CoastWaterfall {
   const direction = { x: Math.cos(angle), z: Math.sin(angle) };
   // Start above the crown and march towards the bay until each elevation
   // clears the face, including the two edges of the sheet.
@@ -545,7 +657,7 @@ function traceWaterfall(x: number, z: number, angle: number, width: number): Coa
   let run = 0;
   for (let row = 0; row <= 28; row += 1) {
     const drop = row / 28;
-    const y = lip * (1 - drop) + 0.2;
+    const y = level + (lip - level) * (1 - drop) + 0.2;
     const halfSpan = width * (0.47 + 0.17 * drop);
     let px = x + run * direction.x;
     let pz = z + run * direction.z;
@@ -568,6 +680,8 @@ export const COAST_FALLS = [
   traceWaterfall(-48, -383, 0.92, 5.5),
 ];
 
+export const UPLAND_FALL = traceWaterfall(247, 774, Math.PI - 0.18, 5.4, UPLAND_LAKE.level);
+
 const overlookViews = COAST_WALKS.map(({ overlook }) => {
   const dx = overlook.towardX - overlook.x;
   const dz = overlook.towardZ - overlook.z;
@@ -583,6 +697,21 @@ const waterfallClearings = COAST_FALLS.map(fall => {
 
 export function coastPlantingDistance(x: number, z: number): number {
   let distance = coastTrailDistance(x, z);
+  for (const site of COAST_REST_SITES) {
+    const radius = site.kind === 'shelter' ? 4.5 : 2.7;
+    distance = Math.min(distance, Math.max(0, Math.hypot(x - site.x, z - site.z) - radius));
+    if (site.id === 'shore-shelter') continue;
+    const yaw = restSiteYaw(site);
+    const dx = x - site.x, dz = z - site.z;
+    const along = dx * Math.sin(yaw) + dz * Math.cos(yaw);
+    const side = Math.abs(dx * Math.cos(yaw) - dz * Math.sin(yaw));
+    const nearView = site.id === 'beach-bench' ? 28 : site.id === 'ridge-bench' ? 94 : 43;
+    const cone = site.id === 'ridge-bench' ? 0.61 : 0.22;
+    distance = Math.min(distance, Math.max(0, side - cone * along - 2.1, -along, along - nearView));
+  }
+  if (z > 650 && z < 855 && Math.abs(x - UPLAND_LAKE.x) < 113) {
+    distance = Math.min(distance, Math.max(0, (uplandLakeRadius(x, z) - 0.91) * UPLAND_LAKE.width));
+  }
   if (z > 219) {
     const vista = Math.hypot((x + 14) * 0.88, (z - 391) * 0.65);
     distance = Math.min(distance, forestStreamDistance(x, z), Math.max(0, vista - 9));

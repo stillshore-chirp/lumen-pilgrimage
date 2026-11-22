@@ -1,4 +1,4 @@
-import { coastRandom, FOREST_WALKS, groundHeight, groundSlope, smoothstep } from '../terrain';
+import { coastRandom, FOREST_WALKS, UPLAND_WALKS, groundHeight, groundSlope, smoothstep, uplandLakeRadius } from '../terrain';
 import type { FloorForm } from './coastPlantMeshes';
 import type { TreeForm } from './coastTreeMeshes';
 
@@ -84,6 +84,24 @@ export function plantForest(trailDistance: PlantingDistance, streamDistance: Pla
     }
   }
 
+  const uplandRandom = coastRandom(944619);
+  for (let row = 466; row < 1210; row += 8.4) {
+    for (let column = -373; column < 477; column += 8.4) {
+      const x = column + uplandRandom() * 8.4;
+      const z = row + uplandRandom() * 8.4;
+      if (z <= maxZ && x >= minX && x <= maxX) continue;
+      const height = groundHeight(x, z);
+      const patch = cover(x * 0.57 + 49, z * 0.62);
+      const ridge = smoothstep(118, 173, height);
+      const lakeEdge = (1 - smoothstep(1.02, 1.35, uplandLakeRadius(x, z))) * smoothstep(646, 690, z);
+      if (lakeEdge > 0.73 || uplandRandom() > 0.28 + patch * 0.64 - ridge * 0.37 - lakeEdge * 0.16) continue;
+      const size = uplandRandom();
+      const form = ridge > 0.67 ? 'windPruned' : size > 0.71 ? 'emergent' : size > 0.33 ? 'spreading' : 'sapling';
+      const width = 2.2 + size * 4.05;
+      addTree(x, z, width, width * (form === 'emergent' ? 3.35 : 1.70 + uplandRandom() * 0.92), form);
+    }
+  }
+
   function plantFloor(x: number, z: number, form: FloorForm, width: number, height: number, detailOnly = false): void {
     const grass = form === 'sedge' || form === 'grass';
     if (trailDistance(x, z) < (grass ? 1.96 + width * 0.26 : 2.05 + width * 0.87)
@@ -103,7 +121,7 @@ export function plantForest(trailDistance: PlantingDistance, streamDistance: Pla
   ] as const) plantFloor(x, z, form, size, size * 1.13);
 
   // Stagger the close silhouettes along both banks of the route so bends reveal new fronds.
-  for (const walk of FOREST_WALKS) {
+  for (const walk of [...FOREST_WALKS, ...UPLAND_WALKS]) {
     const points = walk.points;
     for (let i = 2; i < points.length - 1; i += 2 + Math.floor(floorRandom() * 1.7)) {
       const point = points[i];
@@ -116,7 +134,8 @@ export function plantForest(trailDistance: PlantingDistance, streamDistance: Pla
         const x = point.x + dz / sideLength * offset + (floorRandom() - 0.5) * 0.82;
         const z = point.z - dx / sideLength * offset + (floorRandom() - 0.5) * 0.82;
         const width = 0.46 + floorRandom() ** 1.28 * 1.68;
-        const blueprints = ['swordFern', 'shieldLeaf', 'birdnest', 'swordFern', 'heliconia', 'sedge'] as const;
+        const blueprints = point.y > 120 ? ['grass', 'sedge', 'swordFern'] as const
+          : ['swordFern', 'shieldLeaf', 'birdnest', 'swordFern', 'heliconia', 'sedge'] as const;
         if (floorRandom() < 0.85) {
           plantFloor(x, z, blueprints[Math.floor(floorRandom() * blueprints.length)], width, width * (0.87 + floorRandom() * 0.29));
         }

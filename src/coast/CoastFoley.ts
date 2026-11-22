@@ -81,7 +81,10 @@ export class CoastFoley {
   update(position: CoastPoint, surface: number, movement: CoastMovement, elapsed: number, now: number): void {
     const previous = this.previous;
     this.previous = { ...position, movement, elapsed };
-    if (!previous || movement === 'flight') return;
+    if (!previous || movement === 'flight' || movement === 'rest') {
+      this.traveled = 0;
+      return;
+    }
     const dx = position.x - previous.x;
     const dz = position.z - previous.z;
     const dy = position.y - previous.y;

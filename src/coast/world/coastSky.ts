@@ -18,6 +18,9 @@ const cloudBanks = [
   { tile: 2, x: 1285, y: 315, z: 756, width: 565, height: 392, opacity: 0.95 },
   { tile: 0, x: -660, y: 385, z: 1267, width: 505, height: 570, opacity: 0.92 },
   { tile: 3, x: 160, y: 200, z: 1520, width: 740, height: 270, opacity: 0.85 },
+  { tile: 0, x: 1318, y: 470, z: 1450, width: 668, height: 681, opacity: 0.96 },
+  { tile: 2, x: 1030, y: 317, z: 1740, width: 540, height: 445, opacity: 0.87 },
+  { tile: 3, x: 1550, y: 665, z: 1410, width: 726, height: 285, opacity: 0.84 },
   { tile: 1, x: -1290, y: 215, z: 166, width: 600, height: 315, opacity: 0.82 },
 ];
 
