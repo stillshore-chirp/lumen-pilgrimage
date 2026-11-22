@@ -8,10 +8,11 @@
 ## 海岸探索
 
 - [CoastApp](../src/coast/CoastApp.ts) は、海岸専用のレンダラー、カメラ、画面とフレームループを起動する。従来ゲームへのリンクは同一オリジンでページを遷移する。海岸側は遠征のセーブや設定を読み書きしない。
-- [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形と水面の座標](../src/coast/terrain.ts) を共有する。地形は断崖、岩棚、砂浜、海底で構成し、斜面と高さから固定シードで植生を配置する。海底の深さは海面の陰影、浅瀬の光、砕波に使う。岩・砂・樹冠・積雲に使う素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
+- [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形と水面の座標](../src/coast/terrain.ts) を共有する。西の岩棚と東の潮だまりへ向かう散策路は、高さをサンプリングする段階で幅と勾配を作り、接地と描画の両方に反映する。[広葉樹の立体モデル](../src/coast/world/coastTreeMeshes.ts) は幹、枝、葉を生成し、植生の配置は散策路の幅を空ける。岩、砂、林床、積雲の素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
 - 歩行の接地と登坂判定には地形の高さを使い、水深が足の届く範囲を超えると水面から一定の目線で遊泳する。飛行を解除すると同じ水平座標で地表または水面まで降りる。
 - 起動時は「軽量」。両設定でモデル、植生と光源を共有し、内部解像度、影の解像度と更新頻度を切り替える。軽量は影を再利用し、高品質は揺れる葉の影も更新する。
-- [CoastAudio](../src/coast/CoastAudio.ts) は、明示操作で録音の再生を開始する。カメラの位置・向きをリスナーへ渡し、HRTF と距離減衰を適用する。[伝播の計算](../src/coast/coastAcoustics.ts) は地形による遮蔽を低域通過フィルタとゲインで表す。波と滝の一部には、水面への反射点が水域にあるときだけ、鏡像方向へ短く遅延した音を加える。描画設定を切り替えても音響グラフは続く。
+- [海面](../src/coast/world/coastOcean.ts) は海底の深さを使い、浅瀬で波が盛り上がる位置と崩れた泡を計算する。[波の周期](../src/coast/world/coastSwell.ts) を [CoastAudio](../src/coast/CoastAudio.ts) と共有し、砕波音の位置と強さを寄せ引きに合わせる。
+- 音響は明示操作で開始する。滝の落水と滝つぼのしぶきは別の距離減衰で鳴らす。[伝播の計算](../src/coast/coastAcoustics.ts) は距離による高域の減衰、岩壁による遮蔽、地形に遮られず水面を経由できる短い反射を扱う。どちらの描画設定でも同じ HRTF 音響グラフが続く。
 
 ## 遠征とキャンペーン
 

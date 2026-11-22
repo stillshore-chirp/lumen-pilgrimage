@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { COAST_FALLS, SEA_LEVEL, coastRandom, groundHeight, groundSlope } from './terrain';
-import { createCoastOceanMaterial } from './world/coastOcean';
+import {
+  COAST_FALLS, SEA_LEVEL, coastPlantingDistance, coastRandom, coastTrailDistance, groundHeight, groundSlope,
+} from './terrain';
+import { createCoastOceanGeometry, createCoastOceanMaterial } from './world/coastOcean';
 import { createCoastSky } from './world/coastSky';
 import { createCoastTerrain, loadCoastTexture } from './world/coastSurface';
 import { createCoastVegetation } from './world/coastVegetation';
@@ -39,7 +41,18 @@ function createShoreRocks(stone: THREE.Texture): THREE.Group {
     { x: 39, z: 21, width: 6.4, pieces: 16 },
     { x: 48, z: 43, width: 6.2, pieces: 12 },
     { x: 47, z: -6, width: 6.5, pieces: 13 },
+    { x: 42, z: 26, width: 3.4, pieces: 13 },
+    { x: 53, z: 20, width: 2.5, pieces: 10 },
+    { x: 53, z: 39, width: 2.7, pieces: 14 },
+    { x: 59, z: 26, width: 2.8, pieces: 10 },
+    { x: 66, z: 52, width: 3.5, pieces: 11 },
+    { x: 129, z: -22, width: 4.7, pieces: 13 },
     { x: -73, z: 10, width: 7.8, pieces: 16 },
+    { x: -126, z: -14, width: 4.8, pieces: 12 },
+    { x: -151, z: 10, width: 3.6, pieces: 9 },
+    { x: -99, z: 112, width: 3.4, pieces: 12 },
+    { x: -94, z: 121, width: 3.9, pieces: 12 },
+    { x: -76, z: 120, width: 2.4, pieces: 9 },
     { x: -65, z: -48, width: 8.9, pieces: 18 },
     { x: 89, z: -52, width: 8.8, pieces: 17 },
   ];
@@ -53,7 +66,7 @@ function createShoreRocks(stone: THREE.Texture): THREE.Group {
       const radius = cluster.width * (i === 0 ? 0 : 0.32+random()*1.94);
       const x = cluster.x + Math.cos(angle)*radius;
       const z = cluster.z + Math.sin(angle)*radius;
-      if (groundSlope(x, z) > 1.1 || groundHeight(x, z) < -3.4) continue;
+      if (coastTrailDistance(x, z) < 1.75 + size || groundSlope(x, z) > 1.1 || groundHeight(x, z) < -3.4) continue;
       const height = 0.37 + random()*0.58;
       transform.position.set(x, groundHeight(x, z) + size*height*0.06, z);
       transform.rotation.set((random()-0.5)*0.40, random()*Math.PI*2, (random()-0.5)*0.45);
@@ -161,13 +174,13 @@ export class CoastWorld {
     const sand = loadCoastTexture('sand.webp', true);
     const canopy = loadCoastTexture('canopy.webp', true);
     this.scene.add(createCoastTerrain(stone, sand, canopy), createShoreRocks(stone));
-    const ocean = new THREE.Mesh(new THREE.PlaneGeometry(4890, 4700),
+    const ocean = new THREE.Mesh(createCoastOceanGeometry(),
       createCoastOceanMaterial(this.time, sunDirection, sand));
     ocean.name = 'Clear shoals and open sea';
     ocean.rotation.x = -Math.PI / 2;
     ocean.position.set(0, SEA_LEVEL, -230);
     ocean.receiveShadow = true;
-    this.scene.add(ocean, createCoastVegetation(canopy, this.time));
+    this.scene.add(ocean, createCoastVegetation(this.time, coastPlantingDistance));
 
     this.waterfalls = createWaterfalls(COAST_FALLS, this.time);
     this.scene.add(this.waterfalls.group, this.seabirds.mesh);

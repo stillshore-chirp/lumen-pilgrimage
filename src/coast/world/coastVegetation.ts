@@ -1,16 +1,21 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { LANDSCAPE_BOUNDS, coastRandom, groundHeight, groundSlope, SPAWN } from '../terrain';
+import { coastNoise } from './coastNoise';
+import { createCoastRoots, createCoastTreeMeshes, createDistantCoastTreeMesh, type TreeForm } from './coastTreeMeshes';
 
 type Plant = { x: number; y: number; z: number; width: number; height: number; yaw: number; tone: number };
+type Tree = Plant & { form: TreeForm };
+type TrailDistance = (x: number, z: number) => number;
 const placed = new THREE.Object3D();
 const color = new THREE.Color();
 
-function instances(geometry: THREE.BufferGeometry, material: THREE.Material, plants: Plant[], shadows: boolean): THREE.InstancedMesh {
+function instances(geometry: THREE.BufferGeometry, material: THREE.Material, plants: Plant[], shadows: boolean,
+  origin?: THREE.Vector3): THREE.InstancedMesh {
   const mesh = new THREE.InstancedMesh(geometry, material, plants.length);
   for (let i = 0; i < plants.length; i += 1) {
     const p = plants[i];
     placed.position.set(p.x, p.y, p.z);
+    if (origin) placed.position.sub(origin);
     placed.rotation.set(0, p.yaw, 0);
     placed.scale.set(p.width, p.height, p.width);
     placed.updateMatrix();
@@ -21,24 +26,6 @@ function instances(geometry: THREE.BufferGeometry, material: THREE.Material, pla
   mesh.castShadow = shadows;
   mesh.receiveShadow = shadows;
   return mesh;
-}
-
-function crownGeometry(): THREE.BufferGeometry {
-  const geometry = new THREE.IcosahedronGeometry(1, 1);
-  const position = geometry.getAttribute('position');
-  const colors = new Float32Array(position.count * 3);
-  for (let i = 0; i < position.count; i += 1) {
-    const x = position.getX(i);
-    const y = position.getY(i);
-    const z = position.getZ(i);
-    const lobe = 1 + 0.18 * Math.sin(x * 7.8 + z * 6.1 + y * 3.8)
-      + 0.15 * Math.cos(z * 6.6 - y * 8.4) + 0.10 * Math.sin(x * 4.7 - z * 7.2);
-    position.setXYZ(i, x * lobe + y * 0.11, y * (0.79 + 0.18 * lobe), z * lobe);
-    const light = THREE.MathUtils.lerp(0.43, 1.13, Math.max(0, (y + 1) * 0.5));
-    colors.set([light * 0.94, light, light * (1.06 - y * 0.11)], i * 3);
-  }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  return geometry;
 }
 
 // A raised midrib and a tapered outline catch sunlight on each leaflet.
@@ -166,30 +153,7 @@ function forestFloorLeaves(fern: boolean): THREE.BufferGeometry {
   return leafGeometry(vertices, colors);
 }
 
-function splitTrunk(): THREE.BufferGeometry {
-  const branches = [
-    { from: [0, -0.09, 0], to: [0.10, 0.96, 0.02], width: 0.08 },
-    { from: [0.07, 0.55, 0.01], to: [-0.49, 0.99, 0.20], width: 0.049 },
-    { from: [0.08, 0.61, 0.02], to: [0.57, 1.03, -0.27], width: 0.038 },
-    { from: [0.09, 0.73, 0.01], to: [0.02, 1.11, 0.38], width: 0.029 },
-  ];
-  const up = new THREE.Vector3(0, 1, 0);
-  const geometry = branches.map(branch => {
-    const start = new THREE.Vector3(...branch.from);
-    const end = new THREE.Vector3(...branch.to);
-    const axis = end.clone().sub(start);
-    const limb = new THREE.CylinderGeometry(branch.width*0.43, branch.width, axis.length(), 8, 2);
-    limb.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, axis.normalize()));
-    const middle = start.lerp(end, 0.5);
-    limb.translate(middle.x, middle.y, middle.z);
-    return limb;
-  });
-  const base = mergeGeometries(geometry)!;
-  for (const part of geometry) part.dispose();
-  return base;
-}
-
-function moveLeaves(material: THREE.MeshStandardMaterial, time: THREE.IUniform<number>): void {
+function moveLeaves(material: THREE.MeshStandardMaterial, time: THREE.IUniform<number>, veins = false): void {
   material.onBeforeCompile = shader => {
     shader.uniforms.uBreezeTime = time;
     shader.vertexShader = shader.vertexShader
@@ -200,85 +164,169 @@ function moveLeaves(material: THREE.MeshStandardMaterial, time: THREE.IUniform<n
           float gust = sin(dot(root, vec2(0.14,0.09)) + uBreezeTime*1.35);
           float stir = sin(position.x*4.5 + position.z*3.7 + uBreezeTime*2.95);
           float tipFlex = min(1.0, length(position.xz) + position.y*0.21);
-          transformed.x += (gust*0.028+stir*0.017)*tipFlex*tipFlex;
-          transformed.z += (gust*0.020-stir*0.011)*tipFlex*tipFlex;
+          float flex = tipFlex*tipFlex*${veins ? 'bladeUv.y*0.44' : '1.0'};
+          transformed.x += (gust*0.028+stir*0.017)*flex;
+          transformed.z += (gust*0.020-stir*0.011)*flex;
         #endif
       `);
+    if (veins) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec2 bladeUv;\nvarying vec2 vBlade;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBlade = bladeUv;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vBlade;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          float across = abs(vBlade.x - 0.5) * 2.0;
+          float midrib = (1.0 - smoothstep(0.01, 0.06, across)) * (1.0 - smoothstep(0.70, 0.97, vBlade.y));
+          float riblet = abs(fract((vBlade.y - across * 0.20) * 5.0) - 0.5);
+          float resolution = 1.0 - smoothstep(0.06, 0.32, fwidth(vBlade.y) * 5.0 + fwidth(across));
+          diffuseColor.rgb *= 1.0 + resolution * (midrib * 0.22 + (1.0 - smoothstep(0.02, 0.14, riblet)) * 0.075);
+        `);
+    }
   };
+  material.customProgramCacheKey = () => veins ? 'coast-broadleaf-breeze' : 'coast-understory-breeze';
+}
+
+function createBroadleafBark(): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96 });
+  material.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCoastBark;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCoastBark = position;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nvarying vec3 vCoastBark;\n${coastNoise}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec3 p = vCoastBark;
+        float resolution = 1.0 - smoothstep(0.24, 0.89, length(fwidth(p)) * 67.0);
+        float plate = coastNoise(p.xz * 42.0 + vec2(p.y * 23.0, p.y * -17.0));
+        float grain = coastNoise(p.xz * 119.0 + vec2(p.y * 3.0, p.y * -5.0));
+        float fissure = smoothstep(0.52, 0.78, grain * 0.68 + plate * 0.32);
+        float lichen = smoothstep(0.58, 0.78, plate) * smoothstep(0.34, 0.61, grain);
+        vec3 bark = diffuseColor.rgb * (0.84 + 0.62 * plate - 0.63 * fissure);
+        bark = mix(bark, bark * 0.64 + vec3(0.068, 0.082, 0.052), lichen * 0.65);
+        diffuseColor.rgb = mix(diffuseColor.rgb, bark, resolution);
+      `);
+  };
+  return material;
 }
 
 function makePlant(x: number, z: number, width: number, height: number, random: () => number, lift = 0): Plant {
   return { x, y: groundHeight(x, z) + lift, z, width, height, yaw: random()*Math.PI*2, tone: random() };
 }
 
-function groupCrowns(parent: THREE.Group, canopy: THREE.Texture): void {
-  const shape = crownGeometry();
-  const material = new THREE.MeshStandardMaterial({
-    map: canopy, vertexColors: true, roughness: 0.87,
-    emissiveMap: canopy, emissive: 0xf4f9e8, emissiveIntensity: 0.14,
-  });
+function plantTiles<T extends Plant>(plants: T[], size: number): Map<string, T[]> {
+  const tiles = new Map<string, T[]>();
+  for (const plant of plants) {
+    const key = `${Math.floor(plant.x / size)},${Math.floor(plant.z / size)}`;
+    let tile = tiles.get(key);
+    if (!tile) {
+      tile = [];
+      tiles.set(key, tile);
+    }
+    tile.push(plant);
+  }
+  return tiles;
+}
+
+function plantBroadleaf(trailDistance: TrailDistance): Tree[] {
   const random = coastRandom(6395194);
-  const trunks: Plant[] = [];
+  const trees: Tree[] = [];
   const { minX, maxX, minZ, maxZ } = LANDSCAPE_BOUNDS;
-  // Cell-local instance bounds keep the back side of the islands out of the current draw.
-  const tileSize = 88;
-  for (let z0 = minZ; z0 < maxZ; z0 += tileSize) {
-    for (let x0 = minX; x0 < maxX; x0 += tileSize) {
-      const distance = Math.hypot(x0 + tileSize * 0.5 - SPAWN.x, z0 + tileSize * 0.5 - SPAWN.z);
+  const regionSize = 88;
+  for (let z0 = minZ; z0 < maxZ; z0 += regionSize) {
+    for (let x0 = minX; x0 < maxX; x0 += regionSize) {
+      const distance = Math.hypot(x0 + regionSize * 0.5 - SPAWN.x, z0 + regionSize * 0.5 - SPAWN.z);
       const spacing = distance < 340 ? 4.45 : 7.0;
-      const plants: Plant[] = [];
-      const centerX = Math.min(x0 + tileSize, maxX);
-      const centerZ = Math.min(z0 + tileSize, maxZ);
-      for (let cz = z0; cz < centerZ; cz += spacing) {
-        for (let cx = x0; cx < centerX; cx += spacing) {
+      for (let cz = z0; cz < Math.min(z0 + regionSize, maxZ); cz += spacing) {
+        for (let cx = x0; cx < Math.min(x0 + regionSize, maxX); cx += spacing) {
           const x = cx + random() * spacing;
           const z = cz + random() * spacing;
+          if (x > maxX || z > maxZ) continue;
           const top = groundHeight(x, z);
-          if (top < 2.4 || x > maxX || z > maxZ) continue;
+          if (top < 2.4) continue;
           const slope = groundSlope(x, z, 1.4);
-          const patch = Math.sin(x*0.095 + z*0.084) * Math.cos(z*0.136 - x*0.061);
+          const patch = Math.sin(x * 0.095 + z * 0.084) * Math.cos(z * 0.136 - x * 0.061);
           const cliff = slope > 1.39;
           const coastalGrass = top < 4.25 && z > 30 && Math.abs(x - SPAWN.x) < 48;
           if (coastalGrass || (cliff && (slope > 3.4 || patch < 0.03))) continue;
-          const size = (0.76 + random() * 0.61) * (distance < 340 ? 3.53 : 5.2);
+
+          const width = (0.76 + random() * 0.61) * (distance < 340 ? 3.53 : 5.2);
           const low = cliff || top < 8.4;
-          const mature = !low && distance < 140 && slope < 1.25 && patch > -0.39 && random() < 0.68;
-          const trunkHeight = size * (1.12 + random()*0.59);
-          const y = mature ? top + trunkHeight : low ? top - size * 0.09 : top + size*0.49;
-          const yaw = random()*Math.PI*2;
-          const tone = 0.07 + random()*0.92;
-          plants.push({ x, y, z, width: size, height: size*(low ? 0.71 : 0.86), yaw, tone });
-          if (mature) {
-            trunks.push({ x, y: top, z, width: size, height: trunkHeight, yaw, tone });
-            plants.push({ x: x + size*0.48*Math.cos(yaw), y: y - size*0.16,
-              z: z - size*0.48*Math.sin(yaw), width: size*0.86, height: size*0.51, yaw, tone: tone*0.86 });
-          }
-          // A second, offset lobe breaks up the round silhouette near the beach.
-          if (!low && distance < 213 && random() < 0.57) {
-            const angle = random() * Math.PI * 2;
-            plants.push({ x: x + Math.cos(angle)*size*0.69, y: y - size*0.28, z: z + Math.sin(angle)*size*0.69,
-              width: size*0.65, height: size*0.62, yaw: angle, tone: random() });
-          }
+          const mature = !low && slope < 1.25 && patch > -0.39 && random() < 0.61;
+          const form = low ? 'windPruned' : mature && random() < 0.55 ? 'emergent' : 'spreading';
+          const stature = width * (low ? 0.79 + random() * 0.27
+            : mature ? 1.57 + random() * 0.65 : 1.10 + random() * 0.47);
+          const yaw = random() * Math.PI * 2;
+          const tone = random();
+          const clearance = trailDistance(x, z);
+          if (clearance < 2.2 + width * 0.13) continue;
+          // Taller trunks along the trail keep the lowest branches above eye level.
+          const height = clearance < width + 2.2 ? Math.max(stature, low ? 5.2 : 6.6) : stature;
+          trees.push({ x, y: top - slope * 0.15, z, width, height, yaw, tone, form });
         }
       }
-      if (plants.length) parent.add(instances(shape, material, plants, distance < 352));
     }
   }
-  parent.add(instances(splitTrunk(),
-    new THREE.MeshStandardMaterial({ color: 0x655142, roughness: 0.96 }), trunks, true));
+  return trees;
 }
 
-export function createCoastVegetation(canopy: THREE.Texture, time: THREE.IUniform<number>): THREE.Group {
+function groupTrees(parent: THREE.Group, bark: THREE.Material, leaves: THREE.Material,
+  trailDistance: TrailDistance): void {
+  const forms = ['emergent', 'spreading', 'windPruned'] as const;
+  const models = forms.map(createCoastTreeMeshes);
+  const distant = createDistantCoastTreeMesh();
+  const distantMaterial = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, vertexColors: true, roughness: 0.89 });
+  const tileSize = 60;
+  for (const tile of plantTiles(plantBroadleaf(trailDistance), tileSize).values()) {
+    const levels = new THREE.LOD();
+    const anchor = tile[0];
+    levels.position.set(
+      (Math.floor(anchor.x / tileSize) + 0.5) * tileSize,
+      tile.reduce((total, tree) => total + tree.y, 0) / tile.length,
+      (Math.floor(anchor.z / tileSize) + 0.5) * tileSize,
+    );
+    levels.name = 'Broadleaf forest tile';
+    const shadows = Math.hypot(levels.position.x - SPAWN.x, levels.position.z - SPAWN.z) < 345;
+    const placements = forms.map(form => tile.filter(tree => tree.form === form));
+    const detailDistances = [0, 67];
+    detailDistances.forEach((distance, detail) => {
+      const batch = new THREE.Group();
+      placements.forEach((plants, form) => {
+        if (!plants.length) return;
+        const model = models[form][detail];
+        batch.add(instances(model.wood, bark, plants, shadows, levels.position),
+          instances(model.leaves, leaves, plants, shadows, levels.position));
+      });
+      if (detail === 0) {
+        const roots = new THREE.Mesh(createCoastRoots(tile, levels.position), bark);
+        roots.castShadow = roots.receiveShadow = shadows;
+        batch.add(roots);
+      }
+      levels.addLevel(batch, distance, 0.12);
+    });
+    levels.addLevel(instances(distant, distantMaterial, tile, shadows, levels.position), 151, 0.12);
+    // Fully fogged trees have no visible contribution, including the edge of the tile.
+    levels.addLevel(new THREE.Group(), 925, 0.04);
+    parent.add(levels);
+  }
+}
+
+export function createCoastVegetation(time: THREE.IUniform<number>, trailDistance: TrailDistance = () => Infinity): THREE.Group {
   const vegetation = new THREE.Group();
   vegetation.name = 'Rainforest canopy, palms and understory';
-  groupCrowns(vegetation, canopy);
   const random = coastRandom(441201);
   const leaves = new THREE.MeshStandardMaterial({
     side: THREE.DoubleSide, vertexColors: true, roughness: 0.76,
     emissive: 0x173012, emissiveIntensity: 0.32,
   });
+  const treeLeaves = new THREE.MeshStandardMaterial({
+    side: THREE.DoubleSide, vertexColors: true, roughness: 0.87,
+    emissive: 0x263c17, emissiveIntensity: 0.14,
+  });
   const bark = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93 });
   moveLeaves(leaves, time);
+  moveLeaves(treeLeaves, time, true);
+  groupTrees(vegetation, createBroadleafBark(), treeLeaves, trailDistance);
 
   const palms: Plant[] = [];
   // Mature trees frame the entrance to the beach and continue along the forest edge.
@@ -287,7 +335,10 @@ export function createCoastVegetation(canopy: THREE.Texture, time: THREE.IUnifor
     [1, 73, 8.1], [5, 80, 8.4], [14, 88, 9.2], [27, 81, 6.9], [39, 75, 7.4], [15, 92, 5.8],
     [-50, 61, 7.2], [-61, 51, 7.7], [-71, 44, 9.2],
   ];
-  for (const [x, z, height] of shorelinePalms) palms.push(makePlant(x, z, height, height, random, -0.12));
+  for (const [x, z, height] of shorelinePalms) {
+    const palm = makePlant(x, z, height, height, random, -0.12);
+    if (trailDistance(x, z) >= 2.2 + height * 0.057) palms.push(palm);
+  }
 
   for (let i = 0; i < 2160 && palms.length < 128; i += 1) {
     const x = -174 + random()*355;
@@ -296,9 +347,14 @@ export function createCoastVegetation(canopy: THREE.Texture, time: THREE.IUnifor
     if (y < 2.05 || y > 30 || groundSlope(x, z) > 1.23) continue;
     if (Math.abs(x - SPAWN.x) < 12 && z < SPAWN.z + 10 && z > SPAWN.z - 36) continue;
     const height = 4.4 + random()*6.4;
-    palms.push(makePlant(x, z, height, height, random, -0.15));
+    const palm = makePlant(x, z, height, height, random, -0.15);
+    if (trailDistance(x, z) >= 2.2 + height * 0.057) palms.push(palm);
   }
-  vegetation.add(instances(palmTrunk(), bark, palms, true), instances(palmCrown(), leaves, palms, true));
+  const palmWood = palmTrunk();
+  const palmLeaves = palmCrown();
+  for (const tile of plantTiles(palms, 80).values()) {
+    vegetation.add(instances(palmWood, bark, tile, true), instances(palmLeaves, leaves, tile, true));
+  }
 
   const ferns: Plant[] = [];
   const shrubs: Plant[] = [];
@@ -308,7 +364,8 @@ export function createCoastVegetation(canopy: THREE.Texture, time: THREE.IUnifor
   ];
   for (let i = 0; i < groundPlants.length; i += 1) {
     const [x, z, size] = groundPlants[i];
-    (i % 3 === 0 ? ferns : shrubs).push(makePlant(x, z, size, size, random, -0.04));
+    const plant = makePlant(x, z, size, size, random, -0.04);
+    if (trailDistance(x, z) >= 2.2 + size * 0.9) (i % 3 === 0 ? ferns : shrubs).push(plant);
   }
 
   for (let i = 0; i < 4900 && shrubs.length + ferns.length < 1000; i += 1) {
@@ -318,9 +375,13 @@ export function createCoastVegetation(canopy: THREE.Texture, time: THREE.IUnifor
     if (y < 2.7 || y > 33 || groundSlope(x, z) > 1.30) continue;
     if (Math.abs(x - SPAWN.x) < 8 && z <= SPAWN.z + 8) continue;
     const size = 0.61 + random() * (1.05 + 1.02 * (z > 35 ? 1 : 0));
-    (random() < 0.19 ? ferns : shrubs).push(makePlant(x, z, size, size, random, -0.06));
+    const patch = random() < 0.19 ? ferns : shrubs;
+    const plant = makePlant(x, z, size, size, random, -0.06);
+    if (trailDistance(x, z) >= 2.2 + size * 0.9) patch.push(plant);
   }
-  vegetation.add(instances(forestFloorLeaves(true), leaves, ferns, true));
-  vegetation.add(instances(forestFloorLeaves(false), leaves, shrubs, true));
+  for (const [isFern, plants] of [[true, ferns], [false, shrubs]] as const) {
+    const geometry = forestFloorLeaves(isFern);
+    for (const tile of plantTiles(plants, 55).values()) vegetation.add(instances(geometry, leaves, tile, true));
+  }
   return vegetation;
 }

@@ -10,10 +10,10 @@ export interface CoastControlCallbacks {
 }
 
 const EYE_HEIGHT = 1.65;
-const WALK_SPEED = 4.4;
-const SWIM_SPEED = 2.65;
+const WALK_SPEED = 6.4;
+const SWIM_SPEED = 4.1;
 const SWIM_DEPTH = 1.02;
-const FLIGHT_SPEED = 13;
+const FLIGHT_SPEED = 20.5;
 const SPRINT_MULTIPLIER = 1.7;
 const LOOK_SPEED = 2.3;
 const MOUSE_SENSITIVITY = 0.0022;
@@ -22,6 +22,7 @@ const GRAVITY = 22;
 const MAX_FALL_SPEED = 18;
 const MAX_DELTA = 0.05;
 const WALK_SAMPLE_DISTANCE = 0.15;
+const FLIGHT_SAMPLE_DISTANCE = 0.46;
 const MAX_WALK_SLOPE = 0.95;
 const WALK_SLOPE_EPSILON = 0.000001;
 const BOUNDS_PADDING = 0.35;
@@ -328,20 +329,23 @@ export class CoastControls {
 
     if (this.movement.lengthSq() > 1) this.movement.normalize();
     this.movement.multiplyScalar(FLIGHT_SPEED * pace * dt);
-    const startX = this.camera.position.x;
-    const startZ = this.camera.position.z;
-    this.camera.position.add(this.movement);
-
-    this.camera.position.x = this.clampX(this.camera.position.x);
-    this.camera.position.z = this.clampZ(this.camera.position.z);
-    const requestedY = this.camera.position.y;
-    let safeFloor = this.flightFloorHeight(this.camera.position.x, this.camera.position.z);
-    if ((this.camera.position.x !== startX || this.camera.position.z !== startZ) && requestedY < safeFloor) {
-      this.camera.position.x = startX;
-      this.camera.position.z = startZ;
-      safeFloor = this.flightFloorHeight(startX, startZ);
+    const { x, y, z } = this.camera.position;
+    const targetX = this.clampX(x + this.movement.x);
+    const targetZ = this.clampZ(z + this.movement.z);
+    const targetY = Math.min(y + this.movement.y, MAX_FLIGHT_HEIGHT);
+    const steps = Math.ceil(Math.hypot(targetX - x, targetZ - z) / FLIGHT_SAMPLE_DISTANCE);
+    let clear = true;
+    for (let step = 1; step <= steps; step += 1) {
+      const t = step / steps;
+      const surface = this.flightFloorHeight(x + (targetX - x) * t, z + (targetZ - z) * t);
+      if (y + (targetY - y) * t < surface) {
+        clear = false;
+        break;
+      }
     }
-    this.camera.position.y = Math.max(safeFloor, Math.min(requestedY, MAX_FLIGHT_HEIGHT));
+    const safeX = clear ? targetX : x;
+    const safeZ = clear ? targetZ : z;
+    this.camera.position.set(safeX, Math.max(this.flightFloorHeight(safeX, safeZ), targetY), safeZ);
   }
 
   private moveAlongSupport(deltaX: number, deltaZ: number): void {

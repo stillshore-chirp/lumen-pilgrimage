@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { COAST_BOUNDS, COAST_FALLS, SEA_LEVEL, SPAWN, groundHeight, shoreline } from '../src/coast/terrain.ts';
+import {
+  COAST_BOUNDS, COAST_FALLS, COAST_WALKS, SEA_LEVEL, SPAWN, coastPlantingDistance, groundHeight, shoreline,
+} from '../src/coast/terrain.ts';
 
 const acousticsUrl = new URL('../src/coast/coastAcoustics.ts', import.meta.url).href;
 const hooks = registerHooks({
@@ -10,7 +12,7 @@ const hooks = registerHooks({
     return nextResolve(path, context);
   },
 });
-const { terrainOcclusion, waterReflection } = await import(acousticsUrl);
+const { airCutoff, soundReach, terrainOcclusion, waterReflection } = await import(acousticsUrl);
 hooks.deregister();
 
 test('the coast contains a dry approach, tidal edge, and submerged seabed', () => {
@@ -32,6 +34,24 @@ test('the sandy inlet opens to sea between headlands', () => {
   assert.ok(groundHeight(-180, -143) > 135);
   assert.ok(groundHeight(196, -199) > 155);
   assert.ok(groundHeight(-73, -281) > 75);
+});
+
+test('both trails reach a high lookout and the east trail skirts shallow tidal pools', () => {
+  for (const { points, overlook } of COAST_WALKS) {
+    assert.deepEqual(points.at(0), points.at(-1));
+    assert.ok(points.some(point => Math.hypot(point.x - overlook.x, point.z - overlook.z) < 0.5));
+    assert.ok(groundHeight(overlook.x, overlook.z) > SEA_LEVEL + 30);
+    assert.ok(points.every(p => groundHeight(p.x, p.z) > SEA_LEVEL + 1.4));
+    const direction = Math.atan2(overlook.towardZ - overlook.z, overlook.towardX - overlook.x);
+    for (const distance of [4, 15, 30, 54]) {
+      assert.equal(coastPlantingDistance(overlook.x + distance * Math.cos(direction),
+        overlook.z + distance * Math.sin(direction)), 0);
+    }
+  }
+  for (const [x, z] of [[48.5, 31.7], [52.6, 21.4]]) {
+    const floor = groundHeight(x, z);
+    assert.ok(floor > SEA_LEVEL - 1 && floor < SEA_LEVEL - 0.23);
+  }
 });
 
 test('each waterfall visibly descends from its rock face to the sea', () => {
@@ -57,4 +77,13 @@ test('a reflected arrival is audible over water and disappears over the dry beac
   assert.ok(wet.gain > 0.9);
   assert.ok(wet.delay > 0.009 && wet.delay < 0.15);
   assert.equal(dry.gain, 0);
+});
+
+test('the waterfall range reaches the beach and air removes more treble with distance', () => {
+  const main = COAST_FALLS[0];
+  const source = main.path[Math.round((main.path.length - 1) * 0.65)];
+  const fromBeach = Math.hypot(source.x - SPAWN.x, source.y - 3.6, source.z - SPAWN.z);
+  assert.ok(fromBeach > 240 && soundReach(fromBeach, 840) > 0.9);
+  assert.ok(airCutoff(fromBeach) < airCutoff(70));
+  assert.equal(soundReach(840, 840), 0);
 });

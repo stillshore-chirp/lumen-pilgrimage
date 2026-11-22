@@ -57,12 +57,16 @@ export class CoastApp {
             <button type="button" class="coast-lock">マウス操作を開始</button>
             <button type="button" class="coast-flight" aria-pressed="false">自由飛行</button>
           </div>
-          <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
-          <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
           <details>
-            <summary>ゲームパッド</summary>
-            <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
-            <p><kbd>Y</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
+            <summary>操作方法</summary>
+            <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
+            <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
+            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
+            <details>
+              <summary>ゲームパッド</summary>
+              <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
+              <p><kbd>Y</kbd> 歩行／飛行 <span class="coast-divider">·</span> <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
+            </details>
           </details>
           <p class="coast-lock-message" role="status" hidden></p>
         </section>
@@ -77,7 +81,7 @@ export class CoastApp {
             <button type="button" class="coast-mute" aria-pressed="false">ミュート</button>
             <label class="coast-volume">音量 <input type="range" min="0" max="100" step="1" value="70"></label>
           </div>
-          <p class="coast-audio-message" role="status">ボタンを押すと環境音が流れます。ヘッドホン対応。</p>
+          <p class="coast-audio-message" role="status"></p>
         </section>
       </div>
     `;
@@ -179,7 +183,7 @@ export class CoastApp {
     this.controls.update(dt);
     this.camera.getWorldDirection(this.forward);
     this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
-    this.audio.update(this.camera.position, this.forward, this.up);
+    this.audio.update(this.camera.position, this.forward, this.up, this.elapsed);
     this.world.update(this.elapsed, this.camera);
     this.renderer.render(this.world.scene, this.camera);
     this.frameId = requestAnimationFrame(this.render);

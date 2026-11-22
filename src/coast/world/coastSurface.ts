@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COAST_BOUNDS, LANDSCAPE_BOUNDS, groundHeight } from '../terrain';
+import { COAST_BOUNDS, LANDSCAPE_BOUNDS, coastTrailDistance, groundHeight, smoothstep } from '../terrain';
 import { coastNoise } from './coastNoise';
 
 export function loadCoastTexture(file: string, repeat = false): THREE.Texture {
@@ -15,7 +15,7 @@ function terrainAxis(start: number, end: number, playStart: number, playEnd: num
   const result = [start];
   let value = start;
   while (value < end) {
-    const step = value >= detailedStart && value < detailedEnd ? 0.82
+    const step = value >= detailedStart && value < detailedEnd ? 1.17
       : value < playStart || value >= playEnd ? 6.6 : 2.55;
     value = Math.min(value + step, end);
     result.push(value);
@@ -27,13 +27,15 @@ export function createCoastTerrain(
   rock: THREE.Texture, sand: THREE.Texture, canopy: THREE.Texture
 ): THREE.Mesh {
   const { minX, maxX, minZ, maxZ } = LANDSCAPE_BOUNDS;
-  const xs = terrainAxis(minX, maxX, COAST_BOUNDS.minX, COAST_BOUNDS.maxX, -49, 43);
-  const zs = terrainAxis(minZ, maxZ, COAST_BOUNDS.minZ, COAST_BOUNDS.maxZ, 42, 116);
+  const xs = terrainAxis(minX, maxX, COAST_BOUNDS.minX, COAST_BOUNDS.maxX, -162, 149);
+  const zs = terrainAxis(minZ, maxZ, COAST_BOUNDS.minZ, COAST_BOUNDS.maxZ, -17, 127);
   const positions = new Float32Array(xs.length * zs.length * 3);
+  const trail = new Float32Array(xs.length * zs.length);
   const indices = new Uint32Array((xs.length - 1) * (zs.length - 1) * 6);
   let offset = 0;
   for (const z of zs) {
     for (const x of xs) {
+      trail[offset / 3] = 1 - smoothstep(0.87, 2.95, coastTrailDistance(x, z));
       positions[offset++] = x;
       positions[offset++] = groundHeight(x, z);
       positions[offset++] = z;
@@ -54,6 +56,7 @@ export function createCoastTerrain(
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('coastTrail', new THREE.BufferAttribute(trail, 1));
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
   geometry.computeVertexNormals();
 
@@ -69,13 +72,17 @@ export function createCoastTerrain(
     shader.uniforms.uForestFloor = { value: new THREE.Color(0x668656) };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
+        attribute float coastTrail;
+        varying float vTrail;
         varying vec3 vCoastPoint;
         varying vec3 vCoastNormal;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vTrail = coastTrail;
         vCoastPoint = position;
         vCoastNormal = normal;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
+        varying float vTrail;
         varying vec3 vCoastPoint;
         varying vec3 vCoastNormal;
         uniform sampler2D uStone;
@@ -116,9 +123,13 @@ export function createCoastTerrain(
         vec3 sand = mix(uDrySand, grains * vec3(2.20, 2.09, 1.97), 0.62) * smallRipple;
         float wash = smoothstep(-0.35, 1.05, p.y);
         sand = mix(sand * uWetSand * 1.65, sand, wash) * (0.87 + 0.20 * broad);
-        vec3 leaves = surfaceProjection(uCanopy, p * 0.31, n);
-        vec3 soil = mix(uForestFloor * (0.36 + broad * 0.40), leaves * 1.34, 0.64);
-        diffuseColor.rgb *= mix(mix(sand, cliff, rocky), soil, green);
+        vec3 litter = surfaceProjection(uCanopy, p * 0.53, n);
+        vec3 soil = mix(uForestFloor * (0.34 + broad * 0.46), litter * 1.09, 0.43);
+        vec3 terrain = mix(mix(sand, cliff, rocky), soil, green);
+        float worn = smoothstep(0.12, 0.96, vTrail + (pocket - 0.55) * 0.37);
+        worn *= smoothstep(0.5, 2.3, p.y);
+        vec3 gravel = mix(sand*0.55, cliff*1.62, 0.44 + broad*0.31);
+        diffuseColor.rgb *= mix(terrain, gravel, worn * 0.86);
         float relief = rocky * (grit*0.54 + band*0.24 - seam*0.079) + (1.0-rocky)*dot(sand,vec3(0.3))*0.02;
       `)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>

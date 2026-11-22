@@ -174,46 +174,53 @@ test('the coast renders, wades, swims, flies, spatializes audio, and resets rend
     }
     assert.equal(await light.getAttribute('aria-pressed'), 'true');
     assert.equal(await page.evaluate(() => window.coastProbe.context), null);
+    const fonts = await page.evaluate(() =>
+      ['.coast-title h1', '.coast-mode', '.coast-legacy', '.coast-panel button', '.coast-panel kbd']
+        .map(selector => getComputedStyle(document.querySelector(selector)).fontSize));
+    assert.deepEqual(fonts, ['38px', '24px', '26px', '24px', '22px']);
     await capture(page, 'lagoon-light');
 
     await page.getByRole('button', { name: '環境音を開始' }).click();
     await page.getByRole('button', { name: '環境音を再開' }).waitFor();
     await page.waitForFunction(signalLevel, undefined, { polling: 100 });
-    const beforeSwitch = await page.evaluate(() => ({
+    const graph = () => ({
       contexts: window.coastProbe.contexts,
       contextState: window.coastProbe.context.state,
       decoded: window.coastProbe.decoded,
       delays: window.coastProbe.delays.length,
       panners: window.coastProbe.panners.map(node => [
         node.panningModel, node.distanceModel, node.rolloffFactor,
-        node.positionX.value, node.positionY.value, node.positionZ.value,
+        node.positionX.value, node.positionY.value,
       ]),
-    }));
+    });
+    const initialZ = await page.evaluate(() => {
+      window.coastProbe.originalPanners = window.coastProbe.panners.slice();
+      return window.coastProbe.panners.map(node => node.positionZ.value);
+    });
+    const beforeSwitch = await page.evaluate(graph);
     const start = await page.evaluate(audioPosition);
     assert.equal(beforeSwitch.contexts, 1);
     assert.equal(beforeSwitch.contextState, 'running');
-    assert.deepEqual([...recordings].sort(), ['birds.ogg', 'foliage.ogg', 'insects.ogg', 'waterfall.ogg', 'waves.ogg']);
+    assert.deepEqual([...recordings].sort(), ['birds.ogg', 'foliage.ogg', 'insects.ogg', 'surf.ogg', 'waterfall.ogg', 'waves.ogg']);
     assert.equal(beforeSwitch.decoded, recordings.size);
-    const reflected = beforeSwitch.panners.filter(([model, , rolloff, , y]) => model === 'HRTF' && rolloff > 0 && y < 0);
+    assert.ok(await page.evaluate(() => window.coastProbe.panners.filter(node =>
+      node.positionY.value > 18 && node.maxDistance >= 700 && node.panningModel === 'HRTF').length >= 3));
+    const positions = beforeSwitch.panners.map((panner, i) => [...panner, initialZ[i]]);
+    const reflected = positions.filter(([model, , rolloff, , y]) => model === 'HRTF' && rolloff > 0 && y < 0);
     assert.ok(reflected.length >= 2);
     assert.equal(beforeSwitch.delays, reflected.length);
-    assert.ok(reflected.every(([, , , x, y, z]) => beforeSwitch.panners.some(([, , , dryX, dryY, dryZ]) =>
+    assert.ok(reflected.every(([, , , x, y, z]) => positions.some(([, , , dryX, dryY, dryZ]) =>
       x === dryX && -y === dryY && z === dryZ)), 'reflected sources mirror dry sources across the water');
+    await page.waitForFunction(z => window.coastProbe.panners.some((node, i) =>
+      Math.abs(node.positionZ.value - z[i]) > 0.4), initialZ);
     await sampleRendering(page, 'light');
 
     await high.click();
     assert.equal(await high.getAttribute('aria-pressed'), 'true');
     assert.equal(await canvas.evaluate(node => node.width), viewport.width);
-    assert.deepEqual(await page.evaluate(() => ({
-      contexts: window.coastProbe.contexts,
-      contextState: window.coastProbe.context.state,
-      decoded: window.coastProbe.decoded,
-      delays: window.coastProbe.delays.length,
-      panners: window.coastProbe.panners.map(node => [
-        node.panningModel, node.distanceModel, node.rolloffFactor,
-        node.positionX.value, node.positionY.value, node.positionZ.value,
-      ]),
-    })), beforeSwitch);
+    assert.deepEqual(await page.evaluate(graph), beforeSwitch);
+    assert.ok(await page.evaluate(() => window.coastProbe.panners.every((node, i) =>
+      node === window.coastProbe.originalPanners[i])));
     const afterSwitch = await page.evaluate(audioPosition);
     assert.ok(Math.hypot(start.x - afterSwitch.x, start.y - afterSwitch.y, start.z - afterSwitch.z) < 0.05);
     await capture(page, 'lagoon-high');
