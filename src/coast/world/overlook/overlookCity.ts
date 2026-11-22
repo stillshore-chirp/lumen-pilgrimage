@@ -39,6 +39,7 @@ const roofs = {
   shingle: [0x807a72, 0x716965, 0x92908a, 0x73645e, 0x929296, 0xa69381],
   terracotta: [0xa17159, 0x986654, 0xad7860, 0xa77861, 0x8d6b5b, 0xb4866d],
   industrial: [0xbec3c0, 0xe0d8cc, 0x9e9d97, 0xcfd4d3, 0xb2ada5, 0xc6bab4],
+  shops: [0xb6a48d, 0x9b9187, 0xb8b2a2, 0x99877d, 0xab9b83, 0x919b95],
   masonry: [0xbcb6aa, 0xa1978e, 0xa3978d, 0xb6aaa3, 0x8e8380, 0xc0b7a6],
   offices: [0x7a929f, 0x8296a2, 0x667d8d, 0x859a9d, 0x92999d, 0x99928a],
 } as const;
@@ -196,10 +197,13 @@ const blocksFragment = /* glsl */`
       float occupancy = windowRandom(floor(cell / vec2(6.1, 2.6)));
       float lit = mix(0.035 + occupancy * 0.25, smoothstep(0.52, 0.88, windowRandom(floor(cell)) * (0.73 + occupancy * 0.44)), resolved);
       float glass = smoothstep(0.27, 0.32, vBlockFace.z);
+      // Shopfront glazing extends across the ground-floor bays.
+      float storefront = (1.0 - glass) * (1.0 - smoothstep(1.24, 1.62, cell.y));
+      pane = max(pane, storefront * (0.32 + 0.51 * mix(0.66, opening.x, resolved)));
       vec3 reflectedSky = vec3(0.071, 0.125, 0.174);
       vec3 electric = mix(vec3(1.0, 0.72, 0.41), vec3(0.63, 0.76, 1.0), step(0.72, occupancy));
       color = mix(color, color * 0.46 + reflectedSky * mix(0.58, 1.25, glass), pane * (1.0 - uNight));
-      color += electric * lit * pane * uNight * mix(0.48, 0.77, glass);
+      color += electric * lit * pane * uNight * (mix(0.43, 0.73, glass) + 0.14 * storefront);
     }
     gl_FragColor = vec4(cityInAir(color, vBlockTransmission), 1.0);
     #include <tonemapping_fragment>
@@ -532,20 +536,22 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
         rise = Math.max(rise, influence * height);
       }
       const side = Math.min(w, d);
-      const readyForOffices = THREE.MathUtils.smoothstep(side, 13, 31);
-      const commercial = use === 1 || (use === 0 && variant < district * (0.28 + 0.84 * readyForOffices));
-      const residence = !commercial && use === 0;
-      const greenery = residence ? neighborhoodNoise(x, z, 850, 618) * 0.72 + neighborhoodNoise(x, z, 240, 663) * 0.28 : 0;
-      const gardens = THREE.MathUtils.smoothstep(greenery, 0.33, 0.72);
-      const residentialShare = THREE.MathUtils.lerp(0.20, 0.70, gardens) * (1 - district * 0.85);
-      if (residence && randomUnit(seed, 9451) >= residentialShare) continue;
-
-      const office = commercial && random < 0.48 + district * 0.37;
-      const h = commercial ? Math.min(side * 3.3, 13 + 9 * readyForOffices + 12 * variant + rise * random ** 1.38)
+      const broadLot = THREE.MathUtils.smoothstep(side, 13, 31);
+      const neighborhood = use === 0
+        ? neighborhoodNoise(x, z, 950, 618) * 0.74 + neighborhoodNoise(x, z, 240, 663) * 0.26 : 0;
+      const gardens = THREE.MathUtils.smoothstep(neighborhood, 0.38, 0.76);
+      // Keep pockets of detached homes and reuse the other lots for shops and offices.
+      const residentialShare = THREE.MathUtils.lerp(0.16, 0.76, gardens) * (1 - district * 0.85);
+      const residence = use === 0 && randomUnit(seed, 9451) < residentialShare;
+      const commercial = use !== 2 && !residence;
+      const office = commercial && (use === 1 || random < 0.12 + broadLot * 0.32 + district * 0.41);
+      const commercialHeight = office ? 15 + 12 * broadLot + 10 * variant + rise * (0.17 + 0.78 * random ** 1.55)
+        : 9.4 + 7 * broadLot + 6.8 * variant + rise * (0.03 + 0.19 * random);
+      const h = commercial ? Math.min(side * 3.3, commercialHeight)
         : use === 2 ? 7 + 12 * random + district * 8 : 4.5 + random ** 1.72 * 6.9;
-      const form: BuildingForm = commercial && nearby && h > 29 && variant < 0.61 ? 'terraced'
+      const form: BuildingForm = office && nearby && h > 28 && variant < (h > 50 ? 0.57 : 0.28) ? 'terraced'
         : residence && nearby && variant > 0.45 ? 'pitched' : 'flat';
-      const palette = office ? roofs.offices : commercial ? roofs.masonry : use === 2 ? roofs.industrial
+      const palette = office ? (variant < 0.72 ? roofs.offices : roofs.masonry) : commercial ? roofs.shops : use === 2 ? roofs.industrial
         : random > 0.96 ? roofs.terracotta : random > 0.53 ? roofs.shingle : roofs.plaster;
       const color = new THREE.Color(palette[Math.min(palette.length - 1, Math.floor(variant * palette.length))]);
       color.multiplyScalar((residence ? 0.75 : 0.90) + randomUnit(seed, 1675) * 0.22);
@@ -553,11 +559,31 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       const yaw = -view.getUint8(offset + 6) / 256 * Math.PI;
       const sin = Math.sin(yaw), cos = Math.cos(yaw);
       const tile = tileKey(x, z);
-      const detail = !nearby && district < 0.31 && randomUnit(seed, 757) < (distance > 11000 ? 0.56 : 0.30);
-      append(buildingTiles, `${detail ? 1 : 0}:${form}:${tile}`, {
+      const detail = !nearby && district < 0.31 && randomUnit(seed, 757) < (distance > 11000 ? 0.48 : 0.24);
+      const building: CityVolume = {
         x, y: feet, z, width: w, depth: d, height: h + ground - feet, yaw, color, variant,
-        facade: commercial ? (office ? 0.31 + variant * 0.047 : 0.23 + variant * 0.034) : 0,
-      });
+        facade: commercial ? (office ? 0.302 + variant * 0.047 : 0.184 + variant * 0.039) : 0,
+      };
+      if (commercial && side >= 17 && Math.max(w, d) >= 29 && h < 48 && randomUnit(seed, 7807) < 0.53) {
+        // Wide plots can hold an office with a separate retail building along the same frontage.
+        const alongWidth = w >= d;
+        const dx = alongWidth ? cos : sin, dz = alongWidth ? -sin : cos;
+        const span = Math.max(w, d);
+        const lower: CityVolume = {
+          ...building,
+          x: x + dx * span * 0.335, z: z + dz * span * 0.335,
+          width: w * (alongWidth ? 0.33 : 1), depth: d * (alongWidth ? 1 : 0.33),
+          height: 5.8 + variant * 7.2 + ground - feet,
+          color: new THREE.Color(roofs.shops[Math.floor(random * roofs.shops.length)]),
+          facade: 0.191 + variant * 0.024,
+        };
+        append(buildingTiles, `${detail ? 1 : 0}:flat:${tile}`, lower);
+        building.x -= dx * span * 0.205;
+        building.z -= dz * span * 0.205;
+        building.width *= alongWidth ? 0.59 : 1;
+        building.depth *= alongWidth ? 1 : 0.59;
+      }
+      append(buildingTiles, `${detail ? 1 : 0}:${form}:${tile}`, building);
       if (residence && distance < 6200) {
         if (randomUnit(seed, 7194) < 0.16 + gardens * 0.71) {
           // Draw crowns along garden edges, outside the inferred roof footprint.
@@ -578,16 +604,17 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       if (lit > occupancy * (commercial ? 0.62 : 1)) continue;
 
       // The street-aligned façades catch different lights in adjoining rooms and entrances.
-      const frontage = (sin * x + cos * z > 0 ? -1 : 1) * d * (form === 'terraced' ? 0.439 : 0.515);
-      const along = (randomUnit(seed, 1331) - 0.5) * w * 0.79;
+      const frontage = (sin * building.x + cos * building.z > 0 ? -1 : 1)
+        * building.depth * (form === 'terraced' ? 0.439 : 0.515);
+      const along = (randomUnit(seed, 1331) - 0.5) * building.width * 0.79;
       const temperature = 0.28 + randomUnit(seed, 2003) * (use === 2 ? 0.70 : 0.49);
       const power = 0.25 + randomUnit(seed, 4907) ** 1.43 * (0.56 + activity * 0.16) + 0.15 * activity;
-      const lampX = x + sin * frontage + cos * along, lampZ = z + cos * frontage - sin * along;
+      const lampX = building.x + sin * frontage + cos * along, lampZ = building.z + cos * frontage - sin * along;
       append(lampTiles, `0:${tile}`, {
         x: lampX, z: lampZ, y: ground + Math.min(h * (0.32 + random * 0.22), 12), kind: 0, power, temperature,
       });
       if (nearby && power > 0.52 && randomUnit(seed, 1617) < 0.35) {
-        const spacing = (along > 0 ? -1 : 1) * w * (0.28 + variant * 0.2);
+        const spacing = (along > 0 ? -1 : 1) * building.width * (0.28 + variant * 0.2);
         append(lampTiles, `0:${tile}`, {
           x: lampX + cos * spacing, z: lampZ - sin * spacing,
           y: ground + Math.min(h * 0.39, 10), kind: 0, power: power * 0.68, temperature,
