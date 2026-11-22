@@ -1,7 +1,7 @@
 import type { Vector3 } from 'three';
 import { POOL, WATERFALL } from './terrain';
 
-type AudioAsset = 'waves' | 'waterfall' | 'wind' | 'foliage' | 'birds' | 'insects';
+type AudioAsset = 'waves' | 'waterfall' | 'foliage' | 'birds' | 'insects';
 type FilterSpec = { type: BiquadFilterType; frequency: number };
 type EmitterSpec = {
   asset: AudioAsset;
@@ -16,7 +16,6 @@ type EmitterSpec = {
 const ASSET_FILES: Record<AudioAsset, string> = {
   waves: 'waves.ogg',
   waterfall: 'waterfall.ogg',
-  wind: 'wind.ogg',
   foliage: 'foliage.ogg',
   birds: 'birds.ogg',
   insects: 'insects.ogg',
@@ -246,10 +245,6 @@ export class CoastAudio {
       { asset: 'waterfall', position: [POOL.x + 1.5, 2.8, POOL.z - 1], gain: 0.32,
         refDistance: 5, maxDistance: 74, rolloff: 1.12,
         filters: [{ type: 'highpass', frequency: 580 }, { type: 'lowpass', frequency: 9800 }] },
-      { asset: 'wind', position: [-74, 14, 39], gain: 0.28, refDistance: 20, maxDistance: 195, rolloff: 0.68,
-        filters: [{ type: 'lowpass', frequency: 2300 }] },
-      { asset: 'wind', position: [76, 17, 46], gain: 0.28, refDistance: 20, maxDistance: 195, rolloff: 0.68,
-        filters: [{ type: 'lowpass', frequency: 2300 }] },
       { asset: 'foliage', position: [-70, 8, 48], gain: 0.34, refDistance: 10, maxDistance: 96, rolloff: 1.05,
         filters: [{ type: 'highpass', frequency: 420 }, { type: 'lowpass', frequency: 8200 }] },
       { asset: 'foliage', position: [80, 9, 54], gain: 0.34, refDistance: 10, maxDistance: 96, rolloff: 1.05,
@@ -257,6 +252,8 @@ export class CoastAudio {
       { asset: 'birds', position: [-64, 12, 42], gain: 0.74, refDistance: 7, maxDistance: 108, rolloff: 0.88,
         filters: [{ type: 'highpass', frequency: 700 }, { type: 'lowpass', frequency: 9200 }] },
       { asset: 'birds', position: [72, 15, 61], gain: 0.74, refDistance: 7, maxDistance: 108, rolloff: 0.88,
+        filters: [{ type: 'highpass', frequency: 700 }, { type: 'lowpass', frequency: 9200 }] },
+      { asset: 'birds', position: [-27, 7, 32], gain: 0.53, refDistance: 8, maxDistance: 83, rolloff: 0.94,
         filters: [{ type: 'highpass', frequency: 700 }, { type: 'lowpass', frequency: 9200 }] },
       { asset: 'insects', position: [-84, 1.8, 57], gain: 0.58, refDistance: 6, maxDistance: 92, rolloff: 0.82,
         filters: [{ type: 'highpass', frequency: 1050 }, { type: 'lowpass', frequency: 7400 }] },

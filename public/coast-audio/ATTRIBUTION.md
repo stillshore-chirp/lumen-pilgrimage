@@ -16,13 +16,6 @@
 - Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Water_fall.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/5/5d/Water_fall.ogg)
 - 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。通常の滝音と、実行時に高域を通す水しぶき音に使用。変換音源は CC BY-SA 3.0 で再配布。
 
-## `wind.ogg`
-
-- 「Wind Loop」— Jonathan Shaw の録音を AntumDeluge がループ素材として公開
-- ライセンス: [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
-- OpenGameArt: [作品ページ](https://opengameart.org/content/wind-loop) · [元ファイル](https://opengameart.org/sites/default/files/wind-01_0.ogg)
-- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。左右の林に離した 2 点から再生。
-
 ## `foliage.ogg`
 
 - 秋の風と葉擦れ「Wind - autumn wind with leaves rustling」— Gregor Quendel
@@ -36,7 +29,7 @@
 - Abuja の庭で録音された鳥のさえずり「Birds chirping in a garden.ogg」— Akum20
 - ライセンス: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
 - Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Birds_chirping_in_a_garden.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/2/2f/Birds_chirping_in_a_garden.ogg)
-- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。左右の林に離した 2 点から再生。
+- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。開始地点近くと左右の林に離した 3 点から再生。
 
 ## `insects.ogg`
 

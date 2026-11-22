@@ -145,7 +145,7 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
   });
   page.on('response', response => {
     const path = new URL(response.url()).pathname;
-    if (path.includes('/coast-audio/') && response.ok()) recordings.add(path);
+    if (path.includes('/coast-audio/') && response.ok()) recordings.add(path.split('/').at(-1));
   });
   page.on('request', request => {
     const target = new URL(request.url());
@@ -183,8 +183,8 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
     const start = await page.evaluate(audioPosition);
     assert.equal(beforeSwitch.contexts, 1);
     assert.equal(beforeSwitch.contextState, 'running');
-    assert.ok(beforeSwitch.decoded >= 6, `Only ${beforeSwitch.decoded} recordings decoded`);
-    assert.ok(recordings.size >= 6, `Only ${recordings.size} local recordings served`);
+    assert.deepEqual([...recordings].sort(), ['birds.ogg', 'foliage.ogg', 'insects.ogg', 'waterfall.ogg', 'waves.ogg']);
+    assert.equal(beforeSwitch.decoded, recordings.size);
     assert.ok(beforeSwitch.panners.filter(([model, , rolloff]) => model === 'HRTF' && rolloff > 0).length >= 4);
     await sampleRendering(page, 'low');
 
