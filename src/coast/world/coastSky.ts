@@ -86,7 +86,7 @@ function createStars(atmosphere: CoastAtmosphere) {
   return stars;
 }
 
-export function createCoastSky(atmosphere: CoastAtmosphere) {
+export function createCoastSky(atmosphere: CoastAtmosphere, nightCloudOpacity = 0.53) {
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -154,7 +154,7 @@ export function createCoastSky(atmosphere: CoastAtmosphere) {
         } else {
           material.color.copy(daylight);
         }
-        material.opacity = night ? opacity * 0.53 : opacity;
+        material.opacity = night ? opacity * nightCloudOpacity : opacity;
       }
     },
     dispose(): void {
