@@ -1,5 +1,5 @@
 import { Vector3, type PerspectiveCamera } from 'three';
-import { COAST_BOUNDS, forestStreamLevel, groundHeight, SEA_LEVEL, smoothstep, SPAWN } from './terrain';
+import { COAST_BOUNDS, COAST_REST_SITES, coastWaterLevel, groundHeight, restSiteYaw, smoothstep, SPAWN } from './terrain';
 
 export type CoastMovement = 'walk' | 'wade' | 'swim' | 'dive' | 'flight';
 
@@ -40,6 +40,22 @@ const WALK_SLOPE_EPSILON = 0.000001;
 const BOUNDS_PADDING = 0.35;
 const MAX_FLIGHT_HEIGHT = 255;
 const GAMEPAD_DEADZONE = 0.16;
+
+const benches = COAST_REST_SITES.map(site => {
+  const yaw = restSiteYaw(site);
+  return { site, forwardX: Math.sin(yaw), forwardZ: Math.cos(yaw), halfWidth: site.kind === 'terrace' ? 1.39 : 1.18 };
+});
+
+function hitsBench(x: number, z: number, foot: number): boolean {
+  for (const { site, forwardX, forwardZ, halfWidth } of benches) {
+    const dx = x - site.x, dz = z - site.z;
+    if (Math.abs(dx) > 1.6 || Math.abs(dz) > 1.6 || foot > site.grade + 0.83) continue;
+    const side = Math.abs(dx * forwardZ - dz * forwardX);
+    const along = dx * forwardX + dz * forwardZ;
+    if (side < halfWidth && along > -0.48 && along < 0.30) return true;
+  }
+  return false;
+}
 
 export class CoastControls {
   private readonly camera: PerspectiveCamera;
@@ -491,6 +507,7 @@ export class CoastControls {
       const distance = Math.hypot(x - position.x, z - position.z);
       if (distance === 0) return false;
       const height = this.supportHeight(x, z);
+      if (hitsBench(x, z, followSupport ? height : footAtStep)) return false;
       const rise = height - support;
       const walkableRise = distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON);
       if (followSupport ? rise > walkableRise : height > footAtStep + FOOT_CLEARANCE) return false;
@@ -522,7 +539,7 @@ export class CoastControls {
   }
 
   private waterLevel(x: number, z: number): number {
-    return forestStreamLevel(x, z) ?? SEA_LEVEL;
+    return coastWaterLevel(x, z);
   }
 
   private diveFloorY(x: number, z: number, ground: number): number {

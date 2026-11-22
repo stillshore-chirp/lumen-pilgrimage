@@ -38,7 +38,7 @@ export class CoastApp {
     const canvas = this.renderer.domElement;
     canvas.className = 'coast-view';
     canvas.tabIndex = 0;
-    canvas.setAttribute('aria-label', '海岸と密林の探索画面');
+    canvas.setAttribute('aria-label', '海岸、森、湖と山の探索画面');
 
     const ui = document.createElement('div');
     ui.className = 'coast-ui';
@@ -59,7 +59,7 @@ export class CoastApp {
           </div>
           <details>
             <summary>操作方法</summary>
-            <p>海に向かって左は岩浜、右は潮だまり。浜の背後は沢と岩間へ続きます。</p>
+            <p>海に向かって左は岩浜、右は潮だまり。浜を背にすると森の入口に休憩所があり、道は湖と稜線へ続きます。</p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
             <p>地上で <kbd>Space</kbd> ジャンプ</p>

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { coastRandom, coastTrailDistance, forestStreamDistance, groundHeight, groundSlope, SEA_LEVEL, smoothstep } from '../terrain';
+import { coastRandom, coastTrailDistance, coastWaterLevel, forestStreamDistance, groundHeight, groundSlope, smoothstep } from '../terrain';
 import { type CoastScenery, type CoastSceneryName } from './coastSceneryAssets';
 
 type Rock = readonly [kind: CoastSceneryName, x: number, z: number, yaw: number, width: number, height: number];
@@ -88,6 +88,30 @@ const landmarks: readonly { name: string; rocks: readonly Rock[]; ferns?: readon
       ['moss04', -59.2, -16.3, -0.9, 1.35, 1.21], ['rockShelf', 64.2, -19.8, 0.81, 1.43, 0.93],
     ],
   },
+  {
+    name: 'Boulders and wet fern banks of the upland lake',
+    rocks: [
+      ['moss02', 93, 696, 0.15, 2.6, 1.7], ['moss05', 92, 702, -1.00, 1.6, 1.2],
+      ['rockShelf', 87, 717, 1.52, 2.9, 0.79], ['moss06', 82, 718, -1.5, 1.86, 1.1],
+      ['moss03', 64, 734, 0.72, 2.4, 2.0], ['moss01', 63, 773, 2.7, 2.1, 1.6],
+      ['rockShelf', 92, 798, -0.82, 3.4, 1.3], ['moss04', 102, 817, 1.91, 3.7, 2.4],
+      ['rockShelf', 196, 800, -1.2, 2.5, 1.1], ['moss05', 203, 794, 0.8, 2.4, 1.8],
+      ['rockBoulder', 217, 786, 0.5, 4.2, 3.0], ['moss02', 214, 801, 1.7, 3.0, 2.5],
+    ],
+    ferns: [[76, 696, 3.5, 24, 1.78], [93, 697, 3.2, 19, 1.66], [85, 716, 4.4, 24, 1.24],
+      [66, 737, 4.4, 23, 1.73], [58, 767, 4.7, 21, 1.64], [92, 812, 5.6, 25, 1.55],
+      [109, 824, 4.5, 23, 1.66], [210, 799, 3.8, 19, 1.47]],
+  },
+  {
+    name: 'Exposed stones between the ridgeline and the warm valley',
+    rocks: [
+      ['rockShelf', -116, 968, 1.35, 3.4, 1.8], ['moss04', -106, 971, -0.64, 2.0, 0.8],
+      ['moss06', -106, 982, 1.9, 1.76, 0.93], ['moss01', -116, 986, 1.7, 1.66, 1.25],
+      ['moss05', -128, 950, -0.45, 2.8, 1.84], ['rockShelf', -96, 1002, 0.9, 2.54, 1.3],
+    ],
+    ferns: [[-124, 956, 3.3, 17, 1.2], [-120, 967, 3.6, 19, 1.31], [-111, 969, 2.7, 15, 1.1],
+      [-101, 982, 3.3, 14, 1.1]],
+  },
 ];
 
 interface Placement {
@@ -162,7 +186,7 @@ export function createCoastLandmarks(scenery: CoastScenery): {
         const spread = Math.sqrt(random()) * radius;
         const px = x + Math.cos(angle) * spread, pz = z + Math.sin(angle) * spread;
         const scale = size * (0.31 + random() ** 1.35 * 0.94);
-        if (coastTrailDistance(px, pz) < 1.66 + scale * 0.33 || groundHeight(px, pz) < 1.1
+        if (coastTrailDistance(px, pz) < 1.66 + scale * 0.33 || groundHeight(px, pz) < Math.max(1.1, coastWaterLevel(px, pz) + 0.2)
           || forestStreamDistance(px, pz) < 0.28 || groundSlope(px, pz, 0.74) > 1.19) continue;
         const name = fernForms[Math.floor(random() * fernForms.length)];
         add(name, { x: px, z: pz, yaw: random() * Math.PI * 2, width: scale,
@@ -176,16 +200,17 @@ export function createCoastLandmarks(scenery: CoastScenery): {
       const fern = name.startsWith('fern');
       placements.forEach(({ x, z, yaw, width, height, tuck, tone }, index) => {
         const y = groundHeight(x, z);
+        const water = coastWaterLevel(x, z);
         transform.position.set(x, y - tuck, z);
         transform.rotation.set(0, yaw, 0);
         transform.scale.set(width, height, width);
         transform.updateMatrix();
         mesh.setMatrixAt(index, transform.matrix);
-        const wet = Math.max(0, Math.min(1, 0.85 - y));
+        const wet = Math.max(0, Math.min(1, water + 0.85 - y));
         const salt = z < 103 && !name.startsWith('fern') ? 1 - wet * 0.50 : 0;
         mesh.setColorAt(index, tint.setRGB(tone * (1 - wet * 0.39 - salt * 0.23),
           tone * (1 - wet * 0.21 - salt * 0.12), tone * (1 - wet * 0.16 + salt * 0.12)));
-        if (!fern && y < SEA_LEVEL - 0.65) {
+        if (!fern && y < water - 0.65) {
           const bounds = geometry.boundingBox!.clone().applyMatrix4(transform.matrix);
           const collision = new THREE.Mesh(geometry, material);
           collision.matrixWorld.copy(transform.matrix);

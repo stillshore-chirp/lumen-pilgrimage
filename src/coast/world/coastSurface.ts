@@ -12,12 +12,14 @@ export function loadCoastTexture(file: string, repeat = false): THREE.Texture {
 }
 
 function terrainAxis(start: number, end: number, playStart: number, playEnd: number,
-  detailedStart: number, detailedEnd: number): number[] {
+  detailedStart: number, detailedEnd: number, outerDetailEnd = detailedEnd): number[] {
   const result = [start];
   let value = start;
   while (value < end) {
+    const offMap = Math.max(playStart - value, value - playEnd);
     const step = value >= detailedStart && value < detailedEnd ? 1.17
-      : value < playStart || value >= playEnd ? 6.6 : 2.55;
+      : value >= detailedEnd && value < outerDetailEnd ? 1.96
+      : offMap > 0 ? Math.min(31, 6.6 + offMap * 0.09) : 3.15;
     value = Math.min(value + step, end);
     result.push(value);
   }
@@ -26,8 +28,8 @@ function terrainAxis(start: number, end: number, playStart: number, playEnd: num
 
 export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, time: THREE.IUniform<number>) {
   const { minX, maxX, minZ, maxZ } = LANDSCAPE_BOUNDS;
-  const xs = terrainAxis(minX, maxX, COAST_BOUNDS.minX, COAST_BOUNDS.maxX, -164, 153);
-  const zs = terrainAxis(minZ, maxZ, COAST_BOUNDS.minZ, COAST_BOUNDS.maxZ, -59, 416);
+  const xs = terrainAxis(minX, maxX, COAST_BOUNDS.minX, COAST_BOUNDS.maxX, -164, 153, 246);
+  const zs = terrainAxis(minZ, maxZ, COAST_BOUNDS.minZ, COAST_BOUNDS.maxZ, -59, 416, 1115);
   const positions = new Float32Array(xs.length * zs.length * 3);
   const trail = new Float32Array(xs.length * zs.length);
   const damp = new Float32Array(xs.length * zs.length);
@@ -164,8 +166,11 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
           + (coastNoise(p.xz * 1.70) - 0.51) * 0.28) * smoothstep(0.2, 2.3, p.y);
         vec3 gravel = mix(sand * 0.60, cliff * 1.38, 0.42 + broad * 0.26);
         vec3 coastalGround = mix(terrain, gravel, worn * (0.35 + 0.32 * pocket));
+        float upland = smoothstep(413.0, 586.0, p.z);
+        float nearDetail = 1.0 - smoothstep(30.0, 121.0, length(p - cameraPosition));
+        float forestWidth = mix(144.0, 344.0, upland);
         float interior = smoothstep(100.0, 170.0, p.z) * smoothstep(4.0, 15.0, p.y)
-          * (1.0 - smoothstep(144.0, 258.0, abs(p.x)));
+          * (1.0 - smoothstep(forestWidth, forestWidth + 114.0, abs(p.x)));
         float rockHeight = surfaceProjection(uForestRelief, rockCoordinates, n).g;
         float strataRelief = (grit * 0.057 + band * 0.075 - seam * 0.036) * (1.0 - shelf * 0.76);
         float roughStone = strataRelief + rockHeight * 0.123;
@@ -175,16 +180,31 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
         if (interior > 0.0) {
           vec2 groundUV = p.xz / 3.0;
           vec2 mudUV = vec2(p.x * 0.41 - p.z * 0.13, p.z * 0.41 + p.x * 0.13);
-          vec3 faceUV = p / vec3(3.3, 3.7, 3.3);
+          vec3 faceUV = p / vec3(3.3, 3.7, 3.3) + vec3(pocket * 0.24, broad * 0.29, strata * 0.22);
           float rockCover = smoothstep(0.12, 0.90, rocky + 0.28 * (pocket - 0.43));
           float mudCover = smoothstep(0.13, 0.93, 0.51 * worn + 0.97 * vDamp + (pocket - 0.53) * 0.81);
           forestWet = interior * vDamp * (0.75 + 0.25 * broad);
           vec3 leafMat = texture2D(uForestLitter, groundUV).rgb;
           vec3 mudMat = texture2D(uForestMud, mudUV).rgb;
           vec3 rockMat = surfaceProjection(uForestRock, faceUV, n);
+          float slopeColor = coastNoise(p.xz * 0.026 + p.y * 0.041)
+            + 0.35 * coastNoise(p.xz * 0.064 - p.y * 0.025);
+          float grove = smoothstep(0.27, 0.92, slopeColor);
+          vec3 farFloor = mix(vec3(0.154, 0.179, 0.083), vec3(0.27, 0.26, 0.13), grove);
+          leafMat = mix(leafMat, farFloor, upland * (1.0 - nearDetail) * 0.93);
+          mudMat = mix(mudMat, vec3(0.19, 0.16, 0.098) * (0.82 + 0.28 * grove), upland * (1.0 - nearDetail));
+          vec3 grayOcher = mix(vec3(0.118, 0.142, 0.086), vec3(0.30, 0.302, 0.229),
+            smoothstep(0.37, 1.1, slopeColor));
+          vec3 farRock = surfaceProjection(uForestRock, p / vec3(24.0, 30.0, 24.0), n);
+          rockMat = mix(mix(grayOcher, farRock, 0.22), rockMat, nearDetail);
           vec3 forestFloor = mix(leafMat * vec3(0.89, 1.06, 0.84), mudMat, mudCover);
           vec3 packedEarth = mix(mudMat, leafMat, 0.32) * vec3(1.34, 1.22, 1.03);
           forestFloor = mix(forestFloor, packedEarth, worn * (0.62 - 0.43 * vDamp));
+          float moor = upland * smoothstep(105.0, 163.0, p.y) * (0.64 + 0.36 * broad);
+          vec3 meadow = leafMat * vec3(1.11, 1.45, 0.68) * (0.94 + 0.39 * pocket);
+          forestFloor = mix(forestFloor, meadow, moor * (1.0 - worn * 0.90) * 0.76);
+          float greenSlope = upland * (1.0 - worn) * smoothstep(0.19, 0.92, slopeColor) * (1.0 - rockCover * 0.74);
+          forestFloor *= mix(vec3(1.0), vec3(0.83, 1.29, 0.77), greenSlope * 0.86);
           vec3 forestSurface = mix(forestFloor, rockMat, rockCover) * (0.78 + 0.49 * broad);
           forestSurface *= mix(vec3(1.0), vec3(0.54, 0.67, 0.63), forestWet);
           diffuseColor.rgb = mix(diffuseColor.rgb, forestSurface, interior);
@@ -193,7 +213,7 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
           float mudHeight = texture2D(uForestRelief, mudUV).b;
           float rockRelief = surfaceProjection(uForestRelief, faceUV, n).g;
           float scanned = mix(mix(leafHeight, mudHeight, mudCover) * 0.085, rockRelief * 0.166, rockCover);
-          relief = mix(relief, uMicroRelief * scanned, interior);
+          relief = mix(relief, uMicroRelief * scanned * (0.08 + nearDetail * 0.92), interior);
         }
       `)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>

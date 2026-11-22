@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera, Ray, Triangle, Vector3 } from 'three';
-import { COAST_WALKS, FOREST_WALKS, groundHeight, SEA_LEVEL, SPAWN } from '../src/coast/terrain.ts';
+import {
+  COAST_WALKS, FOREST_WALKS, UPLAND_LAKE, UPLAND_WALKS, groundHeight, SEA_LEVEL, SPAWN,
+} from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
 // Vite resolves the extensionless terrain import in the app. Resolve that same file in the Node test.
@@ -513,6 +515,33 @@ test('walking near the edge of the ravine tread passes the inside of its bend', 
   }
 });
 
+test('the upland lake uses its own water level for floating, diving, and surfacing', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  const { x, z, level } = UPLAND_LAKE;
+  const press = code => browser.window.dispatch('keydown', { target: browser.canvas, code });
+  const release = code => browser.window.dispatch('keyup', { code });
+  const advance = frames => { for (let frame = 0; frame < frames; frame++) controls.update(0.05); };
+  try {
+    camera.position.set(x, level + 0.63, z);
+    advance(1);
+    assert.equal(controls.currentMovement, 'swim');
+    press('KeyC');
+    advance(18);
+    release('KeyC');
+    assert.equal(controls.currentMovement, 'dive');
+    assert.ok(camera.position.y < level - 1 && camera.position.y > groundHeight(x, z));
+    press('Space');
+    advance(26);
+    assert.equal(controls.currentMovement, 'swim');
+    assert.ok(Math.abs(camera.position.y - level - 0.63) < 0.0001);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
 test('the main walking controls complete the coastal and forest paths without flying', () => {
   const browser = createBrowser();
   const camera = new PerspectiveCamera();
@@ -542,6 +571,16 @@ test('the main walking controls complete the coastal and forest paths without fl
     walkThrough('beach to forest', coastAccess.slice(0, startOfForest + 1));
     walkThrough(approach.id, approach.points);
     walkThrough(ravine.id, ravine.points);
+    const [saddle, lake, ridge] = UPLAND_WALKS;
+    walkThrough(saddle.id, saddle.points);
+    walkThrough(lake.id, lake.points);
+    const ridgeStart = ridge.points[0];
+    const lakeToRidge = lake.points.findIndex(point => Math.hypot(point.x - ridgeStart.x, point.z - ridgeStart.z) < 0.06);
+    assert.ok(lakeToRidge > 0);
+    walkThrough('lake to ridge', lake.points.slice(1, lakeToRidge + 1));
+    walkThrough(ridge.id, ridge.points);
+    const oldOverlook = ford.points.at(-1);
+    camera.position.set(oldOverlook.x, groundHeight(oldOverlook.x, oldOverlook.z) + 1.65, oldOverlook.z);
     walkThrough(ford.id, [...ford.points].reverse());
     const creekFork = headwater.points[0];
     walkThrough('fork to headwater', ford.points.slice(0,
