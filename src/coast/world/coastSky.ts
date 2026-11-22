@@ -1,92 +1,90 @@
 import * as THREE from 'three';
+import { loadCoastTexture } from './coastSurface';
 
-const BASE_URL = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
-const SKY_SUN_LONGITUDE = 0.6;
+const atlas = [
+  { x: 0, y: 0, w: 0.49, h: 0.49 },
+  { x: 0.50, y: 0.134, w: 0.50, h: 0.305 },
+  { x: 0, y: 0.56, w: 0.50, h: 0.38 },
+  { x: 0.50, y: 0.59, w: 0.50, h: 0.34 },
+];
 
-function createAzureFallback(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
-  if (!context) {
-    throw new Error('Coast sky fallback requires a 2D canvas context');
-  }
+const cloudBanks = [
+  { tile: 0, x: 88, y: 432, z: -1450, width: 615, height: 658, opacity: 1.0 },
+  { tile: 1, x: -462, y: 409, z: -1320, width: 510, height: 245, opacity: 0.88 },
+  { tile: 3, x: 535, y: 582, z: -1460, width: 620, height: 247, opacity: 0.83 },
+  { tile: 1, x: 155, y: 115, z: -1680, width: 870, height: 250, opacity: 0.82 },
+  { tile: 2, x: -990, y: 525, z: -1010, width: 510, height: 448, opacity: 0.92 },
+  { tile: 0, x: 1140, y: 385, z: -577, width: 415, height: 463, opacity: 0.94 },
+  { tile: 2, x: 1285, y: 315, z: 756, width: 565, height: 392, opacity: 0.95 },
+  { tile: 0, x: -660, y: 385, z: 1267, width: 505, height: 570, opacity: 0.92 },
+  { tile: 3, x: 160, y: 200, z: 1520, width: 740, height: 270, opacity: 0.85 },
+  { tile: 1, x: -1290, y: 215, z: 166, width: 600, height: 315, opacity: 0.82 },
+];
 
-  const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0, '#246fc3');
-  gradient.addColorStop(0.48, '#4d9bd7');
-  gradient.addColorStop(0.72, '#a9d0e2');
-  gradient.addColorStop(1, '#c7dfe9');
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
-  texture.generateMipmaps = true;
-  return texture;
-}
-
-/** Builds a camera-centered dome with a lightweight fallback while the local panorama loads. */
-export function createCoastSky(sunDirection: THREE.Vector3): THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> {
-  const geometry = new THREE.SphereGeometry(560, 48, 32);
-  const material = new THREE.MeshBasicMaterial({
-    map: createAzureFallback(),
+export function createCoastSky(sun: THREE.Vector3): {
+  dome: THREE.Mesh;
+  clouds: THREE.Group;
+} {
+  const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
-    fog: false,
-    depthTest: false,
     depthWrite: false,
-    toneMapped: false
-  });
-  material.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <map_fragment>',
-      `#ifdef USE_MAP
-        vec2 coastSkyUv = vec2(vMapUv.x, max(vMapUv.y, 0.5));
-        vec4 sampledDiffuseColor = texture2D(map, coastSkyUv);
-        diffuseColor *= sampledDiffuseColor;
-      #endif`
-    );
-  };
-  material.customProgramCacheKey = () => 'coast-sky-panorama-v1';
-
-  const sky = new THREE.Mesh(geometry, material);
-  const cameraPosition = new THREE.Vector3();
-  const normalizedSun = sunDirection.clone().normalize();
-  const worldSunAzimuth = Math.atan2(normalizedSun.x, normalizedSun.z);
-  const sourceSunAzimuth = SKY_SUN_LONGITUDE * Math.PI * 2 - Math.PI / 2;
-  sky.rotation.y = worldSunAzimuth - sourceSunAzimuth;
-  sky.name = 'Coast sky and clouds';
-  sky.frustumCulled = false;
-  sky.renderOrder = -1000;
-  sky.onBeforeRender = (_renderer, _scene, camera) => {
-    camera.getWorldPosition(cameraPosition);
-    if (sky.parent) {
-      sky.position.copy(sky.parent.worldToLocal(cameraPosition));
-    } else {
-      sky.position.copy(cameraPosition);
-    }
-    sky.updateMatrixWorld(true);
-  };
-
-  new THREE.TextureLoader().load(
-    `${BASE_URL}coast-materials/sky.webp`,
-    (loaded) => {
-      loaded.colorSpace = THREE.SRGBColorSpace;
-      loaded.wrapS = THREE.ClampToEdgeWrapping;
-      loaded.wrapT = THREE.ClampToEdgeWrapping;
-      loaded.magFilter = THREE.LinearFilter;
-      loaded.minFilter = THREE.LinearMipmapLinearFilter;
-      loaded.generateMipmaps = true;
-      loaded.needsUpdate = true;
-      material.map = loaded;
-      material.needsUpdate = true;
+    depthTest: false,
+    toneMapped: false,
+    uniforms: {
+      uSun: { value: sun },
+      uHorizon: { value: new THREE.Color(0xb9e0f2) },
+      uHaze: { value: new THREE.Color(0x70b9ec) },
+      uAzure: { value: new THREE.Color(0x246cbd) },
+      uZenith: { value: new THREE.Color(0x164b93) },
     },
-    undefined,
-    () => { /* Keep the azure gradient if the local panorama is unavailable. */ }
-  );
-  return sky;
+    vertexShader: /* glsl */`
+      varying vec3 vSkyDirection;
+      void main() {
+        vSkyDirection = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */`
+      uniform vec3 uSun, uHorizon, uHaze, uAzure, uZenith;
+      varying vec3 vSkyDirection;
+      void main() {
+        vec3 d = normalize(vSkyDirection);
+        float h = max(0.0, d.y);
+        vec3 sky = mix(uHorizon, uHaze, smoothstep(0.0, 0.19, h));
+        sky = mix(sky, uAzure, smoothstep(0.09, 0.49, h));
+        sky = mix(sky, uZenith, smoothstep(0.51, 1.0, h));
+        float sun = max(dot(d,uSun), 0.0);
+        sky += vec3(1.0, 0.89, 0.62) * (pow(sun, 14.0)*0.18 + pow(sun, 280.0)*0.41);
+        gl_FragColor = vec4(sky, 1.0);
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(2170, 28, 18), material);
+  dome.name = 'Open sky and sunlight';
+  dome.renderOrder = -100;
+  dome.frustumCulled = false;
+
+  const texture = loadCoastTexture('cumulus.webp');
+  const clouds = new THREE.Group();
+  clouds.name = 'Cumulus and distant banks';
+  for (const bank of cloudBanks) {
+    const { x, y, w, h } = atlas[bank.tile];
+    const geometry = new THREE.PlaneGeometry(bank.width, bank.height);
+    const uv = geometry.getAttribute('uv');
+    for (let i = 0; i < uv.count; i += 1) {
+      uv.setXY(i, x + w * uv.getX(i), 1 - y - h * (1 - uv.getY(i)));
+    }
+    const cloud = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      map: texture, color: new THREE.Color(1.05, 1.09, 1.11),
+      transparent: true, opacity: bank.opacity, alphaTest: 0.018,
+      side: THREE.DoubleSide, depthWrite: false, fog: false, toneMapped: false,
+    }));
+    cloud.position.set(bank.x, bank.y, bank.z);
+    cloud.lookAt(0, bank.y, 30);
+    // Keep the distant planes behind nearby transparent spray.
+    cloud.renderOrder = -20;
+    clouds.add(cloud);
+  }
+  return { dome, clouds };
 }

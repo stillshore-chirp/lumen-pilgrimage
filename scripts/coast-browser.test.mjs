@@ -8,7 +8,7 @@ import { preview } from 'vite';
 const screenshotDirectory = process.env.COAST_SCREENSHOTS;
 const chromeChannel = process.env.COAST_CHROME_CHANNEL || undefined;
 const viewport = chromeChannel || screenshotDirectory ? { width: 1280, height: 800 } : { width: 768, height: 480 };
-const lowWidth = Math.floor(viewport.width * 0.8);
+const lightWidth = Math.floor(viewport.width * 0.8);
 const timeout = 65_000;
 let server;
 let browser;
@@ -71,7 +71,7 @@ async function sampleRendering(page, quality) {
 }
 
 function installBrowserProbes() {
-  const probe = { context: null, analyser: null, panners: [], pad: null, decoded: 0, contexts: 0 };
+  const probe = { context: null, analyser: null, panners: [], delays: [], pad: null, decoded: 0, contexts: 0 };
   window.coastProbe = probe;
   probe.peak = () => {
     const signal = new Float32Array(probe.analyser.fftSize);
@@ -92,6 +92,11 @@ function installBrowserProbes() {
       const panner = super.createPanner();
       probe.panners.push(panner);
       return panner;
+    }
+    createDelay(...args) {
+      const delay = super.createDelay(...args);
+      probe.delays.push(delay);
+      return delay;
     }
     async decodeAudioData(buffer, success, failure) {
       const decoded = await super.decodeAudioData(buffer, success, failure);
@@ -133,7 +138,7 @@ function signalLevel() {
   return peak > 0.001 && peak < 0.98 ? peak : 0;
 }
 
-test('the coast renders, walks, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
+test('the coast renders, wades, swims, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
   const page = await newPage();
   const errors = [];
   const recordings = new Set();
@@ -145,7 +150,7 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
   });
   page.on('response', response => {
     const path = new URL(response.url()).pathname;
-    if (path.includes('/coast-audio/') && response.ok()) recordings.add(path);
+    if (path.includes('/coast-audio/') && response.ok()) recordings.add(path.split('/').at(-1));
   });
   page.on('request', request => {
     const target = new URL(request.url());
@@ -155,21 +160,21 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
   });
   await page.addInitScript(installBrowserProbes);
   try {
-    const sceneryAssets = Promise.all(['rock.webp', 'sand.webp', 'sky.webp', 'cliff-ledge.glb'].map(file =>
+    const sceneryAssets = Promise.all(['limestone.webp', 'sand.webp', 'cumulus.webp', 'canopy.webp'].map(file =>
       page.waitForResponse(response => new URL(response.url()).pathname.endsWith(`/coast-materials/${file}`))));
     const [, loadedAssets] = await Promise.all([page.goto(url, { waitUntil: 'commit' }), sceneryAssets]);
-    const low = page.getByRole('button', { name: 'ローポリ' });
-    const normal = page.getByRole('button', { name: '通常' });
+    const light = page.getByRole('button', { name: '軽量' });
+    const high = page.getByRole('button', { name: '高品質' });
     const flight = page.getByRole('button', { name: '自由飛行' });
     const canvas = page.locator('canvas.coast-view');
-    await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lowWidth);
+    await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lightWidth);
     for (const response of loadedAssets) {
       assert.ok(response.ok(), `Scenery asset request failed: ${response.url()}`);
       assert.equal(await response.finished(), null);
     }
-    assert.equal(await low.getAttribute('aria-pressed'), 'true');
+    assert.equal(await light.getAttribute('aria-pressed'), 'true');
     assert.equal(await page.evaluate(() => window.coastProbe.context), null);
-    await capture(page, 'coast-low');
+    await capture(page, 'lagoon-light');
 
     await page.getByRole('button', { name: '環境音を開始' }).click();
     await page.getByRole('button', { name: '環境音を再開' }).waitFor();
@@ -178,30 +183,42 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
       contexts: window.coastProbe.contexts,
       contextState: window.coastProbe.context.state,
       decoded: window.coastProbe.decoded,
-      panners: window.coastProbe.panners.map(node => [node.panningModel, node.distanceModel, node.rolloffFactor]),
+      delays: window.coastProbe.delays.length,
+      panners: window.coastProbe.panners.map(node => [
+        node.panningModel, node.distanceModel, node.rolloffFactor,
+        node.positionX.value, node.positionY.value, node.positionZ.value,
+      ]),
     }));
     const start = await page.evaluate(audioPosition);
     assert.equal(beforeSwitch.contexts, 1);
     assert.equal(beforeSwitch.contextState, 'running');
-    assert.ok(beforeSwitch.decoded >= 6, `Only ${beforeSwitch.decoded} recordings decoded`);
-    assert.ok(recordings.size >= 6, `Only ${recordings.size} local recordings served`);
-    assert.ok(beforeSwitch.panners.filter(([model, , rolloff]) => model === 'HRTF' && rolloff > 0).length >= 4);
-    await sampleRendering(page, 'low');
+    assert.deepEqual([...recordings].sort(), ['birds.ogg', 'foliage.ogg', 'insects.ogg', 'waterfall.ogg', 'waves.ogg']);
+    assert.equal(beforeSwitch.decoded, recordings.size);
+    const reflected = beforeSwitch.panners.filter(([model, , rolloff, , y]) => model === 'HRTF' && rolloff > 0 && y < 0);
+    assert.ok(reflected.length >= 2);
+    assert.equal(beforeSwitch.delays, reflected.length);
+    assert.ok(reflected.every(([, , , x, y, z]) => beforeSwitch.panners.some(([, , , dryX, dryY, dryZ]) =>
+      x === dryX && -y === dryY && z === dryZ)), 'reflected sources mirror dry sources across the water');
+    await sampleRendering(page, 'light');
 
-    await normal.click();
-    assert.equal(await normal.getAttribute('aria-pressed'), 'true');
+    await high.click();
+    assert.equal(await high.getAttribute('aria-pressed'), 'true');
     assert.equal(await canvas.evaluate(node => node.width), viewport.width);
     assert.deepEqual(await page.evaluate(() => ({
       contexts: window.coastProbe.contexts,
       contextState: window.coastProbe.context.state,
       decoded: window.coastProbe.decoded,
-      panners: window.coastProbe.panners.map(node => [node.panningModel, node.distanceModel, node.rolloffFactor]),
+      delays: window.coastProbe.delays.length,
+      panners: window.coastProbe.panners.map(node => [
+        node.panningModel, node.distanceModel, node.rolloffFactor,
+        node.positionX.value, node.positionY.value, node.positionZ.value,
+      ]),
     })), beforeSwitch);
     const afterSwitch = await page.evaluate(audioPosition);
     assert.ok(Math.hypot(start.x - afterSwitch.x, start.y - afterSwitch.y, start.z - afterSwitch.z) < 0.05);
-    await capture(page, 'coast-normal');
-    await sampleRendering(page, 'normal');
-    await low.click();
+    await capture(page, 'lagoon-high');
+    await sampleRendering(page, 'high');
+    await light.click();
 
     const mute = page.getByRole('button', { name: 'ミュート' });
     await mute.click();
@@ -227,11 +244,29 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
       const listener = window.coastProbe.context.listener;
       return Math.hypot(listener.positionX.value - x, listener.positionZ.value - z) > 0.8;
     }, start);
+    await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '浅瀬');
+    await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '遊泳');
     await page.keyboard.up('w');
+    await page.waitForFunction(() => window.coastProbe.context.listener.positionY.value < 0.75);
+    const swimming = await page.evaluate(audioPosition);
+    assert.ok(swimming.y > 0.4 && swimming.z < start.z - 10);
+    await capture(page, 'lagoon-swim');
+    await page.keyboard.press('f');
+    await page.keyboard.down('Space');
+    await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y + 4, swimming.y);
+    await page.keyboard.up('Space');
+    await page.keyboard.press('f');
+    await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '遊泳');
+    const afterSplash = await page.evaluate(audioPosition);
+    assert.ok(Math.hypot(afterSplash.x - swimming.x, afterSplash.z - swimming.z) < 0.1);
+
+    await page.keyboard.down('s');
+    await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '歩行');
+    await page.keyboard.up('s');
     await canvas.evaluate(node => node.dispatchEvent(new MouseEvent('mousemove', { movementX: 220 })));
     await page.waitForFunction(fx => Math.abs(window.coastProbe.context.listener.forwardX.value - fx) > 0.15, start.fx);
     const walked = await page.evaluate(audioPosition);
-    assert.ok(Math.abs(walked.y - start.y) < 1.4, 'walking keeps the listener at ground level');
+    assert.ok(walked.y >= 1.55, 'returning to the beach restores walking height');
 
     await page.keyboard.press('f');
     await page.waitForFunction(() => document.querySelector('.coast-flight')?.getAttribute('aria-pressed') === 'true');
@@ -241,7 +276,7 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
     await page.keyboard.up('Space');
     await page.evaluate(() => document.exitPointerLock());
     await flight.waitFor();
-    await capture(page, 'coast-flight');
+    await capture(page, 'lagoon-flight');
 
     const flown = await page.evaluate(audioPosition);
     await page.evaluate(setPad, { axes: [0.55, -0.6, -0.5, 0], pressed: [1] });
@@ -254,10 +289,10 @@ test('the coast renders, walks, flies, spatializes audio, and resets rendering q
     await page.waitForFunction(() => document.querySelector('.coast-flight')?.getAttribute('aria-pressed') === 'false');
     await page.evaluate(setPad, { connected: false });
 
-    await normal.click();
+    await high.click();
     await page.reload({ waitUntil: 'commit' });
-    await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lowWidth);
-    assert.equal(await low.getAttribute('aria-pressed'), 'true');
+    await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lightWidth);
+    assert.equal(await light.getAttribute('aria-pressed'), 'true');
     assert.equal(await flight.getAttribute('aria-pressed'), 'false');
     assert.equal(await page.evaluate(() => window.coastProbe.context), null);
     assert.deepEqual([...externalRequests], []);
