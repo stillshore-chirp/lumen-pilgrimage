@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera } from 'three';
-import { groundHeight, SEA_LEVEL, SPAWN } from '../src/coast/terrain.ts';
+import { COAST_WALKS, groundHeight, SEA_LEVEL, SPAWN } from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
 // Vite resolves the extensionless terrain import in the app. Resolve that same file in the Node test.
@@ -201,6 +201,60 @@ test('ending flight above deep water settles into swimming at the same horizonta
     assert.equal(camera.position.x, 30);
     assert.equal(camera.position.z, -10);
     assert.ok(camera.position.y > SEA_LEVEL && camera.position.y < SEA_LEVEL + 1);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('dry land, open water and free flight use the faster travel speeds', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  const travelForHalfSecond = () => {
+    const start = camera.position.z;
+    for (let frame = 0; frame < 10; frame += 1) controls.update(0.05);
+    return start - camera.position.z;
+  };
+  try {
+    camera.rotation.set(0, 0, 0);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW' });
+    assert.ok(Math.abs(travelForHalfSecond() - 3.2) < 1e-6);
+    camera.position.set(30, 0.63, -10);
+    assert.ok(Math.abs(travelForHalfSecond() - 2.05) < 1e-6);
+    camera.position.set(30, 100, -10);
+    controls.toggleFlight();
+    assert.ok(Math.abs(travelForHalfSecond() - 10.25) < 1e-6);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('the main walking controls can complete both coastal circuits without flying', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const modes = [];
+  const controls = createControls(browser, camera, { onMovementChange: mode => modes.push(mode) });
+  try {
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW' });
+    for (const { id, points } of COAST_WALKS) {
+      const start = points[0];
+      camera.position.set(start.x, groundHeight(start.x, start.z) + 1.65, start.z);
+      for (const point of points.slice(1)) {
+        for (let frame = 0; frame < 16; frame += 1) {
+          const dx = point.x - camera.position.x;
+          const dz = point.z - camera.position.z;
+          const distance = Math.hypot(dx, dz);
+          if (distance < 0.035) break;
+          camera.rotation.set(0, Math.atan2(-dx, -dz), 0);
+          controls.update(Math.min(0.05, distance / 6.4));
+        }
+        assert.ok(Math.hypot(point.x-camera.position.x, point.z-camera.position.z) < 0.08,
+          `${id} trail is blocked near (${Math.round(point.x)}, ${Math.round(point.z)})`);
+      }
+    }
+    assert.deepEqual(modes, []);
   } finally {
     controls.dispose();
     browser.cleanup();

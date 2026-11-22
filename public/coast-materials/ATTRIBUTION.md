@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | `sand.webp` | Charlotte Baglioni の [Sand 03](https://polyhaven.com/a/sand_03)（Poly Haven、[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)） | 砂浜と海底に使う。1K Diffuse を WebP に変換し、メタデータを除去 |
 | `limestone.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 断崖と海岸の岩に使う白亜灰色の石灰岩。1200 px 四方の WebP |
-| `canopy.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 樹冠と林床に使う熱帯の葉。768 px 四方の WebP |
+| `canopy.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 林床の葉を表す768 px 四方の WebP |
 | `cumulus.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 積雲4種を収録した透明アトラス。1152 px 四方の WebP |
 
 ## 生成時の指示
