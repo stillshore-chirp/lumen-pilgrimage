@@ -386,11 +386,39 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await canvas.waitFor();
   }
 
+  async function walkWithFocus(key, focused) {
+    const start = await page.evaluate(audioPosition);
+    await page.keyboard.down(key);
+    try {
+      await page.waitForFunction(({ x, z }) => {
+        const listener = window.coastProbe.context.listener;
+        return Math.hypot(listener.positionX.value - x, listener.positionZ.value - z) > 0.2;
+      }, start);
+    } finally {
+      await page.keyboard.up(key);
+    }
+    assert.equal(await focused.evaluate(node => document.activeElement === node
+      && document.pointerLockElement === null), true);
+  }
+
   try {
     await page.goto(url, { waitUntil: 'commit' });
     const coastDay = await skyBrightness(canvas);
     assert.equal(await day.getAttribute('aria-pressed'), 'true');
+    await page.getByRole('button', { name: '環境音を開始' }).click();
+    await page.getByRole('button', { name: '環境音を再開' }).waitFor();
+    await walkWithFocus('w', page.locator('body'));
+
+    const high = page.getByRole('button', { name: '高品質' });
+    const light = page.getByRole('button', { name: '軽量' });
+    await high.click();
+    assert.equal(await high.getAttribute('aria-pressed'), 'true');
+    await walkWithFocus('s', high);
+    await light.press('Space');
+    assert.equal(await light.getAttribute('aria-pressed'), 'true');
+
     await night.click();
+    await walkWithFocus('d', night);
     const coastNight = await skyBrightness(canvas);
     assert.ok(coastNight > 5 && coastDay - coastNight > 65, `${coastDay} → ${coastNight}`);
     await capture(page, 'lagoon-night');
@@ -403,8 +431,21 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'hidden' });
 
-    await page.getByRole('button', { name: '環境音を開始' }).click();
-    await page.getByRole('button', { name: '環境音を再開' }).waitFor();
+    await travel.click();
+    await dialog.waitFor();
+    const paused = await page.evaluate(audioPosition);
+    await page.keyboard.down('w');
+    try {
+      await dialog.getByRole('button', { name: '閉じる' }).press('Space');
+      await dialog.waitFor({ state: 'hidden' });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const resumed = await page.evaluate(audioPosition);
+      assert.deepEqual([resumed.x, resumed.z], [paused.x, paused.z]);
+    } finally {
+      await page.keyboard.up('w');
+    }
+    await walkWithFocus('a', travel);
+
     await flight.click();
     assert.equal(await flight.getAttribute('aria-pressed'), 'true');
     for (const [label, id, x, z] of [
@@ -420,6 +461,7 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
       }, [x, z]);
       assert.equal(await flight.getAttribute('aria-pressed'), 'false');
       assert.equal(await page.locator('.coast-mode').textContent(), '歩行');
+      if (id === 'forest') await walkWithFocus('w', travel);
     }
 
     await arrive('中央展望デッキ', 'overlook', 'main-deck', 'night');
