@@ -7,7 +7,14 @@
 - 波が岩に打ち寄せる録音「Water on Rocks.ogg」— Dsw4
 - ライセンス: [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
 - Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Water_on_Rocks.ogg) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/8/8a/Water_on_Rocks.ogg)
-- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。波の遠近 2 点から再生。
+- 変更: モノラル 48 kHz、約96 kb/s constrained-VBR Opus に変換。沖合の波音として再生。
+
+## `surf.ogg`
+
+- 海岸に打ち寄せる波の録音「Sea waves.wav」— Ganesh Mohan T
+- ライセンス: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+- Commons: [作品ページ](https://commons.wikimedia.org/wiki/File:Sea_waves.wav) · [元ファイル](https://upload.wikimedia.org/wikipedia/commons/8/84/Sea_waves.wav)
+- 変更: 4か所を抜き出して帯域と音量を調整し、前後に短いフェードをかけ、1片4.2秒にそろえて変換。岸の砕波と引き波に使用。変換音源は CC BY-SA 4.0 で再配布。
 
 ## `waterfall.ogg`
 

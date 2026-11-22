@@ -12,7 +12,7 @@ const hooks = registerHooks({
     return nextResolve(path, context);
   },
 });
-const { terrainOcclusion, waterReflection } = await import(acousticsUrl);
+const { airCutoff, soundReach, terrainOcclusion, waterReflection } = await import(acousticsUrl);
 hooks.deregister();
 
 test('the coast contains a dry approach, tidal edge, and submerged seabed', () => {
@@ -77,4 +77,13 @@ test('a reflected arrival is audible over water and disappears over the dry beac
   assert.ok(wet.gain > 0.9);
   assert.ok(wet.delay > 0.009 && wet.delay < 0.15);
   assert.equal(dry.gain, 0);
+});
+
+test('the waterfall range reaches the beach and air removes more treble with distance', () => {
+  const main = COAST_FALLS[0];
+  const source = main.path[Math.round((main.path.length - 1) * 0.65)];
+  const fromBeach = Math.hypot(source.x - SPAWN.x, source.y - 3.6, source.z - SPAWN.z);
+  assert.ok(fromBeach > 240 && soundReach(fromBeach, 840) > 0.9);
+  assert.ok(airCutoff(fromBeach) < airCutoff(70));
+  assert.equal(soundReach(840, 840), 0);
 });
