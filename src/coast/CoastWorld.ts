@@ -5,8 +5,10 @@ import {
 } from './terrain';
 import { createForestRocks } from './world/coastForestRocks';
 import { createForestWater } from './world/coastForestWater';
+import { createCoastLandmarks, createCoastSeagrass, createCreekFlowers } from './world/coastLandmarks';
 import { createCoastLighting } from './world/coastLighting';
 import { createCoastOceanGeometry, createCoastOceanMaterial } from './world/coastOcean';
+import { loadCoastScenery } from './world/coastSceneryAssets';
 import { createCoastSky } from './world/coastSky';
 import { createCoastTerrain, loadCoastTexture } from './world/coastSurface';
 import { createCoastVegetation } from './world/coastVegetation';
@@ -154,6 +156,8 @@ export class CoastWorld {
   private readonly waterfalls: ReturnType<typeof createWaterfalls>;
   private readonly seabirds = createSeabirds();
   private quality: CoastQuality | undefined;
+  private disposed = false;
+  private diveObstacles: ((x: number, z: number) => number | undefined) | undefined;
 
   constructor() {
     this.scene.fog = this.fog;
@@ -163,8 +167,7 @@ export class CoastWorld {
 
     const stone = loadCoastTexture('limestone.webp', true);
     const sand = loadCoastTexture('sand.webp', true);
-    const canopy = loadCoastTexture('canopy.webp', true);
-    this.terrain = createCoastTerrain(stone, sand, canopy, this.time);
+    this.terrain = createCoastTerrain(stone, sand, this.time);
     this.scene.add(this.terrain.mesh, createShoreRocks(stone), createForestRocks(this.terrain.mossRock));
     const ocean = new THREE.Mesh(createCoastOceanGeometry(),
       createCoastOceanMaterial(this.time, sunDirection, sand));
@@ -173,12 +176,25 @@ export class CoastWorld {
     ocean.position.set(0, SEA_LEVEL, -230);
     ocean.receiveShadow = true;
     this.vegetation = createCoastVegetation(this.time, coastPlantingDistance, forestStreamDistance);
-    this.scene.add(ocean, this.vegetation, createForestWater(this.time));
+    this.scene.add(ocean, this.vegetation, createForestWater(this.time), createCoastSeagrass(this.time), createCreekFlowers());
 
     this.waterfalls = createWaterfalls(COAST_FALLS, this.time);
     this.scene.add(this.waterfalls.group, this.seabirds.mesh);
     this.lighting = createCoastLighting(this.scene, sunDirection);
+    void loadCoastScenery().then(scenery => {
+      if (this.disposed) return;
+      const landmarks = createCoastLandmarks(scenery);
+      this.scene.add(landmarks.group);
+      this.diveObstacles = landmarks.diveObstacleHeight;
+      this.lighting.addScenery(landmarks.group);
+    }).catch(() => {
+      if (!this.disposed) console.error('Could not load the local coast scenery models.');
+    });
     this.setQuality('light');
+  }
+
+  diveObstacleHeight(x: number, z: number): number | undefined {
+    return this.diveObstacles?.(x, z);
   }
 
   setQuality(quality: CoastQuality): void {
@@ -200,6 +216,9 @@ export class CoastWorld {
     this.fog.far = 854 - humidAir * 433;
     const stream = forestStreamLevel(x, z);
     const depth = (stream ?? SEA_LEVEL) - y;
+    const underwater = depth > 0.10;
+    this.sky.dome.visible = this.sky.clouds.visible = !underwater;
+    this.scene.background = underwater ? this.fog.color : null;
     if (depth > 0) {
       const submersion = smoothstep(0.01, 0.24, depth);
       const openWater = stream === undefined;
@@ -215,6 +234,7 @@ export class CoastWorld {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.lighting.dispose();
   }
 }

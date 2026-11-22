@@ -9,6 +9,7 @@ export interface CoastControlCallbacks {
   onMovementChange: (movement: CoastMovement) => void;
   onLockChange: (locked: boolean) => void;
   onLockError: () => void;
+  diveObstacleHeight?: (x: number, z: number) => number | undefined;
 }
 
 export const EYE_HEIGHT = 1.65;
@@ -21,6 +22,7 @@ const DIVE_ENTRY_DEPTH = 0.72;
 const DIVE_START_DEPTH = 1.55;
 const DIVE_EXIT_DEPTH = 1.15;
 const DIVE_FLOOR_CLEARANCE = 0.68;
+const DIVE_SURFACE_CLEARANCE = 0.16;
 const FLIGHT_SPEED = 20.5;
 const SPRINT_MULTIPLIER = 1.7;
 const LOOK_SPEED = 2.3;
@@ -144,7 +146,9 @@ export class CoastControls {
     if (this.divePhase === null && this.diveQueued && input.vertical <= 0) {
       const { x, y, z } = this.camera.position;
       const water = this.waterLevel(x, z);
-      if (water - groundHeight(x, z) >= DIVE_START_DEPTH && y <= water + EYE_HEIGHT - SWIM_DEPTH + FOOT_CLEARANCE) {
+      const ground = groundHeight(x, z);
+      if (water - ground >= DIVE_START_DEPTH && y <= water + EYE_HEIGHT - SWIM_DEPTH + FOOT_CLEARANCE
+        && this.diveFloorY(x, z, ground) <= water - DIVE_SURFACE_CLEARANCE) {
         this.divePhase = 'entering';
         this.verticalVelocity = 0;
       }
@@ -376,8 +380,10 @@ export class CoastControls {
     const { x, z } = position;
     const water = this.waterLevel(x, z);
     const ground = groundHeight(x, z);
+    const floor = this.diveFloorY(x, z, ground);
+    const ceiling = water - DIVE_SURFACE_CLEARANCE;
     const step = DIVE_VERTICAL_SPEED * dt;
-    if (this.jumpQueued || verticalInput > 0 || water - ground < DIVE_EXIT_DEPTH) {
+    if (this.jumpQueued || verticalInput > 0 || water - ground < DIVE_EXIT_DEPTH || floor > ceiling) {
       this.divePhase = 'surfacing';
     } else if (this.divePhase === 'surfacing' && this.diveQueued && water - ground >= DIVE_START_DEPTH) {
       this.divePhase = 'entering';
@@ -386,13 +392,14 @@ export class CoastControls {
 
     if (this.divePhase === 'surfacing') {
       const swimY = Math.max(ground, water - SWIM_DEPTH) + EYE_HEIGHT;
-      position.y = Math.min(swimY, position.y + step);
+      position.y = Math.min(swimY, Math.max(floor, position.y + step));
     } else {
       // Finish the initial dip even for a tap, then keep the chosen depth on release.
-      const ceiling = water - (this.divePhase === 'entering' ? DIVE_ENTRY_DEPTH : 0.16);
-      const target = verticalInput < 0 ? ground + DIVE_FLOOR_CLEARANCE : Math.min(ceiling, position.y);
-      position.y = Math.max(ground + DIVE_FLOOR_CLEARANCE, target, position.y - step);
-      if (position.y <= water - DIVE_ENTRY_DEPTH) this.divePhase = 'submerged';
+      const entryY = Math.max(floor, water - DIVE_ENTRY_DEPTH);
+      const holdY = this.divePhase === 'entering' ? entryY : ceiling;
+      const target = verticalInput < 0 ? floor : Math.min(holdY, position.y);
+      position.y = Math.max(floor, target, position.y - step);
+      if (position.y <= entryY) this.divePhase = 'submerged';
     }
 
     this.movement.multiplyScalar(DIVE_SPEED * dt);
@@ -415,8 +422,10 @@ export class CoastControls {
       const distance = Math.hypot(x - position.x, z - position.z);
       if (distance === 0) return false;
       const ground = groundHeight(x, z);
-      const floor = ground + DIVE_FLOOR_CLEARANCE;
-      if (this.waterLevel(x, z) - ground <= 0.08
+      const water = this.waterLevel(x, z);
+      if (water - ground <= 0.08) return false;
+      const floor = this.diveFloorY(x, z, ground);
+      if ((this.divePhase !== 'surfacing' && floor > water - DIVE_SURFACE_CLEARANCE)
         || floor > position.y + distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON)) return false;
       position.set(x, Math.max(position.y, floor), z);
       return true;
@@ -514,6 +523,10 @@ export class CoastControls {
 
   private waterLevel(x: number, z: number): number {
     return forestStreamLevel(x, z) ?? SEA_LEVEL;
+  }
+
+  private diveFloorY(x: number, z: number, ground: number): number {
+    return Math.max(ground, this.callbacks.diveObstacleHeight?.(x, z) ?? ground) + DIVE_FLOOR_CLEARANCE;
   }
 
   private updateMovementMode(): void {

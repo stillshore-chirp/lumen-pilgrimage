@@ -229,7 +229,7 @@ export function createCoastOceanMaterial(
       ${shoreBathymetry}
       ${coastWaterOptics}
 
-      vec3 oceanUnderside(vec3 ray, vec3 normal, vec2 p, float path, float thickness,
+      vec3 oceanUnderside(vec3 ray, vec3 normal, vec2 p, float thickness,
         float sunlit, float wave, vec2 dpdx, vec2 dpdy) {
         vec3 airRay;
         float transmission = waterTransmission(ray, normal, airRay);
@@ -248,8 +248,7 @@ export function createCoastOceanMaterial(
         vec3 sand = textureGrad(uSand, bedUV, dpdx * 0.42, dpdy * 0.42).rgb;
         vec3 bed = sand * vec3(0.55, 0.94, 0.80) * (0.85 + wave * 0.22) * (0.54 + sunlit * 0.46);
         vec3 reflected = mix(uUnderwaterScatter * 0.64, bed, underwaterExtinction(bedPath));
-        vec3 interfaceLight = mix(reflected, sky, transmission);
-        return mix(uUnderwaterScatter, interfaceLight, underwaterExtinction(path));
+        return mix(reflected, sky, transmission);
       }
 
       void main() {
@@ -292,8 +291,10 @@ export function createCoastOceanMaterial(
           if (thickness <= 0.015) discard;
           vec2 ripples = 0.035 * vec2(cos(phaseD * 2.49), sin(phaseC * 2.31 + phaseB)) * rippleFade;
           vec3 opticalNormal = normalize(normal + vec3(ripples.x, 0.0, ripples.y));
-          gl_FragColor = vec4(oceanUnderside(-eye, opticalNormal, p, distance, thickness, sunlit, wave, dpdx, dpdy), 1.0);
+          gl_FragColor = vec4(oceanUnderside(-eye, opticalNormal, p, thickness, sunlit, wave, dpdx, dpdy), 1.0);
           #include <tonemapping_fragment>
+          // The distant water and the Three.js scene fog share a display-referred color.
+          gl_FragColor.rgb = mix(uUnderwaterScatter, gl_FragColor.rgb, underwaterExtinction(distance));
           #include <colorspace_fragment>
           return;
         }

@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import {
   COAST_BOUNDS, COAST_FALLS, COAST_WALKS, FOREST_STREAM, FOREST_WALKS, SEA_LEVEL, SPAWN,
-  coastPlantingDistance, forestStreamLevel, groundHeight, shoreline,
+  coastBedrock, coastPlantingDistance, coastTreadWear, forestStreamLevel, groundHeight, shoreline,
 } from '../src/coast/terrain.ts';
 
 const acousticsUrl = new URL('../src/coast/coastAcoustics.ts', import.meta.url).href;
@@ -63,6 +63,31 @@ test('each waterfall visibly descends from its rock face to the sea', () => {
       assert.ok(point.y > groundHeight(point.x, point.z), 'the waterfall clips through terrain');
     }
     assert.ok(groundHeight(impact.x, impact.z) < SEA_LEVEL);
+  }
+});
+
+test('both coast circuits now follow low limestone beside the bay before climbing to overlooks', () => {
+  for (const [walk, x, z] of [[COAST_WALKS[0], -61, 0], [COAST_WALKS[1], 77, -26]]) {
+    const shore = walk.points.find(point => Math.hypot(point.x - x, point.z - z) < 0.07);
+    assert.ok(shore && groundHeight(shore.x, shore.z) < 3.3);
+    assert.ok(coastTreadWear(shore.x, shore.z) > 0.8);
+    assert.ok(groundHeight(x + (x < 0 ? 18 : -18), z) < SEA_LEVEL,
+      'the low bench must face water on the bay side');
+  }
+  assert.ok(coastBedrock(-38, 159) > 0.9 && coastBedrock(48, 253) > 0.9);
+  assert.equal(coastBedrock(SPAWN.x, SPAWN.z), 0);
+});
+
+test('the worn tread stays continuous off the center of bends in the ravine and on the ascent', () => {
+  for (const [x, z] of [[-60.9333, 308.4256], [-35.36, 381.96]]) {
+    assert.ok(coastTreadWear(x, z) > 0.45);
+    const origin = groundHeight(x, z);
+    for (let i = 0; i < 16; i += 1) {
+      const angle = i * Math.PI / 8;
+      const step = 0.052;
+      const next = groundHeight(x + Math.cos(angle) * step, z + Math.sin(angle) * step);
+      assert.ok(Math.abs(next - origin) < 0.039, `an invisible step remains at (${x}, ${z})`);
+    }
   }
 });
 

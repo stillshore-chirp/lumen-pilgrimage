@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { coastRandom, coastTrailDistance, forestStreamDistance, groundHeight } from '../terrain';
+import { coastRandom, coastTrailDistance, forestStreamDistance, groundHeight, groundSlope } from '../terrain';
 
 function fractureGeometry(seed: number): THREE.BufferGeometry {
   const random = coastRandom(seed);
@@ -65,16 +65,13 @@ export function createForestRocks(moss: THREE.Texture): THREE.Group {
       const x = bed.x + Math.cos(angle) * distance;
       const z = bed.z + Math.sin(angle) * distance;
       const size = 0.19 + Math.pow(random(), 2.35) * bed.maxSize;
-      if (coastTrailDistance(x, z) < 1.7 + size || groundHeight(x, z) < 6) continue;
+      if (coastTrailDistance(x, z) < 1.7 + size || groundHeight(x, z) < 6
+        || (size > 0.7 && groundSlope(x, z, 1.1) > 0.8)) continue;
       const isWet = forestStreamDistance(x, z) < 1.3;
       (isWet ? wetPieces : dryPieces).push({ x, z, size, height: size * (isWet ? 0.34 : 0.47 + 0.66 * random()) });
     }
   }
   dryPieces.push(
-    { x: -69.4, z: 298.3, size: 3.75, height: 4.0 },
-    { x: -57.5, z: 306.8, size: 2.8, height: 5.0 },
-    { x: -59.6, z: 317.1, size: 2.95, height: 3.6 },
-    { x: 80.8, z: 309.3, size: 2.2, height: 2.3 },
     { x: -9.7, z: 393.5, size: 2.7, height: 0.64 },
   );
   const dummy = new THREE.Object3D();

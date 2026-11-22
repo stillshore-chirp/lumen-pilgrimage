@@ -119,8 +119,7 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
           float bedPath = vStreamDepth / max(0.06, -bounce.y);
           vec3 reflected = mix(uForestWaterScatter * 0.68, bottomTint * (0.8 + 0.5 * ripples),
             underwaterExtinction(bedPath));
-          vec3 refracted = mix(mix(reflected, sky, transmission), vec3(0.49, 0.65, 0.54), foam * 0.63);
-          streamUnderside = mix(uForestWaterScatter, refracted, underwaterExtinction(length(cameraPosition - vStreamPoint)));
+          streamUnderside = mix(mix(reflected, sky, transmission), vec3(0.49, 0.65, 0.54), foam * 0.63);
           diffuseColor.a = coverage;
         }
       `)
@@ -136,6 +135,10 @@ export function createForestWater(time: THREE.IUniform<number>): THREE.Mesh {
       .replace('#include <opaque_fragment>', `
         if (!gl_FrontFacing) outgoingLight = streamUnderside;
         #include <opaque_fragment>
+      `)
+      .replace('#include <tonemapping_fragment>', `#include <tonemapping_fragment>
+        if (!gl_FrontFacing) gl_FragColor.rgb = mix(uForestWaterScatter, gl_FragColor.rgb,
+          underwaterExtinction(length(cameraPosition - vStreamPoint)));
       `);
   };
   const water = new THREE.Mesh(geometry, material);

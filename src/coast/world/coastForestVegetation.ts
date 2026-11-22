@@ -55,7 +55,8 @@ export function plantForest(trailDistance: PlantingDistance, streamDistance: Pla
 
   // Taller trunks and low forks give the first two clearings a distinct silhouette.
   for (const [x, z, width, height] of [
-    [-19, 187, 5.3, 17.9], [3, 203, 6.5, 20.8], [-21, 222, 6.8, 19.2], [11, 224, 5.9, 16.2],
+    [-19, 187, 5.3, 17.9], [3, 203, 6.5, 20.8], [-21, 222, 6.8, 19.2], [-5.1, 230.3, 12.0, 31.5],
+    [-9.2, 236.8, 7.1, 21.3], [11, 224, 5.9, 16.2],
     [26, 252, 6.5, 16.5], [58, 272, 6.9, 21.1], [-51, 284, 6.4, 16.5], [-70, 331, 6.7, 20.1],
   ]) addTree(x, z, width, height, 'buttressed');
   addTree(-13.6, 199, 6.1, 19.4, 'spreading');

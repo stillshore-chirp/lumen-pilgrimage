@@ -59,7 +59,7 @@ export class CoastApp {
           </div>
           <details>
             <summary>操作方法</summary>
-            <p>浜を背にして林へ進むと、沢と岩間に分かれます。</p>
+            <p>海に向かって左は岩浜、右は潮だまり。浜の背後は沢と岩間へ続きます。</p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
             <p>地上で <kbd>Space</kbd> ジャンプ</p>
@@ -97,6 +97,7 @@ export class CoastApp {
     const flight = ui.querySelector<HTMLButtonElement>('.coast-flight')!;
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
     this.controls = new CoastControls(this.camera, canvas, {
+      diveObstacleHeight: (x, z) => this.world.diveObstacleHeight(x, z),
       onMovementChange: movement => {
         mode.textContent = movementLabels[movement];
         flight.setAttribute('aria-pressed', String(movement === 'flight'));
