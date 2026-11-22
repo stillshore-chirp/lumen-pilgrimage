@@ -1,6 +1,6 @@
 export const SEA_LEVEL = 0;
-export const COAST_BOUNDS = { minX: -380, maxX: 390, minZ: -760, maxZ: 195 };
-export const LANDSCAPE_BOUNDS = { minX: -574, maxX: 574, minZ: -817, maxZ: 383 };
+export const COAST_BOUNDS = { minX: -380, maxX: 390, minZ: -760, maxZ: 517 };
+export const LANDSCAPE_BOUNDS = { minX: -574, maxX: 574, minZ: -817, maxZ: 695 };
 export const SPAWN = { x: -12, z: 79, yaw: -0.035, pitch: 0.102 };
 export type CoastPoint = { x: number; y: number; z: number };
 
@@ -76,6 +76,88 @@ const limestonePassage = [
   { x: -79, z: 107.3, width: 6.6, length: 4.3, height: 5.8 },
 ];
 
+export const FOREST_STREAM = [
+  { x: -30, z: 240.0, y: 18.64, halfWidth: 0 },
+  { x: -24, z: 240.6, y: 18.69, halfWidth: 4.8 },
+  { x: -19, z: 241.0, y: 18.72, halfWidth: 5.4 },
+  { x: -5, z: 247.0, y: 18.91, halfWidth: 3.5 },
+  { x: 13, z: 254.5, y: 19.14, halfWidth: 3.8 },
+  { x: 28, z: 256.5, y: 19.42, halfWidth: 4.8 },
+  { x: 39, z: 261.0, y: 19.60, halfWidth: 5.9 },
+  { x: 53, z: 268.0, y: 19.92, halfWidth: 4.4 },
+  { x: 67, z: 276.0, y: 20.89, halfWidth: 4.0 },
+  { x: 77, z: 286.0, y: 22.73, halfWidth: 3.1 },
+  { x: 84, z: 296.0, y: 24.40, halfWidth: 3.7 },
+  { x: 85, z: 297.5, y: 24.54, halfWidth: 3.3 },
+  { x: 88, z: 301.0, y: 29.20, halfWidth: 2.65 },
+  { x: 97, z: 307.0, y: 31.80, halfWidth: 1.8 },
+  { x: 108, z: 315.0, y: 33.20, halfWidth: 0 },
+] as const;
+
+function sampleForestStream(x: number, z: number): { y: number; halfWidth: number; side: number } | undefined {
+  if (x <= FOREST_STREAM[0].x || x >= FOREST_STREAM[FOREST_STREAM.length - 1].x || z < 224 || z > 337) {
+    return undefined;
+  }
+  for (let i = 1; i < FOREST_STREAM.length; i += 1) {
+    const end = FOREST_STREAM[i];
+    if (x > end.x) continue;
+    const start = FOREST_STREAM[i - 1];
+    const t = (x - start.x) / (end.x - start.x);
+    return {
+      y: start.y + (end.y - start.y) * t,
+      halfWidth: start.halfWidth + (end.halfWidth - start.halfWidth) * t,
+      side: z - start.z - (end.z - start.z) * t,
+    };
+  }
+  return undefined;
+}
+
+export function forestStreamDistance(x: number, z: number): number {
+  const stream = sampleForestStream(x, z);
+  return stream ? Math.max(0, Math.abs(stream.side) - stream.halfWidth) : Infinity;
+}
+
+export function forestStreamLevel(x: number, z: number): number | undefined {
+  const stream = sampleForestStream(x, z);
+  return stream && Math.abs(stream.side) < stream.halfWidth ? stream.y : undefined;
+}
+
+const inlandRidges = [
+  { x: -114, z: 204, width: 39, length: 68, height: 31 },
+  { x: -101, z: 304, width: 29, length: 50, height: 37 },
+  { x: -75, z: 294, width: 8.9, length: 17.2, height: 13 },
+  { x: -53, z: 307, width: 7.2, length: 14.0, height: 15 },
+  { x: 13, z: 303, width: 25, length: 32, height: 12 },
+  { x: 113, z: 279, width: 27, length: 36, height: 27 },
+  { x: 121, z: 342, width: 41, length: 53, height: 44 },
+  { x: -77, z: 423, width: 48, length: 62, height: 55 },
+  { x: -23, z: 465, width: 78, length: 65, height: 66 },
+  { x: 55, z: 462, width: 51, length: 55, height: 55 },
+] as const;
+
+function inlandHeight(x: number, z: number): number {
+  const grade = 12.9 + (z - 145) * 0.052;
+  const foldedFloor = 3.7 * Math.sin(z * 0.031 + x * 0.043)
+    + 3.2 * Math.sin(z * 0.024 - x * 0.027) + 1.32 * Math.cos(x * 0.108 - z * 0.081);
+  const ridgeX = x + 2.2 * Math.sin(z * 0.14) + 0.85 * Math.sin(z * 0.54 - x * 0.13);
+  const ridgeZ = z + 2.6 * Math.cos(x * 0.10) + 0.66 * Math.sin(x * 0.42 + z * 0.23);
+  let ridge = 0;
+  for (const rock of inlandRidges) {
+    const dx = (ridgeX - rock.x) / rock.width;
+    const dz = (ridgeZ - rock.z) / rock.length;
+    if (Math.abs(dx) > 1.29 || Math.abs(dz) > 1.29) continue;
+    const radius = Math.hypot(dx, dz) * 0.75 + Math.max(Math.abs(dx), Math.abs(dz)) * 0.25;
+    const bedding = 0.04 * Math.sin(x * 0.29 + z * 0.17);
+    ridge = Math.max(ridge, rock.height * (0.35 * (1 - smoothstep(0.42, 1.31, radius))
+      + 0.65 * (1 - smoothstep(0.66, 0.97, radius + bedding))));
+  }
+  const summit = 25.0 * dune(x, z, -14, 396, 32, 40);
+  const saddle = 8.7 * dune(x, z, -16, 186, 70, 67);
+  const ledges = 0.63 * Math.sin(x * 0.37 + z * 0.48) + 0.25 * Math.cos(z * 0.95 - x * 0.91);
+  const bank = 3.03 * dune(x, z, 26, 268, 54, 29);
+  return grade + foldedFloor + ledges + Math.max(ridge, summit) + bank + saddle;
+}
+
 function landscapeHeight(x: number, z: number): number {
   const shore = z - shoreline(x);
   const shelf = shore * (shore < 0 ? 0.177 : 0.208);
@@ -143,8 +225,11 @@ function landscapeHeight(x: number, z: number): number {
       height += (Math.min(height, floor) - height) * patch;
     }
   }
+  const inner = 1 - smoothstep(162, 292, Math.abs(x + 15 * Math.sin(z * 0.021)));
+  const inland = smoothstep(115, 186, z) * inner;
+  if (inland > 0) height += (inlandHeight(x, z) - height) * inland;
   const edgeX = smoothstep(336, 560, Math.abs(x + 13 * Math.sin(z * 0.031)));
-  const inlandEdge = 222 + 32 * Math.sin(x * 0.016) + 17 * Math.sin(x * 0.061);
+  const inlandEdge = 222 + 32 * Math.sin(x * 0.016) + 17 * Math.sin(x * 0.061) + 315 * inner;
   const edgeZ = smoothstep(inlandEdge, inlandEdge + 107, z);
   const shelfEdge = Math.max(edgeX, edgeZ);
   return height * (1 - shelfEdge) - 29 * shelfEdge;
@@ -153,13 +238,16 @@ function landscapeHeight(x: number, z: number): number {
 type TrailAnchor = readonly [x: number, z: number, y: number];
 const junction = [-18, 85, 4.4] as const;
 
-function sampleTrail(anchors: readonly TrailAnchor[]): CoastPoint[] {
+function sampleTrail(anchors: readonly TrailAnchor[], closed = true): CoastPoint[] {
   const points: CoastPoint[] = [];
-  for (let index = 0; index < anchors.length; index += 1) {
-    const previous = anchors[(index + anchors.length - 1) % anchors.length];
-    const start = anchors[index];
-    const end = anchors[(index + 1) % anchors.length];
-    const next = anchors[(index + 2) % anchors.length];
+  const count = anchors.length;
+  const anchorAt = (index: number) => anchors[closed
+    ? (index + count) % count : Math.max(0, Math.min(count - 1, index))];
+  for (let index = 0; index < count - Number(!closed); index += 1) {
+    const previous = anchorAt(index - 1);
+    const start = anchorAt(index);
+    const end = anchorAt(index + 1);
+    const next = anchorAt(index + 2);
     const length = Math.hypot(end[0] - start[0], end[1] - start[1]);
     const steps = Math.ceil(length / 1.55);
     for (let step = 0; step < steps; step += 1) {
@@ -175,7 +263,9 @@ function sampleTrail(anchors: readonly TrailAnchor[]): CoastPoint[] {
       points.push({ x: curve(0), y, z: curve(1) });
     }
   }
-  return [...points, points[0]];
+  const [x, z, y] = anchorAt(count - 1);
+  points.push(closed ? points[0] : { x, y, z });
+  return points;
 }
 
 export const COAST_WALKS = [
@@ -203,24 +293,54 @@ export const COAST_WALKS = [
   },
 ] as const;
 
+const forestFork = [-5, 215, 20.7] as const;
+const forestOverlook = [-14, 392, 51] as const;
+const creekFork = [57, 287, 22.0] as const;
+
+export const FOREST_WALKS = [
+  { id: 'approach', points: sampleTrail([
+    [-32, 103, 8.5], [-40, 123, 10.6], [-34, 142, 13.2], [-23, 160, 15.4],
+    [-8, 177, 17.1], [-8, 193, 19.4], forestFork,
+  ], false) },
+  { id: 'ravine', points: sampleTrail([
+    forestFork, [-21, 226, 21.6], [-37, 241, 22.1], [-52, 261, 23.0], [-63, 282, 25.0],
+    [-63, 304, 27.9], [-55, 323, 30.5], [-43, 343, 34.8], [-48, 361, 40.5],
+    [-38, 381, 47.2], forestOverlook,
+  ], false) },
+  { id: 'ford', points: sampleTrail([
+    forestFork, [17, 228, 20.4], [32, 244, 19.8], [39, 261, 19.13], [38, 276, 20.6],
+    creekFork, [68, 307, 26.0], [63, 328, 30.2], [48, 345, 34.8], [32, 360, 39.2],
+    [14, 378, 45.0], forestOverlook,
+  ], false) },
+  { id: 'headwater', points: sampleTrail([
+    creekFork, [68, 284, 22.5], [77, 290, 24.05], [82, 301, 25.55], [83, 313, 28.35], [68, 307, 26.0],
+  ], false) },
+] as const;
+
 const TRAIL_CELL = 14;
 const TRAIL_SHOULDER = 7.2;
-type TrailSegment = { start: CoastPoint; end: CoastPoint; inverseLengthSquared: number };
+const FOREST_TRAIL_SHOULDER = 16;
+type TrailSegment = { start: CoastPoint; end: CoastPoint; inverseLengthSquared: number; shoulder: number };
 
 function trailCellKey(col: number, row: number): number {
   return col * 65_536 + row;
 }
 
 const trailCells = new Map<number, TrailSegment[]>();
-for (const walk of COAST_WALKS) {
+for (const walk of [...COAST_WALKS, ...FOREST_WALKS]) {
+  const forest = walk.id !== 'west' && walk.id !== 'east';
   for (let i = 1; i < walk.points.length; i += 1) {
     const start = walk.points[i - 1];
     const end = walk.points[i];
-    const segment = { start, end, inverseLengthSquared: 1 / ((end.x - start.x) ** 2 + (end.z - start.z) ** 2) };
-    const left = Math.floor((Math.min(start.x, end.x) - TRAIL_SHOULDER) / TRAIL_CELL);
-    const right = Math.floor((Math.max(start.x, end.x) + TRAIL_SHOULDER) / TRAIL_CELL);
-    const top = Math.floor((Math.min(start.z, end.z) - TRAIL_SHOULDER) / TRAIL_CELL);
-    const bottom = Math.floor((Math.max(start.z, end.z) + TRAIL_SHOULDER) / TRAIL_CELL);
+    const centerZ = (start.z + end.z) * 0.5;
+    const slot = walk.id === 'ravine' ? 1 - smoothstep(26, 47, Math.abs(centerZ - 303)) : 0;
+    const broadShoulder = smoothstep(111, 159, centerZ) * (1 - slot);
+    const shoulder = TRAIL_SHOULDER + (forest ? (FOREST_TRAIL_SHOULDER - TRAIL_SHOULDER) * broadShoulder : 0);
+    const segment = { start, end, shoulder, inverseLengthSquared: 1 / ((end.x - start.x) ** 2 + (end.z - start.z) ** 2) };
+    const left = Math.floor((Math.min(start.x, end.x) - shoulder) / TRAIL_CELL);
+    const right = Math.floor((Math.max(start.x, end.x) + shoulder) / TRAIL_CELL);
+    const top = Math.floor((Math.min(start.z, end.z) - shoulder) / TRAIL_CELL);
+    const bottom = Math.floor((Math.max(start.z, end.z) + shoulder) / TRAIL_CELL);
     for (let col = left; col <= right; col += 1) {
       for (let row = top; row <= bottom; row += 1) {
         const cell = trailCellKey(col, row);
@@ -232,22 +352,24 @@ for (const walk of COAST_WALKS) {
   }
 }
 
-function sampleNearestTrail(x: number, z: number): { distance: number; grade: number } | undefined {
+function sampleNearestTrail(x: number, z: number): { distance: number; grade: number; shoulder: number } | undefined {
   const key = trailCellKey(Math.floor(x / TRAIL_CELL), Math.floor(z / TRAIL_CELL));
   const segments = trailCells.get(key);
   if (!segments) return undefined;
-  let distanceSquared = TRAIL_SHOULDER * TRAIL_SHOULDER;
+  let distanceSquared = Infinity;
   let grade = 0;
-  for (const { start, end, inverseLengthSquared } of segments) {
+  let nearestShoulder = 0;
+  for (const { start, end, inverseLengthSquared, shoulder } of segments) {
     const dx = end.x - start.x;
     const dz = end.z - start.z;
     const t = Math.max(0, Math.min(1, ((x - start.x) * dx + (z - start.z) * dz) * inverseLengthSquared));
     const candidate = (x - start.x - dx * t) ** 2 + (z - start.z - dz * t) ** 2;
-    if (candidate >= distanceSquared) continue;
+    if (candidate >= distanceSquared || candidate >= shoulder ** 2) continue;
     distanceSquared = candidate;
     grade = start.y + (end.y - start.y) * t;
+    nearestShoulder = shoulder;
   }
-  return distanceSquared < TRAIL_SHOULDER ** 2 ? { distance: Math.sqrt(distanceSquared), grade } : undefined;
+  return nearestShoulder > 0 ? { distance: Math.sqrt(distanceSquared), grade, shoulder: nearestShoulder } : undefined;
 }
 
 export function coastTrailDistance(x: number, z: number): number {
@@ -257,11 +379,27 @@ export function coastTrailDistance(x: number, z: number): number {
 export function groundHeight(x: number, z: number): number {
   const terrain = landscapeHeight(x, z);
   const trail = sampleNearestTrail(x, z);
-  if (!trail) return terrain;
   const fromStart = Math.hypot(x - SPAWN.x, z - SPAWN.z);
-  const blend = (1 - smoothstep(1.63, TRAIL_SHOULDER, trail.distance)) * smoothstep(2.25, 5.2, fromStart);
-  const footfall = Math.sin(x * 1.19 + z * 0.68) * 0.047 + Math.cos(z * 1.72 - x * 0.63) * 0.033;
-  return terrain + (trail.grade + footfall - terrain) * blend;
+  let height = terrain;
+  if (trail) {
+    const blend = (1 - smoothstep(1.63, trail.shoulder, trail.distance)) * smoothstep(2.25, 5.2, fromStart);
+    const footfall = Math.sin(x * 1.19 + z * 0.68) * 0.047 + Math.cos(z * 1.72 - x * 0.63) * 0.033;
+    height += (trail.grade + footfall - terrain) * blend;
+  }
+  const stream = sampleForestStream(x, z);
+  if (stream) {
+    const side = Math.abs(stream.side);
+    const profile = smoothstep(0.2, 0.9, side / Math.max(stream.halfWidth, 0.4));
+    const ford = 1 - smoothstep(2.5, 10, Math.abs(x - 39));
+    const pool = 1 - smoothstep(2, 9, Math.abs(x + 20));
+    const depth = (0.61 + pool * 0.65 - ford * 0.23) * (1 - 0.90 * profile);
+    const bed = stream.y - depth - 0.045 * (1 + Math.sin(x * 0.89 + z * 0.54));
+    const bank = stream.y + 0.34 + 0.29 * Math.sin(x * 0.37 + z * 0.31);
+    const channel = bed + (bank - bed) * smoothstep(stream.halfWidth * 0.85, stream.halfWidth + 0.25, side);
+    const weight = smoothstep(0, 1.1, stream.halfWidth) * (1 - smoothstep(stream.halfWidth + 0.4, stream.halfWidth + 7, side));
+    height += (channel - height) * weight;
+  }
+  return height;
 }
 
 export function groundSlope(x: number, z: number, span = 1.35): number {
@@ -323,6 +461,10 @@ const waterfallClearings = COAST_FALLS.map(fall => {
 
 export function coastPlantingDistance(x: number, z: number): number {
   let distance = coastTrailDistance(x, z);
+  if (z > 219) {
+    const vista = Math.hypot((x + 14) * 0.88, (z - 391) * 0.65);
+    distance = Math.min(distance, forestStreamDistance(x, z), Math.max(0, vista - 9));
+  }
   for (const view of overlookViews) {
     const along = (x - view.x) * view.dx + (z - view.z) * view.dz;
     const side = Math.abs((z - view.z) * view.dx - (x - view.x) * view.dz);

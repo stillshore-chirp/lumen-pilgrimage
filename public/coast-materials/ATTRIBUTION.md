@@ -6,6 +6,11 @@
 | `limestone.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 断崖と海岸の岩に使う白亜灰色の石灰岩。1200 px 四方の WebP |
 | `canopy.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 林床の葉を表す768 px 四方の WebP |
 | `cumulus.webp` | Codex の組み込み ImageGen で本プロジェクト向けに制作 | 積雲4種を収録した透明アトラス。1152 px 四方の WebP |
+| `forest-litter.webp` | Rob Tuytel の [Forest Leaves 02](https://polyhaven.com/a/forest_leaves_02)（Poly Haven、CC0 1.0） | 苔と落ち葉の林床。1K Diffuse を WebP に変換 |
+| `forest-rock.webp` | Rob Tuytel の [Mossy Rock](https://polyhaven.com/a/mossy_rock)（Poly Haven、CC0 1.0） | 岩間と沢の苔むした岩。1K Diffuse を WebP に変換 |
+| `forest-mud.webp` | eye-candy.xyz の [Mud Forest](https://polyhaven.com/a/mud_forest)（Poly Haven、CC0 1.0） | 踏み跡と水際の泥。1K Diffuse を WebP に変換 |
+| `forest-relief.webp` | 上記3素材の Displacement（Poly Haven、CC0 1.0） | 赤に林床、緑に岩、青に泥の凹凸を収録。線形データとして読み込む |
+| `forest-bark.webp`、`forest-bark-height.webp` | Rob Tuytel の [Bark Brown 01](https://polyhaven.com/a/bark_brown_01)（Poly Haven、CC0 1.0） | 近景の幹と板根。1K Diffuse と640 pxの高さを WebP で配布 |
 
 ## 生成時の指示
 

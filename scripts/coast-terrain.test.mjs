@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import {
-  COAST_BOUNDS, COAST_FALLS, COAST_WALKS, SEA_LEVEL, SPAWN, coastPlantingDistance, groundHeight, shoreline,
+  COAST_BOUNDS, COAST_FALLS, COAST_WALKS, FOREST_STREAM, FOREST_WALKS, SEA_LEVEL, SPAWN,
+  coastPlantingDistance, forestStreamLevel, groundHeight, shoreline,
 } from '../src/coast/terrain.ts';
 
 const acousticsUrl = new URL('../src/coast/coastAcoustics.ts', import.meta.url).href;
@@ -63,6 +64,31 @@ test('each waterfall visibly descends from its rock face to the sea', () => {
     }
     assert.ok(groundHeight(impact.x, impact.z) < SEA_LEVEL);
   }
+});
+
+test('the inland paths connect the beach to distinct passages and a common high clearing', () => {
+  const [approach, ravine, ford, headwater] = FOREST_WALKS.map(walk => walk.points);
+  assert.ok(COAST_WALKS[0].points.some(point => Math.hypot(point.x - approach[0].x, point.z - approach[0].z) < 0.1));
+  assert.deepEqual(approach.at(-1), ravine[0]);
+  assert.deepEqual(ravine[0], ford[0]);
+  assert.deepEqual(ravine.at(-1), ford.at(-1));
+  assert.ok(ford.some(point => Math.hypot(point.x - headwater[0].x, point.z - headwater[0].z) < 0.1));
+  assert.ok(ford.some(point => Math.hypot(point.x - headwater.at(-1).x, point.z - headwater.at(-1).z) < 0.1));
+  assert.ok(groundHeight(-14, 392) > 49 && coastPlantingDistance(-14, 392) === 0);
+  const slot = groundHeight(-63, 304);
+  assert.ok(groundHeight(-73, 304) > slot + 5 && groundHeight(-52, 304) > slot + 5);
+});
+
+test('the stream falls to the inland pool, with a shallow crossable ford', () => {
+  const elevations = FOREST_STREAM.slice(1, -1).map(({ x, z, y }) => {
+    assert.equal(forestStreamLevel(x, z), y);
+    assert.ok(groundHeight(x, z) < y, `water runs under ground at (${x}, ${z})`);
+    return y;
+  });
+  assert.ok(elevations.every((y, index) => index === 0 || y > elevations[index - 1]));
+  const fordDepth = forestStreamLevel(39, 261) - groundHeight(39, 261);
+  assert.ok(fordDepth > 0.25 && fordDepth < 0.65);
+  assert.equal(forestStreamLevel(39, 248), undefined);
 });
 
 test('a headland occludes a low source while the open channel preserves the direct path', () => {

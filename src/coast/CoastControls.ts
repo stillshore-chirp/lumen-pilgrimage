@@ -1,5 +1,5 @@
 import { Vector3, type PerspectiveCamera } from 'three';
-import { COAST_BOUNDS, groundHeight, SEA_LEVEL, smoothstep, SPAWN } from './terrain';
+import { COAST_BOUNDS, forestStreamLevel, groundHeight, SEA_LEVEL, smoothstep, SPAWN } from './terrain';
 
 export type CoastMovement = 'walk' | 'wade' | 'swim' | 'flight';
 
@@ -307,7 +307,7 @@ export class CoastControls {
 
     const position = this.camera.position;
     const foot = position.y - EYE_HEIGHT;
-    const depth = SEA_LEVEL - groundHeight(position.x, position.z);
+    const depth = (forestStreamLevel(position.x, position.z) ?? SEA_LEVEL) - groundHeight(position.x, position.z);
     const onSupport = this.verticalVelocity <= 0
       && foot <= this.supportHeight(position.x, position.z) + FOOT_CLEARANCE;
     const jumping = this.jumpQueued && onSupport && depth < SWIM_DEPTH;
@@ -404,18 +404,20 @@ export class CoastControls {
   }
 
   private supportHeight(x: number, z: number): number {
-    return Math.max(groundHeight(x, z), SEA_LEVEL - SWIM_DEPTH);
+    return Math.max(groundHeight(x, z), (forestStreamLevel(x, z) ?? SEA_LEVEL) - SWIM_DEPTH);
   }
 
   private flightFloorHeight(x: number, z: number): number {
-    return Math.max(groundHeight(x, z) + 0.25, SEA_LEVEL + 0.25);
+    return Math.max(groundHeight(x, z), forestStreamLevel(x, z) ?? SEA_LEVEL) + 0.25;
   }
 
   private updateMovementMode(): void {
-    const depth = SEA_LEVEL - groundHeight(this.camera.position.x, this.camera.position.z);
+    const { x, y, z } = this.camera.position;
+    const water = forestStreamLevel(x, z) ?? SEA_LEVEL;
+    const depth = water - groundHeight(x, z);
     let mode: CoastMovement = 'walk';
     if (this.flying) mode = 'flight';
-    else if (this.camera.position.y <= SEA_LEVEL + EYE_HEIGHT + 0.03) {
+    else if (y <= water + EYE_HEIGHT + 0.03) {
       if (depth >= SWIM_DEPTH) mode = 'swim';
       else if (depth > 0.08) mode = 'wade';
     }
