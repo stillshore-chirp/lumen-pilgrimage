@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { coastRandom } from '../terrain';
 import { bindCoastSky, coastSkyGlsl, type CoastAtmosphere, type CoastTimeOfDay } from './coastAtmosphere';
+import { coastMilkyWayGlsl, createCoastMilkyWay, sampleGalacticStars } from './coastMilkyWay';
 import { loadCoastTexture } from './coastSurface';
 
 const atlas = [
@@ -26,26 +27,30 @@ const cloudBanks = [
   { tile: 1, x: -1290, y: 215, z: 166, width: 600, height: 315, opacity: 0.82 },
 ];
 
-function createStars(atmosphere: CoastAtmosphere) {
+function createStars(atmosphere: CoastAtmosphere, galaxy?: ReturnType<typeof createCoastMilkyWay>) {
   const random = coastRandom(21791);
   const positions: number[] = [];
   const photometry: number[] = [];
-  for (let i = 0; i < 1900; i += 1) {
+  const fieldSize = galaxy ? 4400 : 1900;
+  for (let i = 0; i < fieldSize; i += 1) {
     const azimuth = random() * Math.PI * 2;
     const y = 0.012 + random() * 0.988;
     const horizontal = Math.sqrt(1 - y * y);
     positions.push(Math.cos(azimuth) * horizontal, y, Math.sin(azimuth) * horizontal);
     photometry.push(Math.pow(random(), 3.7), random());
   }
+  if (galaxy) sampleGalacticStars(random, positions, photometry);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('photometry', new THREE.Float32BufferAttribute(photometry, 2));
+  const pixelFactor = { value: 1 };
   const material = new THREE.ShaderMaterial({
     depthWrite: false,
     depthTest: false,
-    uniforms: { uStarVisibility: atmosphere.starVisibility },
+    uniforms: { uStarVisibility: atmosphere.starVisibility, uStarPixelFactor: pixelFactor, ...galaxy?.uniforms },
     vertexShader: /* glsl */`
       attribute vec2 photometry;
+      uniform float uStarPixelFactor;
       varying vec3 vStarDirection;
       varying vec2 vPhotometry;
       void main() {
@@ -53,7 +58,7 @@ function createStars(atmosphere: CoastAtmosphere) {
         vPhotometry = photometry;
         gl_Position = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
         gl_Position.z = gl_Position.w;
-        gl_PointSize = 1.8 + 2.3 * photometry.x;
+        gl_PointSize = ${galaxy ? '(1.25 + 3.20 * pow(photometry.x, 0.68)) * uStarPixelFactor' : '1.8 + 2.3 * photometry.x'};
       }
     `,
     fragmentShader: /* glsl */`
@@ -61,17 +66,19 @@ function createStars(atmosphere: CoastAtmosphere) {
       varying vec3 vStarDirection;
       varying vec2 vPhotometry;
       ${coastSkyGlsl}
+      ${galaxy ? coastMilkyWayGlsl : ''}
       void main() {
         vec2 fromCenter = 2.0 * gl_PointCoord - 1.0;
         float radius = dot(fromCenter, fromCenter);
         float moonSeparation = 1.0 - dot(vStarDirection, uCoastSunDirection);
         if (radius >= 1.0 || moonSeparation <= 0.002) discard;
-        float visibility = smoothstep(0.014, 0.43, vStarDirection.y) * smoothstep(0.002, 0.065, moonSeparation)
+        float visibility = smoothstep(0.014, ${galaxy ? '0.29' : '0.43'}, vStarDirection.y) * smoothstep(0.002, 0.065, moonSeparation)
           * uStarVisibility;
-        float energy = 0.013 + 0.44 * vPhotometry.x * vPhotometry.x;
+        float energy = ${galaxy ? '0.008 + 0.55 * pow(vPhotometry.x, 2.5)' : '0.013 + 0.44 * vPhotometry.x * vPhotometry.x'};
         float intensity = energy * visibility * (1.0 - smoothstep(0.0, 1.0, radius));
         vec3 tint = mix(vec3(0.65, 0.8, 1.0), vec3(1.0, 0.84, 0.68), vPhotometry.y);
-        gl_FragColor = vec4(coastNightSky(vStarDirection) + tint * intensity, 1.0);
+        ${galaxy ? 'tint = mix(tint, vec3(1.0), 0.34);' : ''}
+        gl_FragColor = vec4(coastNightSky(vStarDirection) ${galaxy ? '+ coastMilkyWay(vStarDirection)' : ''} + tint * intensity, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -83,14 +90,20 @@ function createStars(atmosphere: CoastAtmosphere) {
   stars.renderOrder = -99;
   stars.frustumCulled = false;
   stars.visible = false;
+  if (galaxy) stars.onBeforeRender = renderer => { pixelFactor.value = renderer.getPixelRatio(); };
   return stars;
 }
 
-export function createCoastSky(atmosphere: CoastAtmosphere, nightCloudOpacity = 0.53) {
+type CoastSkyOptions = { nightCloudOpacity: number; milkyWay: boolean };
+
+export function createCoastSky(atmosphere: CoastAtmosphere, options: number | CoastSkyOptions = 0.53) {
+  const nightCloudOpacity = typeof options === 'number' ? options : options.nightCloudOpacity;
+  const galaxy = typeof options !== 'number' && options.milkyWay ? createCoastMilkyWay() : undefined;
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     depthTest: false,
+    uniforms: { ...galaxy?.uniforms },
     vertexShader: /* glsl */`
       varying vec3 vSkyDirection;
       void main() {
@@ -102,9 +115,10 @@ export function createCoastSky(atmosphere: CoastAtmosphere, nightCloudOpacity = 
     fragmentShader: /* glsl */`
       varying vec3 vSkyDirection;
       ${coastSkyGlsl}
+      ${galaxy ? coastMilkyWayGlsl : ''}
       void main() {
         vec3 direction = normalize(vSkyDirection);
-        gl_FragColor = vec4(coastSkyRadiance(direction) + coastSunRadiance(direction), 1.0);
+        gl_FragColor = vec4(coastSkyRadiance(direction) + coastSunRadiance(direction) ${galaxy ? '+ coastMilkyWay(direction)' : ''}, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -115,7 +129,7 @@ export function createCoastSky(atmosphere: CoastAtmosphere, nightCloudOpacity = 
   dome.name = 'Open sky, sun and moon';
   dome.renderOrder = -100;
   dome.frustumCulled = false;
-  const stars = createStars(atmosphere);
+  const stars = createStars(atmosphere, galaxy);
   dome.add(stars);
 
   const texture = loadCoastTexture('cumulus.webp');
@@ -162,6 +176,7 @@ export function createCoastSky(atmosphere: CoastAtmosphere, nightCloudOpacity = 
       material.dispose();
       stars.material.dispose();
       dome.geometry.dispose();
+      galaxy?.radiance.dispose();
       for (const cloud of clouds.children) {
         if (cloud instanceof THREE.Mesh) cloud.geometry.dispose();
       }

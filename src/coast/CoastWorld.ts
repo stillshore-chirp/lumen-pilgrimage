@@ -122,7 +122,7 @@ export class CoastWorld {
 
   constructor() {
     this.scene.fog = this.fog;
-    this.sky = createCoastSky(this.atmosphere);
+    this.sky = createCoastSky(this.atmosphere, { nightCloudOpacity: 0.26, milkyWay: true });
     this.scene.add(this.sky.dome, this.sky.clouds);
 
     const stone = loadCoastTexture('limestone.webp', true);
