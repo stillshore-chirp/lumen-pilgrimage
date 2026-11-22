@@ -324,7 +324,8 @@ const nightPointsVertex = /* glsl */`
     float warmPractical = middleBasin * brightCore * (1.0 - smoothstep(0.60, 0.92, cityTemperature));
     float practicalSize = diameter * (0.57 + 0.73 * intensity)
       * (mix(1.09, 1.04, distant) + 0.11 * distant * brightCore + 0.14 * warmPractical);
-    gl_PointSize = max(1.7, (practicalSize + spread) * uCityPixelFactor);
+    float distantLowland = distant * (1.0 - smoothstep(95.0, 185.0, world.y)) * (1.0 - step(2.5, lightKind));
+    gl_PointSize = max(1.7, (practicalSize + spread) * uCityPixelFactor * mix(1.0, 0.82, distantLowland));
     float transmission = cityTransmittance(world);
     vec3 basinGlow = vec3(1.0, 0.70, 0.145);
     float basinWarmth = max(0.73 * distant * (1.0 - smoothstep(0.65, 0.91, cityTemperature)), 0.64 * warmPractical);
@@ -332,7 +333,7 @@ const nightPointsVertex = /* glsl */`
     float luminousCore = 0.15 + cityPower * (0.83 + mix(0.83, 1.16, distant) * cityPower);
     vPower = transmission * radiance * mix(luminousCore, 0.16 + cityPower * 0.96, step(3.5, lightKind))
       * mix(1.08, 1.19, distant) * (1.0 + 0.74 * warmPractical);
-    vScatter = mix(0.15, 0.088, distant) * smoothstep(0.38, 1.05, intensity);
+    vScatter = mix(0.15, 0.088, distant) * smoothstep(0.38, 1.05, intensity) * mix(1.0, 0.66, distantLowland);
     gl_Position = projectionMatrix * view;
   }
 `;
@@ -833,6 +834,73 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
         }
       }
     }
+    // Continue the nearby neighborhoods into the open parcels between the arterial roads.
+    const foregroundTile = tileKey(0, -1);
+    const indexForeground = ({ x, z, width, depth }: CityVolume) => {
+      if (x > 140 && x < 1290 && z > -1100 && z < -140) {
+        occupied.add({ x, z, radius: Math.hypot(width, depth) * 0.5 });
+      }
+    };
+    for (const [key, buildings] of buildingTiles) {
+      if (key.endsWith(`:${foregroundTile}`)) buildings.forEach(indexForeground);
+    }
+    canopyTiles.get(foregroundTile)?.forEach(indexForeground);
+
+    const foothillBlocks = [
+      [352, -742, 115, 147, -0.62],
+      [590, -738, 172, 134, -0.32],
+      [803, -515, 224, 164, -0.38],
+      [722, -363, 108, 104, -0.28],
+    ] as const;
+    const lotSpacing = 39;
+    for (const [centerX, centerZ, spanX, spanZ, bearing] of foothillBlocks) {
+      const cos = Math.cos(bearing), sin = Math.sin(bearing);
+      for (let row = -Math.floor(spanZ / lotSpacing); row <= spanZ / lotSpacing; row += 1) {
+        for (let column = -Math.floor(spanX / lotSpacing); column <= spanX / lotSpacing; column += 1) {
+          const seed = Math.imul(centerX + column, 31123) + Math.imul(centerZ + row, 69431);
+          const u = (column + (randomUnit(seed, 1528) - 0.5) * 0.65) * lotSpacing;
+          const v = (row + (randomUnit(seed, 3828) - 0.5) * 0.65) * lotSpacing;
+          const x = centerX + u * cos + v * sin, z = centerZ - u * sin + v * cos;
+          const edge = (u / spanX) ** 2 + (v / spanZ) ** 2;
+          if (edge > 0.62 + neighborhoodNoise(x, z, 58, 769) * 0.46
+            || randomUnit(seed, 4093) < 0.20 || Math.hypot(x, z) < 475) continue;
+
+          const variant = randomUnit(seed, 3464), use = randomUnit(seed, 641);
+          const office = use > 0.81, commercial = use > 0.55;
+          const w = (office ? 22 : 14) + randomUnit(seed, 5661) * 12;
+          const d = w * (0.63 + randomUnit(seed, 8382) * 0.37);
+          const radius = Math.hypot(w, d) * 0.5;
+          if (occupied.overlaps(x, z, radius + 4) || landmarks.overlaps(x, z, radius + 6)
+            || options.blocksFootprint?.(x, z, radius + 5)) continue;
+
+          const ground = heightAt(x, z);
+          const edges = [heightAt(x - radius, z), heightAt(x + radius, z),
+            heightAt(x, z - radius), heightAt(x, z + radius)];
+          const lowest = Math.min(ground, ...edges), highest = Math.max(ground, ...edges);
+          const h = office ? 15 + 11 * variant : commercial ? 8 + 6 * variant : 5.5 + 5.5 * variant;
+          if (lowest < 1 || highest - lowest > radius * 0.53 || ground + h > DECK_LEVEL - 72) continue;
+
+          const palette = office ? roofs.masonry : commercial ? roofs.shops : variant < 0.58 ? roofs.plaster : roofs.shingle;
+          const color = new THREE.Color(palette[Math.floor(randomUnit(seed, 9925) * palette.length)]);
+          const form: BuildingForm = office && variant > 0.57 ? 'terraced' : !commercial && variant > 0.34 ? 'pitched' : 'flat';
+          const yaw = bearing + (randomUnit(seed, 8331) - 0.5) * 0.28;
+          const y = lowest - 2;
+          append(buildingTiles, `0:${form}:${foregroundTile}`, {
+            x, y, z, width: w, depth: d, height: h + ground - y, yaw, color, variant,
+            facade: office ? 0.31 : commercial ? 0.20 : 0,
+          });
+          occupied.add({ x, z, radius });
+          if (randomUnit(seed, 2629) < 0.39) {
+            const frontage = -d * (form === 'terraced' ? 0.44 : 0.52);
+            append(lampTiles, `0:${foregroundTile}`, {
+              x: x + Math.sin(yaw) * frontage, y: ground + h * 0.42, z: z + Math.cos(yaw) * frontage,
+              kind: 0, power: 0.28 + variant * 0.24, temperature: 0.27 + variant * 0.52,
+            });
+          }
+        }
+      }
+    }
+
     const flat = flatGeometry();
     const shapes = { flat, pitched: pitchedGeometry(), terraced: terracedGeometry(flat) };
     for (const [key, buildings] of buildingTiles) {
