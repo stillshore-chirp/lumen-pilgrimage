@@ -60,6 +60,7 @@ const commercialDistricts = [
   [OVERLOOK_DISTRICTS.parkway, 980, 810, 76],
   [OVERLOOK_DISTRICTS.east, 1540, 1210, 108],
   [OVERLOOK_DISTRICTS.gateway, 1370, 1160, 77],
+  [[8300, -5200], 1700, 1130, 92],
   [OVERLOOK_DISTRICTS.south, 2050, 1360, 96],
   [OVERLOOK_DISTRICTS.westRidge, 1700, 1510, 88],
   [OVERLOOK_DISTRICTS.eastRidge, 1860, 1580, 104],
@@ -532,7 +533,7 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
       }
       const side = Math.min(w, d);
       const readyForOffices = THREE.MathUtils.smoothstep(side, 13, 31);
-      const commercial = use === 1 || (use === 0 && variant < district * (0.20 + 0.77 * readyForOffices));
+      const commercial = use === 1 || (use === 0 && variant < district * (0.28 + 0.84 * readyForOffices));
       const residence = !commercial && use === 0;
       const greenery = residence ? neighborhoodNoise(x, z, 850, 618) * 0.72 + neighborhoodNoise(x, z, 240, 663) * 0.28 : 0;
       const gardens = THREE.MathUtils.smoothstep(greenery, 0.33, 0.72);

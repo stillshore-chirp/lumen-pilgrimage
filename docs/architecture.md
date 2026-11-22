@@ -7,7 +7,7 @@
 
 ## 自然景観探索
 
-- 丘陵展望台は標高データに展望デッキの擁壁と、その外側に落ちる斜面を接続する。公開街路に沿って建物と街灯を配置し、[高層街区](../src/coast/world/overlook/overlookSkyline.ts) と [幹線交通](../src/coast/world/overlook/overlookTraffic.ts) を眺望に合わせて構成する。夜は街灯と窓の光を街区ごとに変え、デッキでは石の縁から足元を照らす。幹線の周囲では建物の敷地を空け、車体とライトは道路の高さと走行方向に追従する。地上移動はテラスの縁、建物、ベンチ、望遠鏡に沿って制限する。[地理データの出典](../public/coast-overlook/ATTRIBUTION.md)
+- 丘陵展望台は標高データに展望デッキの擁壁と、その外側に落ちる斜面を接続する。公開街路に沿って建物と街灯を配置する。手前から遠景へ [高層業務街区](../src/coast/world/overlook/overlookSkyline.ts) を並べ、独立住宅は低層街区の一部に残す。[幹線交通](../src/coast/world/overlook/overlookTraffic.ts) は立体交差の高さを求め、同じ線形に車体・前照灯・尾灯を沿わせる。幹線と高層棟の敷地には、街路沿いの建物を配置しない。[地理データの出典](../public/coast-overlook/ATTRIBUTION.md)
 - [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形、散策路、沢の水位](../src/coast/terrain.ts) を共有する。道の縦断勾配を滑らかにつなぎ、周囲の地面に応じて横断勾配を付ける。西の岩棚、東の潮棚、林内の分岐と沢は、地形と [岩・シダの配置](../src/coast/world/coastLandmarks.ts) を合わせて組む。素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
 - 地上の登坂判定に引っかかったときは横方向の移動を試す。急な下りとジャンプは重力で接地させる。遊泳と潜水は海・沢・湖の水位を参照し、潜水時に水底への進入を止める。水底が浅くなると浮上し、岸で接地する。水中の視界は深さで減衰し、水面の裏側と水底に届く光を描く。
 - 密林の高所から峠、湖の周回路、稜線へつながる。[朱の参道](../src/coast/world/coastInariTrail.ts) は湖の周回路から分かれ、地形の二つの歩行路に沿って石段と鳥居を置く。山の鞍部と樹冠の高さを調整し、南東から楼門や前庭、石段の入口に日が入る。小社からの下り道は稜線への道に合流する。路肩の地形、ベンチと屋外休憩所の座標、視界を空ける範囲を地形定義に持つ。[休憩所](../src/coast/world/coastRestAreas.ts) は地形に合わせて木製ベンチと低い石の縁を置く。
