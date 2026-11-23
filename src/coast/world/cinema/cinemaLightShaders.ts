@@ -153,16 +153,22 @@ export const cinemaScreenFragment = /* glsl */ `
   // The calibrated screen signal is kept in linear light through output encoding.
   // Define the sampling footprint before the aperture branch so the edge uses the picture's mip level.
   vec4 pictureGradients = vec4(dFdx(vMapUv), dFdy(vMapUv)) / cinemaOpening.xyxy;
+  vec2 halfPixel = max(fwidth(vMapUv) * 0.5, vec2(1e-6));
   vec3 lightOnScreen = vec3(cinemaSpill);
   if (cinemaLive > 0.5) {
-    if (cinemaInOpening(vMapUv)) {
-      vec3 direct = cinemaProjectedPixel(vMapUv, pictureGradients);
+    vec2 halfOpening = cinemaOpening * 0.5;
+    vec2 edgeCoverage = smoothstep(-halfPixel, halfPixel, halfOpening - abs(vMapUv - 0.5));
+    // The geometry already antialiases any edges that fill the physical screen.
+    edgeCoverage = mix(edgeCoverage, vec2(1.0), step(vec2(1.0), cinemaOpening));
+    float coverage = edgeCoverage.x * edgeCoverage.y;
+    lightOnScreen *= mix(0.035, 1.0, coverage);
+    if (coverage > 0.0) {
+      vec2 pictureUV = clamp(vMapUv, 0.5 - halfOpening, 0.5 + halfOpening);
+      vec3 direct = cinemaProjectedPixel(pictureUV, pictureGradients);
       vec3 stray = cinemaAtlas(${CINEMA_LIGHT_META}.0, vec2(0.0));
       vec3 returned = cinemaAtlas(${CINEMA_LIGHT_BOUNCE}.0, vMapUv);
-      lightOnScreen += cinemaProjectorWhite *
+      lightOnScreen += cinemaProjectorWhite * coverage *
         ((1.0 - ${CINEMA_LENS_SCATTER}) * direct + ${CINEMA_LENS_SCATTER} * stray + returned);
-    } else {
-      lightOnScreen *= 0.035;
     }
   } else {
     vec2 centered = vMapUv * 2.0 - 1.0;
