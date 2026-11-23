@@ -1,49 +1,5 @@
-import { DoubleSide, Vector3, type Material } from 'three';
-import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
-import type { ResidenceMaterials } from './residenceMaterials';
-
-function gatheredCurtain(piece: FurniturePiece, fabric: Material, track: Material, drop: number,
-  trackLength: number, trackOffset: number, seed: number): void {
-  piece.box(track, trackOffset, drop, -.018, trackLength, .014, .031, .002);
-  const sample = (u: number, v: number): readonly [number, number, number] => {
-    const phase = u * (6.30 + .31 * v) * Math.PI * 2 + seed + .39 * v;
-    return [
-      (u - .5) * (.329 + .048 * v) + Math.sin(u * 14 + v * 3 + seed) * .003 * v,
-      drop - .030 - v * (drop - .068) + Math.sin(u * 28 + seed) * .008 * v ** 4,
-      Math.sin(phase) * (.024 + .013 * v) + .010 * Math.sin(phase * .51 + v * 4)
-        + .007 * v * Math.sin(u * 9.3 + seed),
-    ];
-  };
-  piece.surface(fabric, .61, drop, 53, 20, sample);
-  piece.tube(fabric, Array.from({ length: 50 }, (_, i) => sample(i / 49, 1)), .00165);
-  for (let i = 0; i < 7; i++) {
-    const [x, y, z] = sample((i + .5) / 7, 0);
-    piece.rod(track, [x, y - .008, z], [x, drop - .008, -.018], .0014);
-  }
-}
-
-export function addWindowDressing(model: FurnitureModel, m: ResidenceMaterials): void {
-  const linen = model.tone(m.bedding, 0xdbd1c0);
-  linen.side = DoubleSide;
-  const bedroomLinen = model.tone(m.bedding, 0xb5afa4);
-  bedroomLinen.side = DoubleSide;
-
-  model.room('Living room curtains');
-  gatheredCurtain(model.at(11.665, .345), linen, m.ceiling, 2.965, 6.24, 2.90, 1.18);
-  gatheredCurtain(model.at(22.234, .342), linen, m.ceiling, 2.965, 4.24, -1.94, 3.6);
-  gatheredCurtain(model.at(22.448, 6.107, -Math.PI / 2), linen, m.ceiling, 2.965, 5.91, 2.73, 4.2);
-
-  for (const [name, east, north, heading, trackLength, trackOffset, seed] of [
-    ['Bedroom 03 curtains', .732, .347, 0, 2.52, 1.031, .74],
-    ['Bedroom 04 curtains', 4.402, .347, 0, 2.62, 1.080, 2.23],
-    ['Bedroom 05 curtains', 10.206, .347, 0, 2.62, -1.082, 4.84],
-    ['Bedroom 02 curtains', 22.449, 9.346, -Math.PI / 2, 2.52, 1.03, 2.39],
-    ['Primary bedroom curtains', 20.395, 14.972, -Math.PI / 2, 3.12, 1.34, 5.86],
-  ] as const) {
-    model.room(name);
-    gatheredCurtain(model.at(east, north, heading), bedroomLinen, m.ceiling, 2.771, trackLength, trackOffset, seed);
-  }
-}
+import { Vector3, type Material } from 'three';
+import type { FurniturePiece } from './residenceFurnitureModel';
 
 export function foliage(piece: FurniturePiece, stem: Material, leaf: Material, lightLeaf: Material,
   x: number, y: number, z: number, height: number, spread: number, seed = 0): void {
