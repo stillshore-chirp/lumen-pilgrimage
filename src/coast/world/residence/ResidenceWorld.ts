@@ -71,30 +71,26 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         const curtain = curtains.nearby(position);
         const roomDoor = shell.doors.nearby(position);
         const windowShoji = shoji.nearby(position);
+        const windowSwitch = windowShoji && (!curtain || windowShoji.distance < curtain.distance) ? windowShoji : curtain;
+        const localLights = windowSwitch ? null : lighting.nearby(position);
+        const localSwitch = windowSwitch ?? localLights;
         const canUseDoor = distance <= DOOR_REACH && !(opening && occupiesDoorway(position));
-        if (canUseDoor && (!curtain || distance <= curtain.distance)) {
+        if (canUseDoor && (!localSwitch || distance <= localSwitch.distance)) {
           invokeNearby = () => { opening = !opening; };
           return opening ? 'バルコニーの引戸を閉める' : 'バルコニーの引戸を開ける';
         }
         // A switch mounted against the jamb stays easy to pick from inside its room.
-        if (roomDoor && (!curtain || roomDoor.distance + .12 < curtain.distance)) {
+        if (roomDoor && (!localSwitch || roomDoor.distance + .12 < localSwitch.distance)) {
           invokeNearby = roomDoor.invoke;
           return roomDoor.label;
         }
-        if (windowShoji && (!curtain || windowShoji.distance < curtain.distance)) {
-          invokeNearby = windowShoji.invoke;
-          return windowShoji.label;
+        const appliance = furniture.appliances.nearby(position);
+        if (localSwitch && (localSwitch !== localLights || !appliance || localSwitch.distance <= appliance.distance)) {
+          invokeNearby = localSwitch.invoke;
+          return localSwitch.label;
         }
-        if (curtain) {
-          invokeNearby = curtain.invoke;
-          return curtain.label;
-        }
-        const localLights = lighting.nearby(position);
-        const localAppliance = furniture.appliances.nearby(position);
-        const localPanel = localAppliance && (!localLights || localAppliance.distance < localLights.distance)
-          ? localAppliance : localLights;
-        invokeNearby = localPanel ? () => ({ openSection: localPanel.sectionId }) : undefined;
-        return localPanel?.label ?? null;
+        invokeNearby = appliance ? () => ({ openSection: appliance.sectionId }) : undefined;
+        return appliance?.label ?? null;
       },
       invoke() { return invokeNearby?.(); },
     },

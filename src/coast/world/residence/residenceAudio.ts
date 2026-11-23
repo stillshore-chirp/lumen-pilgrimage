@@ -1,4 +1,4 @@
-import { EYE_HEIGHT, type CoastMovement } from '../../CoastControls';
+import { groundEyeHeight, type CoastMovement } from '../../CoastControls';
 import type { CoastBirdCue } from '../../coastBirdCue';
 import { coastRandom, type CoastPoint } from '../../terrain';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
@@ -47,6 +47,7 @@ type Graph = {
 
 // The existing CC0 loop and its editing history are credited in public/coast-overlook/ATTRIBUTION.md.
 const TRAFFIC_FILE = `${import.meta.env?.BASE_URL ?? '/'}coast-overlook/distant-traffic.ogg`;
+const MICROWAVE_COMPLETION_FILE = `${import.meta.env?.BASE_URL ?? '/'}residence-audio/microwave-completion.wav`;
 const OFFSET_SECONDS = [3.5, 30.1, 53.4, 78.7, 15.8, 96.5] as const;
 const LISTENER_PERIOD = 0.05;
 const FOOTFALL_INTERVAL = 0.52;
@@ -128,9 +129,13 @@ export class ResidenceAudio {
       const context = this.context ??= new AudioContext({ latencyHint: 'interactive' });
       // Resume during the button's user gesture before fetching or decoding the recording.
       const resume = context.state === 'running' ? Promise.resolve() : context.resume();
-      this.pendingStart = (this.graph ? resume : Promise.all([resume, this.load(context)]).then(([, buffer]) => {
+      const completion = !this.graph && this.options.appliances?.some(source => source.kind === 'microwave')
+        ? this.load(context, MICROWAVE_COMPLETION_FILE, 'microwave completion') : undefined;
+      this.pendingStart = (this.graph ? resume : Promise.all([
+        resume, this.load(context, TRAFFIC_FILE, 'traffic'), completion,
+      ]).then(([, buffer, microwaveCompletion]) => {
         if (this.request.signal.aborted || this.context !== context) throw new Error('The residence audio is inactive');
-        this.graph = this.buildGraph(context, buffer);
+        this.graph = this.buildGraph(context, buffer, microwaveCompletion);
       })).catch((error: unknown) => {
         if (!this.graph && this.context === context) this.releaseContext();
         throw error;
@@ -212,13 +217,13 @@ export class ResidenceAudio {
     return this.muted ? 0 : this.volume * 0.86;
   }
 
-  private async load(context: AudioContext): Promise<AudioBuffer> {
-    const response = await fetch(TRAFFIC_FILE, { signal: this.request.signal });
-    if (!response.ok) throw new Error('The residence traffic recording could not be loaded');
+  private async load(context: AudioContext, file: string, description: string): Promise<AudioBuffer> {
+    const response = await fetch(file, { signal: this.request.signal });
+    if (!response.ok) throw new Error(`The residence ${description} recording could not be loaded`);
     return context.decodeAudioData(await response.arrayBuffer());
   }
 
-  private buildGraph(context: AudioContext, buffer: AudioBuffer): Graph {
+  private buildGraph(context: AudioContext, buffer: AudioBuffer, microwaveCompletion?: AudioBuffer): Graph {
     const now = context.currentTime;
     const master = context.createGain();
     master.gain.value = this.masterLevel();
@@ -281,7 +286,7 @@ export class ResidenceAudio {
     this.nextPass = now + this.passGap(true);
     this.nextBreeze = now + 24 + this.random() * 18;
     const appliances = this.options.appliances?.length
-      ? createResidenceApplianceAudio(context, dry, wet, this.options.appliances) : undefined;
+      ? createResidenceApplianceAudio(context, dry, wet, this.options.appliances, microwaveCompletion) : undefined;
     return { master, dry, wet, roomLevels, traffic, reflected, reflectionDelay, vehicles, vehicleSamples, breeze,
       breezeSample, slider, sliderSamples, doorSamples, feet, appliances };
   }
@@ -398,8 +403,10 @@ export class ResidenceAudio {
     movement: CoastMovement, now: number): void {
     const previous = this.previousStep;
     this.previousStep = { ...position, elapsed, movement };
-    if (!previous || movement !== 'walk' || previous.movement !== 'walk'
-      || Math.abs(position.y - EYE_HEIGHT) > 0.18 || Math.abs(previous.y - EYE_HEIGHT) > 0.18) {
+    if (!previous || (movement !== 'walk' && movement !== 'crouch')
+      || (previous.movement !== 'walk' && previous.movement !== 'crouch')
+      || Math.abs(position.y - groundEyeHeight(movement)) > 0.18
+      || Math.abs(previous.y - groundEyeHeight(previous.movement)) > 0.18) {
       this.traveled = 0;
       return;
     }
