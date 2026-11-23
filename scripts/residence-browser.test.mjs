@@ -614,8 +614,8 @@ test('the primary bedroom slider gates balcony access and the glass rail stops w
 test('captures the designed seated and balcony sightlines', { timeout, skip: !screenshots }, async t => {
   const { page, errors } = await createPage(t);
   const landscape = '.coast-ui { visibility: hidden; }';
-  // The central sofa cushion is near E20/N1 and finishes at 0.50 m above the floor.
-  let eye = { x: 20, y: 1.15, z: -1, yaw: 179.83, pitch: -17 };
+  // The central sofa cushion is near E20/N1.30 and finishes at 0.50 m above the floor.
+  let eye = { x: 20, y: 1.15, z: -1.30, yaw: 179.83, pitch: -17 };
   await page.route('**/assets/CoastApp-*.js', async route => {
     const response = await route.fetch();
     const source = await response.text();

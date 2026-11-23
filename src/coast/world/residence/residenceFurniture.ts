@@ -7,7 +7,7 @@ import { FurnitureModel, type FurniturePiece } from './residenceFurnitureModel';
 import { addServiceFurniture } from './residenceFurnitureFixtures';
 import { addStudy } from './residenceStudy';
 import { addTeaRoom } from './residenceTeaRoom';
-import { addResidenceTheater } from './residenceTheater';
+import { addResidenceTheater, LIVING_SOFA_BACK_NORTH } from './residenceTheater';
 
 const northFacing = Math.PI;
 const eastFacing = Math.PI / 2;
@@ -140,7 +140,8 @@ function addLiving(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
   model.room('Living room');
   const sandWeave = model.tone(m.rug, 0xbab5a2);
   const rugEdge = model.tone(m.rug, 0xa19881);
-  const sofa = model.at(19.99, 1.01);
+  const sofaNorth = LIVING_SOFA_BACK_NORTH - .50;
+  const sofa = model.at(19.99, sofaNorth);
   const seam = model.tone(m.fabric, 0xa99b89);
   const lining = model.tone(m.fabric, 0xb8ab97);
   const throwBlanket = model.tone(m.bedding, 0x686d65);
@@ -180,7 +181,7 @@ function addLiving(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
     crown: [.014, .014, .024], gathers: .010, seed: 4.82,
   }, { pitch: -.301, yaw: -.233, roll: .16, welt: tobacco, vertical: true });
   sofaThrow(sofa, throwBlanket, throwBlanket);
-  model.footprint(18.4, .5, 3.18, 1.02);
+  model.footprint(18.4, sofaNorth - .51, 3.18, 1.02);
   rug(model.at(19.56, 1.40), sandWeave, rugEdge, 4.16, 1.87);
 
   const endTable = model.at(17.97, .90);

@@ -9,13 +9,13 @@ const SCREEN_HEIGHT = SCREEN_WIDTH * 9 / 16;
 const AXIS = 19.99;
 const SCREEN_NORTH = 6.49;
 const SCREEN_HEIGHT_ABOVE_FLOOR = 1.45;
-const LISTENER = { east: AXIS, north: 1.79 };
+export const LIVING_SOFA_BACK_NORTH = 1.81;
+const LISTENER = { east: AXIS, north: LIVING_SOFA_BACK_NORTH + .28 };
 
 function addSofa(model: FurnitureModel, m: ResidenceMaterials): void {
   const flax = model.tone(m.fabric, 0xd0c3b2);
   const seam = model.tone(m.fabric, 0xa99b89);
-  // This north-facing half meets the back of the existing south-facing window sofa at n = 1.51.
-  const sofa = model.at(AXIS, 1.99, Math.PI);
+  const sofa = model.at(AXIS, LIVING_SOFA_BACK_NORTH + .48, Math.PI);
   sofa.box(m.cabinetry, 0, .105, -.012, 2.99, .075, .902, .013);
   sofa.box(flax, 0, .231, 0, 3.172, .219, .978, .075);
   sofa.upholstered(flax, 0, .495, -.377, {
@@ -39,7 +39,7 @@ function addSofa(model: FurnitureModel, m: ResidenceMaterials): void {
     }, { welt: seam });
     sofa.box(m.darkMetal, x * .874, .045, .366, .108, .089, .05, .008);
   }
-  model.footprint(AXIS - 1.59, 1.50, 3.18, .99);
+  model.footprint(AXIS - 1.59, LIVING_SOFA_BACK_NORTH - .01, 3.18, .99);
 
   const rug = model.at(AXIS, 3.59);
   rug.slab(model.tone(m.rug, 0x9a9485), 0, .001, 0, 3.56, .008, 2.40, .056);

@@ -140,10 +140,22 @@ test('tea room and study retain a continuous entry and their own interior layout
 
 test('walking crosses the indoor sofa, dining table and chairs, kitchen island and entry bench', () => {
   const nav = navigation(false);
-  assertClearRoute(nav, [[19.99, .43], [19.99, 1.85]]);
+  assertClearRoute(nav, [[19.99, .43], [19.99, 3.06]]);
   assertClearRoute(nav, [[15.98, 3.3], [15.98, 6.1]]);
   assertClearRoute(nav, [[13.35, 7.715], [16.7, 7.715]]);
   assertClearRoute(nav, [[11.65, 14.84], [12.48, 14.84]]);
+});
+
+test('both living-room sofas keep their back-to-back layout and room at the theater arrival point', () => {
+  const spans = furniture.obstacles
+    .filter(([west, , east]) => Math.abs(west - 18.4) < 1e-8 && Math.abs(east - 21.58) < 1e-8)
+    .map(([, south, , north]) => [south.toFixed(2), north.toFixed(2)]);
+  assert.deepEqual(spans, [['0.80', '1.82'], ['1.80', '2.79']]);
+  const theater = findDestination('residence', 'living-theater');
+  assert.ok(-theater.z - Number(spans[1][1]) >= .24);
+  const nav = navigation(false);
+  assertClearRoute(nav, [[theater.x, -theater.z], [22.15, -theater.z], [22.15, .55], [20, .55]]);
+  assertClearRoute(nav, [[theater.x, -theater.z], [17.43, -theater.z], [17.43, .55]]);
 });
 
 function doorwayCentre({ wall, opening }, offset = 0) {
