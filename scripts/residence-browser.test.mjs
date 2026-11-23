@@ -1143,6 +1143,7 @@ test('nearby lighting controls switch a zone or one lamp without opening the res
   const table = living.getByRole('button', { name: 'ソファ横のランプ', exact: true });
   const pendant = living.getByRole('button', { name: 'ペンダント灯（東）', exact: true });
   const theater = living.getByRole('button', { name: 'シアター照明', exact: true });
+  const nightLight = living.getByRole('button', { name: '常夜灯', exact: true });
   const desk = study.getByRole('button', { name: 'デスクライト', exact: true });
   const lantern = tea.getByRole('button', { name: '行灯', exact: true });
   const canvas = page.locator('canvas.coast-view');
@@ -1180,6 +1181,7 @@ test('nearby lighting controls switch a zone or one lamp without opening the res
   await openSection(living);
   await pressed(table, false);
   await pressed(pendant, true);
+  await pressed(nightLight, true);
 
   await pendant.click();
   await theater.click();
@@ -1196,6 +1198,13 @@ test('nearby lighting controls switch a zone or one lamp without opening the res
   await openSection(living);
   await pressed(theater, true);
   await pressed(pendant, true);
+  await pressed(nightLight, true);
+  await nightLight.click();
+  await pressed(nightLight, false);
+  await page.waitForFunction(() => {
+    const fixture = window.residenceProbe.scene.getObjectByName('Residence light fixture LD-night');
+    return fixture && fixture.material.isMeshStandardMaterial === true;
+  });
   await page.keyboard.press('Escape');
   await button(page, 'リビング・ダイニングの照明を一括消灯').click();
   await light('LD-pendant-east', false);
@@ -1226,6 +1235,7 @@ test('nearby lighting controls switch a zone or one lamp without opening the res
   await theater.click();
   await pressed(table, false);
   await pressed(pendant, false);
+  await pressed(nightLight, true);
   await page.keyboard.press('Escape');
   await light('LD-table', false);
 
