@@ -69,6 +69,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
     },
     world: {
       scene,
+      theater: furniture.theater,
       setTimeOfDay(time) {
         city.setTimeOfDay(time);
         shell.setTimeOfDay(time);

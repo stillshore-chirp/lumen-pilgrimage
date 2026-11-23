@@ -3,6 +3,7 @@ import {
 } from 'three';
 import { CoastAudio } from './CoastAudio';
 import { CoastControls, EYE_HEIGHT, type CoastMovement, type CoastNavigation } from './CoastControls';
+import type { MonitorTheater } from '../monitor/monitorObject';
 import type { MonitorView } from '../monitor/monitorView';
 import type { CoastBirdCue } from './coastBirdCue';
 import { EXPLORATION_WORLDS, findDestination, type ExplorationWorldId } from './coastDestinations';
@@ -24,6 +25,7 @@ const movementLabels: Record<CoastMovement, string> = {
 
 interface ExplorationWorld {
   readonly scene: Scene;
+  readonly theater?: MonitorTheater;
   setQuality(quality: CoastQuality): void;
   setTimeOfDay(time: CoastTimeOfDay): void;
   update(elapsed: number, camera: PerspectiveCamera): readonly CoastBirdCue[];
@@ -319,6 +321,7 @@ export class CoastApp {
           entry, toggle, renderer: this.renderer, scene: this.world.scene, camera: this.camera,
           eyeHeight: EYE_HEIGHT, releaseInput: () => this.controls.releaseInput(),
         });
+        this.monitor.setTheater(this.world.theater ?? null);
         toggle.setAttribute('aria-controls', 'monitor-view-panel');
       } catch {
         toggle.textContent = '仮想モニターを再読み込み';

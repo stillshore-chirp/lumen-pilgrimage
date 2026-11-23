@@ -7,6 +7,7 @@ import { FurnitureModel, type FurniturePiece } from './residenceFurnitureModel';
 import { addServiceFurniture } from './residenceFurnitureFixtures';
 import { addStudy } from './residenceStudy';
 import { addTeaRoom } from './residenceTeaRoom';
+import { addResidenceTheater } from './residenceTheater';
 
 const northFacing = Math.PI;
 const eastFacing = Math.PI / 2;
@@ -224,7 +225,7 @@ function addLiving(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
 }
 
 function addDining(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStandardMaterial,
-  olive: MeshStandardMaterial, leaves: readonly [MeshStandardMaterial, MeshStandardMaterial]): void {
+  leaves: readonly [MeshStandardMaterial, MeshStandardMaterial]): void {
   model.room('Dining room');
   const dining = model.at(16.025, 4.725);
   for (const x of [-.78, .78]) {
@@ -262,19 +263,6 @@ function addDining(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
     ]);
     pendant.oval(fixtureFinish(model, m.lamp, id), 0, 2.083, 0, .326, .058, .326);
   }
-  const console = model.at(21.16, 5.94);
-  console.box(m.cabinetry, 0, .32, 0, 1.82, .48, .405, .034);
-  console.slab(m.counterStone, 0, .558, 0, 1.856, .022, .426, .038);
-  for (const x of [-.64, .64]) {
-    console.box(m.darkMetal, x, .043, 0, .065, .084, .31, .007);
-  }
-  console.box(m.darkMetal, 0, .329, .204, .008, .38, .004);
-  books(console, olive, m.bedding, .52, .58, 0);
-  console.vessel(earthenware, -.63, .581, -.066, .161, .121, [
-    [0, 0], [.64, 0], [.91, .033], [1, .133], [.91, .206], [.58, .261],
-    [.55, .311], [.49, .313], [.44, .260], [.78, .188], [.87, .109], [.53, .028], [0, .022],
-  ]);
-  model.footprint(20.23, 5.725, 1.86, .43);
 }
 
 function wardrobe(piece: FurniturePiece, m: ResidenceMaterials, width: number, depth: number,
@@ -465,6 +453,7 @@ function addBalcony(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStan
 export function createResidenceFurniture(materials: ResidenceMaterials): {
   group: FurnitureModel['group'];
   obstacles: readonly ResidenceRect[];
+  theater: ReturnType<typeof addResidenceTheater>;
   dispose(): void;
 } {
   const model = new FurnitureModel();
@@ -477,7 +466,7 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
     material.roughness = .48;
   }
   addLiving(model, materials, flax, tobacco, olive);
-  addDining(model, materials, flax, olive, leaves);
+  addDining(model, materials, flax, leaves);
   addBedrooms(model, materials, olive, tobacco, flax);
   addTeaRoom(model, materials);
   addStudy(model, materials);
@@ -487,6 +476,12 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
   model.footprint(9.06, .57, .959, 1.018);
   addBalcony(model, materials, flax, leaves);
   addServiceFurniture(model, materials);
+  const theater = addResidenceTheater(model, materials);
+  model.group.add(theater.screen);
   model.finish();
-  return { group: model.group, obstacles: model.obstacles, dispose: () => model.dispose() };
+  return { group: model.group, obstacles: model.obstacles, theater, dispose() {
+    theater.screen.geometry.dispose();
+    theater.screen.material.dispose();
+    model.dispose();
+  } };
 }
