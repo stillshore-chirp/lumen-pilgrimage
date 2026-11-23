@@ -3,12 +3,13 @@ import { smoothstep, type CoastPoint } from '../../terrain';
 import {
   RESIDENCE_AVENUE, RESIDENCE_BALCONY_REFLECTOR, RESIDENCE_CROSS_STREETS, RESIDENCE_STREET_LEVEL,
 } from './residenceCityPlan';
-import { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, RESIDENCE_WALLS, type ResidenceRect } from './residencePlan';
+import { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, RESIDENCE_STUDY_RUG, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS,
+  type ResidenceRect } from './residencePlan';
 
 type Point = Readonly<CoastPoint>;
 type Window = { axis: 'e' | 'n'; fixed: number; from: number; to: number; y: number };
 
-export type ResidenceSurface = 'oak' | 'stone' | 'tile' | 'balcony';
+export type ResidenceSurface = 'oak' | 'stone' | 'tile' | 'balcony' | 'tatami' | 'wool';
 
 const { e: doorEast, nFrom: doorSouth, nTo: doorNorth } = RESIDENCE_BALCONY_DOOR;
 export const BALCONY_DOOR = { x: doorEast, y: 1.47, z: -(doorSouth + doorNorth) * 0.5 };
@@ -18,7 +19,9 @@ const roomRects = (...ids: string[]): ResidenceRect[] => RESIDENCE_ROOMS
 const [BALCONY] = roomRects('BL');
 const LIVING = roomRects('LD', 'K');
 const PRIMARY = roomRects('01');
-const BEDROOMS = roomRects('02', '03', '04', '05');
+const BEDROOMS = roomRects('02', '03');
+const TEA_ROOM = roomRects('04');
+const STUDY = roomRects('05');
 const TILED = roomRects(...RESIDENCE_ROOMS.filter(room => room.floor === 'tile').map(room => room.id));
 const WINDOWS: Window[] = RESIDENCE_WALLS.filter(wall => wall.kind === 'exterior').flatMap(wall =>
   (wall.openings ?? []).filter(opening => opening.kind === 'window' || opening.kind === 'balcony-door')
@@ -76,6 +79,8 @@ function strongestPane(point: Point, windows: readonly Window[]) {
 }
 
 export function residenceSurfaceAt(point: Point): ResidenceSurface {
+  if (inset(point, RESIDENCE_TEA_TATAMI) >= 0) return 'tatami';
+  if (inset(point, RESIDENCE_STUDY_RUG) >= 0) return 'wool';
   const floor = RESIDENCE_ROOMS.find(room => room.rectangles.some(zone => inset(point, zone) >= 0))?.floor;
   if (floor === 'deck') return 'balcony';
   if (floor === 'core') return 'stone';
@@ -86,8 +91,10 @@ export function residenceReceiver(point: Point, opening: number) {
   const openness = Number.isFinite(opening) ? clamp(opening, 0, 1) : 0;
   const primary = roomWeight(point, PRIMARY);
   const bedroom = roomWeight(point, BEDROOMS) * (1 - primary);
-  const tiled = roomWeight(point, TILED) * (1 - primary - bedroom);
-  const living = roomWeight(point, LIVING) * (1 - primary - bedroom - tiled);
+  const tea = roomWeight(point, TEA_ROOM) * (1 - primary - bedroom);
+  const study = roomWeight(point, STUDY) * (1 - primary - bedroom - tea);
+  const tiled = roomWeight(point, TILED) * (1 - primary - bedroom - tea - study);
+  const living = roomWeight(point, LIVING) * (1 - primary - bedroom - tea - study - tiled);
   const doorDistance = Math.hypot(point.x - BALCONY_DOOR.x, point.z - BALCONY_DOOR.z);
   // Outside the flush threshold the direct field replaces the sound coming through the opening.
   const doorSpan = Math.min(-point.z - doorSouth, doorNorth + point.z);
@@ -99,7 +106,7 @@ export function residenceReceiver(point: Point, opening: number) {
     point, exterior, openness,
     south: strongestPane(point, SOUTH_WINDOWS), east: strongestPane(point, EAST_WINDOWS),
     doorReach: primary * (1 - smoothstep(0.5, 5.4, doorDistance)),
-    wet: [living, primary, bedroom, 1 - living - primary - bedroom - tiled, tiled]
+    wet: [living, primary, bedroom, 1 - living - primary - bedroom - tea - study - tiled, tiled, tea, study]
       .map(room => (1 - exterior) * Math.max(0, room)),
   };
 }

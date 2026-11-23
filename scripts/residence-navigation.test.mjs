@@ -11,7 +11,8 @@ const hooks = registerHooks({
 });
 const { EXPLORATION_WORLDS, findDestination } = await import('../src/coast/coastDestinations.ts');
 const { createResidenceNavigation } = await import('../src/coast/world/residence/residenceNavigation.ts');
-const { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, RESIDENCE_WALLS } =
+const { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS,
+  RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS } =
   await import('../src/coast/world/residence/residencePlan.ts');
 const { createResidenceMaterials } = await import('../src/coast/world/residence/residenceMaterials.ts');
 const { createResidenceFurniture } = await import('../src/coast/world/residence/residenceFurniture.ts');
@@ -87,7 +88,7 @@ test('dwelling follows the drawing dimensions and all travel poses have continuo
   }
 });
 
-test('a connected route links the common lobby, all five bedrooms, water rooms and kitchen with furniture in place', () => {
+test('a connected route links the lobby, dwelling rooms and kitchen with furniture in place', () => {
   const nav = navigation(false);
   const connected = reachableFrom(nav, 10.96, 16.6);
   const destinations = [
@@ -101,6 +102,28 @@ test('a connected route links the common lobby, all five bedrooms, water rooms a
     assert.ok(connected(e, n), `${room} inaccessible near E${e}, N${n}`);
   }
   assert.equal(connected(21.94, 12.94), false);
+});
+
+test('tea room and study retain a continuous entry and their own interior layout', () => {
+  const area = ([west, south, east, north]) => (east - west) * (north - south);
+  assert.equal(RESIDENCE_ROOMS.find(room => room.id === '04').label, '茶室04');
+  assert.equal(RESIDENCE_ROOMS.find(room => room.id === '05').label, '書斎05');
+  assert.equal(furniture.group.children.filter(room => /Bedroom 0[345]$/.test(room.name)).length, 1);
+  assert.ok(furniture.group.getObjectByName('Tea room 04'));
+  assert.ok(furniture.group.getObjectByName('Study 05'));
+  assert.equal(RESIDENCE_TEA_MATS.length, 5);
+  assert.ok(Math.abs(area(RESIDENCE_TEA_TATAMI) - 4.5 * 1.91 * .955) < 1e-9);
+  assert.ok(Math.abs(RESIDENCE_TEA_MATS.reduce((sum, rect) => sum + area(rect), 0)
+    - area(RESIDENCE_TEA_TATAMI)) < 1e-9);
+  const [west, south, east, north] = RESIDENCE_TEA_HEARTH;
+  assert.ok(Math.abs(east - west - .424) < 1e-9 && Math.abs(north - south - .424) < 1e-9);
+  const nav = navigation(false);
+  assertClearRoute(nav, [[6.50, 5.5], [6.50, 3.79], [6.31, 2.58], [5.68, 2.43]]);
+  assertClearRoute(nav, [[10.05, 5.5], [10.05, 3.83], [9.46, 2.89], [9.46, 1.08]]);
+  assertClearRoute(nav, [[9.44, 2.82], [10.67, 2.82]]);
+  for (const [x, n] of [[6.49, 5.00], [6.49, 3.475], [5.68, 2.43], [10.05, 5.00], [9.46, 1.69]]) {
+    assert.equal(nav.groundHeight(x, -n), 0);
+  }
 });
 
 test('walking crosses the indoor sofa, dining table and chairs, kitchen island and entry bench', () => {
