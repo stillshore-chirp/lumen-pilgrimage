@@ -85,6 +85,9 @@ function createLuminaires(plaster: THREE.Material, darkMetal: THREE.Material) {
   const group = new THREE.Group();
   group.name = 'Concealed coves, guide lights and recessed downlights';
   const opal = new THREE.MeshBasicMaterial({ name: 'Warm white architectural diffuser', color: 0xb9b1a2 });
+  const footOpal = new THREE.MeshBasicMaterial({
+    name: 'Warm low-output footlight diffuser', color: new THREE.Color(0xffd7aa).multiplyScalar(.53),
+  });
   const unlitOpal = new THREE.MeshStandardMaterial({ name: 'Unlit architectural diffuser', color: 0x9c9180, roughness: .79 });
   const emitters = new Map<LightSource, THREE.Mesh>();
   const geometries: THREE.BufferGeometry[] = [];
@@ -101,7 +104,7 @@ function createLuminaires(plaster: THREE.Material, darkMetal: THREE.Material) {
     }
   }
 
-  for (const [room, sources] of Object.entries(roomSources)) {
+  for (const sources of Object.values(roomSources)) {
     for (const fixture of sources) {
       const { span: [west, south, east, north], height } = fixture;
       if (fixture.kind === 'cove') {
@@ -119,11 +122,16 @@ function createLuminaires(plaster: THREE.Material, darkMetal: THREE.Material) {
           centerEast - wallEast * .53, height + .016, centerNorth - wallNorth * .53);
       }
       if (fixture.kind === 'foot') {
-        const alongEast = room === 'H1' || room === 'H2';
-        place(new THREE.BoxGeometry(alongEast ? .112 : .025, .042, alongEast ? .025 : .112),
-          darkMetal, east, height, north);
-        place(new THREE.BoxGeometry(alongEast ? .079 : .026, .019, alongEast ? .026 : .079),
-          unlitOpal, east, height, north, fixture);
+        const { mount } = fixture;
+        const inwardEast = mount === 'west' ? 1 : mount === 'east' ? -1 : 0;
+        const inwardNorth = mount === 'south' ? 1 : mount === 'north' ? -1 : 0;
+        const alongEast = inwardNorth !== 0;
+        const box = (width: number, tall: number, depth: number) =>
+          new THREE.BoxGeometry(alongEast ? width : depth, tall, alongEast ? depth : width);
+        // Sink the back of the housing into the wall. The low diffuser faces the walkable side.
+        place(box(.118, .042, .016), darkMetal, east + .006 * inwardEast, height, north + .006 * inwardNorth);
+        place(box(.083, .014, .005), unlitOpal, east + .016 * inwardEast, height - .006,
+          north + .016 * inwardNorth, fixture);
       }
       if (fixture.kind === 'down') {
         place(new THREE.CylinderGeometry(.052, .064, .015, 28), plaster, east, height - .007, north);
@@ -137,11 +145,15 @@ function createLuminaires(plaster: THREE.Material, darkMetal: THREE.Material) {
     unlitOpal,
     update(night: boolean, enabled: (fixture: LightSource) => boolean) {
       opal.color.setHex(night ? 0xffdcb6 : 0xb9b1a2).multiplyScalar(night ? 2.8 : 1);
-      for (const [fixture, mesh] of emitters) mesh.material = enabled(fixture) ? opal : unlitOpal;
+      for (const [fixture, mesh] of emitters) {
+        const lit = fixture.kind === 'foot' ? footOpal : opal;
+        mesh.material = enabled(fixture) ? lit : unlitOpal;
+      }
     },
     dispose() {
       geometries.forEach(geometry => geometry.dispose());
       opal.dispose();
+      footOpal.dispose();
       unlitOpal.dispose();
     },
   };
