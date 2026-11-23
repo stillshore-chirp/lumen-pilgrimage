@@ -2,6 +2,7 @@ import type { MeshStandardMaterial } from 'three';
 import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
 import type { ResidenceMaterials } from './residenceMaterials';
 import { fixtureFinish } from './residenceFixtureFinish';
+import { addTeaRoomShoji } from './residenceShoji';
 import { RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS, RESIDENCE_TEA_TATAMI } from './residencePlan';
 
 function tatami(model: FurnitureModel, m: ResidenceMaterials) {
@@ -74,22 +75,6 @@ function hearth(model: FurnitureModel, m: ResidenceMaterials) {
     ro.tube(castIron, [[side * .126, .101, 0], [side * .153, .120, 0],
       [side * .164, .079, 0], [side * .143, .070, 0], [side * .131, .091, 0]], .0052, true);
   }
-}
-
-function shoji(panel: FurniturePiece, m: ResidenceMaterials, width: number) {
-  const height = 2.046;
-  const bottom = .135;
-  panel.box(m.washi, 0, bottom + height / 2, .001, width - .036, height - .033, .005);
-  for (const side of [-1, 1]) {
-    panel.box(m.cedar, side * (width / 2 - .012), bottom + height / 2, 0, .024, height, .026, .001, 0, true);
-    panel.box(m.cedar, 0, bottom + height / 2 + side * (height / 2 - .018),
-      0, width - .046, .036, .026, .001);
-  }
-  for (const x of [-width / 6, width / 6]) {
-    panel.box(m.cedar, x, bottom + height / 2, -.009, .012, height - .066, .017, .001, 0, true);
-  }
-  for (let i = 1; i < 8; i++) panel.box(m.cedar, 0, bottom + i * height / 8, -.009, width - .042, .012, .017, .001);
-  panel.box(m.cedar, 0, bottom + .068, -.008, width - .046, .098, .021, .002);
 }
 
 function artwork(piece: FurniturePiece, m: ResidenceMaterials, silk: MeshStandardMaterial,
@@ -166,7 +151,7 @@ function teaUtensils(piece: FurniturePiece, m: ResidenceMaterials, bowl: MeshSta
   piece.rod(m.cedar, [-.100, .026, .089], [.053, .032, .063], .0035, .0022);
 }
 
-export function addTeaRoom(model: FurnitureModel, m: ResidenceMaterials): void {
+export function addTeaRoom(model: FurnitureModel, m: ResidenceMaterials) {
   model.room('Tea room 04');
   const plaster = model.tone(m.wall, 0xd0bba0);
   const ceiling = model.tone(m.ceiling, 0xe3d4bc);
@@ -181,13 +166,7 @@ export function addTeaRoom(model: FurnitureModel, m: ResidenceMaterials): void {
   tatami(model, m);
   hearth(model, m);
   alcove(model, m, plaster);
-  shoji(model.at(4.505, .59), m, .690);
-  shoji(model.at(6.455, .59), m, .690);
-  const sill = model.at(5.480, .59);
-  sill.box(m.cedar, 0, .117, 0, 2.680, .036, .064, .004);
-  sill.box(m.cedar, 0, 2.203, 0, 2.680, .051, .075, .003);
-  sill.box(m.cedar, 0, 2.343, -.006, 2.680, .239, .033, .003);
-  for (const x of [-1.337, 1.337]) sill.box(m.cedar, x, 1.17, 0, .029, 2.086, .062, .003, 0, true);
+  const shoji = addTeaRoomShoji(model, m);
 
   const storage = model.at(3.859, 2.56, Math.PI / 2);
   storage.box(m.cedar, 0, .261, -.006, 1.563, .480, .255, .011);
@@ -216,4 +195,5 @@ export function addTeaRoom(model: FurnitureModel, m: ResidenceMaterials): void {
   }
   const threshold = model.at(6.490, 4.930);
   threshold.box(m.cedar, 0, -.006, 0, .929, .013, .058, .002);
+  return shoji;
 }
