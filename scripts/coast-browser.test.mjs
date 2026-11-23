@@ -38,8 +38,8 @@ after(async () => {
   }
 });
 
-async function capture(page, name) {
-  if (screenshotDirectory) await page.screenshot({ path: join(screenshotDirectory, `${name}.png`) });
+async function capture(page, name, style) {
+  if (screenshotDirectory) await page.screenshot({ path: join(screenshotDirectory, `${name}.png`), style });
 }
 
 function observeCameraWithoutAudio() {
@@ -87,7 +87,9 @@ async function sampleRendering(page, quality) {
 }
 
 function installBrowserProbes() {
-  const probe = { context: null, analyser: null, panners: [], delays: [], pad: null, decoded: 0, contexts: 0 };
+  const probe = {
+    context: null, analyser: null, panners: [], pannerTargets: new WeakMap(), delays: [], pad: null, decoded: 0, contexts: 0,
+  };
   window.coastProbe = probe;
   probe.peak = () => {
     const signal = new Float32Array(probe.analyser.fftSize);
@@ -122,6 +124,7 @@ function installBrowserProbes() {
   };
   AudioNode.prototype.connect = function (destination, ...args) {
     if (destination === probe.context?.destination) connect.call(this, probe.analyser);
+    if (this instanceof PannerNode) probe.pannerTargets.set(this, destination);
     return connect.call(this, destination, ...args);
   };
   Object.defineProperty(navigator, 'getGamepads', {
@@ -172,6 +175,29 @@ function setPad({ axes = [0, 0, 0, 0], pressed = [], connected = true } = {}) {
 function audioPosition() {
   const { positionX, positionY, positionZ, forwardX, forwardZ } = window.coastProbe.context.listener;
   return { x: positionX.value, y: positionY.value, z: positionZ.value, fx: forwardX.value, fz: forwardZ.value };
+}
+
+async function pointStickAt(page, x, z) {
+  const pose = await page.evaluate(audioPosition);
+  const distance = Math.hypot(x - pose.x, z - pose.z);
+  const horizontal = Math.hypot(pose.fx, pose.fz);
+  const dx = (x - pose.x) / distance, dz = (z - pose.z) / distance;
+  const fx = pose.fx / horizontal, fz = pose.fz / horizontal;
+  // Feed the intended walking vector through the controller's axial deadzone.
+  const stick = axis => Math.sign(axis) * (0.16 + Math.abs(axis) * 0.84);
+  await page.evaluate(setPad, { axes: [stick(-fz * dx + fx * dz), stick(-(fx * dx + fz * dz)), 0, 0] });
+}
+
+async function walkTo(page, x, z, tolerance = 0.27) {
+  await pointStickAt(page, x, z);
+  try {
+    await page.waitForFunction(([x, z, tolerance]) => {
+      const listener = window.coastProbe.context.listener;
+      return Math.hypot(listener.positionX.value - x, listener.positionZ.value - z) < tolerance;
+    }, [x, z, tolerance]);
+  } finally {
+    await page.evaluate(setPad, { connected: false });
+  }
 }
 
 function signalLevel() {
@@ -468,6 +494,7 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     if (message.type() === 'error') errors.push(message.text());
   });
   await page.addInitScript(installBrowserProbes);
+  await page.addInitScript(observeCameraWithoutAudio);
 
   async function arrive(label, world, place, time) {
     await travel.click();
@@ -492,6 +519,21 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     }
     assert.equal(await focused.evaluate(node => document.activeElement === node
       && document.pointerLockElement === null), true);
+  }
+
+  async function walkAcrossBench(keys, across, past) {
+    try {
+      for (const key of keys) await page.keyboard.down(key);
+      for (const bounds of [across, past]) {
+        await page.waitForFunction(([left, right, near, far]) => {
+          const [x, z] = window.startupCameraPosition ?? [];
+          return x > left && x < right && z > near && z < far;
+        }, bounds);
+      }
+    } finally {
+      for (const key of keys) await page.keyboard.up(key);
+    }
+    assert.equal(await page.locator('.coast-mode').textContent(), '歩行');
   }
 
   try {
@@ -567,7 +609,10 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
       }, [x, z]);
       assert.equal(await flight.getAttribute('aria-pressed'), 'false');
       assert.equal(await page.locator('.coast-mode').textContent(), '歩行');
-      if (id === 'forest') await walkWithFocus('w', travel);
+      if (id === 'forest') {
+        // Back from the landing through the middle of the rest area's 2.5 m bench.
+        await walkAcrossBench(['s'], [-27.85, -27.2, 110.75, 111.26], [-27.8, -26.7, 111.65, 113]);
+      }
     }
 
     await arrive('中央展望デッキ', 'overlook', 'main-deck', 'night');
@@ -575,6 +620,12 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     assert.equal(await night.getAttribute('aria-pressed'), 'true');
     const townNight = await skyBrightness(canvas);
     await capture(page, 'overlook-night');
+    await page.waitForFunction(() => {
+      const [x, z] = window.startupCameraPosition ?? [];
+      return Math.hypot(x + 7, z + 20.9) < 0.10;
+    });
+    // From the main deck landing, W+D crosses the long front bench at (-0.3, -21.8).
+    await walkAcrossBench(['w', 'd'], [-0.72, 0.15, -22.24, -21.48], [2.04, 3.2, -22.55, -21.75]);
     await arrive('西テラス', 'overlook', 'west-terrace', 'night');
     await arrive('東テラス', 'overlook', 'east-terrace', 'night');
     await travel.click();
@@ -655,29 +706,6 @@ test('the overlook plays quiet spatial audio and its upper deck can be reached a
   await page.addInitScript(installBrowserProbes);
   const button = name => page.getByRole('button', { name, exact: true });
 
-  async function pointStickAt(x, z) {
-    const pose = await page.evaluate(audioPosition);
-    const distance = Math.hypot(x - pose.x, z - pose.z);
-    const horizontal = Math.hypot(pose.fx, pose.fz);
-    const dx = (x - pose.x) / distance, dz = (z - pose.z) / distance;
-    const fx = pose.fx / horizontal, fz = pose.fz / horizontal;
-    // Feed the intended walking vector through the controller's axial deadzone.
-    const stick = axis => Math.sign(axis) * (0.16 + Math.abs(axis) * 0.84);
-    await page.evaluate(setPad, { axes: [stick(-fz * dx + fx * dz), stick(-(fx * dx + fz * dz)), 0, 0] });
-  }
-
-  async function walkTo(x, z) {
-    await pointStickAt(x, z);
-    try {
-      await page.waitForFunction(([x, z]) => {
-        const listener = window.coastProbe.context.listener;
-        return Math.hypot(listener.positionX.value - x, listener.positionZ.value - z) < 0.27;
-      }, [x, z]);
-    } finally {
-      await page.evaluate(setPad, { connected: false });
-    }
-  }
-
   try {
     await page.goto(`${url}?world=overlook&place=east-terrace&time=night`, { waitUntil: 'commit' });
     await button('環境音を開始').waitFor();
@@ -688,6 +716,26 @@ test('the overlook plays quiet spatial audio and its upper deck can be reached a
       && window.coastProbe.panners.filter(panner => panner.panningModel === 'HRTF').length >= 6
       && window.coastProbe.peak() > 0.001 && window.coastProbe.peak() < 0.24);
 
+    await page.waitForFunction(() => {
+      const probe = window.coastProbe;
+      const cricketPatches = [[7, -35], [-9, -31], [23, -31], [-19, -46], [17, -49]];
+      const insects = cricketPatches.map(([x, z]) => probe.panners.find(node =>
+        node.positionX.value === x && node.positionZ.value === z && node.positionY.value < 346
+        && node.panningModel === 'HRTF'));
+      const bus = probe.pannerTargets.get(insects[0]);
+      if (!(bus instanceof GainNode) || !insects.every(node => probe.pannerTargets.get(node) === bus)) return false;
+      const analyser = probe.context.createAnalyser();
+      bus.connect(analyser);
+      const signal = new Float32Array(analyser.fftSize);
+      probe.insectPeak = () => {
+        analyser.getFloatTimeDomainData(signal);
+        return Math.max(...signal.map(Math.abs));
+      };
+      probe.insectGain = () => bus.gain.value;
+      return true;
+    });
+    await page.waitForFunction(() => window.coastProbe.insectPeak() > 0.001);
+
     const mute = button('ミュート');
     await mute.click();
     assert.equal(await mute.getAttribute('aria-pressed'), 'true');
@@ -695,24 +743,26 @@ test('the overlook plays quiet spatial audio and its upper deck can be reached a
     await mute.click();
     await button('昼').click();
     await page.waitForFunction(() => window.coastProbe.peak() > 0.001);
+    await page.waitForFunction(() => window.coastProbe.insectGain() < 0.005
+      && window.coastProbe.insectPeak() < 0.0001);
 
     const lower = (await page.evaluate(audioPosition)).y;
-    await walkTo(25.85, -4);
-    await walkTo(25.85, 4.2);
+    await walkTo(page, 25.85, -4);
+    await walkTo(page, 25.85, 4.2);
     assert.ok(Math.abs((await page.evaluate(audioPosition)).y - lower - 3.6) < 0.12);
-    await walkTo(25.85, 13.5);
-    await walkTo(21, 13.5);
+    await walkTo(page, 25.85, 13.5);
+    await walkTo(page, 21, 13.5);
     const upper = await page.evaluate(audioPosition);
     assert.ok(Math.abs(upper.y - lower - 7.2) < 0.12);
-    await pointStickAt(upper.x, 9.5);
+    await pointStickAt(page, upper.x, 9.5);
     await page.waitForFunction(() => window.coastProbe.context.listener.positionZ.value < 12.65);
     await page.waitForTimeout(360);
     await page.evaluate(setPad, { connected: false });
     const rail = await page.evaluate(audioPosition);
     assert.ok(rail.z > 12.30 && Math.abs(rail.y - upper.y) < 0.10);
-    await walkTo(21, 13.5);
-    await walkTo(25.85, 13.5);
-    await walkTo(25.85, -4);
+    await walkTo(page, 21, 13.5);
+    await walkTo(page, 25.85, 13.5);
+    await walkTo(page, 25.85, -4);
     assert.ok(Math.abs((await page.evaluate(audioPosition)).y - lower) < 0.12);
 
     await button('夜').click();
@@ -727,6 +777,59 @@ test('the overlook plays quiet spatial audio and its upper deck can be reached a
     }, upper.y);
     assert.equal(await page.evaluate(() => window.coastProbe.contexts), 1);
     await capture(page, 'overlook-upper-deck-night');
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('captures the inlet spray in daylight and at night from the east coastal walk', {
+  timeout: 90_000, skip: !screenshotDirectory,
+}, async () => {
+  const page = await newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  await page.addInitScript(installBrowserProbes);
+  try {
+    await page.goto(`${url}?world=coast&place=inlet&time=day`, { waitUntil: 'commit' });
+    await page.getByRole('button', { name: '環境音を開始', exact: true }).click();
+    await page.getByRole('button', { name: '環境音を再開', exact: true }).waitFor();
+    await page.waitForFunction(() => window.coastProbe.context.listener.positionZ.value > 70);
+
+    // Follow the existing east walk to the rise above the inlet's shore ledge.
+    for (const [x, z] of [[4, 89], [22, 90], [39, 87], [49, 75], [57, 61]]) {
+      await walkTo(page, x, z, 0.7);
+    }
+    await walkTo(page, 61.87, 50.8);
+    assert.equal(await page.locator('.coast-mode').textContent(), '歩行');
+    assert.ok(Math.abs((await page.evaluate(audioPosition)).y - 12.04) < 0.20);
+
+    const canvas = page.locator('canvas.coast-view');
+    await page.getByRole('button', { name: '高品質', exact: true }).click();
+    await page.getByRole('button', { name: 'マウス操作を開始', exact: true }).click();
+    await page.waitForFunction(() => document.pointerLockElement?.matches('canvas.coast-view'));
+    await canvas.dispatchEvent('mousemove', { movementX: -666, movementY: 192 });
+    await page.waitForFunction(() => {
+      const { forwardX, forwardY, forwardZ } = window.coastProbe.context.listener;
+      return Math.abs(forwardX.value + 0.94) < 0.03 && Math.abs(forwardY.value + 0.315) < 0.03
+        && Math.abs(forwardZ.value + 0.133) < 0.03;
+    });
+    const landscape = '.coast-ui { visibility: hidden; }';
+    await capture(page, 'inlet-shore-ledge-day', landscape);
+    await page.evaluate(() => document.exitPointerLock());
+    await page.waitForFunction(() => document.pointerLockElement === null);
+    await page.getByRole('button', { name: '夜', exact: true }).click();
+    await page.waitForURL(address => address.searchParams.get('time') === 'night');
+    await capture(page, 'inlet-shore-ledge-night', landscape);
+
+    await page.getByRole('button', { name: '昼', exact: true }).click();
+    await page.waitForURL(address => address.searchParams.get('time') === 'day');
+    await walkTo(page, 61.556, 47.037);
+    assert.equal(await page.locator('.coast-mode').textContent(), '歩行');
+    await capture(page, 'inlet-shore-ledge-day-side', landscape);
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
