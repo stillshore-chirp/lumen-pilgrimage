@@ -100,7 +100,6 @@ export class CoastControls {
   private previousGamepadJump = false;
   private previousGamepadDive = false;
   private pointerLockRequestPending = false;
-  private inputSuspended = false;
   private disposed = false;
 
   constructor(camera: PerspectiveCamera, canvas: HTMLCanvasElement, callbacks: CoastControlCallbacks,
@@ -116,8 +115,8 @@ export class CoastControls {
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     window.addEventListener('blur', this.handleWindowBlur);
-    window.addEventListener('focus', this.handleWindowFocus);
-    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    window.addEventListener('focus', this.handleFocusChange);
+    document.addEventListener('visibilitychange', this.handleFocusChange);
     document.addEventListener('pointerlockchange', this.handlePointerLockChange);
     document.addEventListener('pointerlockerror', this.handlePointerLockError);
     this.canvas.addEventListener('mousemove', this.handleMouseMove);
@@ -190,10 +189,14 @@ export class CoastControls {
 
   update(dt: number): void {
     if (this.disposed) return;
+    if (!this.canUseSceneInput()) {
+      this.syncGamepadButtons();
+      return;
+    }
 
     const delta = Number.isFinite(dt) ? Math.max(0, Math.min(dt, MAX_DELTA)) : 0;
     const input = this.readMovementInput(delta);
-    if (delta === 0 || this.inputSuspended) return;
+    if (delta === 0) return;
     const pace = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
       ? SPRINT_MULTIPLIER
       : 1;
@@ -227,8 +230,8 @@ export class CoastControls {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     window.removeEventListener('blur', this.handleWindowBlur);
-    window.removeEventListener('focus', this.handleWindowFocus);
-    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    window.removeEventListener('focus', this.handleFocusChange);
+    document.removeEventListener('visibilitychange', this.handleFocusChange);
     document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
     document.removeEventListener('pointerlockerror', this.handlePointerLockError);
     this.canvas.removeEventListener('mousemove', this.handleMouseMove);
@@ -285,12 +288,10 @@ export class CoastControls {
   };
 
   private readonly handleWindowBlur = (): void => {
-    this.inputSuspended = true;
     this.clearInput();
   };
 
-  private readonly handleWindowFocus = (): void => {
-    this.inputSuspended = document.visibilityState === 'hidden' || !document.hasFocus();
+  private readonly handleFocusChange = (): void => {
     this.clearInput();
     this.syncGamepadButtons();
   };
@@ -299,20 +300,18 @@ export class CoastControls {
     if (document.pointerLockElement !== this.canvas) this.clearInput();
   };
 
-  private readonly handleVisibilityChange = (): void => {
-    this.inputSuspended = document.visibilityState === 'hidden' || !document.hasFocus();
-    this.clearInput();
-    this.syncGamepadButtons();
-  };
-
   private reportPointerLockError(): void {
     if (!this.pointerLockRequestPending) return;
     this.pointerLockRequestPending = false;
     this.callbacks.onLockError();
   }
 
+  private canUseSceneInput(): boolean {
+    return document.visibilityState !== 'hidden' && document.hasFocus();
+  }
+
   private canUseSceneKeyboard(event: KeyboardEvent): boolean {
-    if (this.inputSuspended) return false;
+    if (!this.canUseSceneInput()) return false;
     const { target } = event;
     const active = document.activeElement;
     if (target instanceof Element && target === active
@@ -348,11 +347,6 @@ export class CoastControls {
   }
 
   private readMovementInput(dt: number): { forward: number; right: number; vertical: number } {
-    if (this.inputSuspended) {
-      this.syncGamepadButtons();
-      return { forward: 0, right: 0, vertical: 0 };
-    }
-
     let forward = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
     let right = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
     let vertical = (this.keys.has('Space') ? 1 : 0) - (this.keys.has('KeyC') ? 1 : 0);

@@ -70,6 +70,7 @@ function createBrowser(gamepads = []) {
 
   return {
     canvas,
+    document: fakeDocument,
     window: fakeWindow,
     cleanup: () => restore.reverse().forEach(restoreGlobal => restoreGlobal())
   };
@@ -222,6 +223,33 @@ test('gamepad A jumps on land and Space does not lift a swimmer out of deep wate
   }
 });
 
+test('walking starts when document focus returns after the focus notification', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  const move = () => browser.window.dispatch('keydown', { target: browser.document.body, code: 'KeyW' });
+  let focused = false;
+  browser.document.hasFocus = () => focused;
+  browser.document.activeElement = browser.document.body;
+
+  try {
+    browser.window.dispatch('focus');
+    move();
+    controls.update(0.05);
+    assert.equal(camera.position.z, SPAWN.z);
+
+    focused = true;
+    controls.update(0.05);
+    assert.equal(camera.position.z, SPAWN.z);
+    move();
+    controls.update(0.05);
+    assert.ok(camera.position.z < SPAWN.z - 0.25);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
 test('gamepad Y toggles on press edges and does not trigger while focus is lost', () => {
   const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
   const gamepad = { connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons };
@@ -235,9 +263,15 @@ test('gamepad Y toggles on press edges and does not trigger while focus is lost'
     setY(true);
     controls.update(0);
     controls.update(0);
+    setY(false);
+    controls.update(0);
+    let focused = false;
+    browser.document.hasFocus = () => focused;
     browser.window.dispatch('blur');
+    setY(true);
     controls.update(0);
     browser.window.dispatch('focus');
+    focused = true;
     controls.update(0);
     assert.deepEqual(modes, ['flight']);
 
