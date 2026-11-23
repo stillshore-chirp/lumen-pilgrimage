@@ -226,6 +226,109 @@ test('Space jumps once per press, lands, and works again after releasing', () =>
   }
 });
 
+test('C changes eye height only and preserves walking, sprinting and jumping', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  const down = (code, options = {}) => browser.window.dispatch('keydown', { target: browser.canvas, code, ...options });
+  const up = code => browser.window.dispatch('keyup', { code });
+  const tap = code => { down(code); up(code); };
+  const move = sprint => {
+    if (sprint) down('ShiftLeft');
+    down('KeyW');
+    for (let frame = 0; frame < 5; frame += 1) controls.update(0.05);
+    up('KeyW');
+    up('ShiftLeft');
+    return camera.position.z;
+  };
+
+  try {
+    const start = camera.position.clone();
+    down('KeyC');
+    controls.update(0.05);
+    down('KeyC', { repeat: true });
+    controls.update(0.05);
+    up('KeyC');
+    assert.equal(controls.currentMovement, 'crouch');
+    assert.equal(controls.eyeHeight, 1.15);
+    assert.deepEqual(camera.position.toArray(), [start.x, start.y - 0.5, start.z]);
+
+    tap('KeyC');
+    controls.update(0.05);
+    assert.equal(controls.currentMovement, 'walk');
+    assert.deepEqual(camera.position.toArray(), start.toArray());
+
+    tap('KeyC');
+    tap('KeyC');
+    controls.update(0.05);
+    assert.equal(controls.currentMovement, 'walk');
+
+    for (const sprint of [false, true]) {
+      const standing = move(sprint);
+      controls.relocate(SPAWN);
+      tap('KeyC');
+      controls.update(0.05);
+      assert.equal(move(sprint), standing);
+      const { x, y, z } = camera.position;
+      assert.ok(Math.abs(y - groundHeight(x, z) - 1.15) < 1e-6);
+      controls.relocate(SPAWN);
+      assert.equal(controls.currentMovement, 'walk');
+      assert.deepEqual(camera.position.toArray(), start.toArray());
+    }
+
+    tap('KeyC');
+    controls.update(0.05);
+    tap('Space');
+    controls.update(0.05);
+    assert.ok(camera.position.y > start.y - 0.5 + 0.3);
+    tap('KeyC');
+    for (let frame = 0; frame < 20; frame += 1) controls.update(0.05);
+    assert.equal(controls.currentMovement, 'crouch');
+    assert.deepEqual(camera.position.toArray(), [start.x, start.y - 0.5, start.z]);
+
+    tap('KeyF');
+    assert.equal(controls.currentMovement, 'flight');
+    assert.equal(camera.position.y, start.y);
+    down('Space');
+    controls.update(0.05);
+    up('Space');
+    const airborne = camera.position.y;
+    down('KeyC');
+    controls.update(0.05);
+    up('KeyC');
+    assert.ok(camera.position.y < airborne - 0.9);
+    assert.equal(controls.currentMovement, 'flight');
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('a queued crouch is cleared by blur and key repeat does not toggle after refocus', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  const press = options => browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyC', ...options });
+  try {
+    press({ metaKey: true });
+    controls.update(0.05);
+    assert.equal(controls.currentMovement, 'walk');
+    press();
+    browser.window.dispatch('blur');
+    browser.window.dispatch('focus');
+    press({ repeat: true });
+    controls.update(0.05);
+    assert.equal(controls.currentMovement, 'walk');
+    browser.window.dispatch('keyup', { code: 'KeyC' });
+    press();
+    controls.update(0.05);
+    assert.equal(controls.currentMovement, 'crouch');
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
 test('gamepad A jumps on land and Space does not lift a swimmer out of deep water', () => {
   const buttons = Array.from({ length: 16 }, () => ({ pressed: false, value: 0 }));
   const browser = createBrowser([{ connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons }]);
@@ -311,7 +414,7 @@ test('gamepad Y toggles on press edges and does not trigger while focus is lost'
   }
 });
 
-test('walking wades and swims across the beach, then returns to land', () => {
+test('crouch ends when walking into the water, and swimming again leads to standing on land', () => {
   const browser = createBrowser();
   const camera = new PerspectiveCamera();
   const modes = [];
@@ -322,12 +425,16 @@ test('walking wades and swims across the beach, then returns to land', () => {
     browser.window.dispatch('keyup', { target: browser.canvas, code: key });
   };
   try {
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyC' });
+    controls.update(0.05);
+    assert.equal(controls.currentMovement, 'crouch');
     move('KeyW', 133);
-    assert.deepEqual(modes, ['wade', 'swim']);
+    browser.window.dispatch('keyup', { code: 'KeyC' });
+    assert.deepEqual(modes, ['crouch', 'wade', 'swim']);
     assert.ok(groundHeight(camera.position.x, camera.position.z) < SEA_LEVEL - 1.1);
     assert.ok(camera.position.y > SEA_LEVEL + 0.4 && camera.position.y < SEA_LEVEL + 1);
     move('KeyS', 152);
-    assert.deepEqual(modes, ['wade', 'swim', 'wade', 'walk']);
+    assert.deepEqual(modes, ['crouch', 'wade', 'swim', 'wade', 'walk']);
     assert.ok(camera.position.z >= SPAWN.z - 1.0);
     assert.ok(Math.abs(camera.position.y - groundHeight(camera.position.x, camera.position.z) - 1.65) < 1e-6);
   } finally {

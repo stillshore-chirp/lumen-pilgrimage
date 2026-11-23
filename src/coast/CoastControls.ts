@@ -1,7 +1,7 @@
 import { Vector3, type PerspectiveCamera } from 'three';
 import { COAST_BOUNDS, coastWaterLevel, groundHeight, smoothstep, SPAWN } from './terrain';
 
-export type CoastMovement = 'walk' | 'wade' | 'swim' | 'dive' | 'flight';
+export type CoastMovement = 'walk' | 'crouch' | 'wade' | 'swim' | 'dive' | 'flight';
 
 type DivePhase = 'entering' | 'submerged' | 'surfacing';
 
@@ -33,8 +33,10 @@ export interface CoastNavigation {
 }
 
 export const EYE_HEIGHT = 1.65;
+const CROUCH_EYE_HEIGHT = 1.15;
 const WALK_SPEED = 6.4;
 const SWIM_SPEED = 4.1;
+const WADE_DEPTH = 0.08;
 const SWIM_DEPTH = 1.02;
 const DIVE_SPEED = 3.6;
 const DIVE_VERTICAL_SPEED = 3.0;
@@ -66,6 +68,10 @@ const coastNavigation: CoastNavigation = {
   flightCeiling: MAX_FLIGHT_HEIGHT,
 };
 
+export function groundEyeHeight(movement: CoastMovement): number {
+  return movement === 'crouch' ? CROUCH_EYE_HEIGHT : EYE_HEIGHT;
+}
+
 export class CoastControls {
   private readonly camera: PerspectiveCamera;
   private readonly canvas: HTMLCanvasElement;
@@ -79,10 +85,12 @@ export class CoastControls {
   private readonly up = new Vector3(0, 1, 0);
   private flying = false;
   private divePhase: DivePhase | null = null;
+  private posture: 'walk' | 'crouch' = 'walk';
   private movementMode: CoastMovement = 'walk';
   private verticalVelocity = 0;
   private jumpQueued = false;
   private diveQueued = false;
+  private crouchQueued = false;
   private previousGamepadFlight = false;
   private previousGamepadJump = false;
   private previousGamepadDive = false;
@@ -115,12 +123,17 @@ export class CoastControls {
     return this.movementMode;
   }
 
+  get eyeHeight(): number {
+    return groundEyeHeight(this.posture);
+  }
+
   relocate(pose: CoastPose): void {
     if (this.disposed) return;
     this.clearInput();
     this.syncGamepadButtons();
     this.flying = false;
     this.divePhase = null;
+    this.posture = 'walk';
     this.verticalVelocity = 0;
     this.placeCamera(pose);
     this.updateMovementMode();
@@ -143,9 +156,11 @@ export class CoastControls {
     if (this.disposed || this.navigation.flightEnabled === false) return;
 
     this.flying = !this.flying;
+    this.setPosture('walk');
     this.verticalVelocity = 0;
     this.jumpQueued = false;
     this.diveQueued = false;
+    this.crouchQueued = false;
 
     if (this.divePhase !== null) {
       const { x, z } = this.camera.position;
@@ -207,6 +222,7 @@ export class CoastControls {
     if (this.divePhase !== null) this.updateDive(input.vertical, delta);
     else this.updateGroundMovement(pace, delta);
     this.diveQueued = false;
+    this.crouchQueued = false;
   }
 
   dispose(): void {
@@ -232,6 +248,7 @@ export class CoastControls {
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     if (!this.canUseSceneKeyboard(event)) return;
+    if (event.code === 'KeyC' && (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey)) return;
 
     if (this.isControlKey(event.code)) {
       event.preventDefault();
@@ -240,6 +257,7 @@ export class CoastControls {
       }
       if (event.code === 'KeyC' && !event.repeat && !this.keys.has('KeyC') && !this.flying) {
         this.diveQueued = true;
+        this.crouchQueued = !this.crouchQueued;
       }
       this.keys.add(event.code);
     }
@@ -305,7 +323,7 @@ export class CoastControls {
       && target.closest('.coast-ui :is(button[type="button"], summary, input[type="range"])')
       && !target.closest('dialog')) {
       return !event.defaultPrevented && !event.ctrlKey && !event.metaKey && !event.altKey
-        && this.isPlanarControlKey(event.code);
+        && (this.isPlanarControlKey(event.code) || (event.code === 'KeyC' && this.movementMode === this.posture));
     }
     if (this.isInteractiveTarget(target)) return false;
     return active === this.canvas || active === document.body || document.pointerLockElement === this.canvas;
@@ -331,6 +349,7 @@ export class CoastControls {
     this.keys.clear();
     this.jumpQueued = false;
     this.diveQueued = false;
+    this.crouchQueued = false;
   }
 
   private readMovementInput(dt: number): { forward: number; right: number; vertical: number } {
@@ -403,10 +422,13 @@ export class CoastControls {
 
   private updateGroundMovement(pace: number, dt: number): void {
     const position = this.camera.position;
-    const foot = position.y - EYE_HEIGHT;
+    const foot = position.y - this.eyeHeight;
     const depth = this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z);
     const onSupport = this.verticalVelocity <= 0
       && foot <= this.supportHeight(position.x, position.z) + FOOT_CLEARANCE;
+    if (this.crouchQueued && onSupport && depth <= WADE_DEPTH) {
+      this.setPosture(this.posture === 'walk' ? 'crouch' : 'walk');
+    }
     const jumping = this.navigation.jumpEnabled !== false && this.jumpQueued && onSupport && depth < SWIM_DEPTH;
     this.jumpQueued = false;
     const fallSpeed = jumping ? JUMP_SPEED : this.verticalVelocity;
@@ -422,10 +444,21 @@ export class CoastControls {
       followSupport = this.moveAlongSupport(this.movement.x, this.movement.z, foot, verticalStep, followSupport);
     }
 
-    const floorY = this.supportHeight(position.x, position.z) + EYE_HEIGHT;
+    const floorY = this.supportHeight(position.x, position.z) + this.eyeHeight;
     position.y = followSupport ? floorY : Math.max(floorY, position.y + verticalStep);
     this.verticalVelocity = position.y > floorY ? nextVelocity : 0;
+    if (this.posture === 'crouch'
+      && this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z) > WADE_DEPTH) {
+      this.setPosture('walk');
+    }
     this.updateMovementMode();
+  }
+
+  private setPosture(posture: 'walk' | 'crouch'): void {
+    if (posture === this.posture) return;
+    const foot = this.camera.position.y - this.eyeHeight;
+    this.posture = posture;
+    this.camera.position.y = foot + this.eyeHeight;
   }
 
   private updateDive(verticalInput: number, dt: number): void {
@@ -476,7 +509,7 @@ export class CoastControls {
       if (distance === 0) return false;
       const ground = this.navigation.groundHeight(x, z);
       const water = this.waterLevel(x, z);
-      if (water - ground <= 0.08) return false;
+      if (water - ground <= WADE_DEPTH) return false;
       const floor = this.diveFloorY(x, z, ground);
       if ((this.divePhase !== 'surfacing' && floor > water - DIVE_SURFACE_CLEARANCE)
         || floor > position.y + distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON)) return false;
@@ -588,12 +621,12 @@ export class CoastControls {
     const { x, y, z } = this.camera.position;
     const water = this.waterLevel(x, z);
     const depth = water - this.navigation.groundHeight(x, z);
-    let mode: CoastMovement = 'walk';
+    let mode: CoastMovement = this.posture;
     if (this.flying) mode = 'flight';
     else if (this.divePhase !== null) mode = 'dive';
     else if (y <= water + EYE_HEIGHT + 0.03) {
       if (depth >= SWIM_DEPTH) mode = 'swim';
-      else if (depth > 0.08) mode = 'wade';
+      else if (depth > WADE_DEPTH) mode = 'wade';
     }
     if (mode === this.movementMode) return;
     this.movementMode = mode;
