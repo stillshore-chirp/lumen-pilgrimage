@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
+import { createResidenceDoors } from './residenceDoors';
 import type { ResidenceMaterials } from './residenceMaterials';
-import { RESIDENCE_BALCONY_DOOR, RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_HINGED_DOOR, RESIDENCE_ROOMS,
-  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS, type ResidenceRect } from './residencePlan';
+import { RESIDENCE_BALCONY_DOOR, RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_ROOMS,
+  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS,
+  type ResidenceDoorOpening, type ResidenceRect } from './residencePlan';
 
 type Wall = (typeof RESIDENCE_WALLS)[number];
 type Opening = NonNullable<Wall['openings']>[number];
@@ -234,39 +236,24 @@ function addWindow(geometry: ShellGeometry, materials: ResidenceMaterials, wall:
   }
 }
 
-function addDoorFrame(geometry: ShellGeometry, materials: ResidenceMaterials, wall: Wall, opening: Opening) {
+function addDoorFrame(geometry: ShellGeometry, material: THREE.Material, wall: Wall, opening: Opening) {
   const { from, to, top } = opening;
   const half = wall.thickness / 2;
   const jamb = .022;
-  const lining = (left: number, right: number, low: number, high: number) => geometry.box(materials.trim,
+  const lining = (left: number, right: number, low: number, high: number) => geometry.box(material,
     lineRect(wall, left, right, -half - .006, half + .006), low, high);
   lining(from, from + jamb, 0, top);
   lining(to - jamb, to, 0, top);
   lining(from + jamb, to - jamb, top - jamb, top);
   for (const [near, far] of [[-half - .014, -half + .003], [half - .003, half + .014]]) {
-    geometry.box(materials.trim, lineRect(wall, from - .033, from + .011, near, far), .004, top + .034);
-    geometry.box(materials.trim, lineRect(wall, to - .011, to + .033, near, far), .004, top + .034);
-    geometry.box(materials.trim, lineRect(wall, from + .011, to - .011, near, far), top - .011, top + .034);
+    geometry.box(material, lineRect(wall, from - .033, from + .011, near, far), .004, top + .034);
+    geometry.box(material, lineRect(wall, to - .011, to + .033, near, far), .004, top + .034);
+    geometry.box(material, lineRect(wall, from + .011, to - .011, near, far), top - .011, top + .034);
   }
 }
 
-function addOpenDoor(group: THREE.Group, geometry: ShellGeometry, materials: ResidenceMaterials, wall: Wall,
-  opening: Opening) {
-  if (!opening.swing) return;
-  const { hinge, side } = opening.swing;
-  const blade = new THREE.Group();
-  const fromHinge = hinge === 'from';
-  const { hingeInset, skinOffset, leafInset, halfLeaf } = RESIDENCE_HINGED_DOOR;
-  const hingePosition = fromHinge ? opening.from + hingeInset : opening.to - hingeInset;
-  const skin = side * skinOffset;
-  const east = wall.axis === 'e' ? hingePosition : wall.fixed + skin;
-  const north = wall.axis === 'n' ? hingePosition : wall.fixed + skin;
-  blade.name = 'Open hinged door';
-  blade.position.set(east, 0, -north);
-  blade.rotation.y = wall.axis === 'e' ? side * Math.PI / 2 : side < 0 ? Math.PI : 0;
-  group.add(blade);
-
-  const width = opening.to - opening.from - leafInset;
+function addHingedLeaf(blade: THREE.Group, geometry: ShellGeometry, materials: ResidenceMaterials,
+  opening: ResidenceDoorOpening, width: number, halfLeaf: number) {
   const handle = width - .102;
   const panelHeight = opening.top - .036;
   geometry.box(materials.cabinetry, [.008, -halfLeaf + .001, width, halfLeaf - .001], .014, panelHeight, blade, 0, true);
@@ -283,6 +270,36 @@ function addOpenDoor(group: THREE.Group, geometry: ShellGeometry, materials: Res
     geometry.spindle(materials.metal, blade, rose, standOff, .027);
     geometry.spindle(materials.metal, blade, standOff, pivot, .0095);
     geometry.spindle(materials.metal, blade, pivot, tip, .010);
+  }
+}
+
+function addFusuma(blade: THREE.Group, geometry: ShellGeometry, materials: ResidenceMaterials, wall: Wall,
+  opening: ResidenceDoorOpening, width: number, halfLeaf: number, offset: number) {
+  const { from, to, top } = opening;
+  const left = from - width - .025;
+  const guide = (low: number, high: number) => geometry.box(materials.cedar,
+    lineRect(wall, left, to + .028, offset - .033, offset + .030), low, high);
+  guide(top - .019, top + .038);
+  guide(-.012, .001);
+  for (const jamb of [left, to + .008]) {
+    geometry.box(materials.cedar, lineRect(wall, jamb, jamb + .028, offset - .033, offset + .030), .001, top);
+  }
+  const stile = .033;
+  const panelBottom = .009;
+  const panelTop = top - .014;
+  const panel = (finish: THREE.Material, start: number, end: number, bottom: number, cap: number,
+    depth: number, vertical = false) => geometry.box(finish, [start, -depth, end, depth], bottom, cap, blade, 0, vertical);
+  for (const start of [0, width - stile]) {
+    panel(materials.cabinetry, start, start + stile, panelBottom, panelTop, halfLeaf, true);
+  }
+  panel(materials.cabinetry, stile, width - stile, panelBottom, .054, halfLeaf);
+  panel(materials.cabinetry, stile, width - stile, panelTop - .038, panelTop, halfLeaf);
+  panel(materials.washi, stile, width - stile, .054, panelTop - .038, halfLeaf - .003);
+  for (const side of [-1, 1]) {
+    const handle = new THREE.Vector3(width - .105, .902, side * (halfLeaf - .003));
+    const front = new THREE.Vector3(handle.x, handle.y, side * (halfLeaf - .001));
+    geometry.spindle(materials.cabinetry, blade, handle, front, .031);
+    geometry.spindle(materials.darkMetal, blade, front, new THREE.Vector3(handle.x, handle.y, side * halfLeaf), .024);
   }
 }
 
@@ -396,6 +413,8 @@ export function createResidenceShell(materials: ResidenceMaterials) {
   leaf.name = 'Primary bedroom balcony sliding panel';
   group.add(leaf);
   const geometry = createShellGeometry(group);
+  const movingLeaves = new Map<ResidenceDoorOpening, THREE.Group>();
+  let balconyOpenAmount = 0;
   const indicator = new THREE.MeshBasicMaterial({ name: 'Elevator indicator', color: 0x9d9c80 });
   materials.glass.side = THREE.DoubleSide;
   materials.glass.forceSinglePass = true;
@@ -434,9 +453,9 @@ export function createResidenceShell(materials: ResidenceMaterials) {
         }
       } else if (opening.kind === 'balcony-door') {
         addBalconyOpening(geometry, materials, wall, opening, leaf);
-      } else if (opening.kind === 'door') {
-        addDoorFrame(geometry, materials, wall, opening);
-        addOpenDoor(group, geometry, materials, wall, opening);
+      } else if (opening.kind === 'door' || opening.kind === 'fusuma') {
+        const fusuma = opening.kind === 'fusuma';
+        addDoorFrame(geometry, fusuma ? materials.cedar : materials.trim, wall, opening);
       }
       from = opening.to;
     }
@@ -454,16 +473,36 @@ export function createResidenceShell(materials: ResidenceMaterials) {
   for (let north = 12.12; north < 15.13; north += .086) {
     geometry.box(materials.metal, [20.849, north, 20.897, north + .012], -.005, .0002);
   }
+
+  const doors = createResidenceDoors(({ wall, opening }, pose) => {
+    let blade = movingLeaves.get(opening);
+    if (!blade) {
+      blade = new THREE.Group();
+      blade.name = opening.kind === 'fusuma' ? 'Tea room fusuma' : `Hinged door: ${opening.id}`;
+      group.add(blade);
+      movingLeaves.set(opening, blade);
+      if (opening.kind === 'fusuma') {
+        const offset = (wall.axis === 'e' ? pose.north : pose.east) - wall.fixed;
+        addFusuma(blade, geometry, materials, wall, opening, pose.width, pose.halfDepth, offset);
+      } else {
+        addHingedLeaf(blade, geometry, materials, opening, pose.width, pose.halfDepth);
+      }
+    }
+    blade.position.set(pose.east, 0, -pose.north);
+    blade.rotation.y = pose.angle;
+  }, () => balconyOpenAmount);
   geometry.finish();
 
   return {
     group,
+    doors,
     setTimeOfDay(time: CoastTimeOfDay) {
       indicator.color.setHex(time === 'night' ? 0xf3c58d : 0x9d9c80);
     },
     setBalconyDoor(openAmount: number) {
       const { nFrom, nTo } = RESIDENCE_BALCONY_DOOR;
-      leaf.position.z = -(nTo - nFrom) * THREE.MathUtils.clamp(openAmount, 0, 1);
+      balconyOpenAmount = THREE.MathUtils.clamp(openAmount, 0, 1);
+      leaf.position.z = -(nTo - nFrom) * balconyOpenAmount;
     },
     dispose() {
       geometry.dispose();

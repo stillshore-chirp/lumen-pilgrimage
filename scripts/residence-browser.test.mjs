@@ -144,6 +144,18 @@ async function capture(page, name, style) {
   if (screenshots) await page.screenshot({ path: join(screenshots, `${name}.png`), style });
 }
 
+async function exposeResidenceScene(page) {
+  await page.route('**/assets/CoastApp-*.js', async route => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const prepare = 'this.world.prepareRender?.(';
+    assert.ok(source.includes(prepare), 'The residence test hook requires exploration render preparation');
+    const hook = 'window.residenceProbe.scene=this.world.scene,'
+      + 'window.residenceProbe.relocate??=(pose=>this.controls.relocate(pose)),';
+    await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
+  });
+}
+
 async function brightness(canvas) {
   return canvas.evaluate(source => new Promise(resolve => requestAnimationFrame(() => {
     const sample = document.createElement('canvas');
@@ -297,15 +309,7 @@ test('room switches draw, reverse and reopen the same woven curtain panels', { t
       return panels;
     };
   });
-  await page.route('**/assets/CoastApp-*.js', async route => {
-    const response = await route.fetch();
-    const source = await response.text();
-    const prepare = 'this.world.prepareRender?.(';
-    assert.ok(source.includes(prepare), 'The curtain review hook requires exploration render preparation');
-    const hook = 'window.residenceProbe.scene=this.world.scene,'
-      + 'window.residenceProbe.relocate??=(pose=>this.controls.relocate(pose)),';
-    await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
-  });
+  await exposeResidenceScene(page);
   await page.goto(`${origin}/?world=residence`, { waitUntil: 'commit' });
   await page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor();
   await page.waitForFunction(() => window.curtainPanels('LD').length === 6);
@@ -384,6 +388,43 @@ test('room switches draw, reverse and reopen the same woven curtain panels', { t
   await relocate(17.91, -1.23, Math.PI);
   await close.waitFor();
   await waitForExpansion([.99, 1.01]);
+  assert.deepEqual(errors, []);
+});
+
+test('tea room fusuma moves, stops passage when closed, and leaves the window curtain independent', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&place=tea-room&time=day`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+  const doorOpen = button(page, '茶室の襖を開ける');
+  const doorClose = button(page, '茶室の襖を閉める');
+  const closedAt = 5.996;
+  const openAt = 5.008;
+  const waitForFusuma = x => page.waitForFunction(x => {
+    const door = window.residenceProbe.scene.getObjectByName('Tea room fusuma');
+    return door && Math.abs(door.position.x - x) < .005;
+  }, x);
+
+  await page.evaluate(() => window.residenceProbe.relocate({ x: 6.49, z: -5.7, yaw: Math.PI, pitch: 0 }));
+  await doorClose.waitFor();
+  await waitForFusuma(openAt);
+  await page.keyboard.press('e');
+  await doorOpen.waitFor();
+  await waitForFusuma(closedAt);
+  await hold(page, 'w', async () => {
+    await moreMovementFrames(page);
+    assert.ok((await camera(page)).z < -5, 'The closed fusuma must stop passage');
+  });
+  await hold(page, 's', () => page.waitForFunction(() => window.residenceProbe.camera.z < -5.58));
+  await doorOpen.click();
+  await waitForFusuma(openAt);
+  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z > -4.64));
+
+  await page.evaluate(() => window.residenceProbe.relocate({ x: 6.76, z: -4.33, yaw: -Math.PI / 2, pitch: 0 }));
+  await button(page, '茶室04のカーテンを閉める').click();
+  await button(page, '茶室04のカーテンを開ける').waitFor();
+  await waitForFusuma(openAt);
+  await capture(page, 'residence-tea-fusuma-open', '.coast-ui { visibility: hidden; }');
   assert.deepEqual(errors, []);
 });
 
