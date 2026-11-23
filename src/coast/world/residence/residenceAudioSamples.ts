@@ -24,6 +24,8 @@ export const RESIDENCE_ROOM_RESPONSES: readonly RoomResponse[] = [
   roomResponse('03', 0.35, 0.58, 0.28),
   roomResponse('FO', 0.145, 0.31, 0.52),
   roomResponse('BA', 0.10, 0.20, 0.61),
+  roomResponse('04', 0.45, 0.75, 0.23),
+  roomResponse('05', 0.39, 0.66, 0.26),
 ];
 
 function coefficient(cutoff: number, rate = SAMPLE_RATE): number {
@@ -86,6 +88,8 @@ const SURFACES = {
   stone: { duration: 0.16, body: 0.15, pitch: 158, texture: 0.23, cutoff: 3_450, tap: 0.34 },
   tile: { duration: 0.15, body: 0.13, pitch: 192, texture: 0.27, cutoff: 4_700, tap: 0.41 },
   balcony: { duration: 0.18, body: 0.13, pitch: 124, texture: 0.36, cutoff: 2_880, tap: 0.17 },
+  tatami: { duration: 0.18, body: 0.080, pitch: 91, texture: 0.17, cutoff: 690, tap: 0.011 },
+  wool: { duration: 0.17, body: 0.065, pitch: 79, texture: 0.105, cutoff: 510, tap: 0.009 },
 } satisfies Record<ResidenceSurface, Record<string, number>>;
 
 export function createFootfall(context: BaseAudioContext, surface: ResidenceSurface, seed: number): AudioBuffer {

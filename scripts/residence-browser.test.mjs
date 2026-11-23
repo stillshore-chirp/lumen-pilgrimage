@@ -249,6 +249,34 @@ test('the residence accepts startup walking and preserves its views across time,
   assert.deepEqual(errors, []);
 });
 
+test('tea room and study are accessible in the travel panel and have flush walking paths', { timeout }, async t => {
+  const { page, errors } = await openResidence(t, 'foyer');
+  const landscape = '.coast-ui { visibility: hidden; }';
+  await travel(page, '茶室04', 'residence', 'tea-room', 'night');
+  await page.waitForFunction(() => {
+    const { x, y, z } = window.residenceProbe.camera;
+    return Math.hypot(x - 6.57, z + 3.92) < .19 && Math.abs(y - 1.65) < .10;
+  });
+  await capture(page, 'residence-tea-room-night', landscape);
+  await hold(page, 'w', () => page.waitForFunction(() => {
+    const { x, y, z } = window.residenceProbe.camera;
+    return z > -3.08 && x < 6.1 && Math.abs(y - 1.65) < .10;
+  }));
+
+  await button(page, '昼').click();
+  await travel(page, '書斎05', 'residence', 'study', 'day');
+  await page.waitForFunction(() => {
+    const { x, y, z } = window.residenceProbe.camera;
+    return Math.hypot(x - 8.97, z + 3.91) < .19 && Math.abs(y - 1.65) < .10;
+  });
+  await capture(page, 'residence-study-day', landscape);
+  await hold(page, 'w', () => page.waitForFunction(() => {
+    const { x, y, z } = window.residenceProbe.camera;
+    return z > -2.99 && x > 9.19 && Math.abs(y - 1.65) < .10;
+  }));
+  assert.deepEqual(errors, []);
+});
+
 test('the primary bedroom slider gates balcony access and the glass rail stops walking', { timeout }, async t => {
   const { page, errors } = await openResidence(t, 'primary-bedroom');
   const open = button(page, 'バルコニーの引戸を開ける');

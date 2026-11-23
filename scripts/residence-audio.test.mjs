@@ -115,16 +115,24 @@ test('room decay and footfalls follow the floor plan and the audio device rate',
   const contexts = new AudioBuffers();
   assert.deepEqual([living, bed, core, bathroom, balcony].map(residenceSurfaceAt),
     ['oak', 'oak', 'stone', 'tile', 'balcony']);
-  assert.deepEqual(residenceReceiver(living, 0).wet, [1, 0, 0, 0, 0]);
-  assert.deepEqual(residenceReceiver(bed, 0).wet, [0, 1, 0, 0, 0]);
-  assert.deepEqual(residenceReceiver(core, 0).wet, [0, 0, 0, 1, 0]);
-  assert.deepEqual(residenceReceiver(bathroom, 0).wet, [0, 0, 0, 0, 1]);
-  assert.deepEqual(residenceReceiver(balcony, 0).wet, [0, 0, 0, 0, 0]);
-  const [livingTail, bedroomTail, , coreTail, bathTail] = RESIDENCE_ROOM_RESPONSES.map((profile, index) =>
+  const tea = ear(5.34, 2.52);
+  const study = ear(9.42, 2.56);
+  assert.deepEqual([tea, study, ear(6.56, 4.15), ear(9.46, 1.26)].map(residenceSurfaceAt),
+    ['tatami', 'wool', 'oak', 'oak']);
+  assert.deepEqual(residenceReceiver(living, 0).wet, [1, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(residenceReceiver(bed, 0).wet, [0, 1, 0, 0, 0, 0, 0]);
+  assert.deepEqual(residenceReceiver(core, 0).wet, [0, 0, 0, 1, 0, 0, 0]);
+  assert.deepEqual(residenceReceiver(bathroom, 0).wet, [0, 0, 0, 0, 1, 0, 0]);
+  assert.deepEqual(residenceReceiver(balcony, 0).wet, [0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(residenceReceiver(tea, 0).wet, [0, 0, 0, 0, 0, 1, 0]);
+  assert.deepEqual(residenceReceiver(study, 0).wet, [0, 0, 0, 0, 0, 0, 1]);
+  const [livingTail, bedroomTail, smallBedroomTail, coreTail, bathTail, teaTail, studyTail] =
+    RESIDENCE_ROOM_RESPONSES.map((profile, index) =>
     createRoomImpulse(contexts, profile, index + 1));
   assert.equal(livingTail.sampleRate, contexts.sampleRate);
   assert.ok(bedroomTail.duration < livingTail.duration && livingTail.duration < coreTail.duration
     && coreTail.duration < bathTail.duration);
+  assert.ok(teaTail.duration < studyTail.duration && studyTail.duration < smallBedroomTail.duration);
   assert.notDeepEqual(livingTail.getChannelData(0), livingTail.getChannelData(1));
   const firstReflection = buffer => buffer.getChannelData(0).findIndex(sample => Math.abs(sample) > 0.04);
   const livingFirst = firstReflection(livingTail) / contexts.sampleRate;
@@ -144,6 +152,9 @@ test('room decay and footfalls follow the floor plan and the audio device rate',
     return delta / energy;
   };
   assert.ok(brilliance(tile) > brilliance(wood) * 1.3);
+  const power = audio => audio.getChannelData(0).reduce((sum, sample) => sum + sample ** 2, 0);
+  assert.ok(power(createFootfall(contexts, 'tatami', 81)) < power(wood) * .60);
+  assert.ok(power(createFootfall(contexts, 'wool', 81)) < power(wood) * .55);
 });
 
 test('slider rolls and settles without starting or ending in a click', () => {

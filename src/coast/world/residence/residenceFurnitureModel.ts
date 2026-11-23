@@ -12,6 +12,7 @@ export class FurnitureModel {
   private readonly batches = new Map<THREE.Group, Map<THREE.Material, THREE.BufferGeometry[]>>();
   private readonly geometries = new Set<THREE.BufferGeometry>();
   private readonly finishes = new Set<THREE.Material>();
+  private readonly textures = new Set<THREE.Texture>();
   private space = this.group;
 
   constructor() {
@@ -37,6 +38,15 @@ export class FurnitureModel {
     finish.color.setHex(color);
     this.finishes.add(finish);
     return finish;
+  }
+
+  printed(texture: THREE.Texture): THREE.MeshStandardMaterial {
+    const material = new THREE.MeshStandardMaterial({
+      name: 'Printed cloth book spines', map: texture, color: 0xe4ce9f, roughness: .84, alphaTest: .19,
+    });
+    this.finishes.add(material);
+    this.textures.add(texture);
+    return material;
   }
 
   private add(geometry: THREE.BufferGeometry, material: THREE.Material): void {
@@ -86,6 +96,7 @@ export class FurnitureModel {
   dispose(): void {
     for (const geometry of this.geometries) geometry.dispose();
     for (const finish of this.finishes) finish.dispose();
+    for (const texture of this.textures) texture.dispose();
   }
 }
 
@@ -145,6 +156,17 @@ export class FurniturePiece {
   surface(material: THREE.Material, width: number, length: number, columns: number, rows: number,
     sample: (u: number, v: number) => Point): void {
     this.place(furnitureSurface(width, length, columns, rows, sample), material, 0, 0, 0);
+  }
+
+  print(material: THREE.Material, x: number, y: number, z: number, w: number, h: number,
+    uvRect: readonly [left: number, bottom: number, right: number, top: number]): void {
+    const geometry = new THREE.PlaneGeometry(w, h);
+    const uv = geometry.getAttribute('uv');
+    const [left, bottom, right, top] = uvRect;
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, THREE.MathUtils.lerp(left, right, uv.getX(i)), THREE.MathUtils.lerp(bottom, top, uv.getY(i)));
+    }
+    this.place(geometry, material, x, y, z);
   }
 
   cylinder(material: THREE.Material, x: number, y: number, z: number, radius: number,
@@ -208,12 +230,12 @@ export class FurniturePiece {
 
   // The wide corners are independent of the thickness. Holes leave real space for inset basins.
   slab(material: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number,
-    radius: number, hole?: { x: number; z: number; width: number; depth: number }): void {
+    radius: number, hole?: { x: number; z: number; width: number; depth: number; radius?: number }): void {
     const shape = new THREE.Shape();
     roundedOutline(shape, 0, 0, w, d, radius);
     if (hole) {
       const cut = new THREE.Path();
-      roundedOutline(cut, hole.x, -hole.z, hole.width, hole.depth, .085);
+      roundedOutline(cut, hole.x, -hole.z, hole.width, hole.depth, hole.radius ?? .085);
       shape.holes.push(cut);
     }
     const geometry = new THREE.ExtrudeGeometry(shape, {

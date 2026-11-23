@@ -56,8 +56,7 @@ export const fabricLamps = [
   { room: '01', east: 19.905, north: 15.277, base: .487, height: .32, accent: .48 },
   { room: '02', east: 21.335, north: 9.167, base: .487, height: .32, accent: .51 },
   { room: '03', east: 2.305, north: 3.127, base: .487, height: .32, accent: .52 },
-  { room: '04', east: 5.845, north: 3.127, base: .487, height: .32, accent: .37 },
-  { room: '05', east: 9.315, north: 3.037, base: .487, height: .32, accent: .38 },
+  { room: '04', east: 6.672, north: 3.414, base: -.04, height: .43, accent: .45 },
 ] as const;
 
 function fabricLampSources(room: string): LightSource[] {
@@ -71,8 +70,10 @@ const roomSources: Readonly<Record<string, readonly LightSource[]>> = {
   '01': [bedroomCoves['01'], ...fabricLampSources('01')],
   '02': [bedroomCoves['02'], ...fabricLampSources('02')],
   '03': [bedroomCoves['03'], ...fabricLampSources('03')],
-  '04': [bedroomCoves['04'], ...fabricLampSources('04'), task([6.748, .452, 6.748, .452], 1.065, .78, .39, .45)],
-  '05': [bedroomCoves['05'], ...fabricLampSources('05'), task([10.193, .520, 10.193, .520], 1.065, .81, .39, .50)],
+  '04': [bedroomCoves['04'], ...fabricLampSources('04'), task([4.19, 4.790, 5.20, 4.790], 2.15, 1.06, .51, .53)],
+  '05': [bedroomCoves['05'], task([8.005, 2.025, 8.005, 2.025], 1.092, 1.22, .60, .57),
+    task([9.978, 1.437, 9.978, 1.437], 1.27, 1.19, .47, .51),
+    task([10.64, 2.55, 10.64, 3.26], 2.404, 1.14, .39, .38)],
   H1: corridorFootlights.H1,
   H0: [...corridorFootlights.H0, hallCoves.H0],
   H2: corridorFootlights.H2,
@@ -175,7 +176,7 @@ export function createResidenceLightField(obstacles: readonly ResidenceRect[]) {
       const reflectedDay = id === 'K' ? .43 + .67 * Math.exp(-(north - 6.65) * .47)
         : id === 'H0' ? .42 + .60 * Math.exp(-(north - 6.65) * .56) : .56;
       const day = outdoors ? 1.72 : reflectedDay + .76 * skyBounce + (daytimeFixtures ? .38 : 0);
-      const night = outdoors ? .006 : (id === 'LD' ? .35 : id === 'H1' || id === 'H2' ? .23 : .28);
+      const night = outdoors ? .006 : (id === '04' ? .42 : id === 'LD' ? .35 : id === 'H1' || id === 'H2' ? .23 : .28);
       const sources = roomSources[id]?.map(source => ({
         source, distance: distanceTo(source.span, east, north),
         dx: THREE.MathUtils.clamp(east, source.span[0], source.span[2]) - east,
