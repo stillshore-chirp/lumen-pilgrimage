@@ -14,15 +14,24 @@ class MockParam {
 
 class MockNode {
   connections = [];
+  outputs = [];
   disconnected = false;
 
-  connect(node) {
+  connect(node, output = 0) {
     this.connections.push(node);
+    this.outputs.push(output);
     return node;
   }
 
-  disconnect() {
+  disconnect(node) {
+    if (node) {
+      const index = this.connections.indexOf(node);
+      this.connections.splice(index, 1);
+      this.outputs.splice(index, 1);
+      return;
+    }
     this.connections = [];
+    this.outputs = [];
     this.disconnected = true;
   }
 }
@@ -70,6 +79,8 @@ function setup(t, { spatial = true, blocked = false } = {}) {
     sources = [];
     gains = [];
     panners = [];
+    splitters = [];
+    filters = [];
 
     constructor() { contexts.push(this); }
 
@@ -97,6 +108,18 @@ function setup(t, { spatial = true, blocked = false } = {}) {
       const panner = Object.assign(new MockNode(), poseParams('position', 'orientation'));
       this.panners.push(panner);
       return panner;
+    }
+
+    createChannelSplitter(channels) {
+      const splitter = Object.assign(new MockNode(), { channels });
+      this.splitters.push(splitter);
+      return splitter;
+    }
+
+    createBiquadFilter() {
+      const filter = Object.assign(new MockNode(), { frequency: new MockParam(), Q: new MockParam() });
+      this.filters.push(filter);
+      return filter;
     }
   }
 
@@ -263,4 +286,55 @@ test('reports a blocked context and keeps stereo available when HRTF is unavaila
   context.resume = async () => { context.state = 'running'; };
   assert.equal(await audio.start(), true);
   assert.equal(audio.getStatus(), 'ready');
+});
+
+test('routes L, R, C, LFE, SL and SR to the fixed speakers and frees them on departure', async t => {
+  const { audio, contexts } = setup(t);
+  const speakers = Array.from({ length: 6 }, (_, index) => {
+    const object = new Group();
+    object.position.set(index + 1, 1.2, -2 * index);
+    return object;
+  });
+  audio.setStream(new MockStream([new MockTrack('audio')]));
+  await audio.start();
+  const [context] = contexts;
+  const [source] = context.sources;
+  const [master, stereo, spatial] = context.gains;
+  const [screen] = context.panners;
+  audio.setTheaterSpeakers(speakers);
+  assert.equal(audio.supportsSurround(), true);
+  const [layout, surround] = context.gains.slice(3);
+  const [splitter] = context.splitters;
+  const [filter] = context.filters;
+  const positions = context.panners.slice(1);
+  assert.equal(layout.channelCount, 6);
+  assert.equal(layout.channelCountMode, 'explicit');
+  assert.equal(layout.channelInterpretation, 'speakers');
+  assert.deepEqual(layout.connections, [splitter]);
+  assert.equal(splitter.channels, 6);
+  assert.deepEqual(splitter.outputs, [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual(splitter.connections, [...positions.slice(0, 3), filter, ...positions.slice(4)]);
+  assert.equal(filter.type, 'lowpass');
+  assert.equal(filter.frequency.value, 120);
+  assert.deepEqual(filter.connections, [positions[3]]);
+  assert.deepEqual(positions.map(panner => [panner.positionX.value, panner.positionY.value, panner.positionZ.value]),
+    speakers.map(speaker => speaker.position.toArray()));
+  assert.ok(positions.every(panner => panner.panningModel === 'HRTF' && panner.connections[0] === surround));
+  assert.deepEqual(surround.connections, [master]);
+
+  audio.setMode('surround');
+  assert.deepEqual(surround.gain.events.at(-1), ['ramp', 1, 10.12]);
+  assert.deepEqual(stereo.gain.events.at(-1), ['ramp', 0, 10.12]);
+  assert.equal(spatial.gain.value, 0);
+
+  context.currentTime = 11;
+  audio.setMode('television');
+  assert.deepEqual(spatial.gain.events.at(-1), ['ramp', 1, 11.12]);
+  assert.deepEqual(surround.gain.events.at(-1), ['ramp', 0, 11.12]);
+  audio.setMode('surround');
+  audio.setTheaterSpeakers(null);
+  assert.equal(audio.supportsSurround(), false);
+  assert.ok([layout, splitter, filter, ...positions, surround].every(node => node.disconnected));
+  assert.deepEqual(source.connections, [stereo, screen]);
+  assert.deepEqual(stereo.gain.events.at(-1), ['ramp', 1, 11.12]);
 });
