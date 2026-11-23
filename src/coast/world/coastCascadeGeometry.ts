@@ -12,12 +12,15 @@ interface CascadeShape {
   rockRunout?: number;
 }
 
-const shapes: CascadeShape[] = [
-  { feederStart: -15, lip: 10.5, join: 2, bend: -0.19, shelf: 0.70, sourceWidth: 0.60, fan: 1.29 },
-  { feederStart: -14, lip: 5.2, join: 2, bend: -0.16, shelf: 0.52, sourceWidth: 0.52, fan: 1.09 },
-  { feederStart: -10, lip: 21.5, join: 5, bend: 0.083, shelf: 0.67, sourceWidth: 0.51, fan: 1.01 },
-  { feederStart: -19, lip: -1.05, join: 2, bend: 0.015, shelf: 0.37, sourceWidth: 0.72, fan: 1.36, rockRunout: 0.33 },
-];
+const shapes: Record<CoastWaterfall['id'], CascadeShape> = {
+  'east-headland': { feederStart: -15, lip: 10.5, join: 2, bend: -0.19, shelf: 0.70, sourceWidth: 0.60, fan: 1.29 },
+  'west-headland': { feederStart: -14, lip: 5.2, join: 2, bend: -0.16, shelf: 0.52, sourceWidth: 0.52, fan: 1.09 },
+  'offshore-ridge': { feederStart: -10, lip: 21.5, join: 5, bend: 0.083, shelf: 0.67, sourceWidth: 0.51, fan: 1.01 },
+  'upland-lake': { feederStart: -19, lip: -1.05, join: 2, bend: 0.015, shelf: 0.37, sourceWidth: 0.72, fan: 1.36, rockRunout: 0.33 },
+  'west-wall': { feederStart: -9, lip: -0.50, join: 3, bend: -0.14, shelf: 0.58, sourceWidth: 0.66, fan: 1.31 },
+  'east-outer-cliff': { feederStart: -12, lip: -1.60, join: 4, bend: 0.17, shelf: 0.66, sourceWidth: 0.51, fan: 1.46 },
+  'shore-ledge': { feederStart: -4.5, lip: -0.5, join: 4, bend: 0.19, shelf: 0.58, sourceWidth: 0.69, fan: 1.43 },
+};
 
 interface Section {
   center: THREE.Vector3;
@@ -131,7 +134,7 @@ export function createCascadeGeometry(fall: CoastWaterfall, index: number): {
   geometry: THREE.BufferGeometry;
   impacts: CascadeImpact[];
 } {
-  const shape = shapes[index] ?? shapes[0];
+  const shape = shapes[fall.id];
   const sections = cascadeSections(fall, shape, index);
   const positions: number[] = [];
   const flows: number[] = [];

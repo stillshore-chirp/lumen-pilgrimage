@@ -824,12 +824,23 @@ export class CoastAudio {
     if (this.started) return;
     const nodeStart = this.graphNodes.length;
     const voiceStart = this.voices.length;
-    const waterfalls: EmitterSpec[] = COAST_FALLS.map((fall, index) => ({
+    const waterfalls: EmitterSpec[] = COAST_FALLS.slice(0, 3).map((fall, index) => ({
       asset: 'waterfall', position: positionOf(fall.path[Math.round((fall.path.length - 1) * 0.65)]),
       gain: 0.81 * 0.68 ** index, refDistance: 28, maxDistance: 900, rolloff: 0.41, waterReflection: 0.27,
       rockResponse: true,
       filters: [{ type: 'lowpass', frequency: 7600 }],
     }));
+    for (const fall of COAST_FALLS.slice(3)) {
+      const ledge = fall.id === 'shore-ledge';
+      const source = ledge ? { ...fall.impact, y: fall.impact.y + 1.1 }
+        : fall.path[Math.round((fall.path.length - 1) * 0.72)];
+      waterfalls.push({
+        asset: 'waterfall', position: positionOf(source),
+        gain: ledge ? 0.25 : 0.35, refDistance: ledge ? 8 : 17, maxDistance: ledge ? 93 : 390,
+        rolloff: ledge ? 0.95 : 0.54, waterReflection: ledge ? 0.12 : 0.20, rockResponse: true,
+        filters: [{ type: 'lowpass', frequency: ledge ? 8300 : 6900 }],
+      });
+    }
     for (const fall of COAST_FALLS.slice(0, 2)) {
       // Close spray stays at the impact while the bulk of the falling water carries across the bay.
       waterfalls.push({
