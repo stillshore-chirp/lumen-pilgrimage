@@ -31,6 +31,8 @@ const washerModes = [
   { value: 'spin', label: '脱水', seconds: 22, level: .69, speed: 19 },
   { value: 'dry', label: '乾燥', seconds: 60, level: .33, speed: 1.7 },
 ] as const;
+const washerDuration = { min: 10, max: 60 * 60 };
+const washerAdjustments = [[-60, '−1分'], [-10, '−10秒'], [10, '+10秒'], [60, '+1分']] as const;
 const maxMicrowaveSeconds = 30 * 60;
 const interactionReach = .86;
 
@@ -183,7 +185,9 @@ export class ResidenceAppliances {
     const display = this.display(frame, [-.130, .721, .309], .152, .031);
     const cycle = createApplianceCycle(this.now);
     let mode: typeof washerModes[number] = washerModes[0];
+    let configuredSeconds: number = mode.seconds;
     let phase = 0;
+    const selectedSeconds = () => cycle.remaining > 0 ? cycle.remaining : configuredSeconds;
     const sync = (dt: number) => {
       cycle.advance();
       const running = cycle.running;
@@ -200,8 +204,18 @@ export class ResidenceAppliances {
         washWater.rotation.z = washFoam.rotation.z;
       }
       const state = running ? `${mode.label} ${applianceTime(cycle.remaining)}`
-        : cycle.finished ? '完了' : cycle.remaining > 0 ? `停止 ${applianceTime(cycle.remaining)}` : mode.label;
+        : cycle.finished ? '完了' : cycle.remaining > 0 ? `停止 ${applianceTime(cycle.remaining)}`
+          : `${mode.label} ${applianceTime(configuredSeconds)}`;
       display(state, running || cycle.finished);
+    };
+    const setDuration = (seconds: number) => {
+      if (cycle.running) return;
+      if (cycle.remaining > 0) cycle.set(seconds);
+      else {
+        configuredSeconds = seconds;
+        cycle.set(0);
+      }
+      sync(0);
     };
     sync(0);
     this.updates.push(sync);
@@ -209,7 +223,7 @@ export class ResidenceAppliances {
       { kind: 'toggle', id: 'power', label: '運転', get: () => cycle.running, set(value) {
         if (value) {
           if (!cycle.running && cycle.remaining === 0) {
-            cycle.set(mode.seconds);
+            cycle.set(configuredSeconds);
             phase = 0;
           }
           cycle.start();
@@ -221,12 +235,25 @@ export class ResidenceAppliances {
           const selected = washerModes.find(candidate => candidate.value === value);
           if (!selected || selected === mode || cycle.running) return;
           mode = selected;
+          configuredSeconds = mode.seconds;
           cycle.set(0);
           sync(0);
         } },
+      ...washerAdjustments.map(([step, label]) => {
+        const disabled = () => cycle.running || (step < 0 ? selectedSeconds() <= washerDuration.min
+          : selectedSeconds() >= washerDuration.max);
+        return { kind: 'button' as const, id: `time-${step}`, label, disabled,
+          invoke() {
+            if (disabled()) return;
+            setDuration(THREE.MathUtils.clamp(selectedSeconds() + step, washerDuration.min, washerDuration.max));
+          } };
+      }),
+      { kind: 'button', id: 'reset-time', label: '標準時間に戻す', disabled: () => cycle.running,
+        invoke: () => setDuration(mode.seconds) },
       { kind: 'output', id: 'status', label: '状態', read: () => cycle.running
         ? `${mode.label}中・残り ${applianceTime(cycle.remaining)}`
-        : cycle.finished ? '完了' : cycle.remaining > 0 ? `停止中・残り ${applianceTime(cycle.remaining)}` : '待機中' },
+        : cycle.finished ? '完了' : cycle.remaining > 0 ? `停止中・残り ${applianceTime(cycle.remaining)}`
+          : `待機中・設定 ${applianceTime(configuredSeconds)}` },
     ], { kind: 'washer', at: [0, .40, .28], level: () => cycle.running ? mode.level : 0,
       completionCount: () => cycle.completions });
   }

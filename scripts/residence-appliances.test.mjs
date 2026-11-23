@@ -101,12 +101,14 @@ test('washer exposes four modes and holds its state independently from the secon
   const other = controls('washer-back');
   const voice = source('washer-front');
   const modes = ['wash', 'rinse', 'spin', 'dry'];
+  const defaults = ['00:40', '00:30', '00:22', '01:00'];
   assert.deepEqual(washer.mode.options.map(option => option.value), modes);
   const levels = new Set();
   for (const [i, mode] of modes.entries()) {
     washer.mode.set(mode);
     washer.mode.set('invalid');
     assert.equal(washer.mode.get(), mode);
+    assert.equal(washer.status.read(), `待機中・設定 ${defaults[i]}`);
     washer.power.set(true);
     assert.equal(washer.mode.disabled(), true);
     washer.mode.set(modes[(i + 1) % modes.length]);
@@ -128,6 +130,66 @@ test('washer exposes four modes and holds its state independently from the secon
     assert.equal(voice.completionCount(), i + 1);
   }
   assert.equal(levels.size, 4);
+});
+
+test('each washer adjusts its configured and paused time within bounds and completes once', () => {
+  const front = controls('washer-front');
+  const back = controls('washer-back');
+  const frontSound = source('washer-front');
+  const backSound = source('washer-back');
+  const frontCompletions = frontSound.completionCount();
+  const backCompletions = backSound.completionCount();
+  front.mode.set('spin');
+  front['time--60'].invoke();
+  assert.equal(front.status.read(), '待機中・設定 00:10');
+  assert.equal(front['time--10'].disabled(), true);
+  front['time--10'].invoke();
+  assert.equal(front.status.read(), '待機中・設定 00:10');
+  for (let i = 0; i < 61; i++) front['time-60'].invoke();
+  assert.equal(front.status.read(), '待機中・設定 60:00');
+  assert.equal(front['time-10'].disabled(), true);
+  front['reset-time'].invoke();
+  assert.equal(front.status.read(), '待機中・設定 00:22');
+  front['time-10'].invoke();
+  back['time-60'].invoke();
+  assert.equal(back.status.read(), '待機中・設定 01:40');
+  front.power.set(true);
+  assert.equal(front.status.read(), '脱水中・残り 00:32');
+  for (const id of ['time--60', 'time--10', 'time-10', 'time-60', 'reset-time']) {
+    assert.equal(front[id].disabled(), true);
+    front[id].invoke();
+  }
+  advance(3.4);
+  front.power.set(false);
+  assert.equal(frontSound.level(), 0);
+  assert.equal(front.status.read(), '停止中・残り 00:29');
+  front['time-60'].invoke();
+  front['time--10'].invoke();
+  assert.equal(front.status.read(), '停止中・残り 01:19');
+  advance(100);
+  assert.equal(front.status.read(), '停止中・残り 01:19');
+  assert.equal(frontSound.completionCount(), frontCompletions);
+  front['reset-time'].invoke();
+  assert.equal(front.status.read(), '停止中・残り 00:22');
+  front['time--60'].invoke();
+  assert.equal(front.status.read(), '停止中・残り 00:10');
+  back.power.set(true);
+  front.power.set(true);
+  advance(9.5);
+  assert.equal(front.status.read(), '脱水中・残り 00:01');
+  assert.equal(frontSound.completionCount(), frontCompletions);
+  advance(.5);
+  assert.equal(front.status.read(), '完了');
+  assert.equal(frontSound.completionCount(), frontCompletions + 1);
+  assert.equal(back.status.read(), '洗浄中・残り 01:30');
+  assert.equal(backSound.completionCount(), backCompletions);
+  advance(90.1);
+  assert.equal(back.status.read(), '完了');
+  assert.equal(backSound.completionCount(), backCompletions + 1);
+  assert.equal(frontSound.completionCount(), frontCompletions + 1);
+  front.power.set(true);
+  assert.equal(front.status.read(), '脱水中・残り 00:32');
+  front.power.set(false);
 });
 
 test('the nine water outlets run independently and the nearby controls stay within each room', () => {

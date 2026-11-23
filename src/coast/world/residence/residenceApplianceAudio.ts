@@ -8,7 +8,7 @@ type SoundPath = (listener: Point, source: Point) => {
 };
 
 const sampleRate = 24000;
-const loopLevels: Record<ApplianceKind, number> = { water: .30, washer: .21, microwave: .16 };
+const loopLevels: Record<ApplianceKind, number> = { water: .30, washer: .30, microwave: .16 };
 const quietGain = .0008;
 const tau = 2 * Math.PI;
 
