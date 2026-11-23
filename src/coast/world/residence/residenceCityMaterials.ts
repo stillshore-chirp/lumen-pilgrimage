@@ -157,7 +157,6 @@ const facadeLighting = /* glsl */`
     vec2 pane = 1.0 - smoothstep(limits - aa, limits + aa, line);
     float window = pane.x * pane.y;
     vec2 id = floor(grid) + vec2(vFacade.w, vFacade.w * 1.39) * 76.4;
-    float suite = cellRandom(floor(id * vec2(0.267, 0.85)) + 29.0);
     float floorChance = cellRandom(vec2(vFacade.w * 43.2, id.y));
     float individual = cellRandom(id);
     float visibleDetail = 1.0 - smoothstep(0.14, 0.39, max(aa.x, aa.y));
@@ -200,23 +199,32 @@ const facadeLighting = /* glsl */`
     glass *= 1.0 - innerColumn * (0.23 + 0.25 * stone);
     day = mix(day, glass, window);
 
-    // Occupied offices light in groups. Dwellings use smaller, quieter pockets of light.
-    float occupied = smoothstep(0.49, 0.72, suite * (0.64 - 0.25 * balcony) + individual * (0.27 + 0.23 * balcony)
-      + floorChance * (0.16 - 0.075 * balcony));
-    float lobbyLighting = lobby * (0.52 + 0.36 * suite);
-    float equipment = (1.0 - smoothstep(0.76, 0.96, cell.y)) * (0.50 + 0.50 * smoothstep(0.20, 0.61, cell.y));
-    float sources = exp(-abs(cell.y - (0.66 + individual * 0.11)) * 27.0)
-      * (1.0 - smoothstep(0.31, 0.47, line.x)) * visibleDetail;
-    float paired = step(0.42, cellRandom(floor(id * vec2(0.33, 0.99)) + 63.0));
-    vec3 warm = mix(vec3(1.0, 0.56, 0.26), vec3(0.87, 0.70, 0.48), individual);
-    vec3 neutral = mix(vec3(0.73, 0.83, 1.0), vec3(0.93, 0.89, 0.73), floorChance);
-    vec3 electric = mix(warm, neutral, paired * (1.0 - 0.72 * balcony));
-    float glow = max(occupied, lobbyLighting) * (0.085 + equipment * (0.18 + 0.12 * glazed) + sources * 0.29)
-      * (1.0 - 0.67 * shadeInGlass) * (1.0 - innerColumn * 0.38);
-    night = mix(night, vec3(0.0027, 0.0050, 0.0084) + glow * electric, window);
     float railing = balcony * (1.0 - smoothstep(0.35, 0.41, cell.y)) * pane.x;
     day *= 1.0 - railing * 0.34;
-    night *= 1.0 - railing * 0.56;
+    if (uNight > 0.0) {
+      // Neighboring rooms can belong to a single tenant, but an individual bay still varies.
+      float buildingUse = cellRandom(vec2(vFacade.w * 96.7, vFacade.z + 33.4));
+      float tenant = cellRandom(floor((id + vec2(9.8, 4.3)) * vec2(0.48 + 0.22 * balcony, 0.68)) + 43.0);
+      float occupied = smoothstep(0.43, 0.76, individual * (0.57 + 0.10 * balcony)
+        + tenant * (0.29 - 0.10 * balcony) + buildingUse * 0.18 + floorChance * 0.065);
+      float groundLobby = lobby * (1.0 - smoothstep(5.2, 10.0, vWorld.y - uStreetLevel));
+      float entry = groundLobby * smoothstep(0.21, 0.77, tenant * 0.60 + individual * 0.40);
+      float upperRoom = step(0.83, buildingUse) * glazed * step(73.0, vWorld.y - uStreetLevel)
+        * smoothstep(0.89, 0.97, vUv.y) * smoothstep(0.52, 0.86, individual);
+      float equipment = (1.0 - smoothstep(0.76, 0.96, cell.y)) * (0.50 + 0.50 * smoothstep(0.20, 0.61, cell.y));
+      float sources = exp(-abs(cell.y - (0.66 + individual * 0.11)) * 27.0)
+        * (1.0 - smoothstep(0.31, 0.47, line.x)) * visibleDetail;
+      float tint = cellRandom(id + vec2(27.3, 63.0)) * 0.62 + tenant * 0.38;
+      vec3 warm = mix(vec3(1.0, 0.61, 0.33), vec3(0.93, 0.76, 0.57), individual);
+      vec3 neutral = mix(vec3(0.77, 0.86, 1.0), vec3(0.96, 0.91, 0.76), tint);
+      vec3 electric = mix(warm, neutral, smoothstep(0.24, 0.82, tint) * (1.0 - 0.65 * balcony));
+      electric = mix(electric, vec3(1.0, 0.68, 0.39), entry * 0.73);
+      float glow = max(occupied, entry * 0.82) * (0.061 + equipment * (0.14 + 0.08 * glazed) + sources * 0.24)
+        + 0.05 * upperRoom;
+      glow *= (1.0 - 0.60 * shadeInGlass) * (1.0 - innerColumn * 0.41);
+      night = mix(night, vec3(0.0027, 0.0050, 0.0084) + glow * electric, window);
+      night *= 1.0 - railing * 0.56;
+    }
   }
 `;
 
