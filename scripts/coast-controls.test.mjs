@@ -3,7 +3,8 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera, Ray, Triangle, Vector3 } from 'three';
 import {
-  COAST_WALKS, FOREST_WALKS, INARI_WALKS, UPLAND_LAKE, UPLAND_WALKS, groundHeight, SEA_LEVEL, SPAWN,
+  COAST_REST_SITES, COAST_WALKS, FOREST_WALKS, INARI_WALKS, UPLAND_LAKE, UPLAND_WALKS,
+  groundHeight, restSiteYaw, SEA_LEVEL, SPAWN,
 } from '../src/coast/terrain.ts';
 
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
@@ -84,6 +85,30 @@ function createControls(browser, camera, callbacks = {}) {
     diveObstacleHeight: callbacks.diveObstacleHeight
   });
 }
+
+test('walking passes through each coastal rest bench at ground level', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    for (const site of COAST_REST_SITES) {
+      const yaw = restSiteYaw(site);
+      const east = Math.sin(yaw);
+      const south = Math.cos(yaw);
+      controls.relocate({ x: site.x - east * 0.9, z: site.z - south * 0.9, yaw: yaw + Math.PI, pitch: 0 });
+      browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW' });
+      for (let frame = 0; frame < 7; frame += 1) controls.update(0.04);
+      const { x, y, z } = camera.position;
+      const pastBench = (x - site.x) * east + (z - site.z) * south;
+      assert.ok(pastBench > 0.75, `${site.id} blocked walking after ${pastBench.toFixed(2)} m`);
+      assert.equal(controls.currentMovement, 'walk');
+      assert.ok(Math.abs(y - groundHeight(x, z) - 1.65) < 1e-6);
+    }
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
 
 test('walking approaches a steep cliff without crossing it or losing ground contact', () => {
   const browser = createBrowser();

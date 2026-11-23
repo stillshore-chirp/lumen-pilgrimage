@@ -1,5 +1,5 @@
 import { Vector3, type PerspectiveCamera } from 'three';
-import { COAST_BOUNDS, COAST_REST_SITES, coastWaterLevel, groundHeight, restSiteYaw, smoothstep, SPAWN } from './terrain';
+import { COAST_BOUNDS, coastWaterLevel, groundHeight, smoothstep, SPAWN } from './terrain';
 
 export type CoastMovement = 'walk' | 'wade' | 'swim' | 'dive' | 'flight';
 
@@ -61,25 +61,9 @@ const BOUNDS_PADDING = 0.35;
 const MAX_FLIGHT_HEIGHT = 255;
 const GAMEPAD_DEADZONE = 0.16;
 
-const benches = COAST_REST_SITES.map(site => {
-  const yaw = restSiteYaw(site);
-  return { site, forwardX: Math.sin(yaw), forwardZ: Math.cos(yaw), halfWidth: site.kind === 'terrace' ? 1.39 : 1.18 };
-});
-
-function hitsBench(x: number, z: number, foot: number): boolean {
-  for (const { site, forwardX, forwardZ, halfWidth } of benches) {
-    const dx = x - site.x, dz = z - site.z;
-    if (Math.abs(dx) > 1.6 || Math.abs(dz) > 1.6 || foot > site.grade + 0.83) continue;
-    const side = Math.abs(dx * forwardZ - dz * forwardX);
-    const along = dx * forwardX + dz * forwardZ;
-    if (side < halfWidth && along > -0.48 && along < 0.30) return true;
-  }
-  return false;
-}
-
 const coastNavigation: CoastNavigation = {
   bounds: COAST_BOUNDS, spawn: SPAWN, groundHeight, waterLevel: coastWaterLevel,
-  blocksWalking: hitsBench, flightCeiling: MAX_FLIGHT_HEIGHT,
+  flightCeiling: MAX_FLIGHT_HEIGHT,
 };
 
 export class CoastControls {
