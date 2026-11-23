@@ -1,4 +1,4 @@
-import { isResidenceDoorOpening, RESIDENCE_DOORWAYS, type ResidenceDoorway, type ResidenceOpening,
+import { isResidenceDoorOpening, RESIDENCE_DOORWAYS, RESIDENCE_FOYER_POCKET, type ResidenceDoorway, type ResidenceOpening,
   type ResidenceWall } from './residencePlan';
 
 const DOOR_REACH = 1.12;
@@ -30,14 +30,22 @@ function leafPose({ wall, opening }: ResidenceDoorway, amount: number): LeafPose
   const alongEast = wall.axis === 'e';
   const alongAngle = alongEast ? 0 : Math.PI / 2;
   const span = opening.to - opening.from;
-  if (opening.kind !== 'door') {
-    const fusuma = opening.kind === 'fusuma';
+  const poseAt = (along: number, across: number, angle: number, width: number, halfDepth: number): LeafPose => ({
+    east: alongEast ? along : across,
+    north: alongEast ? across : along,
+    angle, width, halfDepth,
+  });
+  if (opening.kind === 'gallery-slide') {
     const width = span + 2 * SLIDING_OVERLAP;
-    const along = opening.from - SLIDING_OVERLAP + (fusuma ? -1 : 1) * amount * width;
+    const closed = opening.from - SLIDING_OVERLAP;
+    const retracted = RESIDENCE_FOYER_POCKET.stowLimit - SLIDING_OVERLAP - width;
+    return poseAt(closed + (retracted - closed) * amount, wall.fixed, alongAngle, width, .028);
+  }
+  if (opening.kind === 'fusuma') {
+    const width = span + 2 * SLIDING_OVERLAP;
+    const along = opening.from - SLIDING_OVERLAP - amount * width;
     // The hallway face has room for the track beside the tea-room alcove.
-    const across = wall.fixed + (fusuma ? wall.thickness / 2 + .025 : 0);
-    return { east: alongEast ? along : across, north: alongEast ? across : along,
-      angle: alongAngle, width, halfDepth: fusuma ? .018 : .028 };
+    return poseAt(along, wall.fixed + wall.thickness / 2 + .025, alongAngle, width, .018);
   }
 
   const { hinge, side } = opening.swing;
@@ -45,12 +53,8 @@ function leafPose({ wall, opening }: ResidenceDoorway, amount: number): LeafPose
   const along = reverse ? opening.to - HINGE_INSET : opening.from + HINGE_INSET;
   const across = wall.fixed + side * HINGE_OFFSET;
   const swingAngle = (alongEast ? side : -side) * (reverse ? -1 : 1) * Math.PI / 2;
-  return {
-    east: alongEast ? along : across,
-    north: alongEast ? across : along,
-    angle: alongAngle + (reverse ? Math.PI : 0) + amount * swingAngle,
-    width: span - .044, halfDepth: HINGED_HALF_DEPTH,
-  };
+  const angle = alongAngle + (reverse ? Math.PI : 0) + amount * swingAngle;
+  return poseAt(along, across, angle, span - .044, HINGED_HALF_DEPTH);
 }
 
 function leafBlocks(pose: LeafPose, east: number, north: number, angle = pose.angle, width = pose.width): boolean {
@@ -66,14 +70,12 @@ function leafBlocks(pose: LeafPose, east: number, north: number, angle = pose.an
   return endGap ** 2 + across ** 2 < (RESIDENCE_WALKER_RADIUS + pose.halfDepth) ** 2;
 }
 
-function sweepBlocks(door: DoorState, next: LeafPose, { x, z }: Position): boolean {
-  const { pose } = door;
-  if (door.doorway.opening.kind !== 'door') {
+function sweepBlocks(doorway: ResidenceDoorway, pose: LeafPose, next: LeafPose, { x, z }: Position): boolean {
+  if (doorway.opening.kind !== 'door') {
     // The moving leaf covers one continuous span along its track.
     const first = next.east < pose.east || next.north < pose.north ? next : pose;
     const travel = Math.hypot(next.east - pose.east, next.north - pose.north);
-    const width = exposedWidth(door.doorway, first, first.width + travel);
-    return width > 0 && leafBlocks(first, x, -z, first.angle, width);
+    return exposedLeafBlocks(doorway, first, x, -z, first.width + travel);
   }
   // Distance to the hinged leaf is smallest at the angle closest to the walker.
   const mid = (pose.angle + next.angle) / 2;
@@ -84,11 +86,16 @@ function sweepBlocks(door: DoorState, next: LeafPose, { x, z }: Position): boole
   return leafBlocks(pose, x, -z, closestAngle);
 }
 
-function exposedWidth({ wall, opening }: ResidenceDoorway, pose: LeafPose, width = pose.width): number {
-  if (opening.kind !== 'gallery-slide') return width;
-  // The pocket itself already has a permanent wall collision.
-  const start = wall.axis === 'e' ? pose.east : pose.north;
-  return Math.min(width, opening.to - start);
+function exposedLeafBlocks({ wall, opening }: ResidenceDoorway, pose: LeafPose,
+  east: number, north: number, width = pose.width): boolean {
+  if (opening.kind !== 'gallery-slide') return leafBlocks(pose, east, north, pose.angle, width);
+  // The fixed wall handles collision for the part of the panel inside the pocket.
+  const along = wall.axis === 'e' ? pose.east : pose.north;
+  const start = Math.max(along, opening.from);
+  const end = Math.min(along + width, opening.to);
+  if (end <= start) return false;
+  const visible = wall.axis === 'e' ? { ...pose, east: start } : { ...pose, north: start };
+  return leafBlocks(visible, east, north, pose.angle, end - start);
 }
 
 function doorwayDistance({ wall, opening }: ResidenceDoorway, { x, z }: Position): number {
@@ -141,7 +148,7 @@ export function createResidenceDoors(
         const amount = door.target === 1 ? Math.min(1, door.amount + step) : Math.max(0, door.amount - step);
         if (door.amount === amount) continue;
         const pose = leafPose(door.doorway, amount);
-        if (sweepBlocks(door, pose, position)) continue;
+        if (sweepBlocks(door.doorway, door.pose, pose, position)) continue;
         door.amount = amount;
         door.pose = pose;
         positionLeaf?.(door.doorway, pose);
@@ -151,8 +158,7 @@ export function createResidenceDoors(
     },
     blocksWalking(x: number, z: number): boolean {
       for (const { doorway, pose } of doors.values()) {
-        const width = exposedWidth(doorway, pose);
-        if (width > 0 && leafBlocks(pose, x, -z, pose.angle, width)) return true;
+        if (exposedLeafBlocks(doorway, pose, x, -z)) return true;
       }
       return false;
     },
