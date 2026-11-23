@@ -685,8 +685,8 @@ test('theater mode sets RGB illumination and restores the normal living-room lig
   assert.equal(await east.getAttribute('aria-pressed'), 'true');
   await toggle.focus();
   await toggle.press('Space');
-  assert.equal(await west.isDisabled(), true);
-  assert.equal(await east.isDisabled(), true);
+  assert.equal(await west.isEnabled(), true);
+  assert.equal(await east.isEnabled(), true);
   assert.equal(await east.getAttribute('aria-pressed'), 'false');
   await kitchen.locator('summary').click();
   const kitchenLight = kitchen.getByRole('button', { pressed: true }).first();
@@ -709,6 +709,9 @@ test('theater mode sets RGB illumination and restores the normal living-room lig
   await button(page, '夜').click();
   await trigger.click();
   assert.equal(await tint.inputValue(), '#70bdff');
+  await west.click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'true');
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
   await toggle.click();
   assert.equal(await west.isEnabled(), true);
   assert.equal(await west.getAttribute('aria-pressed'), 'false');
@@ -1011,5 +1014,144 @@ test('the gallery pocket door closes, stops walking, and reopens both ways', { t
   await open.click();
   await waitForLeaf(12.814);
   await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z < -7.26));
+  assert.deepEqual(errors, []);
+});
+
+test('nearby lighting controls switch a zone or one lamp without opening the residence menu', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&time=night`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+
+  const trigger = button(page, '住戸の操作');
+  const dialog = page.getByRole('dialog', { name: '住戸の操作' });
+  const living = dialog.locator('[data-residence-section="lighting-LD"]');
+  const study = dialog.locator('[data-residence-section="lighting-05"]');
+  const tea = dialog.locator('[data-residence-section="lighting-04"]');
+  const table = living.getByRole('button', { name: 'ソファ横のランプ', exact: true });
+  const pendant = living.getByRole('button', { name: 'ペンダント灯（東）', exact: true });
+  const theater = living.getByRole('button', { name: 'シアター照明', exact: true });
+  const desk = study.getByRole('button', { name: 'デスクライト', exact: true });
+  const lantern = tea.getByRole('button', { name: '行灯', exact: true });
+  const canvas = page.locator('canvas.coast-view');
+  const landscape = '.coast-ui { visibility: hidden; }';
+  const go = pose => page.evaluate(pose => window.residenceProbe.relocate(pose), pose);
+  const pressed = (control, on) => control.and(dialog.getByRole('button', { pressed: on })).waitFor();
+  const light = (id, on) => page.waitForFunction(({ id, on }) => {
+    let amount;
+    window.residenceProbe.scene.traverse(object => {
+      if (object.material?.userData?.residenceFixtureId === id) amount = object.material.emissiveIntensity;
+    });
+    return typeof amount === 'number' && (amount > 0) === on;
+  }, { id, on });
+  async function openSection(section) {
+    await trigger.click();
+    if (await section.getAttribute('open') === null) await section.locator('summary').click();
+  }
+
+  await go({ x: 11.65, z: -4.78, yaw: Math.PI / 2, pitch: -.35 });
+  await button(page, 'リビング・ダイニングの照明を一括消灯').waitFor();
+  await page.keyboard.press('e');
+  await button(page, 'リビング・ダイニングの照明を一括点灯').waitFor();
+  assert.equal(await dialog.isVisible(), false);
+  await light('LD-table', false);
+  await light('LD-pendant-east', false);
+  await light('K-strip-east', true);
+  await button(page, 'リビング・ダイニングの照明を一括点灯').click();
+  await light('LD-table', true);
+  await light('LD-pendant-east', true);
+
+  await go({ x: 17.97, z: -1.55, yaw: Math.PI, pitch: -.72 });
+  await button(page, 'ソファ横のランプを消す').click();
+  await light('LD-table', false);
+  await light('LD-pendant-east', true);
+  await openSection(living);
+  await pressed(table, false);
+  await pressed(pendant, true);
+
+  await pendant.click();
+  await theater.click();
+  assert.equal(await table.isEnabled(), true);
+  assert.equal(await pendant.isEnabled(), true);
+  await pressed(pendant, false);
+  await page.keyboard.press('Escape');
+
+  await go({ x: 11.65, z: -4.78, yaw: Math.PI / 2, pitch: -.35 });
+  await button(page, 'リビング・ダイニングの照明を一括点灯').waitFor();
+  await page.keyboard.press('e');
+  await light('LD-pendant-east', true);
+  assert.equal(await dialog.isVisible(), false);
+  await openSection(living);
+  await pressed(theater, true);
+  await pressed(pendant, true);
+  await page.keyboard.press('Escape');
+  await button(page, 'リビング・ダイニングの照明を一括消灯').click();
+  await light('LD-pendant-east', false);
+
+  await go({ x: 17.97, z: -1.55, yaw: Math.PI, pitch: -.72 });
+  await button(page, 'ソファ横のランプを点ける').waitFor();
+  const dark = await brightness(canvas, [.29, .44, .42, .39]);
+  await capture(page, 'residence-local-light-theater-off', landscape);
+  await page.keyboard.press('e');
+  await light('LD-table', true);
+  await light('LD-pendant-east', false);
+  const lit = await brightness(canvas, [.29, .44, .42, .39]);
+  assert.ok(lit.mean > dark.mean + 1, JSON.stringify({ dark, lit }));
+  await capture(page, 'residence-local-light-theater-table', landscape);
+  await openSection(living);
+  await pressed(theater, true);
+  await pressed(table, true);
+  await table.click();
+  await pendant.click();
+  await pressed(pendant, true);
+  await pressed(theater, true);
+  await page.keyboard.press('Escape');
+  await light('LD-pendant-east', true);
+  await button(page, 'ソファ横のランプを点ける').waitFor();
+  await button(page, 'ソファ横のランプを点ける').click();
+  await light('LD-table', true);
+  await openSection(living);
+  await theater.click();
+  await pressed(table, false);
+  await pressed(pendant, false);
+  await page.keyboard.press('Escape');
+  await light('LD-table', false);
+
+  await go({ x: 12.72, z: -1.27, yaw: Math.PI / 2, pitch: -.18 });
+  await button(page, 'フロアランプを消す').click();
+  await light('LD-floor', false);
+
+  await go({ x: 6.20, z: -3.414, yaw: -Math.PI / 2, pitch: -.8 });
+  await button(page, '行灯を消す').click();
+  await light('04-alcove', true);
+  await openSection(tea);
+  await pressed(lantern, false);
+  await page.keyboard.press('Escape');
+
+  await go({ x: 8.63, z: -2.025, yaw: Math.PI / 2, pitch: -.54 });
+  await button(page, 'デスクライトを消す').click();
+  await light('05-desk', false);
+  await light('05-reading', true);
+  await openSection(study);
+  await pressed(desk, false);
+  await desk.click();
+  await page.keyboard.press('Escape');
+  await button(page, 'デスクライトを消す').waitFor();
+  await light('05-desk', true);
+
+  await go({ x: 10.68, z: -4.42, yaw: 0, pitch: -.35 });
+  await button(page, '書斎05の照明を一括消灯').click();
+  await light('05-reading', false);
+  await light('05-desk', false);
+  assert.equal(await dialog.isVisible(), false);
+
+  await go({ x: 7.24, z: -2.025, yaw: -Math.PI / 2, pitch: -.54 });
+  await page.waitForFunction(() => window.residenceProbe.camera.x < 7.30);
+  assert.equal(await button(page, 'デスクライトを点ける').isVisible(), false);
+
+  await go({ x: 19.77, z: -14.53, yaw: 0, pitch: -.7 });
+  await button(page, 'ベッド脇のランプ（東）を消す').click();
+  await light('01-bed-east', false);
+  await light('01-bed-west', true);
   assert.deepEqual(errors, []);
 });
