@@ -441,7 +441,8 @@ test('the residence plays one WebRTC stream on the television and switches the a
     await button(sender, '接続を許可').click();
     await waitForVideo(viewer, 1);
     const active = await screenPixels(viewer, 'residence-television');
-    assert.ok(active.count > 2_000, 'the television renders the shared video on the north wall');
+    assert.ok(active.width > viewport.width * .4 && active.width < viewport.width * .55,
+      'the shared video fills the enlarged television from the theater travel position');
     assert.ok(Math.abs(active.width / active.height - 16 / 9) < .15);
     const video = viewer.locator(videoSelector);
     await video.evaluate(element => { window.originalMonitorStream = element.srcObject; });
@@ -474,7 +475,9 @@ test('the residence plays one WebRTC stream on the television and switches the a
     await target.selectOption('floating');
     assert.equal(await button(viewer, '配置を編集').isEnabled(), true);
     assert.equal(await mode.inputValue(), 'surround');
-    assert.ok((await screenPixels(viewer)).width > active.width);
+    const floating = await screenPixels(viewer);
+    assert.ok(floating.count > 2_000 && Math.abs(floating.y - active.y) > 12,
+      'the same video is visible at the floating monitor position');
     await target.selectOption('television');
     assert.ok(Math.abs((await screenPixels(viewer)).width - active.width) <= 4);
     assert.equal(await video.evaluate(element => element.srcObject === window.originalMonitorStream), true);

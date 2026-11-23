@@ -3,12 +3,12 @@ import type { MonitorTheater } from '../../../monitor/monitorObject';
 import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
 import type { ResidenceMaterials } from './residenceMaterials';
 
-const SCREEN_DIAGONAL = 65 * .0254;
+const SCREEN_DIAGONAL = 130 * .0254;
 const SCREEN_WIDTH = SCREEN_DIAGONAL * 16 / Math.hypot(16, 9);
 const SCREEN_HEIGHT = SCREEN_WIDTH * 9 / 16;
 const AXIS = 19.99;
 const SCREEN_NORTH = 6.49;
-const SCREEN_HEIGHT_ABOVE_FLOOR = 1.24;
+const SCREEN_HEIGHT_ABOVE_FLOOR = 1.45;
 const LISTENER = { east: AXIS, north: 1.79 };
 
 function addSofa(model: FurnitureModel, m: ResidenceMaterials): void {
@@ -107,18 +107,22 @@ export function addResidenceTheater(model: FurnitureModel, m: ResidenceMaterials
     SCREEN_WIDTH + .012, .006, .005, .002);
   const screen = new Mesh(new PlaneGeometry(SCREEN_WIDTH, SCREEN_HEIGHT),
     new MeshBasicMaterial({ color: 0x11171b, toneMapped: false }));
-  screen.name = 'residence-tv-65v';
+  screen.name = 'residence-tv';
   screen.position.set(AXIS, SCREEN_HEIGHT_ABOVE_FLOOR, -SCREEN_NORTH);
 
   const grille = model.tone(m.felt, 0x303236);
   const diaphragm = model.tone(m.darkMetal, 0x555b5f);
-  const tower: readonly Driver[] = [[0, 1.044, .034], [0, .806, .104], [0, .555, .104], [0, .302, .104]];
+  const towerHeight = 1.64;
+  // Keep the tweeter near seated ear height as the cabinet extends upward.
+  const tower: readonly Driver[] = [
+    [0, 1.125, .034], [0, 1.405, .092], [0, .847, .104], [0, .570, .104], [0, .293, .104],
+  ];
   const satellite: readonly Driver[] = [[0, .214, .027], [0, .103, .059]];
   // ITU-R BS.775-4 provides reference bearings for the fronts and surrounds.
   // The front pair is slightly narrower to preserve the outer window path.
   const speakers = [
-    addSpeaker(model, m, grille, diaphragm, AXIS - 2.13, 6.30, .022, .296, 1.16, .345, tower),
-    addSpeaker(model, m, grille, diaphragm, AXIS + 2.13, 6.30, .022, .296, 1.16, .345, tower),
+    addSpeaker(model, m, grille, diaphragm, AXIS - 2.13, 6.30, .022, .296, towerHeight, .345, tower),
+    addSpeaker(model, m, grille, diaphragm, AXIS + 2.13, 6.30, .022, .296, towerHeight, .345, tower),
     addSpeaker(model, m, grille, diaphragm, AXIS, 6.36, .405, .59, .167, .230,
       [[0, .089, .029], [-.179, .089, .056], [.179, .089, .056]]),
     addSpeaker(model, m, grille, diaphragm, 21.45, 6.28, .016, .419, .435, .451, [[0, .225, .156]]),
