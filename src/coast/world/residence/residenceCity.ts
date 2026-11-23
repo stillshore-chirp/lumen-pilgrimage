@@ -9,21 +9,26 @@ import {
   RESIDENCE_DAY_HAZE, RESIDENCE_NIGHT_HAZE, RESIDENCE_SUN,
 } from './residenceCityMaterials';
 import {
-  RESIDENCE_CITY_LIMITS, RESIDENCE_REGIONAL_ORIGIN, RESIDENCE_STREET_LEVEL,
+  RESIDENCE_AXIAL_CORRIDORS, RESIDENCE_DISTRICT_AREAS, RESIDENCE_REGIONAL_ORIGIN, RESIDENCE_STREET_LEVEL, type CityRect,
 } from './residenceCityPlan';
 import { createResidenceBlocks } from './residenceDistrictGround';
 import { createResidenceNeighborhood } from './residenceNeighborhood';
 import { createResidenceStreetTraffic } from './residenceStreetTraffic';
 
-function distanceFromNeighborhood(x: number, z: number): number {
+function distanceFromNeighborhood(x: number, z: number, areas: readonly CityRect[]): number {
   const east = x - RESIDENCE_REGIONAL_ORIGIN.x;
   const south = RESIDENCE_REGIONAL_ORIGIN.z - z;
-  const { minX, maxX, minZ, maxZ } = RESIDENCE_CITY_LIMITS;
-  return Math.hypot(Math.max(0, minX - east, east - maxX), Math.max(0, minZ - south, south - maxZ));
+  let distance = Infinity;
+  for (const { minX, maxX, minZ, maxZ } of areas) {
+    distance = Math.min(distance, Math.hypot(Math.max(0, minX - east, east - maxX), Math.max(0, minZ - south, south - maxZ)));
+  }
+  return distance;
 }
 
 function excludeRegionalFootprint(x: number, z: number, padding: number): boolean {
-  return distanceFromNeighborhood(x, z) <= padding + 26 || isOverlookRoadway(x, z, padding);
+  return distanceFromNeighborhood(x, z, RESIDENCE_DISTRICT_AREAS) <= padding + 26
+    || distanceFromNeighborhood(x, z, RESIDENCE_AXIAL_CORRIDORS) <= padding + 31
+    || isOverlookRoadway(x, z, padding);
 }
 
 function disposeDrawables(root: THREE.Object3D): void {
@@ -50,7 +55,7 @@ export async function createResidenceCity() {
   const heightAt = (x: number, z: number) => {
     // Adjacent terrain vertices are at most 235 m apart here. Extend the level district
     // below its streets before rejoining the measured surface, including at patch corners.
-    const transition = THREE.MathUtils.smoothstep(distanceFromNeighborhood(x, z), 333, 480);
+    const transition = THREE.MathUtils.smoothstep(distanceFromNeighborhood(x, z, RESIDENCE_DISTRICT_AREAS), 333, 480);
     return THREE.MathUtils.lerp(grade - 0.38, survey(x, z), transition);
   };
 
@@ -91,6 +96,8 @@ export async function createResidenceCity() {
     shader.uniforms.uResidenceNightHaze = { value: RESIDENCE_NIGHT_HAZE };
     shader.uniforms.uResidenceOrigin = { value: new THREE.Vector2(origin.x, origin.z) };
     shader.uniforms.uResidenceBounds = { value: neighborhood.shade.bounds };
+    shader.uniforms.uResidenceDistrictAreas = { value: RESIDENCE_DISTRICT_AREAS.map(({ minX, minZ, maxX, maxZ }) =>
+      new THREE.Vector4(minX, minZ, maxX, maxZ)) };
     shader.uniforms.uResidenceShade = { value: neighborhood.shade.texture };
     shader.uniforms.uResidenceSurface = { value: neighborhood.surface };
     shader.fragmentShader = shader.fragmentShader
@@ -98,16 +105,22 @@ export async function createResidenceCity() {
         uniform vec3 uResidenceDayHaze, uResidenceNightHaze;
         uniform vec2 uResidenceOrigin;
         uniform vec4 uResidenceBounds;
+        uniform vec4 uResidenceDistrictAreas[${RESIDENCE_DISTRICT_AREAS.length}];
         uniform sampler2D uResidenceShade, uResidenceSurface;
       `)
       .replace('#include <opaque_fragment>', `
         vec2 district = (vHillPoint.xz - uResidenceOrigin) * vec2(1.0, -1.0);
         vec2 localUv = (district - uResidenceBounds.xy) / uResidenceBounds.zw;
-        vec2 outside = max(max(-localUv, localUv - 1.0), vec2(0.0)) * uResidenceBounds.zw;
-        float nearDistrict = 1.0 - smoothstep(4.0, 111.0, length(outside));
+        float districtDistance = 43500.0;
+        for (int area = 0; area < ${RESIDENCE_DISTRICT_AREAS.length}; area++) {
+          vec4 bounds = uResidenceDistrictAreas[area];
+          vec2 outside = max(max(bounds.xy - district, district - bounds.zw), vec2(0.0));
+          districtDistance = min(districtDistance, length(outside));
+        }
+        float nearDistrict = 1.0 - smoothstep(4.0, 111.0, districtDistance);
         vec4 surface = texture2D(uResidenceSurface, district * 0.031);
         vec2 shade = texture2D(uResidenceShade, localUv).rg;
-        float inner = step(0.0, localUv.x) * step(0.0, localUv.y) * step(localUv.x, 1.0) * step(localUv.y, 1.0);
+        float inner = 1.0 - step(0.001, districtDistance);
         float fabric = smoothstep(0.32, 0.71, surface.r * 0.65 + surface.g * 0.35);
         vec3 gravel = mix(vec3(0.125, 0.119, 0.109), vec3(0.195, 0.180, 0.155), fabric);
         gravel *= (0.91 + surface.b * 0.15) * (1.0 - inner * (smoothstep(0.007, 0.020, shade.r) * 0.44 + shade.g * 0.14));

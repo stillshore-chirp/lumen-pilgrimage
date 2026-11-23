@@ -1,7 +1,7 @@
 import { airCutoff } from '../../coastAcoustics';
 import { smoothstep, type CoastPoint } from '../../terrain';
 import {
-  RESIDENCE_AVENUE, RESIDENCE_CROSS_STREETS, RESIDENCE_SIDE_STREET, RESIDENCE_STREET_LEVEL,
+  RESIDENCE_AVENUE, RESIDENCE_BALCONY_REFLECTOR, RESIDENCE_CROSS_STREETS, RESIDENCE_STREET_LEVEL,
 } from './residenceCityPlan';
 import { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, RESIDENCE_WALLS, type ResidenceRect } from './residencePlan';
 
@@ -108,7 +108,16 @@ const SOURCE_HEIGHT = RESIDENCE_STREET_LEVEL + 0.55;
 const southCrossing = RESIDENCE_CROSS_STREETS[0];
 const southDepth = (southCrossing.minZ + southCrossing.maxZ) * 0.5;
 const avenueCenter = (RESIDENCE_AVENUE.minX + RESIDENCE_AVENUE.maxX) * 0.5;
-const sideStreetCenter = (RESIDENCE_SIDE_STREET.minX + RESIDENCE_SIDE_STREET.maxX) * 0.5;
+const avenueSouth = {
+  minZ: Math.max(RESIDENCE_AVENUE.minZ, southDepth + 28),
+  maxZ: Math.min(RESIDENCE_AVENUE.maxZ, southDepth + 308),
+};
+// Sample the avenue along the foreground facades below the balcony. Extending the
+// road across the city leaves the nearby traffic and its reflection in this section.
+const avenueEast = {
+  minZ: Math.max(RESIDENCE_AVENUE.minZ, -144),
+  maxZ: Math.min(RESIDENCE_AVENUE.maxZ, 15),
+};
 
 function road(fromX: number, fromZ: number, toX: number, toZ: number, day: number, night: number) {
   const at = (fraction: number) => ({ x: fromX + (toX - fromX) * fraction, y: SOURCE_HEIGHT,
@@ -118,13 +127,13 @@ function road(fromX: number, fromZ: number, toX: number, toZ: number, day: numbe
 
 export const RESIDENCE_ROADS = [
   road(Math.max(-112, southCrossing.minX), southDepth, Math.min(142, southCrossing.maxX), southDepth, 0.65, 0.28),
-  road(avenueCenter, RESIDENCE_AVENUE.minZ + 28, avenueCenter, RESIDENCE_AVENUE.minZ + 308, 0.58, 0.26),
-  road(sideStreetCenter, RESIDENCE_SIDE_STREET.minZ, sideStreetCenter, RESIDENCE_SIDE_STREET.maxZ, 0.48, 0.19),
+  road(avenueCenter, avenueSouth.minZ, avenueCenter, avenueSouth.maxZ, 0.58, 0.26),
+  road(avenueCenter, avenueEast.minZ, avenueCenter, avenueEast.maxZ, 0.48, 0.19),
 ] as const;
 
-// Image of the east street across the adjacent tower face at E54.
+// Image of the east street across the adjacent tower's west face.
 // This is a quiet, band-limited reflection. The recording's other arrivals remain in the road bed.
-export const STREET_REFLECTION = { ...RESIDENCE_ROADS[2].patches[1], x: 2 * 54 - sideStreetCenter };
+export const STREET_REFLECTION = { ...RESIDENCE_ROADS[2].patches[1], x: 2 * RESIDENCE_BALCONY_REFLECTOR.minX - avenueCenter };
 const REFERENCE_DISTANCE = 100;
 
 export function residenceTrafficPath(receiver: ReturnType<typeof residenceReceiver>, source: Point, line: boolean) {

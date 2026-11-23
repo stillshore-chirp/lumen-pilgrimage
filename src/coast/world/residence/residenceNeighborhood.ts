@@ -164,21 +164,22 @@ function layRoads(
     }
   }
 
-  for (const [begin, end] of openSegments(avenue, network, 19.5, 9)) {
+  const center = avenue.center;
+  for (const [begin, end] of openSegments(avenue, network, center, 9)) {
     if (end - begin < 13) continue;
-    for (const x of [17.75, 21.25]) {
+    for (const x of [center - 1.75, center + 1.75]) {
       slab(paint, laneRect(true, x - 0.097, x + 0.097, begin - 4.4, end + 4.4), 0.018, yellow, 0.026);
     }
-    slab(medians, laneRect(true, 18.23, 20.77, begin, end), 0.41, 0xb7ae98, 0.60, DISTRICT_SURFACE.pavement);
-    slab(medians, laneRect(true, 18.43, 20.57, begin + 0.4, end - 0.4), 0.48, 0x67764e, 0.18, vegetation);
+    slab(medians, laneRect(true, center - 1.27, center + 1.27, begin, end), 0.41, 0xb7ae98, 0.60, DISTRICT_SURFACE.pavement);
+    slab(medians, laneRect(true, center - 1.07, center + 1.07, begin + 0.4, end - 0.4), 0.48, 0x67764e, 0.18, vegetation);
     for (let z = begin + 9; z < end - 4; z += 16.2) {
       const h = 1.4 + random() * 1.6;
-      trees.push({ x: 19.5, z, y: ground + 0.46 + h * 0.46, w: 1.64, d: 2.24, h, color: 0x758654, surface: vegetation });
+      trees.push({ x: center, z, y: ground + 0.46 + h * 0.46, w: 1.64, d: 2.24, h, color: 0x758654, surface: vegetation });
     }
   }
 
   for (const { rect: { minX, maxX, minZ, maxZ }, walk } of cross) {
-    for (const x of [1.5, 37.5, 154.5]) {
+    for (const x of [avenue.rect.minX, avenue.rect.maxX, 154.5]) {
       if (x > maxX - 4 || x < minX + 4) continue;
       for (let z = minZ + walk + 0.68; z < maxZ - walk - 0.82; z += 1.44) {
         slab(paint, { minX: x - 2.25, maxX: x + 2.25, minZ: z, maxZ: z + 0.64 }, 0.021, warmWhite, 0.027);
@@ -187,15 +188,16 @@ function layRoads(
     for (const side of [-1, 1]) {
       const z = side > 0 ? maxZ + 2.58 : minZ - 2.58;
       if (z - 2 < avenue.from || z + 2 > avenue.to) continue;
-      for (let x = 5.2; x < 33.2; x += 1.57) {
+      for (let x = center - 14.3; x < center + 13.7; x += 1.57) {
         slab(paint, { minX: x, maxX: x + 0.77, minZ: z - 1.35, maxZ: z + 1.35 }, 0.021, warmWhite, 0.027);
       }
       const stop = z + side * 2.45;
-      for (const [left, right] of [[5.0, 17.6], [21.4, 34.0]]) {
+      for (const [left, right] of [[center - 14.5, center - 1.9], [center + 1.9, center + 14.5]]) {
         slab(paint, { minX: left, maxX: right, minZ: stop - 0.24, maxZ: stop + 0.24 }, 0.024, warmWhite, 0.026);
       }
       if (maxZ - minZ < 20 || minZ > 750) continue;
-      for (const x of side > 0 ? [7.1, 12.3, 16.3] : [22.9, 27.3, 31.7]) {
+      for (const offset of side > 0 ? [-12.4, -7.2, -3.2] : [3.4, 7.8, 12.2]) {
+        const x = center + offset;
         const middle = z + side * 8.2;
         slab(paint, { minX: x - 0.125, maxX: x + 0.125, minZ: middle - 1.42, maxZ: middle + 1.42 },
           0.022, warmWhite, 0.026);

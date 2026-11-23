@@ -1,6 +1,7 @@
 import { seededDetail } from '../overlook/overlookModel';
 import {
-  RESIDENCE_CITY_BUILDINGS, RESIDENCE_CITY_LIMITS, RESIDENCE_DISTRICT_ROADS, RESIDENCE_TOWER, type CityRect, type DistrictBuilding,
+  RESIDENCE_AVENUE, RESIDENCE_AXIAL_CORRIDORS, RESIDENCE_CITY_BUILDINGS, RESIDENCE_CITY_LIMITS, RESIDENCE_DISTRICT_ROADS,
+  RESIDENCE_EXTENSION_BLOCK_LIMITS, RESIDENCE_TOWER, type CityRect, type DistrictBuilding,
 } from './residenceCityPlan';
 
 export type DistrictYard = CityRect & { surface: 'service' | 'paving' | 'platform' };
@@ -21,18 +22,19 @@ function areaAt(x: number, z: number, width: number, depth: number): CityRect {
   return { minX: x - width / 2, maxX: x + width / 2, minZ: z - depth / 2, maxZ: z + depth / 2 };
 }
 
-function blockFootprints() {
-  const streets = RESIDENCE_DISTRICT_ROADS.map(({ rect }) => rect);
+function blockFootprints(extension?: CityRect) {
+  const west = RESIDENCE_DISTRICT_ROADS.find(({ id }) => id === 'west-loop')!.center;
+  const east = RESIDENCE_DISTRICT_ROADS.find(({ id }) => id === 'east-loop')!.center;
+  const north = RESIDENCE_DISTRICT_ROADS.find(({ id }) => id === 'north-loop')!.center;
+  const south = RESIDENCE_DISTRICT_ROADS.find(({ id }) => id === 'south-loop')!.center;
+  const inner = extension ?? { minX: west, maxX: east, minZ: north, maxZ: south };
+  const streets = RESIDENCE_DISTRICT_ROADS.map(({ rect }) => rect)
+    .filter(rect => districtParcelsOverlap(rect, inner, 0));
   const edgesX = [...new Set(streets.flatMap(({ minX, maxX }) => [minX, maxX]))].sort((a, b) => a - b);
   const edgesZ = [...new Set(streets.flatMap(({ minZ, maxZ }) => [minZ, maxZ]))].sort((a, b) => a - b);
   const byId = new Map<number, CityRect>();
   const width = edgesX.length - 1;
   const cellId = (col: number, row: number) => row * width + col;
-  const west = RESIDENCE_DISTRICT_ROADS.find(({ id }) => id === 'west-loop')!.center;
-  const east = RESIDENCE_DISTRICT_ROADS.find(({ id }) => id === 'east-loop')!.center;
-  const north = RESIDENCE_DISTRICT_ROADS.find(({ id }) => id === 'north-loop')!.center;
-  const south = RESIDENCE_DISTRICT_ROADS.find(({ id }) => id === 'south-loop')!.center;
-  const inner = { minX: west, maxX: east, minZ: north, maxZ: south };
   for (let row = 0; row < edgesZ.length - 1; row += 1) {
     for (let col = 0; col < width; col += 1) {
       const minX = edgesX[col], maxX = edgesX[col + 1], minZ = edgesZ[row], maxZ = edgesZ[row + 1];
@@ -115,6 +117,45 @@ function perimeterBlocks() {
   return blocks;
 }
 
+function extensionFrontages() {
+  const blocks: { cells: CityRect[]; faces: Face[] }[] = [];
+  const links = [
+    ['station-north', 1], ['theater-link', -1], ['south-warehouse', 1], ['first-east', -1],
+  ] as const;
+  for (const [id, side] of links) {
+    const street = RESIDENCE_DISTRICT_ROADS.find(road => road.id === id)!;
+    const extension = RESIDENCE_EXTENSION_BLOCK_LIMITS[street.alongZ ? 1 : 0];
+    const edge = street.alongZ ? (side === 1 ? street.rect.minX : street.rect.maxX)
+      : (side === 1 ? street.rect.minZ : street.rect.maxZ);
+    const start = (street.alongZ ? extension.minZ : extension.minX) + 30;
+    const end = street.to - 14;
+    for (let from = start; from < end - 24; from += 128) {
+      const to = Math.min(end, from + 118);
+      const face: Face = { axis: street.alongZ ? 'x' : 'z', side, edge, from, to };
+      blocks.push({ cells: [frontageArea(face, from, to - from, 21, 0)], faces: [face] });
+    }
+  }
+  return blocks;
+}
+
+function terminalFrontages() {
+  const blocks: { cells: CityRect[]; faces: Face[] }[] = [];
+  const termini = ['outer-east-avenue', 'outer-south-boulevard'];
+  for (const [index, id] of termini.entries()) {
+    const street = RESIDENCE_DISTRICT_ROADS.find(road => road.id === id)!;
+    const { alongZ, rect } = street;
+    const corridor = RESIDENCE_AXIAL_CORRIDORS[index];
+    const clearFrom = alongZ ? corridor.minZ : corridor.minX;
+    const clearTo = alongZ ? corridor.maxZ : corridor.maxX;
+    const edge = alongZ ? rect.maxX : rect.maxZ;
+    for (const [from, to] of [[street.from + 6, clearFrom - 3.6], [clearTo + 3.6, street.to - 6]]) {
+      const face: Face = { axis: alongZ ? 'x' : 'z', side: -1, edge, from, to };
+      blocks.push({ cells: [frontageArea(face, from, to - from, 59, 0)], faces: [face] });
+    }
+  }
+  return blocks;
+}
+
 const heightAnchors = [
   { x: -264, z: 511, top: 248 }, { x: 233, z: 542, top: 229 },
   { x: -400, z: 669, top: 281 }, { x: 145, z: 787, top: 254 },
@@ -122,10 +163,15 @@ const heightAnchors = [
   { x: 70, z: 1120, top: 326 }, { x: 300, z: 1178, top: 300 },
   { x: 529, z: -280, top: 224 }, { x: 697, z: -115, top: 268 },
   { x: 826, z: 172, top: 247 }, { x: 837, z: -345, top: 256 },
+  { x: 1419, z: -92, top: 180 }, { x: 1642, z: 91, top: 198 }, { x: 1831, z: -101, top: 220 },
+  { x: -92, z: 1725, top: 210 }, { x: 106, z: 2101, top: 196 }, { x: -111, z: 2451, top: 220 },
 ];
 
 export function createResidenceBlocks() {
-  const blocks = [...blockFootprints(), ...perimeterBlocks()];
+  const blocks = [
+    ...blockFootprints(), ...perimeterBlocks(),
+    ...RESIDENCE_EXTENSION_BLOCK_LIMITS.flatMap(area => blockFootprints(area)), ...extensionFrontages(), ...terminalFrontages(),
+  ];
   const random = seededDetail(44971);
   const buildings: DistrictBuilding[] = [];
   const paved: DistrictYard[] = [];
@@ -134,6 +180,7 @@ export function createResidenceBlocks() {
   const landmarks = new Set<number>();
   const conservativeBounds = (candidate: CityRect, roadBuffer: number, lotBuffer: number) =>
     !streets.some(street => districtParcelsOverlap(candidate, street, roadBuffer))
+    && !RESIDENCE_AXIAL_CORRIDORS.some(corridor => districtParcelsOverlap(candidate, corridor, roadBuffer))
     && !occupied.some(lot => districtParcelsOverlap(candidate, lot, lotBuffer));
   const stock: readonly DistrictBuilding['form'][] = ['ribbon', 'stone', 'balcony', 'glass'];
   const bricks = [0xae937d, 0xa79280, 0xa58c7b, 0x977d70, 0xb9a991, 0x917e72];
@@ -182,7 +229,7 @@ export function createResidenceBlocks() {
         const x = (fit.minX + fit.maxX) / 2, z = (fit.minZ + fit.maxZ) / 2;
         const width = fit.maxX - fit.minX, length = fit.maxZ - fit.minZ;
         const alongActual = face.axis === 'x' ? length : width;
-        const closeToAvenue = Math.abs(x - 19.5) < 49 && z < 490;
+        const closeToAvenue = Math.abs(x - (RESIDENCE_AVENUE.minX + RESIDENCE_AVENUE.maxX) * 0.5) < 49 && z < 490;
         let height = 10.8 + 3.6 * Math.floor(random() * (mostlyLow ? 7 : commercial ? 18 : 12));
         let form = stock[Math.floor(random() * stock.length)];
         let color = blockTone[Math.floor(random() * blockTone.length)];
@@ -193,18 +240,35 @@ export function createResidenceBlocks() {
           form = random() > 0.55 ? 'glass' : 'ribbon';
           if (form === 'glass') color = metals[Math.floor(random() * metals.length)];
         }
+        let anchorTower = false;
         if (width > 24 && length > 24) {
           const anchor = heightAnchors.findIndex(({ x: ax, z: az }, index) =>
             !landmarks.has(index) && Math.hypot(ax - x, az - z) < 61);
           if (anchor >= 0) {
             landmarks.add(anchor);
+            anchorTower = true;
             height = heightAnchors[anchor].top;
             form = anchor % 3 ? 'glass' : 'ribbon';
             color = metals[anchor % metals.length];
           }
         }
-        buildings.push({ ...fit, height, form, color, entrance: { axis: face.axis, side: face.side },
-          compact: mostlyLow || height < 50 || (reach > 555 && height < 95) });
+        // Independent variation keeps frontage footprints stable when storey counts change.
+        const facadeRandom = seededDetail(Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(z * 10), 19349663));
+        const narrow = Math.min(width, length);
+        if (!anchorTower) {
+          const count = 8 + Math.floor(height / 7 + facadeRandom() * (commercial ? 10 : 8));
+          let proposed = Math.max(count * 3.55 + 1.2, height > 79 ? height + 7.2 : 0);
+          const eastCore = x > 302 && x < 1300 && z > -208 && z < 183;
+          const secondaryTower = narrow >= 23 && facadeRandom() > (commercial || eastCore ? 0.64 : 0.85);
+          if (secondaryTower) proposed = Math.max(proposed, 93 + facadeRandom() * 72);
+          const upper = closeToAvenue ? 67.4 : mostlyLow ? 81.4 : Math.min(188, Math.max(43, narrow * 5.3));
+          height = Math.min(proposed, upper);
+        }
+        const profile = facadeRandom();
+        const mass = height > 82 && narrow > 19 && profile > 0.15
+          ? (profile > 0.72 && Math.max(width, length) > 36 ? 'twin' : 'stepped') : undefined;
+        buildings.push({ ...fit, height, form, color, entrance: { axis: face.axis, side: face.side }, mass,
+          compact: !mass && (height < 56 || (reach > 990 && height < 80)) });
         occupied.push(fit);
         along += alongActual + 3.45 + random() * 2.3;
         count += 1;
@@ -218,9 +282,9 @@ export function createResidenceBlocks() {
         for (let z = minZ + 26; z < maxZ - 19 && rear < 6; z += 39) {
           const parcel = areaAt(x, z, 18 + random() * 13, 18 + random() * 15);
           if (!cells.some(cell => contains(cell, x, z)) || !conservativeBounds(parcel, 4.7, 4.3)) continue;
-          const height = 10.4 + 3.2 * Math.floor(random() * 9);
+          const height = 34.2 + 3.5 * Math.floor(random() * 9);
           buildings.push({ ...parcel, height, form: commercial ? 'ribbon' : 'stone',
-            color: stones[Math.floor(random() * stones.length)], compact: true });
+            color: stones[Math.floor(random() * stones.length)], compact: height < 53 });
           occupied.push(parcel);
           rear += 1;
         }

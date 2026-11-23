@@ -18,11 +18,17 @@ const hooks = registerHooks({
     return { format: 'module', source: stripTypeScriptTypes(source, { mode: 'transform' }), shortCircuit: true };
   },
 });
-const { RESIDENCE_DISTRICT_ROADS: roads, RESIDENCE_STREET_LEVEL: streetLevel } =
-  await import('../src/coast/world/residence/residenceCityPlan.ts');
+const {
+  RESIDENCE_AXIAL_CORRIDORS: sightCorridors, RESIDENCE_DISTRICT_ROADS: roads,
+  RESIDENCE_STREET_LEVEL: streetLevel, RESIDENCE_TOWER: tower,
+} = await import('../src/coast/world/residence/residenceCityPlan.ts');
 const { createResidenceCity } = await import('../src/coast/world/residence/residenceCity.ts');
 hooks.deregister();
 const tolerance = 0.04;
+const extendedAxes = [
+  { roadIds: ['southern-boulevard', 'east-return'], oldEnd: 1058, alongZ: false },
+  { roadIds: ['south-avenue'], oldEnd: 1454, alongZ: true },
+];
 
 function intersection(first, second) {
   if (first.alongZ === second.alongZ) return null;
@@ -30,6 +36,11 @@ function intersection(first, second) {
   if (vertical.center < horizontal.from - tolerance || vertical.center > horizontal.to + tolerance
     || horizontal.center < vertical.from - tolerance || horizontal.center > vertical.to + tolerance) return null;
   return [vertical.center, horizontal.center];
+}
+
+function corridorAt(edge, alongZ, end = 'to') {
+  const boundary = `${end === 'to' ? 'min' : 'max'}${alongZ ? 'Z' : 'X'}`;
+  return sightCorridors.find(rect => rect[boundary] === edge);
 }
 
 test('the street network reaches the avenue from every segment, with both ends linked to junctions', () => {
@@ -53,6 +64,47 @@ test('the street network reaches the avenue from every segment, with both ends l
         `${road.id} ends without a junction at ${endpoint}`);
     }
   }
+});
+
+test('the east and south roads continue through multiple junctions beyond the former edge', () => {
+  for (const { roadIds, oldEnd, alongZ } of extendedAxes) {
+    const corridor = corridorAt(oldEnd, alongZ);
+    assert.ok(corridor, `No sight corridor from the former ${alongZ ? 'south' : 'east'} edge`);
+    for (const id of roadIds) {
+      const road = roads.find(candidate => candidate.id === id);
+      assert.ok(road && road.alongZ === alongZ && road.from < oldEnd && road.to > oldEnd,
+        `${id} does not extend past the old district edge`);
+      const crossingCoordinates = [...new Set(roads.map(other => intersection(road, other))
+        .filter(Boolean).map(point => point[Number(alongZ)]))];
+      assert.ok(crossingCoordinates.some(coordinate => Math.abs(coordinate - oldEnd) <= tolerance),
+        `${id} has lost the crossing at its old end`);
+      assert.ok(crossingCoordinates.filter(coordinate => coordinate > oldEnd + tolerance && coordinate < road.to - tolerance).length >= 2,
+        `${id} needs at least two new crossings before its outer junction`);
+      assert.ok(crossingCoordinates.some(coordinate => Math.abs(coordinate - road.to) <= tolerance),
+        `${id} is missing the outer junction`);
+      assert.ok((alongZ ? corridor.maxZ : corridor.maxX) > road.to,
+        `${id} lacks a clear sight corridor beyond its paved end`);
+      const fits = alongZ ? corridor.minX <= road.carriageway.minX && corridor.maxX >= road.carriageway.maxX
+        : corridor.minZ <= road.carriageway.minZ && corridor.maxZ >= road.carriageway.maxZ;
+      assert.ok(fits, `${id} is wider than its reserved sight corridor`);
+    }
+  }
+});
+
+test('the avenue continues past the residence tower to the northern cross streets', () => {
+  const avenue = roads.find(({ id }) => id === 'south-avenue');
+  const boulevard = roads.find(({ id }) => id === 'southern-boulevard');
+  assert.ok(avenue?.alongZ && avenue.from < tower.minZ && avenue.to > tower.maxZ,
+    'The avenue stops alongside the tower');
+  assert.ok([0, -30].every(z => avenue.from < z && avenue.to > z),
+    'The avenue does not extend through both ends of the residence block');
+  assert.ok(boulevard && intersection(avenue, boulevard),
+    'The avenue does not cross the east–west boulevard');
+  assert.ok(!overlaps(avenue.rect, tower), 'The avenue right-of-way occupies the residence tower parcel');
+  const northernCrossings = roads.map(road => intersection(avenue, road))
+    .filter(point => point && point[1] < tower.minZ && point[1] > avenue.from);
+  assert.ok(northernCrossings.length >= 2, 'The avenue does not connect to the north side of the tower');
+  assert.ok(corridorAt(avenue.from, true, 'from'), 'The north end of the avenue has no clear continuation of its view');
 });
 
 function boundsFor(points) {
@@ -88,7 +140,7 @@ function intersectsPolygon(rect, points) {
   });
 }
 
-test('the rendered carriageways connect at every junction and stay clear of buildings', async context => {
+test('both drawing qualities preserve the paved network and the view beyond it by day and night', async context => {
   const publicRoot = new URL('../public/', import.meta.url);
   function asset(url) {
     assert.match(url, /^\/coast-(?:overlook|materials)\/[a-z0-9.-]+$/);
@@ -104,33 +156,72 @@ test('the rendered carriageways connect at every junction and stay clear of buil
   });
   const city = await createResidenceCity();
   context.after(() => city.dispose());
-  city.setQuality('high');
   city.group.updateMatrixWorld(true);
+  for (const quality of ['light', 'high']) {
+    city.setQuality(quality);
+    for (const time of ['day', 'night']) {
+      city.setTimeOfDay(time);
+      verifyRenderedRoads(city.group, `${quality} quality, ${time}`);
+    }
+  }
+});
 
-  const points = roads.flatMap(road => corners(road.carriageway));
-  const district = boundsFor(points);
+function verifyRenderedRoads(group, mode) {
+  const avenue = roads.find(({ id }) => id === 'south-avenue');
+  const lanes = roads.map(({ id, carriageway }) => ({ id, rect: carriageway }));
+  const sightEnds = [
+    ...extendedAxes.map(axis => ({ ...axis, end: 'to', label: axis.alongZ ? 'south' : 'east' })),
+    { roadIds: [avenue.id], oldEnd: avenue.from, alongZ: true, end: 'from', label: 'north' },
+  ];
+  const views = sightEnds.map(({ oldEnd, alongZ, end, label }) => {
+    const rect = corridorAt(oldEnd, alongZ, end);
+    assert.ok(rect, `The ${label} sight corridor is missing`);
+    return { id: `${label} sight corridor`, rect };
+  });
+  const clearBeyondPaving = sightEnds.map(({ roadIds, alongZ, end }, index) => {
+    const extensions = roads.filter(({ id }) => roadIds.includes(id));
+    const outward = end === 'to';
+    const axis = alongZ ? 'Z' : 'X';
+    const curbs = extensions.flatMap(road =>
+      roads.filter(other => {
+        const crossing = intersection(road, other);
+        return crossing && Math.abs(crossing[Number(alongZ)] - road[end]) <= tolerance;
+      }).map(other => other.rect[`${outward ? 'max' : 'min'}${axis}`]),
+    );
+    const farCurb = outward ? Math.max(...curbs) : Math.min(...curbs);
+    const { id, rect } = views[index];
+    assert.ok(Number.isFinite(farCurb) && (outward ? farCurb < rect[`max${axis}`] : farCurb > rect[`min${axis}`]),
+      `${id} needs clear space beyond the outer junction's curb`);
+    return { id, rect: { ...rect, [`${outward ? 'min' : 'max'}${axis}`]: farCurb } };
+  });
+  const buildingZones = [...lanes, ...views];
+  const roadsideZones = [...lanes, ...clearBeyondPaving];
+  const medianZones = lanes.filter(({ id }) => id !== 'south-avenue');
+  const towerRightOfWay = roads.map(({ id, rect }) => ({ id: `${id} right-of-way by the residence tower`, rect }));
+  const district = boundsFor([...buildingZones, ...towerRightOfWay].flatMap(({ rect }) => corners(rect)));
   const obstacles = [];
   const asphalt = [];
   let obstructionCount = 0;
   const seen = { facade: 0, sharedBlock: 0, landmark: 0 };
+  let towerBase = false;
+  let towerShaft = false;
   const matrix = new THREE.Matrix4();
   const transformed = new THREE.Vector3();
-  function check(points, name, part, median = false) {
+  function check(points, name, part, candidates = buildingZones) {
     const extent = boundsFor(points);
     if (!overlaps(extent, district)) return;
-    const hit = roads.find(({ id, carriageway }) => (!median || id !== 'south-avenue')
-      && overlaps(extent, carriageway) && intersectsPolygon(carriageway, points));
+    const hit = candidates.find(({ rect }) => overlaps(extent, rect) && intersectsPolygon(rect, points));
     if (!hit) return;
     obstructionCount += 1;
     if (obstacles.length < 12) {
       const coordinate = value => Number(value.toFixed(2));
-      obstacles.push({ road: hit.id, name, part, extents: Object.fromEntries(
+      obstacles.push({ zone: hit.id, name, part, extents: Object.fromEntries(
         Object.entries(extent).map(([key, value]) => [key, coordinate(value)]),
       ) });
     }
   }
 
-  city.group.traverseVisible(object => {
+  group.traverseVisible(object => {
     if (object.name === 'Inferred buildings on street frontages') {
       const centers = object.geometry.getAttribute('cityCenter');
       const dimensions = object.geometry.getAttribute('cityScale');
@@ -184,42 +275,61 @@ test('the rendered carriageways connect at every junction and stay clear of buil
     ].includes(object.name)) {
       object.geometry.computeBoundingBox();
       const { min, max } = object.geometry.boundingBox;
-      if (object.name.startsWith('Original stone')) seen.facade += object.count;
+      const facade = object.name.startsWith('Original stone');
+      const median = object.name === 'South avenue median islands';
+      if (facade) seen.facade += object.count;
       for (let i = 0; i < object.count; i += 1) {
         object.getMatrixAt(i, matrix);
         matrix.premultiply(object.matrixWorld);
         const bottom = transformed.set(0, min.y, 0).applyMatrix4(matrix).y;
         const top = transformed.set(0, max.y, 0).applyMatrix4(matrix).y;
-        const median = object.name === 'South avenue median islands';
-        if (!median && (bottom > streetLevel + 4.5 || top < streetLevel + 0.45)) continue;
+        if (!median && top < streetLevel + 0.45) continue;
         const footprint = corners({ minX: min.x, minZ: min.z, maxX: max.x, maxZ: max.z });
-        check(footprint.map(([x, z]) => {
+        const renderedFootprint = footprint.map(([x, z]) => {
           transformed.set(x, min.y, z).applyMatrix4(matrix);
           return [transformed.x, transformed.z];
-        }), object.name, i, median);
+        });
+        if (facade && overlaps(boundsFor(renderedFootprint), tower) && intersectsPolygon(tower, renderedFootprint)) {
+          towerBase ||= Math.abs(bottom - streetLevel) < tolerance;
+          towerShaft ||= top > streetLevel + tower.height * 0.75;
+          check(renderedFootprint, 'Residence tower', i, towerRightOfWay);
+        }
+        const zones = facade ? buildingZones : median ? medianZones
+          : bottom > streetLevel + 4.5 ? clearBeyondPaving : roadsideZones;
+        check(renderedFootprint, object.name, i, zones);
       }
     }
   });
   for (const [geometry, count] of Object.entries(seen)) assert.ok(count > 0, `${geometry} geometry is absent`);
-  assert.equal(obstructionCount, 0, `Rendered street obstructions: ${JSON.stringify(obstacles)}`);
+  assert.ok(towerBase && towerShaft, `The rendered residence tower podium or shaft is absent in ${mode}`);
+  assert.equal(obstructionCount, 0, `Obstructions in ${mode}: ${JSON.stringify(obstacles)}`);
   assert.ok(asphalt.length > 0, 'The carriageway mesh is absent');
   for (const road of roads) {
-    // The divided south avenue carries traffic on both sides of its median.
-    const halfWidth = road.alongZ ? (road.carriageway.maxX - road.center) : (road.carriageway.maxZ - road.center);
-    const offsets = [-halfWidth * 0.6, 0, halfWidth * 0.6];
-    for (const offset of offsets) {
-      const lateral = road.center + offset;
-      const spans = asphalt.flatMap(({ minX, maxX, minZ, maxZ }) => {
-        const [left, right, from, to] = road.alongZ ? [minX, maxX, minZ, maxZ] : [minZ, maxZ, minX, maxX];
-        return lateral >= left - tolerance && lateral <= right + tolerance ? [[from, to]] : [];
-      }).sort(([a], [b]) => a - b);
-      let coveredTo = road.from;
-      for (const [from, to] of spans) {
-        if (from > coveredTo + tolerance) break;
-        coveredTo = Math.max(coveredTo, to);
-      }
-      assert.ok(coveredTo >= road.to - tolerance,
-        `${road.id} is missing paved carriageway after ${coveredTo.toFixed(2)} m at lane coordinate ${lateral.toFixed(2)} m`);
-    }
+    verifyPaving(road, asphalt, mode);
   }
-});
+}
+
+function verifyPaving(road, asphalt, mode) {
+  const across = road.alongZ ? 'X' : 'Z';
+  const along = road.alongZ ? 'Z' : 'X';
+  const left = road.carriageway[`min${across}`], right = road.carriageway[`max${across}`];
+  const slabs = asphalt.map(rect => ({
+    left: rect[`min${across}`], right: rect[`max${across}`], from: rect[`min${along}`], to: rect[`max${along}`],
+  })).filter(slab => slab.right >= left - tolerance && slab.left <= right + tolerance
+    && slab.to >= road.from - tolerance && slab.from <= road.to + tolerance);
+  // Slabs are rectangular. Their lateral edges are the only places longitudinal coverage can change.
+  const edges = [...new Set([left, right, ...slabs.flatMap(slab => [slab.left, slab.right])
+    .filter(edge => edge > left + tolerance && edge < right - tolerance)])].sort((a, b) => a - b);
+  const probes = [left, ...edges.slice(1).map((edge, i) => (edge + edges[i]) / 2), right];
+  for (const lateral of probes) {
+    const spans = slabs.filter(slab => lateral >= slab.left - tolerance && lateral <= slab.right + tolerance)
+      .sort((a, b) => a.from - b.from);
+    let coveredTo = road.from;
+    for (const { from, to } of spans) {
+      if (from > coveredTo + tolerance) break;
+      coveredTo = Math.max(coveredTo, to);
+    }
+    assert.ok(coveredTo >= road.to - tolerance,
+      `${road.id} lacks pavement after ${coveredTo.toFixed(2)} m at lane ${lateral.toFixed(2)} m in ${mode}`);
+  }
+}

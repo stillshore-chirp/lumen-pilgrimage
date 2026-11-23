@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  RESIDENCE_CITY_BUILDINGS, RESIDENCE_CITY_LIMITS, RESIDENCE_STREET_LEVEL, RESIDENCE_TOWER, type DistrictBuilding,
+  RESIDENCE_CITY_BUILDINGS, RESIDENCE_DISTRICT_AREAS, RESIDENCE_STREET_LEVEL, RESIDENCE_TOWER, type DistrictBuilding,
 } from './residenceCityPlan';
 
 export const RESIDENCE_SUN = new THREE.Vector3(-0.66, 0.51, 0.55).normalize();
@@ -14,7 +14,10 @@ export const DISTRICT_SURFACE = {
 type Night = THREE.IUniform<number>;
 
 export function createDistrictShadows(additions: readonly DistrictBuilding[]) {
-  const { minX, maxX, minZ, maxZ } = RESIDENCE_CITY_LIMITS;
+  const minX = Math.min(...RESIDENCE_DISTRICT_AREAS.map(area => area.minX));
+  const maxX = Math.max(...RESIDENCE_DISTRICT_AREAS.map(area => area.maxX));
+  const minZ = Math.min(...RESIDENCE_DISTRICT_AREAS.map(area => area.minZ));
+  const maxZ = Math.max(...RESIDENCE_DISTRICT_AREAS.map(area => area.maxZ));
   const step = 1.75;
   const columns = Math.ceil((maxX - minX) / step);
   const rows = Math.ceil((maxZ - minZ) / step);

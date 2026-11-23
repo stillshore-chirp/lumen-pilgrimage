@@ -57,6 +57,16 @@ export function shapeDistrictBuildings(
     const membrane = style === 0 ? 0x858778 : 0x9e9383;
     trim(solids, x, z, w, d, deck - 0.48, deck, style === 1 ? 0xa79d8b : membrane, roof);
     parapet(x, z, w, d, deck, top, cap);
+    if (!close && Math.hypot(x - 43, z * 0.72) > 570) {
+      // Preserve the distant roofline while omitting fins and railings that are subpixel from the residence.
+      const ax = x - w * 0.15, az = z + d * 0.12;
+      const gray = style === 0 ? 0x879596 : style === 1 ? 0xab9e86 : 0x9b998b;
+      const rise = Math.min(d * 0.22, style === 0 ? 6.4 : 3.2);
+      trim(solids, ax, az, w * (style === 0 ? 0.51 : 0.32), d * 0.36, deck, deck + rise, gray, roof);
+      trim(solids, x + w * 0.19, z - d * 0.15, w * 0.34, d * 0.25, deck + 0.12, deck + 0.29,
+        style === 2 ? 0x3f5665 : 0xac9f89, style === 2 ? solar : pavingStone);
+      return;
+    }
     const yardW = w * 0.54, yardD = d * 0.46;
     if (style === 0) {
       // Mechanical penthouse with plenum, panel seams, roof fans and exterior ducts.
@@ -158,48 +168,78 @@ export function shapeDistrictBuildings(
     const deck = height - (tall ? 2.15 : 1.22);
     const crown = tall ? height - (glass ? 13.8 : 9.75) : deck;
     const offset = glass ? shaftW * (seed - 0.44) * 0.17 : shaftW * (seed - 0.48) * 0.10;
-    body(x, z, shaftW, shaftD, skirt, crown, color, kind, bay, floor, seed);
-    if (parcel.compact) {
-      const roofColor = seed < 0.24 ? 0xb3a79a : seed < 0.62 ? 0x92958b : 0x98958b;
-      trim(solids, x, z, shaftW, shaftD, deck - 0.44, deck, roofColor, roof);
+    if (parcel.mass === 'stepped') {
+      const shoulder = skirt + (deck - skirt) * (0.32 + seed * 0.19);
+      const upper = skirt + (deck - skirt) * (0.70 + seed * 0.13);
+      const middleW = shaftW * (0.70 + seed * 0.15), middleD = shaftD * (0.72 + seed * 0.13);
+      const upperW = middleW * 0.74, upperD = middleD * 0.74;
+      const centerX = x + Math.sign(seed - 0.5) * shaftW * 0.066;
+      const centerZ = z - shaftD * 0.066;
+      body(x, z, shaftW, shaftD, skirt, shoulder, color, kind, bay, floor, seed);
+      trim(solids, x, z, shaftW + 0.28, shaftD + 0.28, shoulder - 0.28, shoulder + 0.10, 0xa4a096, roof);
+      body(centerX, centerZ, middleW, middleD, shoulder, upper, color, glass ? 1 : kind, bay, floor, seed);
+      trim(solids, centerX, centerZ, middleW + 0.22, middleD + 0.22, upper - 0.27, upper + 0.14, 0x9fa4a0, roof);
+      body(centerX, centerZ, upperW, upperD, upper, deck, color, glass ? 2 : kind, bay, floor, seed + 0.31);
+      buildRoof(centerX, centerZ, upperW, upperD, deck, glass ? 0 : 2, near);
+    } else if (parcel.mass === 'twin') {
+      const splitX = shaftW >= shaftD;
+      const podium = skirt + Math.min(17.1, (deck - skirt) * 0.24);
+      const tw = shaftW * (splitX ? 0.40 : 0.76), td = shaftD * (splitX ? 0.80 : 0.40);
+      body(x, z, shaftW, shaftD, skirt, podium, color, 2, bay, floor, seed);
+      trim(solids, x, z, shaftW + 0.25, shaftD + 0.25, podium - 0.26, podium + 0.12, 0x9e9d8e, roof);
       for (const side of [-1, 1]) {
-        trim(solids, x + side * (shaftW - 0.34) / 2, z, 0.34, shaftD, deck, deck + 0.84, 0xaba697);
-        trim(solids, x, z + side * (shaftD - 0.34) / 2, shaftW - 0.68, 0.34, deck, deck + 0.84, 0xaba697);
+        const tx = x + side * shaftW * (splitX ? 0.29 : 0.06), tz = z + side * shaftD * (splitX ? 0.06 : 0.29);
+        const top = side === 1 ? deck : deck - (deck - podium) * (0.17 + seed * 0.18);
+        const shoulder = top - Math.min((top - podium) * 0.18, 12.5);
+        body(tx, tz, tw, td, podium, shoulder, color, kind, bay, floor, seed + side * 0.13);
+        trim(solids, tx, tz, tw + 0.19, td + 0.19, shoulder - 0.25, shoulder + 0.12, 0x929c9c, roof);
+        body(tx, tz, tw * 0.88, td * 0.88, shoulder, top, color, glass ? 2 : kind, bay, floor, seed + side * 0.21);
+        buildRoof(tx, tz, tw * 0.88, td * 0.88, top, side === 1 && glass ? 0 : 2, near);
       }
-      const roofHouse = Math.min(4.8, shaftW * 0.32), roofDepth = Math.min(5, shaftD * 0.35);
-      trim(solids, x - shaftW * 0.19, z + shaftD * 0.17, roofHouse, roofDepth, deck, deck + 1.75, 0xa39f8f, roof);
-      if (seed > 0.69) {
-        for (const side of [-1, 1]) {
-          trim(solids, x + shaftW * 0.15, z + shaftD * (side * 0.17 - 0.09), shaftW * 0.42, shaftD * 0.16,
-            deck + 0.22, deck + 0.36, 0x3d5364, solar, 0, -0.18);
-        }
-      } else if (seed > 0.43 && shaftW > 16 && shaftD > 17) {
-        // Workshop roof monitors sit on raised frames and light the span behind the podium.
-        for (const side of [-1, 1]) {
-          const pz = z + shaftD * (side * 0.16 - 0.11);
-          trim(solids, x + shaftW * 0.08, pz, shaftW * 0.61, shaftD * 0.17, deck, deck + 0.75, 0xa6a39a);
-          trim(solids, x + shaftW * 0.08, pz, shaftW * 0.64, shaftD * 0.18, deck + 0.69, deck + 0.88,
-            form === 'glass' ? 0x67818d : 0x8d8475, roof, 0, -0.25);
-        }
-      } else if (seed > 0.20) {
-        const width = shaftW * 0.33, depth = shaftD * 0.18;
-        trim(solids, x + shaftW * 0.18, z - shaftD * 0.19, width, depth, deck + 0.08, deck + 1.12, 0x888f8d);
-        if (near && width > 3.7) {
-          trim(machinery, x + shaftW * 0.18, z - shaftD * 0.19, depth * 0.73, depth * 0.73,
-            deck + 1.09, deck + 1.19, 0x555c5e);
-        }
-      } else {
-        trim(solids, x + shaftW * 0.07, z, shaftW * 0.61, shaftD * 0.10, deck, deck + 0.12, 0xb0a698, pavingStone);
-      }
-    } else if (tall) {
-      const upperW = shaftW - (glass ? 5.2 : 6.5), upperD = shaftD - (glass ? 7.4 : 5.6);
-      trim(solids, x, z, shaftW + 0.37, shaftD + 0.37, crown - 0.34, crown + 0.42, glass ? 0x99a7a7 : 0xc7bdaa, roof);
-      body(x + offset, z - 1.2, upperW, upperD, crown, deck, color, glass ? 2 : kind, bay, floor, seed + 0.69);
-      buildRoof(x + offset, z - 1.2, upperW, upperD, deck, glass ? 0 : balcony ? 1 : index % 3, near);
     } else {
-      buildRoof(x, z, shaftW, shaftD, deck, balcony ? 1 : index % 3, near);
+      body(x, z, shaftW, shaftD, skirt, crown, color, kind, bay, floor, seed);
+      if (parcel.compact) {
+        const roofColor = seed < 0.24 ? 0xb3a79a : seed < 0.62 ? 0x92958b : 0x98958b;
+        trim(solids, x, z, shaftW, shaftD, deck - 0.44, deck, roofColor, roof);
+        for (const side of [-1, 1]) {
+          trim(solids, x + side * (shaftW - 0.34) / 2, z, 0.34, shaftD, deck, deck + 0.84, 0xaba697);
+          trim(solids, x, z + side * (shaftD - 0.34) / 2, shaftW - 0.68, 0.34, deck, deck + 0.84, 0xaba697);
+        }
+        const roofHouse = Math.min(4.8, shaftW * 0.32), roofDepth = Math.min(5, shaftD * 0.35);
+        trim(solids, x - shaftW * 0.19, z + shaftD * 0.17, roofHouse, roofDepth, deck, deck + 1.75, 0xa39f8f, roof);
+        if (seed > 0.69) {
+          for (const side of [-1, 1]) {
+            trim(solids, x + shaftW * 0.15, z + shaftD * (side * 0.17 - 0.09), shaftW * 0.42, shaftD * 0.16,
+              deck + 0.22, deck + 0.36, 0x3d5364, solar, 0, -0.18);
+          }
+        } else if (seed > 0.43 && shaftW > 16 && shaftD > 17) {
+          // Workshop roof monitors sit on raised frames and light the span behind the podium.
+          for (const side of [-1, 1]) {
+            const pz = z + shaftD * (side * 0.16 - 0.11);
+            trim(solids, x + shaftW * 0.08, pz, shaftW * 0.61, shaftD * 0.17, deck, deck + 0.75, 0xa6a39a);
+            trim(solids, x + shaftW * 0.08, pz, shaftW * 0.64, shaftD * 0.18, deck + 0.69, deck + 0.88,
+              form === 'glass' ? 0x67818d : 0x8d8475, roof, 0, -0.25);
+          }
+        } else if (seed > 0.20) {
+          const width = shaftW * 0.33, depth = shaftD * 0.18;
+          trim(solids, x + shaftW * 0.18, z - shaftD * 0.19, width, depth, deck + 0.08, deck + 1.12, 0x888f8d);
+          if (near && width > 3.7) {
+            trim(machinery, x + shaftW * 0.18, z - shaftD * 0.19, depth * 0.73, depth * 0.73,
+              deck + 1.09, deck + 1.19, 0x555c5e);
+          }
+        } else {
+          trim(solids, x + shaftW * 0.07, z, shaftW * 0.61, shaftD * 0.10, deck, deck + 0.12, 0xb0a698, pavingStone);
+        }
+      } else if (tall) {
+        const upperW = shaftW - (glass ? 5.2 : 6.5), upperD = shaftD - (glass ? 7.4 : 5.6);
+        trim(solids, x, z, shaftW + 0.37, shaftD + 0.37, crown - 0.34, crown + 0.42, glass ? 0x99a7a7 : 0xc7bdaa, roof);
+        body(x + offset, z - 1.2, upperW, upperD, crown, deck, color, glass ? 2 : kind, bay, floor, seed + 0.69);
+        buildRoof(x + offset, z - 1.2, upperW, upperD, deck, glass ? 0 : balcony ? 1 : index % 3, near);
+      } else {
+        buildRoof(x, z, shaftW, shaftD, deck, balcony ? 1 : index % 3, near);
+      }
     }
-    if (near && glass) {
+    if (!parcel.mass && near && glass) {
       for (const side of [-1, 1]) {
         trim(solids, x + side * (shaftW / 2 - 0.85), z, 0.62, shaftD + 0.64, skirt, crown, 0x8a9b9e);
         trim(solids, x, z + side * (shaftD / 2 - 0.69), shaftW + 0.66, 0.66, skirt, crown, 0x899996);
@@ -207,7 +247,7 @@ export function shapeDistrictBuildings(
       for (let story = skirt + floor * 4; story < crown - floor; story += floor * 7) {
         trim(solids, x, z, shaftW + 0.39, shaftD + 0.38, story, story + 0.42, 0x829b9e);
       }
-    } else if (near && balcony) {
+    } else if (!parcel.mass && near && balcony) {
       const courses = Math.floor((crown - skirt) / floor);
       for (let story = 1; story < courses; story += 1) {
         const elevation = skirt + story * (crown - skirt) / courses;
@@ -218,7 +258,7 @@ export function shapeDistrictBuildings(
             elevation + 0.20, elevation + 1.40, 0x697b54, vegetation);
         }
       }
-    } else if (near && tall) {
+    } else if (!parcel.mass && near && tall) {
       for (const side of [-1, 1]) {
         trim(solids, x + side * (shaftW / 2 - 1.16), z, 1.26, shaftD + 0.49, skirt, crown, color);
       }
@@ -231,7 +271,7 @@ export function shapeDistrictBuildings(
     const fz = alongX ? z + door.side * (d * 0.5 - 0.36) : z;
     const frontTint = glass ? 0x737f79 : 0x8b7b62;
     trim(solids, fx, fz, alongX ? canopyWidth : 3.9, alongX ? 3.9 : canopyWidth, 3.5, 3.78, frontTint);
-    if (near || !parcel.compact) {
+    if (near || (!parcel.compact && Math.hypot(x - 43, z * 0.75) < 640)) {
       for (const side of [-1, 1]) {
         const ax = fx + (alongX ? canopyWidth * side * 0.43 : door.side * 1.43);
         const az = fz + (alongX ? door.side * 1.43 : canopyWidth * side * 0.43);

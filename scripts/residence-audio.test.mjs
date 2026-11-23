@@ -9,8 +9,10 @@ const hooks = registerHooks({
     return nextResolve(internal ? `${specifier}.ts` : specifier, context);
   },
 });
-const { BALCONY_DOOR, RESIDENCE_ROADS, residenceReceiver, residenceSurfaceAt, residenceTrafficPath } =
+const { BALCONY_DOOR, RESIDENCE_ROADS, STREET_REFLECTION, residenceReceiver, residenceSurfaceAt, residenceTrafficPath } =
   await import('../src/coast/world/residence/residenceAcoustics.ts');
+const { RESIDENCE_AVENUE, RESIDENCE_BALCONY_REFLECTOR, RESIDENCE_CROSS_STREETS, RESIDENCE_STREET_LEVEL } =
+  await import('../src/coast/world/residence/residenceCityPlan.ts');
 const { RESIDENCE_FLOOR_ABOVE_STREET } = await import('../src/coast/world/residence/residenceFloor.ts');
 const { RESIDENCE_ROOM_RESPONSES, createFootfall, createRoomImpulse, createSlider } =
   await import('../src/coast/world/residence/residenceAudioSamples.ts');
@@ -41,6 +43,31 @@ test('traffic reaching the open balcony retains height, direction and distance',
   const rail = residenceTrafficPath(residenceReceiver(ear(22.48, -BALCONY_DOOR.z), 0), east, true);
   assert.ok(rail.gain > eastArrival.gain * 1.3 && rail.cutoff > eastArrival.cutoff * 1.3);
   assert.ok(RESIDENCE_ROADS.every(road => road.patches.length === 2 && road.activity.night < road.activity.day));
+});
+
+test('the local street emitters stay on asphalt and the east reflection meets a facade', () => {
+  const { from, to, patches } = RESIDENCE_ROADS[2];
+  const { minX, maxX, minZ, maxZ } = RESIDENCE_AVENUE;
+  for (const point of [from, ...patches, to]) {
+    assert.ok(point.x > minX && point.x < maxX && point.z >= minZ && point.z <= maxZ);
+  }
+  assert.ok(from.z < patches[0].z && patches[0].z < east.z && east.z < to.z);
+  const { minX: facade, minZ: north, maxZ: south, height } = RESIDENCE_BALCONY_REFLECTOR;
+  assert.equal((east.x + STREET_REFLECTION.x) / 2, facade);
+  const t = (facade - balcony.x) / (STREET_REFLECTION.x - balcony.x);
+  const y = balcony.y + t * (STREET_REFLECTION.y - balcony.y) - RESIDENCE_STREET_LEVEL;
+  const z = balcony.z + t * (STREET_REFLECTION.z - balcony.z);
+  assert.ok(t > 0 && t < 1 && y > 0 && y < height && z > north && z < south);
+});
+
+test('the avenue traffic bed stays south of the closest boulevard', () => {
+  const { from, to, patches } = RESIDENCE_ROADS[1];
+  const { minX, maxX, minZ, maxZ } = RESIDENCE_AVENUE;
+  const southEdge = RESIDENCE_CROSS_STREETS[0].maxZ;
+  assert.ok(from.z < patches[0].z && patches[0].z < patches[1].z && patches[1].z < to.z);
+  for (const point of [from, ...patches, to]) {
+    assert.ok(point.x > minX && point.x < maxX && point.z > southEdge && point.z >= minZ && point.z <= maxZ);
+  }
 });
 
 test('closed glazing favors low traffic frequencies and the stone core is quieter', () => {

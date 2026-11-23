@@ -1,11 +1,17 @@
 import * as THREE from 'three';
 import { seededDetail } from '../overlook/overlookModel';
 import { createDistrictMaterial } from './residenceCityMaterials';
-import { RESIDENCE_DISTRICT_ROADS, RESIDENCE_STREET_LEVEL } from './residenceCityPlan';
+import { RESIDENCE_DISTRICT_ROADS, RESIDENCE_STREET_LEVEL, RESIDENCE_TERMINAL_JUNCTIONS,
+  type DistrictRoad } from './residenceCityPlan';
+
+type TerminalTurn = {
+  from: number; lane: number; straight: number; curve: number; radius: number; side: number;
+};
 
 type Vehicle = {
   directionX: number; directionZ: number; originX: number; originZ: number; travel: number;
   departure: number; cycle: number; speed: number; width: number; length: number; height: number; color: number;
+  turn?: TerminalTurn;
 };
 
 const signalCycle = 42;
@@ -15,10 +21,27 @@ const colors = [0xc8c6bb, 0x515b63, 0x5b747e, 0xa29c90, 0x7f4844, 0xc5bf8f, 0x6a
 function planVehicles(): Vehicle[] {
   const random = seededDetail(483);
   const cars: Vehicle[] = [];
+  function terminalFor(road: DistrictRoad): DistrictRoad | undefined {
+    const link = RESIDENCE_TERMINAL_JUNCTIONS[road.id as keyof typeof RESIDENCE_TERMINAL_JUNCTIONS];
+    return RESIDENCE_DISTRICT_ROADS.find(other => other.id === link);
+  }
   function lane(alongZ: boolean, lateral: number, min: number, max: number, direction: number,
-    junction: number, occurrences: number[], speed: number): void {
+    junction: number, occurrences: number[], speed: number, terminal?: DistrictRoad): void {
     const origin = direction > 0 ? min : max;
-    const travel = max - min;
+    let turn: TerminalTurn | undefined;
+    let travel = max - min;
+    let approach = Math.abs(junction - origin);
+    if (terminal) {
+      const radius = speed > 10 ? 15.5 : 11.0;
+      const crossLane = terminal.center + (terminal.alongZ ? 2.8 : -2.8);
+      const directionToLeg = direction;
+      const straight = crossLane - radius - min;
+      const curve = radius * Math.PI * 0.5;
+      const legEnd = directionToLeg > 0 ? terminal.to - 3.6 : terminal.from + 3.6;
+      travel = straight + curve + Math.abs(legEnd - (lateral + directionToLeg * radius));
+      approach = direction > 0 ? junction - min : travel - (junction - min);
+      turn = { from: min, lane: lateral, straight, curve, radius, side: directionToLeg };
+    }
     const repeats = Math.ceil((travel / speed + 19) / signalCycle);
     const arrivals = Array.from({ length: repeats }, (_, index) => occurrences.map(t => t + index * signalCycle)).flat();
     for (const arrival of arrivals) {
@@ -26,7 +49,7 @@ function planVehicles(): Vehicle[] {
       cars.push({
         directionX: alongZ ? 0 : direction, directionZ: alongZ ? direction : 0,
         originX: alongZ ? lateral : origin, originZ: alongZ ? origin : lateral,
-        travel, cycle: repeats * signalCycle, departure: arrival - Math.abs(junction - origin) / speed,
+        travel, turn, cycle: repeats * signalCycle, departure: arrival - approach / speed,
         speed, width: delivery ? 2.18 : 1.68 + random() * 0.26,
         length: delivery ? 6.8 : 4.12 + random() * 0.71,
         height: delivery ? 2.36 : 1.29 + random() * 0.29,
@@ -36,9 +59,11 @@ function planVehicles(): Vehicle[] {
   }
 
   const [avenue, ...roads] = RESIDENCE_DISTRICT_ROADS;
-  for (const [i, x] of [7.5, 11.9, 15.8, 23.3, 27.1, 31.2].entries()) {
+  const terminal = terminalFor(avenue);
+  for (const [i, lateral] of [-12, -7.6, -3.7, 3.8, 7.6, 11.7].entries()) {
     const offset = (i % 3) * 0.45;
-    lane(true, x, avenue.from, avenue.to, x < avenue.center ? -1 : 1, 276.5, [7, 10.4, 13.8].map(t => t + offset), 13.8);
+    lane(true, avenue.center + lateral, avenue.from + 2.4, avenue.to, Math.sign(lateral),
+      276.5, [7, 10.4, 13.8].map(t => t + offset), 13.8, terminal);
   }
 
   // All traffic uses these same carriageways, with sparser departures on the service streets.
@@ -48,11 +73,12 @@ function planVehicles(): Vehicle[] {
     const width = alongZ ? carriageway.maxX - carriageway.minX : carriageway.maxZ - carriageway.minZ;
     const offsets = index < 8 && width > 19 ? [-5.8, -2.0, 2.0, 5.8] : [-Math.min(2.6, width * 0.24), Math.min(2.6, width * 0.24)];
     const junction = index < 8 ? avenue.center : (from + to) * 0.5;
+    const terminal = terminalFor(road);
     for (const [i, offset] of offsets.entries()) {
       const direction = Math.sign(offset) * (alongZ ? 1 : -1);
       const arrivals = crossArrivals[index] ?? (index % 3 ? [7 + index * 0.81] : [8 + index * 0.54, 24.6 + index * 0.39]);
       lane(alongZ, center + offset, from + 2.4, to - 2.4, direction, junction,
-        arrivals.map(time => time + (i % 2) * 0.68), width > 13 ? 11.5 : width > 8 ? 8.7 : 6.8);
+        arrivals.map(time => time + (i % 2) * 0.68), width > 13 ? 11.5 : width > 8 ? 8.7 : 6.8, terminal);
     }
   }
   return cars;
@@ -147,7 +173,7 @@ export function createResidenceStreetTraffic(night: THREE.IUniform<number>) {
   cabin.name = 'Cabins and delivery boxes';
   lamps.name = 'Paired car headlamps and taillamps';
   beams.name = 'Moving headlight and taillight footprints on asphalt';
-  const bound = new THREE.Sphere(new THREE.Vector3(192, asphaltLevel, 478), 1330);
+  const bound = new THREE.Sphere(new THREE.Vector3(690, asphaltLevel, 986), 2175);
   for (const mesh of [body, cabin, beams]) {
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     // One fixed bound covers the route network as individual cars move through it.
@@ -185,11 +211,28 @@ export function createResidenceStreetTraffic(night: THREE.IUniform<number>) {
 
   function update(time: number): void {
     for (const [i, car] of vehicles.entries()) {
-      const { width, length, height, directionX: dx, directionZ: dz } = car;
+      const { width, length, height, turn } = car;
+      let { directionX: dx, directionZ: dz } = car;
       const distance = THREE.MathUtils.euclideanModulo(time - car.departure, car.cycle) * car.speed;
       const limit = Math.min(distance, car.travel);
       const active = Number(distance < car.travel);
-      const x = car.originX + limit * dx, z = car.originZ + limit * dz;
+      let x = car.originX + limit * dx, z = car.originZ + limit * dz;
+      if (turn) {
+        const direction = dx || dz;
+        const alongZ = dz !== 0;
+        const progress = direction > 0 ? limit : car.travel - limit;
+        const turnProgress = Math.max(0, progress - turn.straight);
+        const angle = Math.min(turnProgress / turn.radius, Math.PI * 0.5);
+        const lengthAfterTurn = Math.max(0, progress - turn.straight - turn.curve);
+        const forward = turn.from + Math.min(progress, turn.straight) + Math.sin(angle) * turn.radius;
+        const across = turn.lane + turn.side * ((1 - Math.cos(angle)) * turn.radius + lengthAfterTurn);
+        const normal = turn.side * Math.sin(angle) * direction;
+        const axial = Math.cos(angle) * direction;
+        x = alongZ ? across : forward;
+        z = alongZ ? forward : across;
+        dx = alongZ ? normal : axial;
+        dz = alongZ ? axial : normal;
+      }
       const delivery = height > 2;
       const deck = delivery ? 0.65 : 0.67;
       place(body, i, x, asphaltLevel + deck * 0.62, z, width, deck, length, dx, dz, active);
