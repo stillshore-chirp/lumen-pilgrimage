@@ -148,8 +148,8 @@ export const RESIDENCE_WALLS: readonly ResidenceWall[] = [
     door('laundry', '洗濯室の扉', 6.61, 7.53, northSwing),
     door('storage', '収納の扉', 9.48, 10.4, northSwing),
   ]),
-  wall('e', 6.65, 11, 14.64, 'interior', [
-    { kind: 'gallery-slide', id: 'gallery-living', label: 'リビングの引戸', from: 11.07, to: 12.8, bottom: 0, top: 2.55 },
+  wall('e', 6.65, 11, 12.8, 'interior', [
+    { kind: 'gallery-slide', id: 'gallery-living', label: 'リビングの引戸', from: 11.07, to: 12.16, bottom: 0, top: 2.55 },
   ]),
   wall('n', 3.35, 6.65, 10.2),
   wall('n', 6.25, 6.65, 11.1),

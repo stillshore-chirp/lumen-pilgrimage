@@ -602,7 +602,7 @@ test('an open gallery doorway softly lights the living floor with its own fixtur
   const menu = button(page, '住戸の操作');
   const dialog = page.getByRole('dialog', { name: '住戸の操作' });
   const canvas = page.locator('canvas').first();
-  const view = { x: 11.94, z: -4.85, yaw: 0, pitch: -.46 };
+  const view = { x: 11.62, z: -4.85, yaw: 0, pitch: -.46 };
   const reachDoor = { ...view, z: -5.70 };
   const area = [.38, .80, .25, .16];
   async function move(pose) {
@@ -626,7 +626,7 @@ test('an open gallery doorway softly lights the living floor with its own fixtur
   await page.keyboard.press('Escape');
 
   await move(view);
-  await leafAt(12.814);
+  await leafAt(12.174);
   const lit = await brightness(canvas, area);
   await capture(page, 'residence-spill-gallery-open', '.coast-ui { visibility: hidden; }');
   await move(reachDoor);
@@ -636,6 +636,7 @@ test('an open gallery doorway softly lights the living floor with its own fixtur
   const shaded = await brightness(canvas, area);
   await capture(page, 'residence-spill-gallery-closed', '.coast-ui { visibility: hidden; }');
   assert.ok(lit.mean > shaded.mean + .8, JSON.stringify({ lit, shaded }));
+  t.diagnostic(`Gallery spill brightness ${JSON.stringify({ lit: lit.mean, shaded: shaded.mean })}`);
   assert.deepEqual(errors, []);
 });
 
@@ -965,12 +966,14 @@ test('the gallery pocket door closes, stops walking, and reopens both ways', { t
   await page.waitForFunction(() => window.residenceProbe.relocate);
   const open = button(page, 'リビングの引戸を開ける');
   const close = button(page, 'リビングの引戸を閉める');
-  const waitForLeaf = x => page.waitForFunction(x => {
-    const door = window.residenceProbe.scene.getObjectByName('Gallery pocket door');
-    return door && Math.abs(door.position.x - x) < .005;
-  }, x);
-  const gallery = { x: 11.94, z: -7.68, yaw: Math.PI, pitch: -.04 };
-  const living = { x: 11.94, z: -5.68, yaw: 0, pitch: -.04 };
+  const waitForLeaves = opened => page.waitForFunction(positions => [
+    'Gallery pocket door', 'Gallery pocket door follower',
+  ].every((name, i) => {
+    const leaf = window.residenceProbe.scene.getObjectByName(name);
+    return leaf && Math.abs(leaf.position.x - positions[i]) < .005;
+  }), opened ? [12.174, 12.174] : [11.056, 11.602]);
+  const gallery = { x: 11.62, z: -7.68, yaw: Math.PI, pitch: -.04 };
+  const living = { x: 11.62, z: -5.68, yaw: 0, pitch: -.04 };
   async function relocate(pose) {
     await page.evaluate(pose => window.residenceProbe.relocate(pose), pose);
     await page.waitForFunction(({ x, z }) => {
@@ -979,37 +982,69 @@ test('the gallery pocket door closes, stops walking, and reopens both ways', { t
     }, pose);
   }
   const landscape = '.coast-ui { visibility: hidden; }';
+  async function walkAcrossKitchen() {
+    await relocate({ x: 11.90, z: -7.72, yaw: -Math.PI / 2, pitch: 0 });
+    await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.x > 13.14));
+    for (const x of [13.25, 14.05, 15.5, 16.9]) {
+      await relocate({ x, z: -7.12, yaw: Math.PI, pitch: 0 });
+      await hold(page, 'w', () => page.waitForFunction(x => {
+        const pose = window.residenceProbe.camera;
+        return pose.z > -6.27 && Math.abs(pose.x - x) < .045 && Math.abs(pose.y - 1.65) < .04;
+      }, x));
+    }
+  }
 
   await relocate(gallery);
   await close.waitFor();
-  await waitForLeaf(12.814);
-  await relocate({ ...gallery, z: -8.75, pitch: -.11 });
+  await waitForLeaves(true);
+  await relocate({ ...gallery, z: -9.01, pitch: -.10 });
   await capture(page, 'gallery-door-open', landscape);
+  await relocate({ x: 15.65, z: -8.75, yaw: 2.56, pitch: -.12 });
+  await capture(page, 'gallery-kitchen-overview', landscape);
+  await relocate({ x: 13.25, z: -8.29, yaw: Math.PI, pitch: -.12 });
+  await capture(page, 'gallery-kitchen-west', landscape);
   await relocate(gallery);
+  await button(page, '環境音を開始').click();
+  await page.evaluate(() => document.activeElement.blur());
+  await page.waitForFunction(() => window.residenceProbe.roomSends[0]?.gain.value > .025);
+  const openReverb = await page.evaluate(() => window.residenceProbe.roomSends[0].gain.value);
+  await relocate({ ...gallery, z: -6.65 });
   await close.waitFor();
   await page.keyboard.press('e');
   await open.waitFor();
-  await waitForLeaf(11.056);
-  await relocate({ ...gallery, z: -8.75, pitch: -.11 });
+  await moreMovementFrames(page);
+  const pausedLeaves = await page.evaluate(() => ['Gallery pocket door', 'Gallery pocket door follower']
+    .map(name => window.residenceProbe.scene.getObjectByName(name).position.x));
+  assert.ok(pausedLeaves.every(x => x >= gallery.x + .24), JSON.stringify(pausedLeaves));
+  await relocate(gallery);
+  await waitForLeaves(false);
+  await page.waitForFunction(level => window.residenceProbe.roomSends[0].gain.value < level * .2, openReverb);
+  const closedReverb = await page.evaluate(() => window.residenceProbe.roomSends[0].gain.value);
+  t.diagnostic(`Gallery living-room reverb ${JSON.stringify({ openReverb, closedReverb })}`);
+  await relocate({ ...gallery, z: -9.01, pitch: -.10 });
   await capture(page, 'gallery-door-closed', landscape);
   await relocate(gallery);
   await hold(page, 'w', async () => {
     await page.waitForFunction(() => window.residenceProbe.camera.z > -7.25);
     await moreMovementFrames(page);
     const pose = await camera(page);
-    assert.ok(pose.z < -6.91 && pose.z > -7.13, JSON.stringify(pose));
+    assert.ok(pose.z < -6.88 && pose.z > -7.13, JSON.stringify(pose));
   });
   await open.click();
-  await waitForLeaf(12.814);
+  await waitForLeaves(true);
   await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z > -6.02));
   await relocate(living);
   await close.click();
-  await waitForLeaf(11.056);
+  await waitForLeaves(false);
   await relocate({ ...living, z: -4.72, pitch: -.11 });
   await capture(page, 'gallery-door-living', landscape);
+  await walkAcrossKitchen();
   await relocate(living);
   await open.click();
-  await waitForLeaf(12.814);
+  await waitForLeaves(true);
   await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z < -7.26));
+  await walkAcrossKitchen();
+  await relocate({ x: 9.94, z: -5.72, yaw: 0, pitch: 0 });
+  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z < -7.14));
   assert.deepEqual(errors, []);
 });
