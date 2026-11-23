@@ -45,17 +45,26 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
     furniture.obstacles, () => door >= 0.96, shell.doors);
   shell.setBalconyDoor(door);
   lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
+  const { shoji } = furniture;
+  const teaCurtain = curtains.daylight.find(room => room.roomId === '04')!;
+  const curtainControls = curtains.sections.map(section => section.id === 'curtains-04'
+    ? { ...section, controls: [...section.controls, shoji.control] }
+    : section);
+  let paperLight = .32;
+  function updateShojiPaper() { shoji.setPaperLight(paperLight * teaCurtain.transmission()); }
+  updateShojiPaper();
 
   return {
     id: 'residence', navigation,
     audio: new ResidenceAudio({ balconyDoor: () => door, doorOpenness: shell.doors.opennessFor,
       appliances: furniture.appliances.audioSources }),
-    residenceControls: [...lighting.sections, ...curtains.sections, ...furniture.appliances.sections],
+    residenceControls: [...lighting.sections, ...curtainControls, ...furniture.appliances.sections],
     interaction: {
       label(position) {
         const distance = Math.hypot(position.x - doorEast, northDistanceToDoor(position.z));
         const curtain = curtains.nearby(position);
         const roomDoor = shell.doors.nearby(position);
+        const windowShoji = shoji.nearby(position);
         const canUseDoor = distance <= DOOR_REACH && !(opening && occupiesDoorway(position));
         if (canUseDoor && (!curtain || distance <= curtain.distance)) {
           invokeNearby = () => { opening = !opening; };
@@ -65,6 +74,10 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         if (roomDoor && (!curtain || roomDoor.distance + .12 < curtain.distance)) {
           invokeNearby = roomDoor.invoke;
           return roomDoor.label;
+        }
+        if (windowShoji && (!curtain || windowShoji.distance < curtain.distance)) {
+          invokeNearby = windowShoji.invoke;
+          return windowShoji.label;
         }
         if (curtain) {
           invokeNearby = curtain.invoke;
@@ -86,6 +99,8 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         city.setTimeOfDay(time);
         shell.setTimeOfDay(time);
         lighting.setTimeOfDay(time);
+        paperLight = time === 'day' ? .32 : .018;
+        updateShojiPaper();
         reflections.setTimeOfDay(time);
       },
       setQuality(quality) {
@@ -107,12 +122,15 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
           shell.setBalconyDoor(door);
         }
         const curtainsMoved = curtains.update(dt);
+        const shojiMoved = shoji.update(dt);
+        if (shojiMoved) lighting.setTeaShojiOpenness(shoji.openness());
         const roomDoorsMoved = shell.doors.update(dt, camera.position);
         if (roomDoorsMoved) lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
         if (curtainsMoved) {
           for (const room of curtains.daylight) lighting.setDaylightTransmission(room.roomId, room.transmission());
+          updateShojiPaper();
         }
-        if (doorMoved || curtainsMoved || roomDoorsMoved) {
+        if (doorMoved || curtainsMoved || roomDoorsMoved || shojiMoved) {
           lighting.invalidateShadows();
           reflections.invalidate();
         }

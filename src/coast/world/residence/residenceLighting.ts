@@ -8,6 +8,7 @@ import { createResidenceLightField, diningPendants, diningPendantHeight, diningP
 import type { ResidenceMaterials } from './residenceMaterials';
 import { RESIDENCE_ROOMS, type ResidenceRect } from './residencePlan';
 import { FurnitureModel } from './residenceFurnitureModel';
+import { teaShojiTransmission } from './residenceShoji';
 
 const switchMounts: Readonly<Record<string, readonly [east: number, north: number, heading: number]>> = {
   LD: [11.072, 4.78, Math.PI / 2],
@@ -176,12 +177,14 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   const overrides = new Map<string, boolean>();
   const windowTransmission = { value: new Float32Array(windowRooms.length).fill(1) };
   const teaDoor = { value: 0 };
+  const teaShoji = { value: teaShojiTransmission(1) };
   const hallLight = { value: 0 };
   const doorwayFixtures = roomSources.H1.filter(source => source.id === 'H1-foot-3' || source.id === 'H1-foot-4');
-  const apertureRooms = windowRooms.map(({ rectangles }, index) => {
+  const apertureRooms = windowRooms.map(({ id, rectangles }, index) => {
     const area = rectangles.map(([w, s, e, n]) =>
       `(point.x >= ${w.toFixed(2)} && point.x <= ${e.toFixed(2)} && point.y >= ${s.toFixed(2)} && point.y <= ${n.toFixed(2)})`);
-    return `if (${area.join(' || ')}) return residenceWindowTransmission[${index}];`;
+    const shojiTransmission = id === '04' ? ' * residenceTeaShojiTransmission' : '';
+    return `if (${area.join(' || ')}) return residenceWindowTransmission[${index}]${shojiTransmission};`;
   }).join('\n');
   function isOn(source: LightSource): boolean {
     return overrides.get(source.id) ?? (nightAmount.value === 1 || source.daytime === true);
@@ -291,6 +294,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       shader.uniforms.residenceNight = nightAmount;
       shader.uniforms.residenceWindowTransmission = windowTransmission;
       shader.uniforms.residenceTeaDoor = teaDoor;
+      shader.uniforms.residenceTeaShojiTransmission = teaShoji;
       shader.uniforms.residenceHallLight = hallLight;
       shader.uniforms.residenceContactEnabled = contactEnabled;
       shader.uniforms.residenceContactMap = contactMap;
@@ -314,6 +318,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
         uniform float residenceNight;
         uniform float residenceWindowTransmission[${windowRooms.length}];
         uniform float residenceTeaDoor;
+        uniform float residenceTeaShojiTransmission;
         uniform float residenceHallLight;
         float windowTransmissionAt(vec2 point) {
           ${apertureRooms}
@@ -433,6 +438,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       if (index >= 0) windowTransmission.value[index] = THREE.MathUtils.clamp(transmission, 0, 1);
     },
     setTeaDoorOpenness(openness: number) { teaDoor.value = THREE.MathUtils.clamp(openness, 0, 1); },
+    setTeaShojiOpenness(openness: number) { teaShoji.value = teaShojiTransmission(openness); },
     setQuality(quality: CoastQuality) {
       if (quality === 'high' && !contactMap.value) contactMap.value = createResidenceContactMap(furnitureGroup, materials.rug);
       contactEnabled.value = Number(quality === 'high');

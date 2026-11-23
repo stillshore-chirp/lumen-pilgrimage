@@ -392,6 +392,90 @@ test('room switches draw, reverse and reopen the same woven curtain panels', { t
   assert.deepEqual(errors, []);
 });
 
+test('tea room shoji and curtain independently control the window through local and menu actions', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await page.addInitScript(() => {
+    const gl = WebGL2RenderingContext.prototype;
+    const getLocation = gl.getUniformLocation;
+    const setFloat = gl.uniform1f;
+    const shojiUniforms = new WeakSet();
+    gl.getUniformLocation = function (program, name) {
+      const location = getLocation.call(this, program, name);
+      if (location && name === 'residenceTeaShojiTransmission') shojiUniforms.add(location);
+      return location;
+    };
+    gl.uniform1f = function (location, value) {
+      if (shojiUniforms.has(location)) window.shojiDiffuseTransmission = value;
+      return setFloat.call(this, location, value);
+    };
+  });
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&place=tea-room&time=day`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+
+  const curtainGroup = page.locator('[data-residence-section="curtains-04"]');
+  const shoji = curtainGroup.getByRole('button', { name: '障子', exact: true });
+  const curtain = curtainGroup.getByRole('button', { name: 'カーテン', exact: true });
+  const menu = button(page, '住戸の操作');
+  const close = button(page, '茶室の障子を閉める');
+  const reopen = button(page, '茶室の障子を開ける');
+  const landscape = '.coast-ui { visibility: hidden; }';
+  const waitForShoji = (x, gain) => page.waitForFunction(({ x, gain }) => {
+    const leaf = window.residenceProbe.scene.getObjectByName('Tea room shoji sliding west');
+    return leaf && Math.abs(leaf.position.x - x) < .005
+      && Math.abs(window.shojiDiffuseTransmission - gain) < .003;
+  }, { x, gain });
+  const paperLight = () => page.evaluate(() => {
+    const leaf = window.residenceProbe.scene.getObjectByName('Tea room shoji sliding west');
+    let light = 0;
+    leaf.traverse(node => {
+      if (node.material?.name === 'Tea room shoji paper') light = node.material.emissiveIntensity;
+    });
+    return light;
+  });
+  const view = { x: 5.48, z: -2.43, yaw: Math.PI, pitch: -.055 };
+  const near = { ...view, z: -1.56 };
+  await page.evaluate(view => window.residenceProbe.relocate(view), view);
+  await waitForShoji(4.505, .561);
+  await capture(page, 'residence-tea-shoji-open-day', landscape);
+  await page.evaluate(near => window.residenceProbe.relocate(near), near);
+  await close.waitFor();
+  await page.keyboard.press('e');
+  await reopen.waitFor();
+  await waitForShoji(5.135, .389);
+  await page.evaluate(view => window.residenceProbe.relocate(view), view);
+  await capture(page, 'residence-tea-shoji-closed-day', landscape);
+  const openCurtainLight = await paperLight();
+  assert.ok(openCurtainLight > .25);
+
+  await menu.click();
+  await page.getByRole('dialog').getByRole('button', { name: 'カーテン', exact: true }).click();
+  await curtainGroup.locator('summary').click();
+  await curtainGroup.getByRole('button', { name: '障子', exact: true, pressed: false }).waitFor();
+  assert.equal(await curtain.getAttribute('aria-pressed'), 'true');
+  await curtain.click();
+  await page.keyboard.press('Escape');
+  await waitForShoji(5.135, .389);
+  await page.waitForFunction(() => {
+    let light = 0;
+    window.residenceProbe.scene.getObjectByName('Tea room shoji sliding west').traverse(node => {
+      if (node.material?.name === 'Tea room shoji paper') light = node.material.emissiveIntensity;
+    });
+    return light > 0 && light < .12;
+  });
+  await capture(page, 'residence-tea-shoji-curtain-closed-day', landscape);
+  await menu.click();
+  await shoji.click();
+  assert.equal(await curtain.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await waitForShoji(4.505, .561);
+  await capture(page, 'residence-tea-curtain-only-closed-day', landscape);
+  await button(page, '高品質').click();
+  await button(page, '夜').click();
+  assert.ok((await paperLight()) < .018);
+  assert.deepEqual(errors, []);
+});
+
 test('tea room fusuma moves, stops passage when closed, and leaves the window curtain independent', { timeout }, async t => {
   const { page, errors } = await createPage(t);
   await page.addInitScript(() => {

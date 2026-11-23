@@ -44,7 +44,7 @@
 
 ### 茶室と書斎
 
-茶室は四畳半の畳割りを内法2.865 m角に納める。北の入口から板敷きを通り、北西の床の間、点前座と客座を見渡せる。炉は0.424 m角の仕上げ開口で、釜や茶器は茶席の道具として置く。南窓の内側に幅0.690 mの障子を左右に配し、中央の1.26 mに眺望を残す。畳と板敷きを同じ高さにそろえ、昼は障子越しの光、夜は床の間と足元に控えめな光を当てる。 [詳細平面は図面P4](residence-70f-drawings.pdf) · [茶室の構成](https://www.urasenke.or.jp/textb/shiru/chashitu/) · [畳の規格・名称](https://www.qsr.mlit.go.jp/nobeoka/kasen/rekisi/pdf/tatamitei02.pdf)
+茶室は四畳半の畳割りを内法2.865 m角に納める。北の入口から板敷きを通り、北西の床の間、点前座と客座を見渡せる。炉は0.424 m角の仕上げ開口で、釜や茶器は茶席の道具として置く。南窓の内側に幅0.690 mの障子を4枚配し、中央の2枚を左右に引くと1.26 mの眺望が開く。紙の拡散透過を40%とし、重なる箇所では2枚分を適用する。窓と障子の間のカーテンは別に開閉できる。北側の襖は不透明とする。畳と板敷きを同じ高さにそろえ、昼は障子越しの光、夜は床の間と足元に控えめな光を当てる。 [詳細平面は図面P4](residence-70f-drawings.pdf) · [障子紙の拡散特性](https://www.jstage.jst.go.jp/article/transjtmsj1972/56/7/56_7_T35/_article/-char/ja/) · [可視光透過率の測定例](https://www.an.shimadzu.co.jp/sites/an.shimadzu.co.jp/files/pim/pim_document_file/an_jp/applications/application_note/19389/an_a507.pdf) · [茶室の構成](https://www.urasenke.or.jp/textb/shiru/chashitu/) · [畳の規格・名称](https://www.qsr.mlit.go.jp/nobeoka/kasen/rekisi/pdf/tatamitei02.pdf)
 
 書斎は東壁の長さ2.79 mの造作書棚を背に、幅1.81 m、奥行き0.64 mの机と南窓の読書席を設ける。北の入口から机、書棚、窓のそれぞれへ歩ける配置とし、机には手元灯を置く。畳と書斎の敷物は足音を変え、茶室と書斎には室ごとの反射音を設定する。 [詳細平面は図面P4](residence-70f-drawings.pdf)
 

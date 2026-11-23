@@ -455,6 +455,7 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
   group: FurnitureModel['group'];
   obstacles: readonly ResidenceRect[];
   appliances: ReturnType<typeof addServiceFurniture>;
+  shoji: ReturnType<typeof addTeaRoom>;
   theater: ReturnType<typeof addResidenceTheater>;
   dispose(): void;
 } {
@@ -470,7 +471,7 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
   addLiving(model, materials, flax, tobacco, olive);
   addDining(model, materials, flax, leaves);
   addBedrooms(model, materials, olive, tobacco, flax);
-  addTeaRoom(model, materials);
+  const shoji = addTeaRoom(model, materials);
   addStudy(model, materials);
   chair(model.at(8.63, 2.39, westFacing - .10), materials, olive, .513, .465);
   model.footprint(8.38, 2.10, .495, .572);
@@ -481,8 +482,9 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
   const theater = addResidenceTheater(model, materials);
   model.group.add(theater.screen);
   model.finish();
-  return { group: model.group, obstacles: model.obstacles, appliances, theater, dispose() {
+  return { group: model.group, obstacles: model.obstacles, appliances, shoji, theater, dispose() {
     appliances.dispose();
+    shoji.dispose();
     theater.screen.geometry.dispose();
     theater.screen.material.dispose();
     model.dispose();

@@ -18,7 +18,7 @@ export function createResidenceContactMap(furniture: THREE.Object3D, rug: THREE.
   furniture.updateWorldMatrix(true, true);
   furniture.traverse(object => {
     if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh || Array.isArray(object.material)
-      || object.material.transparent || object.material.name === rug.name) return;
+      || object.userData.dynamicResidenceShadow || object.material.transparent || object.material.name === rug.name) return;
     const positions = object.geometry.getAttribute('position');
     if (!positions) return;
     const buffer = positions instanceof THREE.InterleavedBufferAttribute ? positions.data : positions;
