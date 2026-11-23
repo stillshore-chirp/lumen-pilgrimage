@@ -1,6 +1,7 @@
 import type { MeshStandardMaterial } from 'three';
 import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
 import type { ResidenceMaterials } from './residenceMaterials';
+import { fixtureFinish } from './residenceFixtureFinish';
 import { RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS, RESIDENCE_TEA_TATAMI } from './residencePlan';
 
 function tatami(model: FurnitureModel, m: ResidenceMaterials) {
@@ -121,7 +122,7 @@ function alcove(model: FurnitureModel, m: ResidenceMaterials, plaster: MeshStand
   recess.box(plaster, 0, 1.173, -.290, 1.528, 2.154, .026, .004);
   recess.box(plaster, -.756, 1.176, -.067, .024, 2.142, .439, .003);
   recess.box(m.cedar, 0, 2.205, -.027, 1.548, .112, .570, .012);
-  recess.box(m.lamp, 0, 2.150, -.166, 1.132, .006, .024, .002);
+  recess.box(fixtureFinish(model, m.lamp, '04-alcove'), 0, 2.150, -.166, 1.132, .006, .024, .002);
   recess.rod(m.cedar, [.735, .110, .240], [.753, 2.166, .242], .044, .038);
   const silk = model.tone(m.bedding, 0xaaa28a);
   const ink = model.tone(m.ceiling, 0x4b5452);

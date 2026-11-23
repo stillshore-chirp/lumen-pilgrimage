@@ -2,6 +2,7 @@ import { CanvasTexture, SRGBColorSpace, type MeshStandardMaterial } from 'three'
 import { coastRandom } from '../../terrain';
 import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
 import type { ResidenceMaterials } from './residenceMaterials';
+import { fixtureFinish } from './residenceFixtureFinish';
 import { RESIDENCE_STUDY_RUG } from './residencePlan';
 
 const spineTitles = ['水辺の地図', '街並みの輪郭', '木の継ぎ手', '庭と石',
@@ -92,7 +93,7 @@ function bookshelf(model: FurnitureModel, m: ResidenceMaterials, timber: MeshSta
     }
     if (bay === 2) {
       builtIn.box(lining, center, 2.412, .109, width - .036, .013, .068, .002);
-      builtIn.box(m.lamp, center, 2.404, .105, width - .083, .005, .016, .001);
+      builtIn.box(fixtureFinish(model, m.lamp, '05-bookcase'), center, 2.404, .105, width - .083, .005, .016, .001);
     }
   }
 
@@ -140,7 +141,7 @@ function bookshelf(model: FurnitureModel, m: ResidenceMaterials, timber: MeshSta
   model.footprint(10.577, 1.88, .351, 2.79);
 }
 
-function readingLamp(piece: FurniturePiece, m: ResidenceMaterials): void {
+function readingLamp(piece: FurniturePiece, m: ResidenceMaterials, diffuser: MeshStandardMaterial): void {
   piece.vessel(m.darkMetal, 0, .007, 0, .233, .233, [
     [0, 0], [.96, 0], [1, .006], [.97, .020], [.84, .028], [.19, .035], [0, .035],
   ]);
@@ -151,7 +152,7 @@ function readingLamp(piece: FurniturePiece, m: ResidenceMaterials): void {
     [.91, 0], [.98, .002], [1, .012], [.82, .054], [.48, .089], [.28, .095],
     [.23, .087], [.46, .079], [.75, .047], [.90, .012], [.91, 0],
   ]);
-  piece.cylinder(m.lamp, 0, 1.273, -.214, .085, .006);
+  piece.cylinder(diffuser, 0, 1.273, -.214, .085, .006);
 }
 
 function desk(model: FurnitureModel, m: ResidenceMaterials, timber: MeshStandardMaterial): void {
@@ -195,7 +196,7 @@ function desk(model: FurnitureModel, m: ResidenceMaterials, timber: MeshStandard
     [.93, 0], [1, .008], [.87, .041], [.51, .078], [.28, .079],
     [.24, .073], [.47, .069], [.80, .035], [.89, .010], [.93, 0],
   ]);
-  piece.cylinder(m.lamp, -.360, 1.092, -.035, .076, .007);
+  piece.cylinder(fixtureFinish(model, m.lamp, '05-desk'), -.360, 1.092, -.035, .076, .007);
   horizontalBook(piece, leather, paper, .547, .760, -.059, .254, .202, .031);
   horizontalBook(piece, pad, paper, .560, .792, -.076, .213, .157, .023);
   model.footprint(7.72, 1.48, .640, 1.810);
@@ -212,7 +213,7 @@ export function addStudy(model: FurnitureModel, m: ResidenceMaterials): void {
   rug.slab(wool, 0, .0115, 0, east - west - .029, .006, north - south - .029, .032);
   bookshelf(model, m, timber);
   desk(model, m, timber);
-  readingLamp(model.at(10.140, 1.297, .86), m);
+  readingLamp(model.at(10.140, 1.297, .86), m, fixtureFinish(model, m.lamp, '05-reading'));
   model.footprint(10.08, 1.18, .23, .23);
   const table = model.at(10.163, .737);
   table.slab(timber, 0, .434, 0, .417, .028, .401, .194);

@@ -33,20 +33,21 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   furniture.group.add(curtains.group);
   const scene = new Scene();
   scene.add(city.group, shell.group, furniture.group);
-  const lighting = createResidenceLighting(scene, materials, furniture.obstacles);
+  const lighting = createResidenceLighting(scene, materials, furniture.obstacles, () => reflections.invalidate());
   lighting.attachInterior(shell.group, furniture.group);
   const reflections = createResidenceReflections(scene, city.group, shell.group, furniture.group, materials);
 
   let door = 0;
   let opening = false;
   let previous = 0;
-  let invokeNearby: (() => void) | undefined;
+  let invokeNearby: (() => void | { openSection: string }) | undefined;
   const navigation = createResidenceNavigation(findDestination('residence', 'living-window')!,
     furniture.obstacles, () => door >= 0.96);
   shell.setBalconyDoor(door);
 
   return {
     id: 'residence', navigation, audio: new ResidenceAudio({ balconyDoor: () => door }),
+    residenceControls: [...lighting.sections, ...curtains.sections],
     interaction: {
       label(position) {
         const distance = Math.hypot(position.x - doorEast, northDistanceToDoor(position.z));
@@ -56,10 +57,15 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
           invokeNearby = () => { opening = !opening; };
           return opening ? 'バルコニーの引戸を閉める' : 'バルコニーの引戸を開ける';
         }
-        invokeNearby = curtain?.invoke;
-        return curtain?.label ?? null;
+        if (curtain) {
+          invokeNearby = curtain.invoke;
+          return curtain.label;
+        }
+        const localLights = lighting.nearby(position);
+        invokeNearby = localLights ? () => ({ openSection: localLights.sectionId }) : undefined;
+        return localLights?.label ?? null;
       },
-      invoke() { invokeNearby?.(); },
+      invoke() { return invokeNearby?.(); },
     },
     world: {
       scene,
@@ -88,6 +94,9 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
           shell.setBalconyDoor(door);
         }
         const curtainsMoved = curtains.update(dt);
+        if (curtainsMoved) {
+          for (const room of curtains.daylight) lighting.setDaylightTransmission(room.roomId, room.transmission());
+        }
         if (doorMoved || curtainsMoved) {
           lighting.invalidateShadows();
           reflections.invalidate();

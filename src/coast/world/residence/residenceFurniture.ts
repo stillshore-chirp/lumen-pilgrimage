@@ -1,5 +1,6 @@
 import { CatmullRomCurve3, DoubleSide, Vector3, type MeshStandardMaterial } from 'three';
 import type { ResidenceMaterials } from './residenceMaterials';
+import { fixtureFinish } from './residenceFixtureFinish';
 import type { ResidenceRect } from './residencePlan';
 import { foliage } from './residenceFurnitureDecor';
 import { FurnitureModel, type FurniturePiece } from './residenceFurnitureModel';
@@ -41,7 +42,8 @@ function books(piece: FurniturePiece, cover: MeshStandardMaterial, pages: MeshSt
   }
 }
 
-function tableLamp(piece: FurniturePiece, m: ResidenceMaterials, base: number, height = .39): void {
+function tableLamp(piece: FurniturePiece, m: ResidenceMaterials, diffuser: MeshStandardMaterial,
+  base: number, height: number): void {
   const shadeWidth = height > 1 ? .282 : .234;
   piece.cylinder(m.darkMetal, 0, base + .010, 0, .085, .020, .091);
   piece.cylinder(m.metal, 0, base + height * .42, 0, height > 1 ? .011 : .007, height * .8);
@@ -51,7 +53,7 @@ function tableLamp(piece: FurniturePiece, m: ResidenceMaterials, base: number, h
     [.983, height * .606], [.722, height * .993], [.717, height], [.686, height],
     [.683, height * .992], [.942, height * .605], [.962, height * .581],
   ]);
-  piece.vessel(m.lamp, 0, base, 0, .092, .092, [[0, height * .738], [.92, height * .741],
+  piece.vessel(diffuser, 0, base, 0, .092, .092, [[0, height * .738], [.92, height * .741],
     [1, height * .766], [.86, height * .795], [0, height * .805]]);
   piece.cylinder(m.linenShade, 0, base + height * .966, 0, shadeWidth * .345, .004);
 }
@@ -189,7 +191,7 @@ function addLiving(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
     [0, 0], [1, 0], [1, .023], [.57, .062], [.48, .398], [.64, .431], [0, .438],
   ]);
   endTable.slab(m.counterStone, 0, .48, 0, .456, .027, .512, .14);
-  tableLamp(endTable, m, .507, .34);
+  tableLamp(endTable, m, fixtureFinish(model, m.lamp, 'LD-table'), .507, .34);
   endTable.vessel(m.ceramic, -.120, .508, .115, .086, .073, [
     [0, 0], [.73, 0], [.9, .012], [1, .030], [.91, .031], [.78, .016], [0, .012],
   ]);
@@ -218,7 +220,7 @@ function addLiving(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
   ]);
   coffee.tube(m.ceramic, [[.045, .375, -.24], [.067, .376, -.24], [.074, .356, -.24], [.045, .342, -.24]], .005);
   model.footprint(12.89, 1.96, 2.37, 1.11);
-  tableLamp(model.at(12.22, 1.27), m, .001, 1.42);
+  tableLamp(model.at(12.22, 1.27), m, fixtureFinish(model, m.lamp, 'LD-floor'), .001, 1.42);
   model.footprint(12.125, 1.175, .19, .19);
 }
 
@@ -251,7 +253,7 @@ function addDining(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
     model.footprint(x - .27, north - .23, .54, .46);
   }
   const form = model.tone(m.ceramic, 0xb7a895);
-  for (const x of [15.36, 16.69]) {
+  for (const [x, id] of [[15.36, 'LD-pendant-west'], [16.69, 'LD-pendant-east']] as const) {
     const pendant = model.at(x, 4.72);
     pendant.cylinder(m.darkMetal, 0, 2.974, 0, .057, .037);
     pendant.cylinder(m.darkMetal, 0, 2.58, 0, .003, .76);
@@ -259,7 +261,7 @@ function addDining(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
       [.66, .045], [.88, .061], [1, .121], [.98, .163], [.65, .209],
       [.19, .252], [.15, .238], [.40, .201], [.83, .149], [.84, .100], [.66, .045],
     ]);
-    pendant.oval(m.lamp, 0, 2.083, 0, .326, .058, .326);
+    pendant.oval(fixtureFinish(model, m.lamp, id), 0, 2.083, 0, .326, .058, .326);
   }
 }
 
@@ -298,10 +300,10 @@ type Bedroom = {
   rug: number;
 };
 
-const bedrooms: readonly Bedroom[] = [
-  { name: 'Bedroom 03', bed: [.49, 1.18, 1.56, 2.12], textile: 0x9d896e, headboard: 0xcab29c, rug: 0xb7ab90 },
-  { name: 'Bedroom 02', bed: [19.53, 7.27, 1.55, 2.07], textile: 0x7d8272, headboard: 0xb3ad97, rug: 0xa6a690 },
-  { name: 'Primary bedroom', bed: [17.82, 13.35, 1.83, 2.10], textile: 0xb8a586, headboard: 0x9c8170, rug: 0xb4a395 },
+const bedrooms: readonly (Bedroom & { readonly lampId: string })[] = [
+  { name: 'Bedroom 03', lampId: '03-bed', bed: [.49, 1.18, 1.56, 2.12], textile: 0x9d896e, headboard: 0xcab29c, rug: 0xb7ab90 },
+  { name: 'Bedroom 02', lampId: '02-bed', bed: [19.53, 7.27, 1.55, 2.07], textile: 0x7d8272, headboard: 0xb3ad97, rug: 0xa6a690 },
+  { name: 'Primary bedroom', lampId: '01-bed-east', bed: [17.82, 13.35, 1.83, 2.10], textile: 0xb8a586, headboard: 0x9c8170, rug: 0xb4a395 },
 ];
 
 function makeBed(model: FurnitureModel, m: ResidenceMaterials, bedroom: Bedroom): void {
@@ -381,7 +383,7 @@ function addBedrooms(model: FurnitureModel, m: ResidenceMaterials, olive: MeshSt
     const nightstandN = south + depth - .23;
     bedside(model.at(nightstandE, nightstandN), m, .44, .423);
     const nightstand = model.at(nightstandE, nightstandN + .057);
-    tableLamp(nightstand, m, .487, .32);
+    tableLamp(nightstand, m, fixtureFinish(model, m.lamp, bedroom.lampId), .487, .32);
     if (bedroom.name === 'Primary bedroom') {
       books(nightstand, model.tone(m.fabric, bedroom.headboard), m.bedding, -.012, .486, .123);
     } else {
@@ -404,7 +406,7 @@ function addBedrooms(model: FurnitureModel, m: ResidenceMaterials, olive: MeshSt
     }
     if (bedroom.name === 'Primary bedroom') {
       bedside(model.at(17.51, 15.162), m, .37, .432);
-      tableLamp(model.at(17.49, 15.218), m, .487, .35);
+      tableLamp(model.at(17.49, 15.218), m, fixtureFinish(model, m.lamp, '01-bed-west'), .487, .35);
       model.footprint(17.325, 14.936, .37, .452);
       const windowSeat = model.at(19.96, 10.66);
       windowSeat.box(m.cabinetry, 0, .315, 0, 1.2, .23, .58, .05);
