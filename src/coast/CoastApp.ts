@@ -320,6 +320,10 @@ export class CoastApp {
   private bindQuality(ui: HTMLElement): void {
     const light = ui.querySelector<HTMLButtonElement>('.coast-light')!;
     const high = ui.querySelector<HTMLButtonElement>('.coast-high')!;
+    if (this.worldId === 'residence') {
+      light.title = '標準の影と反射';
+      high.title = '家具が床に落とす細かい影と、床に映る窓や室内';
+    }
     const apply = (quality: CoastQuality) => {
       this.quality = quality;
       this.world.setQuality(quality);

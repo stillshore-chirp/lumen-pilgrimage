@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { registerHooks, stripTypeScriptTypes } from 'node:module';
 import { test } from 'node:test';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const src = new URL('../src/', import.meta.url).href;
 const hooks = registerHooks({
@@ -23,6 +24,7 @@ const {
   RESIDENCE_STREET_LEVEL: streetLevel, RESIDENCE_TOWER: tower,
 } = await import('../src/coast/world/residence/residenceCityPlan.ts');
 const { createResidenceCity } = await import('../src/coast/world/residence/residenceCity.ts');
+const { createResidenceContactMap } = await import('../src/coast/world/residence/residenceContactMap.ts');
 hooks.deregister();
 const tolerance = 0.04;
 const extendedAxes = [
@@ -333,3 +335,23 @@ function verifyPaving(road, asphalt, mode) {
       `${road.id} lacks pavement after ${coveredTo.toFixed(2)} m at lane ${lateral.toFixed(2)} m in ${mode}`);
   }
 }
+
+
+test('static contact shadows retain furniture feet while excluding flush finishes and moving cloth', () => {
+  const furniture = new THREE.Group();
+  const finish = new THREE.MeshStandardMaterial({ name: 'Test furniture finish' });
+  const rug = new THREE.MeshStandardMaterial({ name: 'Test rug finish' });
+  const foot = new THREE.BoxGeometry(.12, .066, .12).translate(9, .033, -4);
+  const tile = new THREE.BoxGeometry(1.4, .036, 1.4).translate(11, -.018, -4);
+  const moving = new THREE.PlaneGeometry(1.6, 2, 8, 8).rotateX(.30).translate(7, .98, -4);
+  moving.getAttribute('position').setUsage(THREE.DynamicDrawUsage);
+  furniture.add(new THREE.Mesh(foot, finish));
+  const baseline = createResidenceContactMap(furniture, rug);
+  furniture.clear();
+  const mixed = mergeGeometries([foot, tile]);
+  furniture.add(new THREE.Mesh(mixed, finish), new THREE.Mesh(moving, finish));
+  const withRoomFinishes = createResidenceContactMap(furniture, rug);
+  assert.ok(baseline.image.data.some(strength => strength > 180));
+  assert.deepEqual(withRoomFinishes.image.data, baseline.image.data);
+  for (const resource of [finish, rug, foot, tile, moving, mixed, baseline, withRoomFinishes]) resource.dispose();
+});

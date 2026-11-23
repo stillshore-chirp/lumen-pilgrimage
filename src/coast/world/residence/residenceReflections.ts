@@ -3,14 +3,15 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import type { CoastQuality } from '../../CoastWorld';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import type { ResidenceMaterials } from './residenceMaterials';
+import { createResidenceScreenOcclusion } from './residenceScreenOcclusion';
 import { RESIDENCE_BALCONY_DOOR } from './residencePlan';
 import { EAST_GLASS_EAST, SOUTH_GLASS_NORTH } from './residenceShell';
 
-function makeCapture(position: THREE.Vector3, yaw: number) {
+function makeCapture(position: THREE.Vector3, yaw: number, pitch = 0) {
   const geometry = new THREE.PlaneGeometry();
   const reflector = new Reflector(geometry, { textureWidth: 320, textureHeight: 200, clipBias: .0018, multisample: 0 });
   reflector.position.copy(position);
-  reflector.rotation.y = yaw;
+  reflector.rotation.set(pitch, yaw, 0);
   reflector.updateMatrixWorld(true);
   const material = reflector.material as THREE.ShaderMaterial;
   const inverseTransform = reflector.matrixWorld.clone().invert();
@@ -34,11 +35,20 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
   const east = makeCapture(new THREE.Vector3(EAST_GLASS_EAST, 0, 0), -Math.PI / 2);
   const balconyEast = RESIDENCE_BALCONY_DOOR.e;
   const bedroom = makeCapture(new THREE.Vector3(balconyEast, 0, 0), -Math.PI / 2);
+  const floor = makeCapture(new THREE.Vector3(0, -.006, 0), 0, -Math.PI / 2);
+  floor.texture.value.generateMipmaps = true;
+  floor.texture.value.minFilter = THREE.LinearMipmapLinearFilter;
+  const floorMaterials = [materials.oak, materials.stone, materials.tile];
   const rendersHiddenInCaptures: THREE.Mesh[] = [];
   const meshBounds = new THREE.Box3();
   shell.updateMatrixWorld(true);
   shell.traverse(object => {
-    if (!(object instanceof THREE.Mesh) || object.material !== materials.glass) return;
+    if (!(object instanceof THREE.Mesh)) return;
+    if (object.material === materials.oak || object.material === materials.stone || object.material === materials.tile) {
+      meshBounds.setFromObject(object);
+      floor.bounds.union(meshBounds);
+    }
+    if (object.material !== materials.glass) return;
     rendersHiddenInCaptures.push(object);
     meshBounds.setFromObject(object);
     if (Math.abs(meshBounds.min.z + SOUTH_GLASS_NORTH) < .001
@@ -63,7 +73,9 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
     mirrors.push(capture);
   });
   const windows = [south, east, bedroom];
-  const captures = [...windows, ...mirrors];
+  const captures = [...windows, ...mirrors, floor];
+  floor.bounds.min.y = -.025;
+  floor.bounds.max.y = .025;
 
   const night = { value: 0 };
   const readReflection = `
@@ -138,6 +150,38 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
       #include <opaque_fragment>`);
   };
 
+
+  const floorImage: { value: THREE.Texture | null } = { value: null };
+  const daySky = new THREE.Color().setRGB(1.46, 1.79, 2.34);
+  const nightSky = new THREE.Color().setRGB(.013, .025, .061);
+  for (const surface of floorMaterials) {
+    const before = surface.onBeforeCompile.bind(surface);
+    const cacheKey = surface.customProgramCacheKey();
+    surface.customProgramCacheKey = () => `${cacheKey}|residence-floor-reflection`;
+    surface.onBeforeCompile = (shader, renderer) => {
+      before(shader, renderer);
+      Object.assign(shader.uniforms, { floorImage, floorMatrix: floor.matrix, floorVisible: floor.visible });
+      shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
+        uniform sampler2D floorImage;
+        uniform mat4 floorMatrix;
+        uniform float floorVisible;`).replace('#include <opaque_fragment>', `
+        if (floorVisible > 0.5 && abs(vResidenceWorld.y) < 0.038 && surfaceNormal.y > 0.82) {
+          vec4 floorProjection = floorMatrix * vec4(vResidenceWorld, 1.0);
+          vec2 floorUV = floorProjection.xy / max(0.001, floorProjection.w);
+          floorUV += (geometryNormal.xy - nonPerturbedNormal.xy) * 0.020;
+          vec2 safeEdge = min(floorUV, 1.0 - floorUV);
+          float edge = smoothstep(0.006, 0.036, min(safeEdge.x, safeEdge.y));
+          float spread = 1.0 + material.roughness * 3.6 + min(1.0, floorProjection.w * 0.08);
+          vec3 reflectedRoom = textureLod(floorImage, floorUV, spread).rgb;
+          float viewNormal = clamp(dot(nonPerturbedNormal, geometryViewDir), 0.0, 1.0);
+          float fresnel = 0.036 + 0.36 * pow(1.0 - viewNormal, 4.0);
+          outgoingLight += reflectedRoom * fresnel * (0.92 - 0.40 * material.roughness) * edge;
+        }
+        #include <opaque_fragment>`);
+    };
+  }
+
+  const nearOcclusion = createResidenceScreenOcclusion(shell, furniture);
   const clear = new THREE.Color();
   const viewport = new THREE.Vector4();
   const scissor = new THREE.Vector4();
@@ -150,6 +194,9 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
   const latestRotation = new THREE.Quaternion();
   const rotation = new THREE.Quaternion();
   const latestProjection = new THREE.Matrix4();
+  const floorPosition = new THREE.Vector3();
+  const floorRotation = new THREE.Quaternion();
+  let floorHasImage = false;
   // Recapture once after the main pass refreshes the static shadow maps on a time or quality change.
   let pendingRefreshes = 2;
   let quality: CoastQuality = 'light';
@@ -159,6 +206,9 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
     if (renderer.xr.isPresenting) {
       for (const capture of captures) capture.visible.value = 0;
       mirrorVisible.value = 0;
+      floorImage.value = null;
+      floorHasImage = false;
+      nearOcclusion.setActive(false);
       pendingRefreshes = 2;
       return;
     }
@@ -170,6 +220,7 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
     latestPosition.copy(viewPoint);
     latestRotation.copy(rotation);
     latestProjection.copy(camera.projectionMatrix);
+    const refreshing = pendingRefreshes > 0;
     pendingRefreshes = Math.max(0, pendingRefreshes - 1);
     frustum.setFromProjectionMatrix(projectionView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     const visible = windows.filter(capture => {
@@ -182,13 +233,19 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
     const mirror = mirrors.find(capture => planeToCamera.subVectors(viewPoint, capture.position).dot(capture.normal) > .07
       && planeToCamera.lengthSq() < 14.44 && frustum.intersectsBox(capture.bounds));
     if (mirror) visible.push(mirror);
-    if (!visible.length) return;
+    const floorInView = quality === 'high' && viewPoint.y > .12 && viewPoint.y < 3.5 && frustum.intersectsBox(floor.bounds);
+    if (floorInView && (!floorHasImage || refreshing || floorPosition.distanceToSquared(viewPoint) > .0049
+      || floorRotation.dot(rotation) < .99991)) visible.push(floor);
+    floor.visible.value = Number(floorInView && floorHasImage);
+    const useNearOcclusion = quality === 'high' && viewPoint.y < 3.5;
+    if (!visible.length && !useNearOcclusion) return;
 
     renderer.getDrawingBufferSize(size);
     const width = Math.max(160, Math.min(quality === 'high' ? 640 : 448,
       Math.round(size.x * (quality === 'high' ? .53 : .40))));
     const height = Math.max(90, Math.round(width * size.y / Math.max(size.x, 1)));
     const mirrorWidth = Math.min(quality === 'high' ? 1250 : 900, Math.max(640, size.x));
+    const floorWidth = Math.min(576, Math.max(288, Math.round(size.x * .32)));
     const reflectionType = renderer.extensions.has('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType;
     const target = renderer.getRenderTarget();
     const targetFace = renderer.getActiveCubeFace();
@@ -207,6 +264,9 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
 
     try {
       exterior.visible = false;
+      floor.visible.value = 0;
+      floorImage.value = null;
+      nearOcclusion.setActive(false);
       scene.background = null;
       renderer.setClearColor(0, 0);
       renderer.autoClear = true;
@@ -219,12 +279,17 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
         const captureTarget = capture.reflector.getRenderTarget();
         // The silvered mirrors occupy more pixels at arm's length and retain a sharper image.
         captureTarget.texture.type = reflectionType;
-        captureTarget.setSize(capture === mirror ? mirrorWidth : width,
-          capture === mirror ? Math.round(mirrorWidth * height / width) : height);
+        const captureWidth = capture === mirror ? mirrorWidth : capture === floor ? floorWidth : width;
+        captureTarget.setSize(captureWidth, Math.round(captureWidth * height / width));
+        if (capture === floor) scene.background = night.value > .5 ? nightSky : daySky;
         capture.reflector.onBeforeRender(renderer, scene, camera, capture.geometry, capture.material, shell);
         capture.matrix.value.multiplyMatrices(
           capture.material.uniforms.textureMatrix.value as THREE.Matrix4, capture.inverseTransform);
-        capture.visible.value = 1;
+        if (capture === floor) {
+          floorHasImage = true;
+          floorPosition.copy(viewPoint);
+          floorRotation.copy(rotation);
+        } else capture.visible.value = 1;
       }
       if (mirror) {
         mirrorImage.value = mirror.texture.value;
@@ -233,10 +298,23 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
         mirrorPosition.value.copy(mirror.position);
         mirrorVisible.value = 1;
       }
+      if (useNearOcclusion) {
+        for (const [index, mesh] of rendersHiddenInCaptures.entries()) {
+          // The opaque mirror has a screen edge. The transparent panes do not occlude interior light.
+          if (mesh.material === materials.clearMirror) mesh.visible = exteriorVisibility[index];
+        }
+        scene.background = null;
+        renderer.shadowMap.autoUpdate = false;
+        const depthWidth = Math.min(960, Math.max(480, Math.round(size.x * .51)));
+        nearOcclusion.capture(renderer, scene, camera, depthWidth, Math.round(depthWidth * height / width));
+        nearOcclusion.setActive(true);
+      }
     } finally {
       for (let index = 0; index < rendersHiddenInCaptures.length; index += 1) {
         rendersHiddenInCaptures[index].visible = exteriorVisibility[index];
       }
+      floor.visible.value = Number(floorInView && floorHasImage);
+      floorImage.value = floor.visible.value ? floor.texture.value : null;
       scene.background = background;
       exterior.visible = exteriorWasVisible;
       renderer.xr.enabled = xrEnabled;
@@ -256,6 +334,7 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
     invalidate() { pendingRefreshes = 2; },
     setQuality(value: CoastQuality) {
       quality = value;
+      if (quality === 'light') nearOcclusion.setActive(false);
       pendingRefreshes = 2;
     },
     setTimeOfDay(time: CoastTimeOfDay) {
@@ -263,6 +342,7 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
       pendingRefreshes = 2;
     },
     dispose() {
+      nearOcclusion.dispose();
       for (const { geometry, reflector } of captures) {
         reflector.dispose();
         geometry.dispose();

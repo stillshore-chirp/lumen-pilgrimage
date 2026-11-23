@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createResidenceContactMap } from './residenceContactMap';
 import type { CoastQuality } from '../../CoastWorld';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { RESIDENCE_SUN } from './residenceCityMaterials';
@@ -90,6 +91,9 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   furnitureObstacles: readonly ResidenceRect[] = []) {
   const field = createResidenceLightField(furnitureObstacles);
   const nightAmount = { value: 0 };
+  const contactEnabled = { value: 0 };
+  const contactMap: { value: THREE.DataTexture | null } = { value: null };
+  let furnitureGroup: THREE.Object3D;
   const sunPower = 2.35;
   const daylight = new THREE.DirectionalLight(0xffe7d0, sunPower);
   daylight.name = 'Southwest daylight through the glazing';
@@ -131,6 +135,8 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       shader.uniforms.residenceFieldOrigin = { value: residenceFieldOrigin };
       shader.uniforms.residenceFieldExtent = { value: residenceFieldExtent };
       shader.uniforms.residenceNight = nightAmount;
+      shader.uniforms.residenceContactEnabled = contactEnabled;
+      shader.uniforms.residenceContactMap = contactMap;
       shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
         varying vec3 vResidenceWorld;`).replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
         vec4 residenceWorld = vec4(transformed, 1.0);
@@ -148,12 +154,20 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
         uniform highp sampler3D residenceWindowVolume;
         uniform vec3 residenceFieldOrigin;
         uniform vec3 residenceFieldExtent;
-        uniform float residenceNight;`).replace('#include <lights_fragment_end>', `
+        uniform float residenceNight;
+        uniform float residenceContactEnabled;
+        uniform sampler2D residenceContactMap;`).replace('#include <lights_fragment_end>', `
         vec3 surfaceNormal = inverseTransformDirection(nonPerturbedNormal, viewMatrix);
         vec3 roomNormal = inverseTransformDirection(geometryNormal, viewMatrix);
         vec3 roomPoint = vResidenceWorld + surfaceNormal * mix(0.095, 0.050, abs(surfaceNormal.y));
         vec3 fieldUV = clamp((vec3(roomPoint.x, -roomPoint.z, roomPoint.y) - residenceFieldOrigin) / residenceFieldExtent, 0.0, 1.0);
         vec4 probe = texture(residenceLightVolume, fieldUV);
+        if (residenceContactEnabled > 0.5 && vResidenceWorld.y < 0.38) {
+          vec2 floorUV = (vec2(vResidenceWorld.x, -vResidenceWorld.z) - residenceFieldOrigin.xy) / residenceFieldExtent.xy;
+          float contact = texture2D(residenceContactMap, floorUV).r;
+          float receiver = (1.0 - smoothstep(0.025, 0.38, vResidenceWorld.y)) * (0.40 + 0.60 * abs(surfaceNormal.y));
+          probe.a *= 1.0 - 0.65 * contact * receiver;
+        }
         vec4 portal = texture(residenceWindowVolume, fieldUV);
         vec3 toWindow = portal.rgb - vec3(0.5);
         toWindow *= inversesqrt(max(dot(toWindow, toWindow), 0.0002));
@@ -166,6 +180,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
         vec3 evening = vec3(1.0, 0.77, 0.53) * warmBounce * (0.82 + 0.18 * abs(roomNormal.y))
           + vec3(1.0, 0.79, 0.58) * (1.54 * probe.b)
           + vec3(0.40, 0.57, 1.0) * (0.63 * skyAmount + 0.10 * probe.r);
+        // Near-surface occlusion is inserted here for high quality.
         vec3 roomIrradiance = mix(daytime, evening, residenceNight) * probe.a;
         irradiance += roomIrradiance * 0.75;
         iblIrradiance += roomIrradiance * 0.25;
@@ -215,7 +230,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     material.needsUpdate = true;
   }
 
-  function attachInterior(...groups: THREE.Object3D[]): void {
+  function attachMaterials(...groups: THREE.Object3D[]): void {
     for (const group of groups) group.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
       if (Array.isArray(object.material)) object.material.forEach(bind);
@@ -226,14 +241,19 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   for (const material of Object.values(materials)) {
     if (material instanceof THREE.Material) bind(material);
   }
-  attachInterior(luminaires.group);
+  attachMaterials(luminaires.group);
   scene.add(daylight, daylight.target, luminaires.group, ...diningObjects);
   return {
-    attachInterior,
+    attachInterior(shell: THREE.Object3D, furniture: THREE.Object3D) {
+      furnitureGroup = furniture;
+      attachMaterials(shell, furniture);
+    },
     invalidateShadows() {
       if (daylight.castShadow) daylight.shadow.needsUpdate = true;
     },
     setQuality(quality: CoastQuality) {
+      if (quality === 'high' && !contactMap.value) contactMap.value = createResidenceContactMap(furnitureGroup, materials.rug);
+      contactEnabled.value = Number(quality === 'high');
       resizeShadow(daylight.shadow, quality === 'high' ? 2048 : 1024);
       daylight.shadow.radius = quality === 'high' ? 3.4 : 2.35;
       for (const lamp of dining) resizeShadow(lamp.shadow, quality === 'high' ? 1024 : 512);
@@ -261,6 +281,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       field.diffuse.dispose();
       field.accent.dispose();
       field.daylight.dispose();
+      contactMap.value?.dispose();
       luminaires.dispose();
     },
   };
