@@ -42,6 +42,22 @@ async function capture(page, name) {
   if (screenshotDirectory) await page.screenshot({ path: join(screenshotDirectory, `${name}.png`) });
 }
 
+function observeCameraWithoutAudio() {
+  const cameraUniforms = new WeakSet();
+  const gl = WebGL2RenderingContext.prototype;
+  const getLocation = gl.getUniformLocation;
+  const writePosition = gl.uniform3f;
+  gl.getUniformLocation = function (program, name) {
+    const location = getLocation.call(this, program, name);
+    if (location && name === 'cameraPosition') cameraUniforms.add(location);
+    return location;
+  };
+  gl.uniform3f = function (location, x, y, z) {
+    if (cameraUniforms.has(location)) window.startupCameraPosition = [x, z];
+    return writePosition.call(this, location, x, y, z);
+  };
+}
+
 async function sampleRendering(page, quality) {
   if (!screenshotDirectory) return;
   const result = await page.locator('canvas.coast-view').evaluate(async canvas => {
@@ -381,6 +397,58 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     assert.equal(await page.evaluate(() => window.coastProbe.context), null);
     assert.deepEqual([...externalRequests], []);
     assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('both worlds accept the first movement key when the browser finishes focusing after its focus event', { timeout }, async () => {
+  const page = await newPage();
+  await page.addInitScript(observeCameraWithoutAudio);
+
+  try {
+    for (const scene of ['', '?world=overlook']) {
+      await page.goto(url + scene, { waitUntil: 'commit' });
+      await page.waitForFunction(() => document.hasFocus() && window.startupCameraPosition);
+      await page.evaluate(() => {
+        // Simulate the browser announcing focus before hasFocus() starts returning true.
+        Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => false });
+        try {
+          window.dispatchEvent(new Event('focus'));
+        } finally {
+          delete document.hasFocus;
+        }
+      });
+      assert.equal(await page.evaluate(() => document.activeElement === document.body
+        && document.hasFocus() && document.pointerLockElement === null), true);
+
+      for (const key of ['w', 'a', 's', 'd']) {
+        const start = await page.evaluate(() => window.startupCameraPosition);
+        await page.keyboard.down(key);
+        try {
+          await page.waitForFunction(([x, z]) => {
+            const [currentX, currentZ] = window.startupCameraPosition;
+            return Math.hypot(currentX - x, currentZ - z) > 0.2;
+          }, start, { timeout: 5000 });
+        } finally {
+          await page.keyboard.up(key);
+        }
+      }
+    }
+
+    await page.getByRole('button', { name: '仮想モニター', exact: true }).click();
+    const code = page.getByRole('textbox', { name: '接続コード' });
+    await code.focus();
+    const beforeTyping = await page.evaluate(() => window.startupCameraPosition);
+    await page.keyboard.down('w');
+    try {
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    } finally {
+      await page.keyboard.up('w');
+    }
+    await page.keyboard.type('asd');
+    assert.equal(await code.inputValue(), 'wasd');
+    assert.deepEqual(await page.evaluate(() => window.startupCameraPosition), beforeTyping);
   } finally {
     await page.close();
   }
