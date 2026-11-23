@@ -668,8 +668,17 @@ test('residence appliances work from the room menu and start localized audio', {
   await exposeResidenceScene(page);
   await page.addInitScript(() => {
     const start = AudioBufferSourceNode.prototype.start;
+    const connect = AudioBufferSourceNode.prototype.connect;
+    const chimes = new WeakSet();
+    window.residenceProbe.completionStarts = 0;
+    AudioBufferSourceNode.prototype.connect = function (target, ...args) {
+      // Chimes are short one-shots sent straight to the appliance's spatial low-pass filter.
+      if (!this.loop && this.buffer?.duration < 1 && target instanceof BiquadFilterNode) chimes.add(this);
+      return connect.call(this, target, ...args);
+    };
     AudioBufferSourceNode.prototype.start = function (...args) {
       if (this.loop) window.residenceProbe.loopStarts++;
+      if (chimes.has(this)) window.residenceProbe.completionStarts++;
       return start.apply(this, args);
     };
   });
@@ -699,6 +708,7 @@ test('residence appliances work from the room menu and start localized audio', {
   await microwave.getByText(/^00:0[7-9]$/).waitFor();
   await stopHeat.click();
   await microwave.getByText('停止中', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.residenceProbe.completionStarts), 0);
 
   const kitchen = panel.locator('[data-residence-section="kitchen-tap"]');
   await kitchen.locator('summary').click();
@@ -706,8 +716,10 @@ test('residence appliances work from the room menu and start localized audio', {
   await tap.click();
   assert.equal(await tap.getAttribute('aria-pressed'), 'true');
   await capture(page, 'residence-appliance-menu');
+  assert.equal(await page.evaluate(() => window.residenceProbe.completionStarts), 0);
   await heat.click();
   await microwave.getByText('加熱完了', { exact: true }).waitFor();
+  await page.waitForFunction(() => window.residenceProbe.completionStarts === 1);
   assert.equal(await tap.getAttribute('aria-pressed'), 'true');
   await tap.click();
   assert.equal(await tap.getAttribute('aria-pressed'), 'false');
@@ -731,6 +743,7 @@ test('residence appliances work from the room menu and start localized audio', {
   await power.click();
   await washer.getByText(/停止中/).waitFor();
   assert.ok(await mode.isEnabled());
+  assert.equal(await page.evaluate(() => window.residenceProbe.completionStarts), 1);
   await page.keyboard.press('Escape');
   await panel.waitFor({ state: 'hidden' });
   assert.deepEqual(errors, []);
