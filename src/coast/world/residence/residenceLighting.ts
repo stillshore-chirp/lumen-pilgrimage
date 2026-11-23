@@ -10,6 +10,7 @@ import { createResidenceLightField, diningPendants, diningPendantHeight, diningP
 import type { ResidenceMaterials } from './residenceMaterials';
 import { RESIDENCE_ROOMS, type ResidenceRect } from './residencePlan';
 import { FurnitureModel } from './residenceFurnitureModel';
+import type { createResidenceTheaterLights } from './residenceTheaterLights';
 
 const switchMounts: Readonly<Record<string, readonly [east: number, north: number, heading: number]>> = {
   LD: [11.072, 4.78, Math.PI / 2],
@@ -172,7 +173,8 @@ function resizeShadow(shadow: THREE.LightShadow, size: number): void {
 }
 
 export function createResidenceLighting(scene: THREE.Scene, materials: ResidenceMaterials,
-  furnitureObstacles: readonly ResidenceRect[] = [], onFixtureChange?: () => void) {
+  furnitureObstacles: readonly ResidenceRect[] = [], onFixtureChange?: () => void,
+  theaterLights?: ReturnType<typeof createResidenceTheaterLights>) {
   const field = createResidenceLightField(furnitureObstacles);
   const spill = createResidenceLightSpill(residenceFieldOrigin, residenceFieldExtent);
   const nightAmount = { value: 0 };
@@ -185,7 +187,9 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       `(point.x >= ${w.toFixed(2)} && point.x <= ${e.toFixed(2)} && point.y >= ${s.toFixed(2)} && point.y <= ${n.toFixed(2)})`);
     return `if (${area.join(' || ')}) return residenceWindowTransmission[${index}]${id === '04' ? ' * residenceTeaShojiTransmission' : ''};`;
   }).join('\n');
+  const livingFixtures = new Set(roomSources.LD);
   function isOn(source: LightSource): boolean {
+    if (livingFixtures.has(source) && theaterLights?.enabled()) return false;
     return overrides.get(source.id) ?? (nightAmount.value === 1 || source.daytime === true);
   }
   const contactEnabled = { value: 0 };
@@ -256,15 +260,35 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     luminaires.update(night, isOn);
   }
 
-  function setFixtures(room: string, sources: readonly LightSource[], on: boolean): void {
-    const changed = sources.some(source => isOn(source) !== on);
-    for (const source of sources) overrides.set(source.id, on);
-    if (!changed) return;
+  function refreshRoom(room: string): void {
     field.updateRoom(room, isOn, nightAmount.value === 1);
     spill.invalidate();
     refreshEmitters();
     invalidateShadows();
     onFixtureChange?.();
+  }
+
+  function setFixtures(room: string, sources: readonly LightSource[], on: boolean, wholeZone = false): void {
+    const exitTheater = wholeZone && room === 'LD' && theaterLights?.enabled();
+    if (exitTheater) theaterLights?.setEnabled(false);
+    const changed = exitTheater || sources.some(source => isOn(source) !== on);
+    for (const source of sources) overrides.set(source.id, on);
+    if (changed) refreshRoom(room);
+  }
+
+  function theaterControls() {
+    if (!theaterLights) return [];
+    return [
+      { kind: 'toggle' as const, id: 'theater-light', label: 'シアター照明',
+        get: theaterLights.enabled,
+        set(on: boolean) {
+          if (theaterLights.enabled() === on) return;
+          theaterLights.setEnabled(on);
+          refreshRoom('LD');
+        } },
+      { kind: 'color' as const, id: 'theater-color', label: 'シアター照明の色',
+        get: theaterLights.color, set: theaterLights.setColor },
+    ];
   }
 
   const fixtureById = new Map(Object.values(roomSources).flat().map(source => [source.id, source]));
@@ -275,11 +299,13 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     return {
       id: `lighting-${id}`, title, category: 'lighting' as const,
       controls: [
-        { kind: 'button' as const, id: 'on', label: '一括点灯', invoke: () => setFixtures(id, sources, true) },
-        { kind: 'button' as const, id: 'off', label: '一括消灯', invoke: () => setFixtures(id, sources, false) },
+        { kind: 'button' as const, id: 'on', label: '一括点灯', invoke: () => setFixtures(id, sources, true, true) },
+        { kind: 'button' as const, id: 'off', label: '一括消灯', invoke: () => setFixtures(id, sources, false, true) },
+        ...(id === 'LD' ? theaterControls() : []),
         ...sources.map(source => ({
           kind: 'toggle' as const, id: source.id, label: source.label,
           get: () => isOn(source), set: (on: boolean) => setFixtures(id, [source], on),
+          disabled: id === 'LD' ? theaterLights?.enabled : undefined,
         })),
       ],
     };
@@ -293,7 +319,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     const id = material.userData.residenceFixtureId;
     if (typeof id === 'string') emitters.set(id, material);
     const clothShade = material === materials.linenShade || material === materials.fabric;
-    material.customProgramCacheKey = () => `${cacheKey}|residence-light-field|${clothShade}`;
+    material.customProgramCacheKey = () => `${cacheKey}|residence-light-field|${clothShade}|${Boolean(theaterLights)}`;
     material.onBeforeCompile = (shader, renderer) => {
       before(shader, renderer);
       shader.uniforms.residenceLightVolume = { value: field.diffuse };
@@ -411,6 +437,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
             totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.74, 0.45) * (transmitted * mix(1.1, 1.94, residenceNight));
           }`);
       }
+      theaterLights?.bind(shader);
     };
     material.needsUpdate = true;
   }
