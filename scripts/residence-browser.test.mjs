@@ -157,13 +157,14 @@ async function exposeResidenceScene(page) {
   });
 }
 
-async function brightness(canvas) {
-  return canvas.evaluate(source => new Promise(resolve => requestAnimationFrame(() => {
+async function brightness(canvas, area = [0, 0, 1, 1]) {
+  return canvas.evaluate((source, [x, y, width, height]) => new Promise(resolve => requestAnimationFrame(() => {
     const sample = document.createElement('canvas');
     sample.width = 32;
     sample.height = 20;
     const context = sample.getContext('2d');
-    context.drawImage(source, 0, 0, sample.width, sample.height);
+    context.drawImage(source, x * source.width, y * source.height, width * source.width,
+      height * source.height, 0, 0, sample.width, sample.height);
     const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
     const colors = new Set();
     let total = 0;
@@ -173,7 +174,7 @@ async function brightness(canvas) {
       colors.add((r << 16) | (g << 8) | b);
     }
     resolve({ mean: total / (pixels.length / 4), colors: colors.size });
-  })));
+  })), area);
 }
 
 test('the residence accepts startup walking and preserves its views across time, quality and travel', { timeout }, async t => {
@@ -482,18 +483,12 @@ test('tea room fusuma moves, stops passage when closed, and leaves the window cu
     const gl = WebGL2RenderingContext.prototype;
     const locations = new WeakMap();
     const getLocation = gl.getUniformLocation;
-    const setFloat = gl.uniform1f;
     const setArray = gl.uniform1fv;
     window.teaLight = {};
     gl.getUniformLocation = function (program, name) {
       const location = getLocation.call(this, program, name);
       if (location && name.startsWith('residenceWindowTransmission')) locations.set(location, 'window');
-      if (location && name === 'residenceTeaDoor') locations.set(location, 'door');
       return location;
-    };
-    gl.uniform1f = function (location, value) {
-      if (locations.get(location) === 'door') window.teaLight.door = value;
-      return setFloat.call(this, location, value);
     };
     gl.uniform1fv = function (location, values, ...rest) {
       if (locations.get(location) === 'window') window.teaLight.window = Math.min(...values);
@@ -511,19 +506,19 @@ test('tea room fusuma moves, stops passage when closed, and leaves the window cu
     const door = window.residenceProbe.scene.getObjectByName('Tea room fusuma');
     return door && Math.abs(door.position.x - x) < .005;
   }, x);
-  const waitForLight = (openDoor, openCurtain) => page.waitForFunction(({ openDoor, openCurtain }) => {
-    const { door, window: windowLight } = window.teaLight;
-    return (openDoor ? door > .99 : door < .01) && (openCurtain ? windowLight > .99 : windowLight < .45);
-  }, { openDoor, openCurtain });
+  const waitForCurtainLight = open => page.waitForFunction(open => {
+    const light = window.teaLight.window;
+    return open ? light > .99 : light < .45;
+  }, open);
 
   await page.evaluate(() => window.residenceProbe.relocate({ x: 6.49, z: -5.7, yaw: Math.PI, pitch: 0 }));
   await doorClose.waitFor();
   await waitForFusuma(openAt);
-  await waitForLight(true, true);
+  await waitForCurtainLight(true);
   await page.keyboard.press('e');
   await doorOpen.waitFor();
   await waitForFusuma(closedAt);
-  await waitForLight(false, true);
+  await waitForCurtainLight(true);
   await hold(page, 'w', async () => {
     await moreMovementFrames(page);
     assert.ok((await camera(page)).z < -5, 'The closed fusuma must stop passage');
@@ -537,12 +532,12 @@ test('tea room fusuma moves, stops passage when closed, and leaves the window cu
   await button(page, '茶室04のカーテンを閉める').click();
   await button(page, '茶室04のカーテンを開ける').waitFor();
   await waitForFusuma(openAt);
-  await waitForLight(true, false);
+  await waitForCurtainLight(false);
   await page.evaluate(() => window.residenceProbe.relocate({ x: 6.28, z: -4.00, yaw: 0, pitch: 0 }));
   await capture(page, 'residence-tea-fusuma-open', '.coast-ui { visibility: hidden; }');
   await doorClose.click();
   await waitForFusuma(closedAt);
-  await waitForLight(false, false);
+  await waitForCurtainLight(false);
   await capture(page, 'residence-tea-fusuma-closed', '.coast-ui { visibility: hidden; }');
   assert.deepEqual(errors, []);
 });
@@ -595,6 +590,52 @@ test('residence menu keeps fixture, zone and wall curtain controls in sync', { t
   await capture(page, 'residence-control-menu');
   await page.setViewportSize({ width: 375, height: 710 });
   assert.ok(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  assert.deepEqual(errors, []);
+});
+
+test('an open gallery doorway softly lights the living floor with its own fixtures off', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&time=night`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+
+  const menu = button(page, '住戸の操作');
+  const dialog = page.getByRole('dialog', { name: '住戸の操作' });
+  const canvas = page.locator('canvas').first();
+  const view = { x: 11.94, z: -4.85, yaw: 0, pitch: -.46 };
+  const reachDoor = { ...view, z: -5.70 };
+  const area = [.38, .80, .25, .16];
+  async function move(pose) {
+    await page.evaluate(pose => window.residenceProbe.relocate(pose), pose);
+    await page.waitForFunction(({ x, z }) => {
+      const at = window.residenceProbe.camera;
+      return at && Math.hypot(at.x - x, at.z - z) < .015;
+    }, pose);
+  }
+  const leafAt = x => page.waitForFunction(x => {
+    const door = window.residenceProbe.scene.getObjectByName('Gallery pocket door');
+    return door && Math.abs(door.position.x - x) < .005;
+  }, x);
+
+  await menu.click();
+  for (const id of ['LD', 'K']) {
+    const section = dialog.locator(`[data-residence-section="lighting-${id}"]`);
+    await section.locator('summary').click();
+    await section.getByRole('button', { name: '一括消灯', exact: true }).click();
+  }
+  await page.keyboard.press('Escape');
+
+  await move(view);
+  await leafAt(12.814);
+  const lit = await brightness(canvas, area);
+  await capture(page, 'residence-spill-gallery-open', '.coast-ui { visibility: hidden; }');
+  await move(reachDoor);
+  await button(page, 'リビングの引戸を閉める').click();
+  await leafAt(11.056);
+  await move(view);
+  const shaded = await brightness(canvas, area);
+  await capture(page, 'residence-spill-gallery-closed', '.coast-ui { visibility: hidden; }');
+  assert.ok(lit.mean > shaded.mean + .8, JSON.stringify({ lit, shaded }));
   assert.deepEqual(errors, []);
 });
 

@@ -8,7 +8,7 @@ import { createResidenceFurniture } from './residenceFurniture';
 import { createResidenceLighting } from './residenceLighting';
 import { createResidenceMaterials } from './residenceMaterials';
 import { createResidenceNavigation } from './residenceNavigation';
-import { RESIDENCE_BALCONY_DOOR } from './residencePlan';
+import { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS } from './residencePlan';
 import { createResidenceReflections } from './residenceReflections';
 import { createResidenceShell } from './residenceShell';
 
@@ -44,7 +44,10 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   const navigation = createResidenceNavigation(findDestination('residence', 'living-window')!,
     furniture.obstacles, () => door >= 0.96, shell.doors);
   shell.setBalconyDoor(door);
-  lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
+  function updateDoorLighting() {
+    for (const { id } of RESIDENCE_DOORWAYS) lighting.setDoorOpenness(id, shell.doors.openness(id));
+  }
+  updateDoorLighting();
   const { shoji } = furniture;
   const teaCurtain = curtains.daylight.find(room => room.roomId === '04')!;
   const curtainControls = curtains.sections.map(section => section.id === 'curtains-04'
@@ -125,7 +128,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         const shojiMoved = shoji.update(dt);
         if (shojiMoved) lighting.setTeaShojiOpenness(shoji.openness());
         const roomDoorsMoved = shell.doors.update(dt, camera.position);
-        if (roomDoorsMoved) lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
+        if (roomDoorsMoved) updateDoorLighting();
         if (curtainsMoved) {
           for (const room of curtains.daylight) lighting.setDaylightTransmission(room.roomId, room.transmission());
           updateShojiPaper();

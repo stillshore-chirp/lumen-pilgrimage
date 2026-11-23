@@ -116,7 +116,7 @@ interface DaylightAperture {
   axis: 'e' | 'n';
 }
 
-// Each room sees only its own exterior glazing. Light from adjoining rooms is accounted for by the bounce term.
+// Exterior glazing is sampled within its own room. Interior openings transport a separate diffuse term.
 const openingsByRoom = new Map<string, DaylightAperture[]>();
 const opaqueWallRuns: ResidenceRect[] = [];
 for (const wall of RESIDENCE_WALLS) {
@@ -337,6 +337,25 @@ export function createResidenceLightField(obstacles: readonly ResidenceRect[]) {
     accent.needsUpdate = true;
   }
 
+  function doorwayLight(id: string, east: number, north: number, height: number,
+    enabled: (source: LightSource) => boolean): readonly [electric: number, sky: number] {
+    let electric = 0;
+    for (const source of roomSources[id] ?? []) {
+      if (!enabled(source)) continue;
+      // A doorway receives bounced light from the lit floor and walls around each fixture.
+      const distance = distanceTo(source.span, east, north);
+      const roughSpread = source.spread + 1.05;
+      const range = (distance / roughSpread) ** 2 + .18 * (source.height - height) ** 2;
+      electric += .82 * source.level / (1 + range);
+    }
+
+    const column = (value: number, axis: number, size: number) => THREE.MathUtils.clamp(
+      Math.floor((value - fieldOrigin[axis]) / fieldExtent[axis] * size), 0, size - 1);
+    const index = ((column(height, 2, levels) * northCount + column(north, 1, northCount)) * eastCount
+      + column(east, 0, eastCount)) * 4;
+    return [electric, daylight[index + 3] / 255];
+  }
+
   for (const id of columnsByRoom.keys()) updateRoom(id, source => source.daytime === true, false);
-  return { diffuse, accent, daylight: texture(daylight, 'Residence directional window apertures'), updateRoom };
+  return { diffuse, accent, daylight: texture(daylight, 'Residence directional window apertures'), updateRoom, doorwayLight };
 }
