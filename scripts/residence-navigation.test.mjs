@@ -88,6 +88,16 @@ test('dwelling follows the drawing dimensions and all travel poses have continuo
   }
 });
 
+test('the living-room television has twice the 65-inch screen width and height', () => {
+  const { screen } = furniture.theater;
+  screen.geometry.computeBoundingBox();
+  const { min, max } = screen.geometry.boundingBox;
+  const previousWidth = (65 * .0254 * 16) / Math.hypot(16, 9);
+  const previousHeight = previousWidth * 9 / 16;
+  assert.ok(Math.abs((max.x - min.x) - 2 * previousWidth) < 1e-6);
+  assert.ok(Math.abs((max.y - min.y) - 2 * previousHeight) < 1e-6);
+});
+
 test('a connected route links the lobby, dwelling rooms and kitchen with furniture in place', () => {
   const nav = navigation(false);
   const connected = reachableFrom(nav, 10.96, 16.6);
