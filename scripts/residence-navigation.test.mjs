@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { after, test } from 'node:test';
+import { Raycaster, Vector3 } from 'three';
 
 const src = new URL('../src/', import.meta.url).href;
 const hooks = registerHooks({
@@ -201,59 +202,64 @@ test('every dwelling door stays level, blocks walking when closed and reopens fr
   }
 });
 
-test('the gallery pocket door clears the entry route and protects the threshold during travel', () => {
+test('the foyer pocket door protects its threshold while the living and kitchen boundaries stay open', () => {
   const shell = createResidenceShell(materials);
   try {
     const { doors } = shell;
-    const gallery = RESIDENCE_DOORWAYS.find(({ id }) => id === 'gallery-living');
+    const gallery = RESIDENCE_DOORWAYS.find(({ id }) => id === 'foyer-gallery');
     const { wall, opening } = gallery;
     const nav = createResidenceNavigation(spawn, furniture.obstacles, () => false, doors);
-    const frame = shell.group.getObjectByName('Gallery pocket frame');
-    const leaves = ['Gallery pocket door', 'Gallery pocket door follower'].map(name => shell.group.getObjectByName(name));
-    assert.ok(frame && leaves.every(Boolean));
-    assert.ok(leaves.every(leaf => leaf.children.some(mesh => mesh.castShadow && mesh.material === materials.cabinetry
-      && !mesh.material.transparent && mesh.material.transmission === 0)));
-    assert.ok(Math.abs(leaves[0].position.z - leaves[1].position.z) > .04);
-    const maxMeshEast = group => Math.max(...group.children.map(mesh => {
+    const frame = shell.group.getObjectByName('Foyer pocket frame');
+    const leaf = shell.group.getObjectByName('Foyer pocket door');
+    assert.ok(frame && leaf);
+    assert.equal(wall.fixed, 12.1);
+    assert.ok(leaf.children.some(mesh => mesh.castShadow && mesh.material === materials.cabinetry
+      && !mesh.material.transparent && mesh.material.transmission === 0));
+    const maxMeshEast = Math.max(...leaf.children.map(mesh => {
       mesh.geometry.computeBoundingBox();
-      return group.position.x + mesh.geometry.boundingBox.max.x;
+      return leaf.position.x + mesh.geometry.boundingBox.max.x;
     }));
-    assert.ok(maxMeshEast(frame) <= 12.8 + 1e-6);
-    const retracted = leaves[0].position.x;
-    assert.ok(retracted > opening.to);
-    assert.ok(leaves.every(leaf => leaf.position.x === retracted && maxMeshEast(leaf) < 12.8 - .044));
+    const retracted = leaf.position.x;
+    assert.ok(retracted > 9.284 && maxMeshEast < 11, 'the leaf fits in the pre-existing foyer/WC wall');
     for (const centre of [opening.from + .27, opening.to - .27]) {
-      assertClearRoute(nav, [[centre, 7.35], [centre, 6.05]]);
+      assertClearRoute(nav, [[centre, 13.1], [centre, 11.45]]);
       assert.equal(nav.groundHeight(centre, -wall.fixed), 0);
     }
-    const assertKitchenOpen = () => {
-      for (const e of [13.15, 13.5, 14.3, 15.5, 16.9]) assertClearRoute(nav, [[e, 7.1], [e, 6.05]]);
+    const assertLivingBoundaryOpen = () => {
+      assert.ok(!RESIDENCE_WALLS.some(wall => wall.axis === 'e' && wall.fixed === 6.65
+        && wall.to > 11 && wall.from < 17.35));
+      shell.group.updateMatrixWorld(true);
+      for (const e of [11.36, 11.9, 12.43, 12.72, 13.25, 14.3, 15.5, 16.9]) {
+        assertClearRoute(nav, [[e, 7.1], [e, 6.05]]);
+        for (const y of [.85, 1.65, 2.3]) {
+          const ray = new Raycaster(new Vector3(e, y, -7.1), new Vector3(0, 0, 1), 0, 1.05);
+          assert.equal(ray.intersectObject(shell.group).length, 0, `mesh blocks E${e} at Y${y}`);
+        }
+      }
     };
-    assertKitchenOpen();
-    const hallway = doorwayCentre(gallery, .60);
+    assertLivingBoundaryOpen();
+    const foyer = doorwayCentre(gallery, .60);
     const threshold = doorwayCentre(gallery);
-    assert.equal(doors.nearby(hallway)?.label, 'リビングの引戸を閉める');
-    doors.nearby(hallway).invoke();
+    assert.equal(doors.nearby(foyer)?.label, '玄関前室の引戸を閉める');
+    doors.nearby(foyer).invoke();
     assert.equal(doors.update(.55, threshold), false);
-    assert.equal(doors.update(.55, { x: 11.9, z: -6.92 }), false, 'the following leaf also protects its sweep');
     assert.equal(doors.opennessFor(wall, opening), 1);
-    assert.ok(doors.update(.275, hallway));
+    assert.ok(doors.update(.275, foyer));
     assert.equal(doors.opennessFor(wall, opening), .5);
-    assert.ok(!blocked(nav, opening.from + .27, wall.fixed));
-    assert.ok(blocked(nav, opening.to - .29, wall.fixed));
-    assert.ok(leaves.every(leaf => maxMeshEast(leaf) < 12.8));
-    assert.ok(doors.update(.275, hallway));
+    assert.ok(blocked(nav, opening.from + .27, wall.fixed));
+    assert.ok(!blocked(nav, opening.to - .29, wall.fixed));
+    assert.ok(doors.update(.275, foyer));
     assert.equal(doors.opennessFor(wall, opening), 0);
     assert.ok(blocked(nav, threshold.x, -threshold.z));
-    assert.ok(blocked(nav, 12.43, 6.65));
-    assertKitchenOpen();
+    assert.ok(blocked(nav, 10.43, 12.1));
+    assertLivingBoundaryOpen();
     assertClearRoute(nav, [[11.85, 7.7], [13.45, 7.7]]);
     assertClearRoute(nav, [[16.8, 7.30], [16.8, 6.05], [11.55, 5.63], [9.94, 5.63], [9.94, 7.35]]);
-    const living = doorwayCentre(gallery, -.60);
-    assert.equal(doors.nearby(living)?.label, 'リビングの引戸を開ける');
-    doors.nearby(living).invoke();
-    assert.ok(doors.update(.55, living));
-    assert.ok(leaves.every(leaf => leaf.position.x === retracted));
+    const hallway = doorwayCentre(gallery, -.60);
+    assert.equal(doors.nearby(hallway)?.label, '玄関前室の引戸を開ける');
+    doors.nearby(hallway).invoke();
+    assert.ok(doors.update(.55, hallway));
+    assert.equal(leaf.position.x, retracted);
     assert.ok(!blocked(nav, threshold.x, -threshold.z));
   } finally {
     shell.dispose();
