@@ -9,7 +9,7 @@ const categoryLabels = {
 type Category = keyof typeof categoryLabels;
 
 export type ResidenceControl = { readonly id: string; readonly label: string } & (
-  | { readonly kind: 'toggle'; get(): boolean; set(value: boolean): void }
+  | { readonly kind: 'toggle'; get(): boolean; set(value: boolean): void; disabled?(): boolean }
   | { readonly kind: 'button'; invoke(): void; disabled?(): boolean }
   | {
     readonly kind: 'select';
@@ -18,6 +18,7 @@ export type ResidenceControl = { readonly id: string; readonly label: string } &
     set(value: string): void;
     disabled?(): boolean;
   }
+  | { readonly kind: 'color'; get(): string; set(value: string): void }
   | { readonly kind: 'output'; read(): string }
 );
 
@@ -48,19 +49,28 @@ function createControl(control: ResidenceControl, category: Category, changed: (
       if (value.textContent !== text) value.textContent = text;
     } };
   }
-  if (control.kind === 'select') {
+  if (control.kind === 'select' || control.kind === 'color') {
     const element = document.createElement('label');
     element.className = 'residence-control-select';
     const label = document.createElement('span');
     label.textContent = control.label;
-    const select = document.createElement('select');
-    for (const option of control.options) select.add(new Option(option.label, option.value));
-    select.addEventListener('change', () => { control.set(select.value); changed(); });
-    element.append(label, select);
+    let input: HTMLInputElement | HTMLSelectElement;
+    if (control.kind === 'color') {
+      input = document.createElement('input');
+      input.type = 'color';
+    } else {
+      input = document.createElement('select');
+      for (const option of control.options) input.add(new Option(option.label, option.value));
+    }
+    input.addEventListener(control.kind === 'color' ? 'input' : 'change', () => {
+      control.set(input.value);
+      changed();
+    });
+    element.append(label, input);
     return { element, sync() {
       const value = control.get();
-      if (select.value !== value) select.value = value;
-      select.disabled = control.disabled?.() ?? false;
+      if (input.value !== value) input.value = value;
+      if (control.kind === 'select') input.disabled = control.disabled?.() ?? false;
     } };
   }
   const element = button(control.label);
@@ -71,6 +81,7 @@ function createControl(control: ResidenceControl, category: Category, changed: (
     element.append(state);
     element.addEventListener('click', () => { control.set(!control.get()); changed(); });
     return { element, sync() {
+      element.disabled = control.disabled?.() ?? false;
       const on = control.get();
       if (element.getAttribute('aria-pressed') === String(on)) return;
       element.setAttribute('aria-pressed', String(on));

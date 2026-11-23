@@ -639,6 +639,90 @@ test('an open gallery doorway softly lights the living floor with its own fixtur
   assert.deepEqual(errors, []);
 });
 
+test('theater mode sets RGB illumination and restores the normal living-room light settings', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await page.addInitScript(() => {
+    const gl = WebGL2RenderingContext.prototype;
+    const getLocation = gl.getUniformLocation;
+    const setFloat = gl.uniform1f;
+    const setColor = gl.uniform3f;
+    const stateUniforms = new WeakSet();
+    const tintUniforms = new WeakSet();
+    window.theaterLight = {};
+    gl.getUniformLocation = function (program, name) {
+      const location = getLocation.call(this, program, name);
+      if (location && name === 'residenceTheaterEnabled') stateUniforms.add(location);
+      if (location && name === 'residenceTheaterTint') tintUniforms.add(location);
+      return location;
+    };
+    gl.uniform1f = function (location, value) {
+      if (stateUniforms.has(location)) window.theaterLight.on = value === 1;
+      return setFloat.call(this, location, value);
+    };
+    gl.uniform3f = function (location, red, green, blue) {
+      if (tintUniforms.has(location)) window.theaterLight.tint = [red, green, blue];
+      return setColor.call(this, location, red, green, blue);
+    };
+  });
+  await page.goto(`${origin}/?world=residence&place=living-theater&time=night`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.theaterLight.on === false);
+  const trigger = button(page, '住戸の操作');
+  const dialog = page.getByRole('dialog', { name: '住戸の操作' });
+  const living = dialog.locator('[data-residence-section="lighting-LD"]');
+  const kitchen = dialog.locator('[data-residence-section="lighting-K"]');
+  const toggle = living.getByRole('button', { name: 'シアター照明', exact: true });
+  const tint = living.getByLabel('シアター照明の色', { exact: true });
+  const west = living.getByRole('button', { name: 'ペンダント灯（西）', exact: true });
+  const east = living.getByRole('button', { name: 'ペンダント灯（東）', exact: true });
+  const allOff = living.getByRole('button', { name: '一括消灯', exact: true });
+  const landscape = '.coast-ui { visibility: hidden; }';
+
+  await trigger.focus();
+  await trigger.press('Enter');
+  await living.locator('summary').press('Enter');
+  await west.click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  await toggle.focus();
+  await toggle.press('Space');
+  assert.equal(await west.isDisabled(), true);
+  assert.equal(await east.isDisabled(), true);
+  assert.equal(await east.getAttribute('aria-pressed'), 'false');
+  await kitchen.locator('summary').click();
+  const kitchenLight = kitchen.getByRole('button', { pressed: true }).first();
+  await kitchenLight.waitFor();
+  assert.equal(await kitchenLight.isEnabled(), true);
+  assert.equal(await tint.inputValue(), '#ffb875');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.theaterLight.on && window.theaterLight.tint[0] > window.theaterLight.tint[2]);
+  await button(page, '高品質').click();
+  await capture(page, 'residence-theater-rgb-warm', landscape);
+
+  await trigger.click();
+  await tint.fill('#70bdff');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.theaterLight.on && window.theaterLight.tint[2] > window.theaterLight.tint[0]);
+  await capture(page, 'residence-theater-rgb-blue', landscape);
+  await button(page, '軽量').click();
+  await button(page, '昼').click();
+  await page.waitForFunction(() => window.theaterLight.on);
+  await button(page, '夜').click();
+  await trigger.click();
+  assert.equal(await tint.inputValue(), '#70bdff');
+  await toggle.click();
+  assert.equal(await west.isEnabled(), true);
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  await toggle.click();
+  await allOff.click();
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.theaterLight.on === false);
+  await capture(page, 'residence-theater-rgb-off', landscape);
+  assert.deepEqual(errors, []);
+});
+
 test('closing the fusuma reduces street treble and adjoining-room reverb at a fixed hallway viewpoint', { timeout }, async t => {
   const { page, errors } = await createPage(t);
   await exposeResidenceScene(page);

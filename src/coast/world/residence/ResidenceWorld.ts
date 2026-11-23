@@ -11,6 +11,7 @@ import { createResidenceNavigation } from './residenceNavigation';
 import { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS } from './residencePlan';
 import { createResidenceReflections } from './residenceReflections';
 import { createResidenceShell } from './residenceShell';
+import { createResidenceTheaterLights } from './residenceTheaterLights';
 
 const DOOR_SLIDE_SECONDS = 0.55;
 const DOOR_REACH = 1.12;
@@ -33,7 +34,9 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   furniture.group.add(curtains.group);
   const scene = new Scene();
   scene.add(city.group, shell.group, furniture.group);
-  const lighting = createResidenceLighting(scene, materials, furniture.obstacles, () => reflections.invalidate());
+  const invalidateReflections = () => reflections.invalidate();
+  const theaterLights = createResidenceTheaterLights(furniture.theater.screen, invalidateReflections);
+  const lighting = createResidenceLighting(scene, materials, furniture.obstacles, invalidateReflections, theaterLights);
   lighting.attachInterior(shell.group, furniture.group);
   const reflections = createResidenceReflections(scene, city.group, shell.group, furniture.group, materials);
 
@@ -143,6 +146,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
       dispose() {
         reflections.dispose();
         lighting.dispose();
+        theaterLights.dispose();
         shell.dispose();
         curtains.dispose();
         furniture.dispose();
