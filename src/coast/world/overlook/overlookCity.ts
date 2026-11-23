@@ -124,6 +124,33 @@ const nearCityNight = /* glsl */`
   #endif
 `;
 
+const projectedNightFixtures = /* glsl */`
+  #ifdef NEAR_CITY_NIGHT_VIEW
+    vec3 districtFixture(float tint) {
+      return mix(vec3(0.99, 0.71, 0.43), vec3(0.76, 0.87, 1.0), smoothstep(0.25, 0.87, tint));
+    }
+
+    vec3 projectedWindowGroup(vec2 grid, vec2 pixel, vec2 lot, float use) {
+      // Integrate a few adjoining windows as their individual panes become subpixel.
+      // The groups remain small and cover just part of a floor even on wide façades.
+      vec2 span = mix(vec2(1.77, 1.48), vec2(2.45, 2.12), fract(lot * 0.39));
+      vec2 displayCell = (grid + fract(lot * .12)) / span;
+      vec2 id = floor(displayCell) + lot;
+      vec2 sampleWidth = pixel / span;
+      vec2 jitter = (vec2(windowRandom(id + 0.7), windowRandom(id.yx + 31.4)) - 0.5) * 0.18;
+      vec2 position = abs(fract(displayCell) - 0.5 + jitter);
+      vec2 aa = clamp(sampleWidth * 0.43, vec2(0.012), vec2(0.21));
+      vec2 aperture = 1.0 - smoothstep(vec2(0.30, 0.23) - aa, vec2(0.34, 0.29) + aa, position);
+      float activity = smoothstep(0.35, 0.80, windowRandom(id + 19.8) * 0.88 + use * 0.31);
+      float level = 0.11 + 0.32 * windowRandom(id - 0.9);
+      vec3 fixtures = districtFixture(windowRandom(id + 38.9)) * aperture.x * aperture.y * activity * level;
+      float structure = 1.0 - smoothstep(0.91, 2.28, max(sampleWidth.x, sampleWidth.y));
+      vec3 average = districtFixture(windowRandom(lot + 5.6)) * (0.031 + 0.043 * use);
+      return mix(average, fixtures, structure);
+    }
+  #endif
+`;
+
 const towersVertex = /* glsl */`
   attribute vec3 color;
   attribute vec4 cityFacade;
@@ -163,6 +190,7 @@ const towersFragment = /* glsl */`
   flat varying float vLightSeed;
   ${cityAir}
   ${nearCityNight}
+  ${projectedNightFixtures}
 
   vec3 towerFixture(float tint) {
     return mix(vec3(1.0, 0.78, 0.43), vec3(0.81, 0.90, 1.0), smoothstep(0.59, 0.93, tint));
@@ -195,14 +223,21 @@ const towersFragment = /* glsl */`
         #ifdef NEAR_CITY_NIGHT_VIEW
           float buildingUse = fract(vLightSeed * 437.39);
           vec2 room = floor(window);
-          float tenant = windowRandom(floor(room * vec2(0.43, 0.71)) + lotKey);
+          float tenant = windowRandom(floor((room + fract(lotKey)) * vec2(0.49, 0.67)) + lotKey);
           float individual = windowRandom(room + lotKey);
-          float lit = smoothstep(0.56, 0.84, individual * 0.67 + tenant * 0.38 + buildingUse * 0.11);
-          vec3 tint = towerFixture(windowRandom(room + lotKey.yx) * 0.81 + 0.12);
-          vec3 roomLight = tint * panes.x * panes.y * lit * (0.12 + individual * 0.44);
-          // Subpixel panes contribute their average light without outlining whole suites.
-          vec3 averageLight = vec3(0.063, 0.055, 0.044) * (0.80 + buildingUse * 0.65);
-          color += uNight * mix(averageLight, roomLight, resolvedNightWindow(pixel)) * nightWindowFalloff();
+          float farRange = smoothstep(1320.0, 2700.0, vNightWindowDistance);
+          float lit = smoothstep(mix(0.47, 0.39, farRange), mix(0.85, 0.75, farRange),
+            individual * 0.65 + tenant * 0.25 + buildingUse * 0.21);
+          vec3 tint = districtFixture(windowRandom(room + lotKey.yx) * 0.77 + tenant * 0.23);
+          float lobby = smoothstep(-1.5, 1.4, vFacade.y) * (1.0 - smoothstep(5.0, 9.5, vFacade.y));
+          float entry = lobby * smoothstep(0.35, 0.80, tenant) * 0.17;
+          vec3 roomLight = (tint * lit * (0.17 + individual * 0.45) + vec3(1.0, 0.69, 0.39) * entry)
+            * panes.x * panes.y;
+          vec3 distant = projectedWindowGroup(window, pixel, lotKey, buildingUse);
+          float detailed = (1.0 - smoothstep(0.53, 1.42, max(pixel.x, pixel.y)))
+            * (1.0 - smoothstep(2400.0, 6900.0, vNightWindowDistance));
+          float transmission = mix(0.76, 0.56, smoothstep(420.0, 5300.0, vNightWindowDistance));
+          color += uNight * mix(distant, roomLight, detailed) * transmission;
         #else
         vec2 size = mix(vec2(0.124, 0.22), vec2(0.225, 0.38), fract(lotKey));
         vec2 phase = fract(vLightSeed * vec2(181.39, 379.61));
