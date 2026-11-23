@@ -33,6 +33,8 @@
 
 ## 都心の70階住戸
 
+窓のある居間・個室は室内の壁スイッチでカーテンを動かす。部屋の内側から近づいたときに操作でき、バルコニー引戸の近くでは距離で操作対象を選ぶ。布のひだに沿った長さを保ちながらレール方向の幅を変え、動いている間は窓の反射と影の更新を要求する。 [カーテン](../src/coast/world/residence/residenceCurtains.ts)
+
 - 図面の P1 を基準に、東を `x`、北を `-z`、70階の仕上げ床を `y=0` とし、単位をメートルにそろえる。部屋、壁、開口、手すりを描画と歩行判定で共有する。室内家具の外形は間接光の遮蔽に使い、歩行では通り抜けられる。主寝室の引戸は開き量を描画と音響に渡し、人が敷居を通れる幅まで開いてから通行できる。 [設計図 PDF](residence/residence-70f-drawings.pdf) · [平面](../src/coast/world/residence/residencePlan.ts) · [歩行判定](../src/coast/world/residence/residenceNavigation.ts)
 - 街路面は `y=-246`。南窓から大通り沿いの屋上と約277 m南の交差点を見下ろす。南北幹線を住戸の塔の東に通し、横断街路と沿道への出入りを担う街路をつなぐ。車道・歩道・走行経路と敷地は同じ道路網から決める。幹線を街区の外へ延ばし、車道とその先の見通しに建物や基壇が重ならないことを描画形状で確認する。夜は走行中の車両の灯りが舗装を照らす。 [基本設計](residence/residence-70f-design.md#街区と視線) · [高さ](../src/coast/world/residence/residenceFloor.ts) · [都市の描画](../src/coast/world/residence/residenceCity.ts)
 - 室内はオークや漆喰、織物の実寸の色・凹凸・粗さを使う。窓側の日射と方向のある間接光、壁や家具の接地陰影、夜の間接照明を組み合わせる。デスクトップでは視点に応じて窓と鏡の反射を描き、表示位置と描画設定に応じて反射の計算範囲や解像度を調整する。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [反射](../src/coast/world/residence/residenceReflections.ts) · [内装材の出典](../public/residence-materials/ATTRIBUTION.md)

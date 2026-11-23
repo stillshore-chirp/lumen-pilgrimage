@@ -3,6 +3,7 @@ import type { ExplorationScene } from '../../CoastApp';
 import { findDestination } from '../../coastDestinations';
 import { ResidenceAudio } from './residenceAudio';
 import { createResidenceCity } from './residenceCity';
+import { createResidenceCurtains } from './residenceCurtains';
 import { createResidenceFurniture } from './residenceFurniture';
 import { createResidenceLighting } from './residenceLighting';
 import { createResidenceMaterials } from './residenceMaterials';
@@ -28,6 +29,8 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   const materials = createResidenceMaterials();
   const shell = createResidenceShell(materials);
   const furniture = createResidenceFurniture(materials);
+  const curtains = createResidenceCurtains(materials);
+  furniture.group.add(curtains.group);
   const scene = new Scene();
   scene.add(city.group, shell.group, furniture.group);
   const lighting = createResidenceLighting(scene, materials, furniture.obstacles);
@@ -37,6 +40,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   let door = 0;
   let opening = false;
   let previous = 0;
+  let invokeNearby: (() => void) | undefined;
   const navigation = createResidenceNavigation(findDestination('residence', 'living-window')!,
     furniture.obstacles, () => door >= 0.96);
   shell.setBalconyDoor(door);
@@ -46,10 +50,16 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
     interaction: {
       label(position) {
         const distance = Math.hypot(position.x - doorEast, northDistanceToDoor(position.z));
-        if (distance > DOOR_REACH || (opening && occupiesDoorway(position))) return null;
-        return opening ? 'バルコニーの引戸を閉める' : 'バルコニーの引戸を開ける';
+        const curtain = curtains.nearby(position);
+        const canUseDoor = distance <= DOOR_REACH && !(opening && occupiesDoorway(position));
+        if (canUseDoor && (!curtain || distance <= curtain.distance)) {
+          invokeNearby = () => { opening = !opening; };
+          return opening ? 'バルコニーの引戸を閉める' : 'バルコニーの引戸を開ける';
+        }
+        invokeNearby = curtain?.invoke;
+        return curtain?.label ?? null;
       },
-      invoke() { opening = !opening; },
+      invoke() { invokeNearby?.(); },
     },
     world: {
       scene,
@@ -66,13 +76,18 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
       },
       prepareRender: reflections.prepareRender,
       update(elapsed, camera) {
-        const step = (elapsed - previous) / DOOR_SLIDE_SECONDS;
+        const dt = elapsed - previous;
+        const step = dt / DOOR_SLIDE_SECONDS;
         previous = elapsed;
         if (!opening && door > 0 && occupiesDoorway(camera.position)) opening = true;
         const next = opening ? Math.min(1, door + step) : Math.max(0, door - step);
-        if (door !== next) {
+        const doorMoved = door !== next;
+        if (doorMoved) {
           door = next;
           shell.setBalconyDoor(door);
+        }
+        const curtainsMoved = curtains.update(dt);
+        if (doorMoved || curtainsMoved) {
           lighting.invalidateShadows();
           reflections.invalidate();
         }
@@ -83,6 +98,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         reflections.dispose();
         lighting.dispose();
         shell.dispose();
+        curtains.dispose();
         furniture.dispose();
         city.dispose();
         materials.dispose();
