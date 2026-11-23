@@ -144,6 +144,18 @@ async function capture(page, name, style) {
   if (screenshots) await page.screenshot({ path: join(screenshots, `${name}.png`), style });
 }
 
+async function exposeResidenceScene(page) {
+  await page.route('**/assets/CoastApp-*.js', async route => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const prepare = 'this.world.prepareRender?.(';
+    assert.ok(source.includes(prepare), 'The residence test hook requires exploration render preparation');
+    const hook = 'window.residenceProbe.scene=this.world.scene,'
+      + 'window.residenceProbe.relocate??=(pose=>this.controls.relocate(pose)),';
+    await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
+  });
+}
+
 async function brightness(canvas) {
   return canvas.evaluate(source => new Promise(resolve => requestAnimationFrame(() => {
     const sample = document.createElement('canvas');
@@ -297,15 +309,7 @@ test('room switches draw, reverse and reopen the same woven curtain panels', { t
       return panels;
     };
   });
-  await page.route('**/assets/CoastApp-*.js', async route => {
-    const response = await route.fetch();
-    const source = await response.text();
-    const prepare = 'this.world.prepareRender?.(';
-    assert.ok(source.includes(prepare), 'The curtain review hook requires exploration render preparation');
-    const hook = 'window.residenceProbe.scene=this.world.scene,'
-      + 'window.residenceProbe.relocate??=(pose=>this.controls.relocate(pose)),';
-    await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
-  });
+  await exposeResidenceScene(page);
   await page.goto(`${origin}/?world=residence`, { waitUntil: 'commit' });
   await page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor();
   await page.waitForFunction(() => window.curtainPanels('LD').length === 6);
@@ -384,6 +388,128 @@ test('room switches draw, reverse and reopen the same woven curtain panels', { t
   await relocate(17.91, -1.23, Math.PI);
   await close.waitFor();
   await waitForExpansion([.99, 1.01]);
+  assert.deepEqual(errors, []);
+});
+
+test('tea room fusuma moves, stops passage when closed, and leaves the window curtain independent', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await page.addInitScript(() => {
+    const gl = WebGL2RenderingContext.prototype;
+    const locations = new WeakMap();
+    const getLocation = gl.getUniformLocation;
+    const setFloat = gl.uniform1f;
+    const setArray = gl.uniform1fv;
+    window.teaLight = {};
+    gl.getUniformLocation = function (program, name) {
+      const location = getLocation.call(this, program, name);
+      if (location && name.startsWith('residenceWindowTransmission')) locations.set(location, 'window');
+      if (location && name === 'residenceTeaDoor') locations.set(location, 'door');
+      return location;
+    };
+    gl.uniform1f = function (location, value) {
+      if (locations.get(location) === 'door') window.teaLight.door = value;
+      return setFloat.call(this, location, value);
+    };
+    gl.uniform1fv = function (location, values, ...rest) {
+      if (locations.get(location) === 'window') window.teaLight.window = Math.min(...values);
+      return setArray.call(this, location, values, ...rest);
+    };
+  });
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&place=tea-room&time=day`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+  const doorOpen = button(page, '茶室の襖を開ける');
+  const doorClose = button(page, '茶室の襖を閉める');
+  const closedAt = 5.996;
+  const openAt = 5.008;
+  const waitForFusuma = x => page.waitForFunction(x => {
+    const door = window.residenceProbe.scene.getObjectByName('Tea room fusuma');
+    return door && Math.abs(door.position.x - x) < .005;
+  }, x);
+  const waitForLight = (openDoor, openCurtain) => page.waitForFunction(({ openDoor, openCurtain }) => {
+    const { door, window: windowLight } = window.teaLight;
+    return (openDoor ? door > .99 : door < .01) && (openCurtain ? windowLight > .99 : windowLight < .45);
+  }, { openDoor, openCurtain });
+
+  await page.evaluate(() => window.residenceProbe.relocate({ x: 6.49, z: -5.7, yaw: Math.PI, pitch: 0 }));
+  await doorClose.waitFor();
+  await waitForFusuma(openAt);
+  await waitForLight(true, true);
+  await page.keyboard.press('e');
+  await doorOpen.waitFor();
+  await waitForFusuma(closedAt);
+  await waitForLight(false, true);
+  await hold(page, 'w', async () => {
+    await moreMovementFrames(page);
+    assert.ok((await camera(page)).z < -5, 'The closed fusuma must stop passage');
+  });
+  await hold(page, 's', () => page.waitForFunction(() => window.residenceProbe.camera.z < -5.58));
+  await doorOpen.click();
+  await waitForFusuma(openAt);
+  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z > -4.64));
+
+  await page.evaluate(() => window.residenceProbe.relocate({ x: 6.76, z: -4.33, yaw: -Math.PI / 2, pitch: 0 }));
+  await button(page, '茶室04のカーテンを閉める').click();
+  await button(page, '茶室04のカーテンを開ける').waitFor();
+  await waitForFusuma(openAt);
+  await waitForLight(true, false);
+  await page.evaluate(() => window.residenceProbe.relocate({ x: 6.28, z: -4.00, yaw: 0, pitch: 0 }));
+  await capture(page, 'residence-tea-fusuma-open', '.coast-ui { visibility: hidden; }');
+  await doorClose.click();
+  await waitForFusuma(closedAt);
+  await waitForLight(false, false);
+  await capture(page, 'residence-tea-fusuma-closed', '.coast-ui { visibility: hidden; }');
+  assert.deepEqual(errors, []);
+});
+
+test('residence menu keeps fixture, zone and wall curtain controls in sync', { timeout }, async t => {
+  const { page, errors } = await openResidence(t);
+  const trigger = button(page, '住戸の操作');
+  const dialog = page.getByRole('dialog', { name: '住戸の操作' });
+  const livingLights = dialog.locator('[data-residence-section="lighting-LD"]');
+  const west = livingLights.getByRole('button', { name: 'ペンダント灯（西）', exact: true });
+  const east = livingLights.getByRole('button', { name: 'ペンダント灯（東）', exact: true });
+  const atStart = await camera(page);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await dialog.waitFor();
+  await hold(page, 'd', () => moreMovementFrames(page));
+  assert.deepEqual(await camera(page), atStart, 'A modal must suspend scene movement');
+  await livingLights.locator('summary').click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'true');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  await west.click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  await livingLights.getByRole('button', { name: '一括消灯', exact: true }).click();
+  assert.equal(await east.getAttribute('aria-pressed'), 'false');
+  await livingLights.getByRole('button', { name: '一括点灯', exact: true }).click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'true');
+  await west.click();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
+  await button(page, '昼').click();
+  await button(page, '高品質').click();
+  await trigger.click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+
+  await dialog.getByRole('button', { name: 'カーテン', exact: true }).click();
+  const curtains = dialog.locator('[data-residence-section="curtains-LD"]');
+  await curtains.locator('summary').click();
+  const drape = curtains.getByRole('button', { name: 'カーテン', exact: true });
+  await drape.click();
+  assert.equal(await drape.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await button(page, '軽量').click();
+  await hold(page, 'd', () => page.waitForFunction(() => window.residenceProbe.camera.x < 18.06));
+  await button(page, 'リビングのカーテンを開ける').click();
+  await trigger.click();
+  assert.equal(await drape.getAttribute('aria-pressed'), 'true');
+  await capture(page, 'residence-control-menu');
+  await page.setViewportSize({ width: 375, height: 710 });
+  assert.ok(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
   assert.deepEqual(errors, []);
 });
 

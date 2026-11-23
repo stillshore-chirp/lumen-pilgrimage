@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { Group, PerspectiveCamera, Raycaster, Scene, Vector2, Vector3 } from 'three';
+import { Group, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Raycaster, Scene, Vector2, Vector3 } from 'three';
 import { MonitorObject, MONITOR_MIN_SCALE, MONITOR_MAX_SCALE } from '../src/monitor/monitorObject.ts';
 
 const desktopUrl = new URL('../src/monitor/monitorDesktop.ts', import.meta.url).href;
@@ -194,4 +194,49 @@ test('one frameless plane follows video aspect and yields to status after playba
   assert.ok(screen.material.map.isVideoTexture);
   monitor.setVideo(null);
   assert.equal(screen.material.map, statusTexture);
+});
+
+test('fixed television reuses the live texture and preserves the floating placement', t => {
+  const { monitor, scene } = createMonitor(t);
+  const tv = new Mesh(new PlaneGeometry(1.44, .81), new MeshBasicMaterial());
+  scene.add(tv);
+  t.after(() => {
+    tv.geometry.dispose();
+    tv.material.dispose();
+  });
+  const camera = makeCamera();
+  monitor.reset(camera);
+  monitor.group.scale.setScalar(2);
+  monitor.setVisible(true);
+  const position = monitor.group.position.clone();
+  const screen = monitor.group.children[0];
+  const track = { readyState: 'live', enabled: true, muted: false };
+  monitor.setVideo({
+    srcObject: { getVideoTracks: () => [track] }, paused: false, ended: false,
+    readyState: 2, HAVE_CURRENT_DATA: 2, videoWidth: 720, videoHeight: 1280,
+  });
+  const texture = screen.material.map;
+  assert.ok(texture.isVideoTexture);
+  monitor.setTarget(tv);
+  assert.equal(monitor.isVisible, true);
+  assert.equal(monitor.group.visible, false);
+  assert.equal(screen.parent, tv);
+  assert.equal(screen.material.map, texture);
+  assert.equal(screen.scale.y, .81);
+  assert.ok(Math.abs(screen.scale.x / screen.scale.y - 9 / 16) < 1e-8);
+  assert.equal(monitor.intersect(new Raycaster(new Vector3(0, 0, 1), new Vector3(0, 0, -1))), undefined);
+
+  monitor.setTarget(null);
+  assert.equal(monitor.group.visible, true);
+  assert.ok(monitor.group.position.equals(position));
+  assert.equal(screen.parent, monitor.group);
+  assert.equal(screen.material.map, texture);
+  assert.equal(screen.scale.y, 2.7 * 9 / 16);
+
+  monitor.setTarget(tv);
+  monitor.setVisible(false);
+  assert.equal(monitor.isVisible, false);
+  assert.equal(tv.visible, true);
+  assert.equal(screen.visible, false);
+  assert.equal(screen.material.map.isVideoTexture, undefined);
 });

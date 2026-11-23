@@ -33,36 +33,53 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   furniture.group.add(curtains.group);
   const scene = new Scene();
   scene.add(city.group, shell.group, furniture.group);
-  const lighting = createResidenceLighting(scene, materials, furniture.obstacles);
+  const lighting = createResidenceLighting(scene, materials, furniture.obstacles, () => reflections.invalidate());
   lighting.attachInterior(shell.group, furniture.group);
   const reflections = createResidenceReflections(scene, city.group, shell.group, furniture.group, materials);
 
   let door = 0;
   let opening = false;
   let previous = 0;
-  let invokeNearby: (() => void) | undefined;
+  let invokeNearby: (() => void | { openSection: string }) | undefined;
   const navigation = createResidenceNavigation(findDestination('residence', 'living-window')!,
-    furniture.obstacles, () => door >= 0.96);
+    furniture.obstacles, () => door >= 0.96, shell.doors);
   shell.setBalconyDoor(door);
+  lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
 
   return {
     id: 'residence', navigation, audio: new ResidenceAudio({ balconyDoor: () => door }),
+    residenceControls: [...lighting.sections, ...curtains.sections, ...furniture.appliances.sections],
     interaction: {
       label(position) {
         const distance = Math.hypot(position.x - doorEast, northDistanceToDoor(position.z));
         const curtain = curtains.nearby(position);
+        const roomDoor = shell.doors.nearby(position);
         const canUseDoor = distance <= DOOR_REACH && !(opening && occupiesDoorway(position));
         if (canUseDoor && (!curtain || distance <= curtain.distance)) {
           invokeNearby = () => { opening = !opening; };
           return opening ? 'バルコニーの引戸を閉める' : 'バルコニーの引戸を開ける';
         }
-        invokeNearby = curtain?.invoke;
-        return curtain?.label ?? null;
+        // A switch mounted against the jamb stays easy to pick from inside its room.
+        if (roomDoor && (!curtain || roomDoor.distance + .12 < curtain.distance)) {
+          invokeNearby = roomDoor.invoke;
+          return roomDoor.label;
+        }
+        if (curtain) {
+          invokeNearby = curtain.invoke;
+          return curtain.label;
+        }
+        const localLights = lighting.nearby(position);
+        const localAppliance = furniture.appliances.nearby(position);
+        const localPanel = localAppliance && (!localLights || localAppliance.distance < localLights.distance)
+          ? localAppliance : localLights;
+        invokeNearby = localPanel ? () => ({ openSection: localPanel.sectionId }) : undefined;
+        return localPanel?.label ?? null;
       },
-      invoke() { invokeNearby?.(); },
+      invoke() { return invokeNearby?.(); },
     },
     world: {
       scene,
+      theater: furniture.theater,
       setTimeOfDay(time) {
         city.setTimeOfDay(time);
         shell.setTimeOfDay(time);
@@ -79,6 +96,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         const dt = elapsed - previous;
         const step = dt / DOOR_SLIDE_SECONDS;
         previous = elapsed;
+        furniture.appliances.update(dt);
         if (!opening && door > 0 && occupiesDoorway(camera.position)) opening = true;
         const next = opening ? Math.min(1, door + step) : Math.max(0, door - step);
         const doorMoved = door !== next;
@@ -87,7 +105,12 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
           shell.setBalconyDoor(door);
         }
         const curtainsMoved = curtains.update(dt);
-        if (doorMoved || curtainsMoved) {
+        const roomDoorsMoved = shell.doors.update(dt, camera.position);
+        if (roomDoorsMoved) lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
+        if (curtainsMoved) {
+          for (const room of curtains.daylight) lighting.setDaylightTransmission(room.roomId, room.transmission());
+        }
+        if (doorMoved || curtainsMoved || roomDoorsMoved) {
           lighting.invalidateShadows();
           reflections.invalidate();
         }

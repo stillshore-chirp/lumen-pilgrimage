@@ -1,6 +1,7 @@
 import { DoubleSide, type MeshStandardMaterial } from 'three';
 import { ResidenceAppliances, type ApplianceMount } from './residenceAppliances';
 import type { ResidenceMaterials } from './residenceMaterials';
+import { fixtureFinish } from './residenceFixtureFinish';
 import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
 
 const eastFacing = Math.PI / 2;
@@ -164,8 +165,8 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials, appliances: Re
     counter.box(m.cabinetry, x, 1.989, -.02, .59, .924, .023, .003, 0, true);
   }
   counter.box(m.metal, 1.147, 1.50, -.109, .787, .043, .292, .006);
-  counter.box(m.lamp, -.540, 1.491, .061, 1.47, .007, .014, .002);
-  counter.box(m.lamp, 1.07, 1.491, .061, 1.47, .007, .014, .002);
+  counter.box(fixtureFinish(model, m.lamp, 'K-strip-west'), -.540, 1.491, .061, 1.47, .007, .014, .002);
+  counter.box(fixtureFinish(model, m.lamp, 'K-strip-east'), 1.07, 1.491, .061, 1.47, .007, .014, .002);
   counter.slab(cuttingBoard, .341, .892, .040, .489, .020, .269, .041);
   appliances.addMicrowave({ id: 'microwave', title: '電子レンジ', room: 'K', mount: [13.478, 9.54],
     approach: [0, .89, .37] }, model, m);
@@ -308,7 +309,8 @@ function addBathrooms(model: FurnitureModel, m: ResidenceMaterials, appliances: 
   towel.side = DoubleSide;
   const bathMat = model.tone(m.rug, 0x89897b);
   const washbasin = (room: string, title: string, mount: ApplianceMount, width: number, depth: number) => {
-    const outlet = vanity(model.at(...mount), m, towel, width, depth);
+    const lamp = fixtureFinish(model, m.lamp, `${room}-vanity`);
+    const outlet = vanity(model.at(...mount), { ...m, lamp }, towel, width, depth);
     appliances.addWater({ id: `${room.toLowerCase()}-vanity`, title, room, mount,
       approach: [0, .86, depth / 2 + .04] }, outlet, .751);
   };

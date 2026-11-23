@@ -127,6 +127,7 @@ function observeAudio() {
           peak: Math.max(...data.map(Math.abs)),
           stereo: gains.get('stereo')?.gain.value,
           spatial: gains.get('spatial')?.gain.value,
+          surround: gains.get('surround')?.gain.value,
           panners: panners.map(({ positionX, positionY, positionZ, panningModel }) =>
             [positionX.value, positionY.value, positionZ.value, panningModel]),
         };
@@ -152,8 +153,11 @@ function observeAudio() {
   AudioNode.prototype.connect = function (destination, ...args) {
     if (destination === this.context.destination) connect.call(this, this.context.probe.analyser);
     if (destination instanceof GainNode) {
-      if (this instanceof MediaStreamAudioSourceNode) this.context.probe.gains.set('stereo', destination);
-      if (this instanceof PannerNode && this.context.probe.hasStream) this.context.probe.gains.set('spatial', destination);
+      const { gains, panners, hasStream } = this.context.probe;
+      if (this instanceof MediaStreamAudioSourceNode && destination.channelCount === 2) gains.set('stereo', destination);
+      if (this instanceof PannerNode && hasStream) {
+        gains.set(this === panners[0] ? 'spatial' : 'surround', destination);
+      }
     }
     return connect.call(this, destination, ...args);
   };
@@ -407,6 +411,92 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     assert.ok(await viewer.evaluate(() => window.monitorPeers[0].signalingState === 'closed'));
     await waitForMix(viewer, { natural: true, monitor: false });
     assert.equal((await screenPixels(viewer)).count, 0);
+    assert.deepEqual(errors, []);
+  } finally {
+    await Promise.all([sender.context().close(), viewer.context().close()]);
+  }
+});
+
+test('the residence plays one WebRTC stream on the television and switches the audio output separately', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  const errors = [];
+  viewer.on('pageerror', () => errors.push('viewer'));
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture),
+      sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers),
+      viewer.addInitScript(observeAudio),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    await viewer.goto(new URL('?world=residence&place=living-theater&time=day', url).href);
+    await button(viewer, '仮想モニター').click();
+    const target = viewer.getByRole('combobox', { name: '表示先' });
+    const mode = viewer.getByRole('combobox', { name: 'モニターの音響' });
+    await target.selectOption('television');
+    assert.equal(await button(viewer, '配置を編集').isDisabled(), true);
+
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    const active = await screenPixels(viewer, 'residence-television');
+    assert.ok(active.width > viewport.width * .4 && active.width < viewport.width * .55,
+      'the shared video fills the enlarged television from the theater travel position');
+    assert.ok(Math.abs(active.width / active.height - 16 / 9) < .15);
+    const video = viewer.locator(videoSelector);
+    await video.evaluate(element => { window.originalMonitorStream = element.srcObject; });
+
+    const enableAudio = button(viewer, 'モニター音を有効にする');
+    if (await enableAudio.isEnabled()) await enableAudio.click();
+    await mode.selectOption('television');
+    await viewer.waitForFunction(() => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      const source = audio?.panners[0];
+      return audio?.spatial > .98 && audio.peak > .001
+        && Math.abs(source[0] - 19.99) < .02 && Math.abs(source[2] + 6.49) < .02 && source[3] === 'HRTF';
+    });
+
+    await mode.selectOption('surround');
+    await viewer.waitForFunction(() => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      return audio?.surround > .98 && audio.stereo < .02 && audio.spatial < .02 && audio.peak > .001;
+    });
+    const speakers = await viewer.evaluate(() =>
+      window.monitorSound.read().find(context => context.hasStream).panners.slice(1));
+    assert.equal(speakers.length, 6);
+    assert.ok(speakers.every(source => source[3] === 'HRTF'));
+    assert.ok(speakers.slice(0, 4).every(source => source[2] < -6));
+    assert.ok(speakers.slice(4).every(source => source[2] > -2));
+
+    await button(viewer, 'モニター音をミュート').click();
+    await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001);
+    await button(viewer, 'モニター音をミュート').click();
+    await target.selectOption('floating');
+    assert.equal(await button(viewer, '配置を編集').isEnabled(), true);
+    assert.equal(await mode.inputValue(), 'surround');
+    const floating = await screenPixels(viewer);
+    assert.ok(floating.count > 2_000 && Math.abs(floating.y - active.y) > 12,
+      'the same video is visible at the floating monitor position');
+    await target.selectOption('television');
+    assert.ok(Math.abs((await screenPixels(viewer)).width - active.width) <= 4);
+    assert.equal(await video.evaluate(element => element.srcObject === window.originalMonitorStream), true);
+    assert.deepEqual(await viewer.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['connected']);
+
+    await mode.selectOption('stereo');
+    await viewer.waitForFunction(() => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      return audio?.stereo > .98 && audio.spatial < .02 && audio.surround < .02 && audio.peak > .001;
+    });
+    await button(viewer, 'テレビの表示を切る').click();
+    assert.equal((await screenPixels(viewer)).count, 0);
+
+    await button(viewer, 'ファストトラベル').click();
+    await viewer.getByRole('dialog', { name: 'ファストトラベル' }).getByRole('button', { name: '入り江の浜' }).click();
+    await viewer.waitForURL(address => address.searchParams.get('world') === 'coast');
+    await sender.waitForFunction(() => window.monitorPeers[0]?.signalingState === 'closed');
+    await button(viewer, '仮想モニター').click();
+    assert.equal(await viewer.locator('[data-monitor-display-target]').isVisible(), false);
     assert.deepEqual(errors, []);
   } finally {
     await Promise.all([sender.context().close(), viewer.context().close()]);

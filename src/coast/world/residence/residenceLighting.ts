@@ -3,61 +3,143 @@ import { createResidenceContactMap } from './residenceContactMap';
 import type { CoastQuality } from '../../CoastWorld';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { RESIDENCE_SUN } from './residenceCityMaterials';
-import { bedroomCoves, corridorFootlights, createResidenceLightField, diningPendants, fabricLamps, hallCoves,
-  livingCoves, residenceFieldExtent, residenceFieldOrigin, serviceDownlights } from './residenceLightField';
+import { createResidenceLightField, diningPendants, diningPendantHeight, diningPendantNorth, fabricLamps,
+  residenceFieldExtent, residenceFieldOrigin, roomSources, type LightSource } from './residenceLightField';
 import type { ResidenceMaterials } from './residenceMaterials';
-import type { ResidenceRect } from './residencePlan';
+import { RESIDENCE_ROOMS, type ResidenceRect } from './residencePlan';
+import { FurnitureModel } from './residenceFurnitureModel';
+
+const switchMounts: Readonly<Record<string, readonly [east: number, north: number, heading: number]>> = {
+  LD: [11.072, 4.78, Math.PI / 2],
+  '01': [18.76, 11.672, Math.PI],
+  '02': [19.10, 9.878, 0],
+  '03': [2.17, 4.928, 0],
+  '04': [5.90, 4.927, 0],
+  '05': [9.42, 4.928, 0],
+  H1: [10.67, 6.578, 0],
+  H0: [11.072, 9.54, Math.PI / 2],
+  H2: [17.44, 11.528, 0],
+  FO: [11.81, 15.468, 0],
+  K: [17.278, 8.78, -Math.PI / 2],
+  BA: [3.11, 6.722, Math.PI],
+  BB: [4.71, 6.722, Math.PI],
+  UT: [7.69, 6.722, Math.PI],
+  ST: [10.58, 6.722, Math.PI],
+  WC: [10.929, 10.29, -Math.PI / 2],
+  MB: [15.078, 13.16, -Math.PI / 2],
+  WI: [16.977, 13.16, -Math.PI / 2],
+};
+const switchReach = .95;
+const windowRooms = RESIDENCE_ROOMS.filter(({ id }) => ['LD', '01', '02', '03', '04', '05'].includes(id));
+
+function createLightingSwitches(materials: ResidenceMaterials) {
+  const plates = new FurnitureModel();
+  plates.group.name = 'Residence lighting switches';
+  const finish = plates.tone(materials.ceiling, 0xdcd0be);
+
+  const switches = RESIDENCE_ROOMS.flatMap(room => {
+    if (!(room.id in switchMounts)) return [];
+    const mount = switchMounts[room.id];
+    const [east, north, heading] = mount;
+    const plate = plates.at(...mount);
+    const height = 1.245;
+    plate.box(finish, 0, height, .006, .080, .118, .013, .005);
+    plate.box(materials.darkMetal, 0, height, .013, .058, .087, .008, .004);
+    plate.box(finish, 0, height, .019, .052, .081, .008, .003, -.066);
+    plate.box(materials.metal, 0, height - .023, .024, .017, .003, .001);
+    const inwardX = Math.sin(heading);
+    const inwardZ = Math.cos(heading);
+
+    return [{
+      candidate(position: THREE.Vector3) {
+        const dx = position.x - east;
+        const dz = position.z + north;
+        const distance = Math.hypot(dx, dz);
+        if (distance > switchReach || dx * inwardX + dz * inwardZ <= 0) return null;
+        const inside = room.rectangles.some(([w, s, e, n]) =>
+          position.x >= w && position.x <= e && -position.z >= s && -position.z <= n);
+        if (!inside) return null;
+        return { distance, label: `${room.label}の照明を操作`, sectionId: `lighting-${room.id}` };
+      },
+    }];
+  });
+  plates.finish();
+  return {
+    group: plates.group,
+    nearby(position: THREE.Vector3) {
+      let nearest: ReturnType<(typeof switches)[number]['candidate']> = null;
+      for (const { candidate } of switches) {
+        const found = candidate(position);
+        if (found && (!nearest || found.distance < nearest.distance)) nearest = found;
+      }
+      return nearest;
+    },
+    dispose: () => plates.dispose(),
+  };
+}
 
 function createLuminaires(plaster: THREE.Material, darkMetal: THREE.Material) {
   const group = new THREE.Group();
   group.name = 'Concealed coves, guide lights and recessed downlights';
   const opal = new THREE.MeshBasicMaterial({ name: 'Warm white architectural diffuser', color: 0xb9b1a2 });
+  const unlitOpal = new THREE.MeshStandardMaterial({ name: 'Unlit architectural diffuser', color: 0x9c9180, roughness: .79 });
+  const emitters = new Map<LightSource, THREE.Mesh>();
   const geometries: THREE.BufferGeometry[] = [];
-  function place(geometry: THREE.BufferGeometry, material: THREE.Material, east: number, height: number, north: number) {
+  function place(geometry: THREE.BufferGeometry, material: THREE.Material, east: number, height: number, north: number,
+    fixture?: LightSource) {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(east, height, -north);
     mesh.receiveShadow = true;
     group.add(mesh);
     geometries.push(geometry);
-  }
-  const coves = [...livingCoves, ...Object.values(bedroomCoves), ...Object.values(hallCoves)];
-  for (const { span: [west, south, east, north], height, mount } of coves) {
-    const width = east - west;
-    const depth = north - south;
-    const centerEast = (west + east) / 2;
-    const centerNorth = (south + north) / 2;
-    const wallEast = mount === 'west' ? -.076 : 0;
-    const wallNorth = mount === 'north' ? .076 : mount === 'south' ? -.076 : 0;
-    place(new THREE.BoxGeometry(width + (wallEast ? .216 : .10), .040, depth + (wallNorth ? .216 : .10)),
-      plaster, centerEast + wallEast, height, centerNorth + wallNorth);
-    place(new THREE.BoxGeometry(width + .04, .009, depth + .04), opal, centerEast, height + .026, centerNorth);
-    place(new THREE.BoxGeometry(width + .04, .031, depth + .04), plaster,
-      centerEast - wallEast * .53, height + .016, centerNorth - wallNorth * .53);
-  }
-  for (const [room, sources] of Object.entries(corridorFootlights)) {
-    for (const { span: [east, north], height } of sources) {
-      const alongEast = room === 'H1' || room === 'H2';
-      place(new THREE.BoxGeometry(alongEast ? .112 : .025, .042, alongEast ? .025 : .112),
-        darkMetal, east, height, north);
-      place(new THREE.BoxGeometry(alongEast ? .079 : .026, .019, alongEast ? .026 : .079),
-        opal, east, height, north);
+    if (fixture) {
+      mesh.name = `Residence light fixture ${fixture.id}`;
+      emitters.set(fixture, mesh);
     }
   }
-  for (const sources of Object.values(serviceDownlights)) {
-    for (const { span: [east, north], height } of sources) {
-      place(new THREE.CylinderGeometry(.052, .064, .015, 28), plaster, east, height - .007, north);
-      place(new THREE.CylinderGeometry(.046, .052, .009, 28), darkMetal, east, height - .016, north);
-      place(new THREE.CylinderGeometry(.031, .038, .004, 24), opal, east, height - .021, north);
+
+  for (const [room, sources] of Object.entries(roomSources)) {
+    for (const fixture of sources) {
+      const { span: [west, south, east, north], height } = fixture;
+      if (fixture.kind === 'cove') {
+        const { mount } = fixture;
+        const width = east - west;
+        const depth = north - south;
+        const centerEast = (west + east) / 2;
+        const centerNorth = (south + north) / 2;
+        const wallEast = mount === 'west' ? -.076 : 0;
+        const wallNorth = mount === 'north' ? .076 : mount === 'south' ? -.076 : 0;
+        place(new THREE.BoxGeometry(width + (wallEast ? .216 : .10), .040, depth + (wallNorth ? .216 : .10)),
+          plaster, centerEast + wallEast, height, centerNorth + wallNorth);
+        place(new THREE.BoxGeometry(width + .04, .009, depth + .04), unlitOpal, centerEast, height + .026, centerNorth, fixture);
+        place(new THREE.BoxGeometry(width + .04, .031, depth + .04), plaster,
+          centerEast - wallEast * .53, height + .016, centerNorth - wallNorth * .53);
+      }
+      if (fixture.kind === 'foot') {
+        const alongEast = room === 'H1' || room === 'H2';
+        place(new THREE.BoxGeometry(alongEast ? .112 : .025, .042, alongEast ? .025 : .112),
+          darkMetal, east, height, north);
+        place(new THREE.BoxGeometry(alongEast ? .079 : .026, .019, alongEast ? .026 : .079),
+          unlitOpal, east, height, north, fixture);
+      }
+      if (fixture.kind === 'down') {
+        place(new THREE.CylinderGeometry(.052, .064, .015, 28), plaster, east, height - .007, north);
+        place(new THREE.CylinderGeometry(.046, .052, .009, 28), darkMetal, east, height - .016, north);
+        place(new THREE.CylinderGeometry(.031, .038, .004, 24), unlitOpal, east, height - .021, north, fixture);
+      }
     }
   }
   return {
     group,
-    setTimeOfDay(time: CoastTimeOfDay) {
-      opal.color.setHex(time === 'night' ? 0xffdcb6 : 0xb9b1a2).multiplyScalar(time === 'night' ? 2.8 : 1);
+    unlitOpal,
+    update(night: boolean, enabled: (fixture: LightSource) => boolean) {
+      opal.color.setHex(night ? 0xffdcb6 : 0xb9b1a2).multiplyScalar(night ? 2.8 : 1);
+      for (const [fixture, mesh] of emitters) mesh.material = enabled(fixture) ? opal : unlitOpal;
     },
     dispose() {
       geometries.forEach(geometry => geometry.dispose());
       opal.dispose();
+      unlitOpal.dispose();
     },
   };
 }
@@ -65,8 +147,8 @@ function createLuminaires(plaster: THREE.Material, darkMetal: THREE.Material) {
 function diningSpot(east: number): THREE.SpotLight {
   const light = new THREE.SpotLight(0xffd6a5, 4.3, 4.2, .73, .78, 2);
   light.name = 'Dining pendant direct light';
-  light.position.set(east, diningPendants.height - .058, -diningPendants.north);
-  light.target.position.set(east, .74, -diningPendants.north);
+  light.position.set(east, diningPendantHeight - .058, -diningPendantNorth);
+  light.target.position.set(east, .74, -diningPendantNorth);
   light.visible = false;
   light.castShadow = true;
   light.shadow.mapSize.set(512, 512);
@@ -88,9 +170,22 @@ function resizeShadow(shadow: THREE.LightShadow, size: number): void {
 }
 
 export function createResidenceLighting(scene: THREE.Scene, materials: ResidenceMaterials,
-  furnitureObstacles: readonly ResidenceRect[] = []) {
+  furnitureObstacles: readonly ResidenceRect[] = [], onFixtureChange?: () => void) {
   const field = createResidenceLightField(furnitureObstacles);
   const nightAmount = { value: 0 };
+  const overrides = new Map<string, boolean>();
+  const windowTransmission = { value: new Float32Array(windowRooms.length).fill(1) };
+  const teaDoor = { value: 0 };
+  const hallLight = { value: 0 };
+  const doorwayFixtures = roomSources.H1.filter(source => source.id === 'H1-foot-3' || source.id === 'H1-foot-4');
+  const apertureRooms = windowRooms.map(({ rectangles }, index) => {
+    const area = rectangles.map(([w, s, e, n]) =>
+      `(point.x >= ${w.toFixed(2)} && point.x <= ${e.toFixed(2)} && point.y >= ${s.toFixed(2)} && point.y <= ${n.toFixed(2)})`);
+    return `if (${area.join(' || ')}) return residenceWindowTransmission[${index}];`;
+  }).join('\n');
+  function isOn(source: LightSource): boolean {
+    return overrides.get(source.id) ?? (nightAmount.value === 1 || source.daytime === true);
+  }
   const contactEnabled = { value: 0 };
   const contactMap: { value: THREE.DataTexture | null } = { value: null };
   let furnitureGroup: THREE.Object3D;
@@ -113,18 +208,77 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   daylight.shadow.intensity = .92;
   daylight.shadow.autoUpdate = false;
   daylight.shadow.needsUpdate = true;
-  const dining = diningPendants.east.map(diningSpot);
-  const diningObjects = dining.flatMap(light => [light, light.target]);
+  const dining = diningPendants.map(({ id, east }) => ({
+    source: roomSources.LD.find(fixture => fixture.id === id)!,
+    light: diningSpot(east),
+  }));
+  const diningObjects = dining.flatMap(({ light }) => [light, light.target]);
   const lampCenters = fabricLamps.map(({ east, north, base, height }) =>
     new THREE.Vector4(east, base + .79 * height, -north, .255 * height));
+  const shadeSources = fabricLamps.map(({ id, room }) => roomSources[room].find(fixture => fixture.id === id)!);
+  const shadeSwitches = { value: new Float32Array(lampCenters.length) };
+  const emitters = new Map<string, THREE.MeshStandardMaterial>();
   const luminaires = createLuminaires(materials.ceiling, materials.darkMetal);
+  const switches = createLightingSwitches(materials);
   const patched = new WeakSet<THREE.Material>();
+
+  function invalidateShadows(): void {
+    if (daylight.castShadow) daylight.shadow.needsUpdate = true;
+    for (const { light } of dining) if (light.visible) light.shadow.needsUpdate = true;
+  }
+
+  function refreshEmitters(): void {
+    const night = nightAmount.value === 1;
+    const strength = night ? 1.18 : .61;
+    for (const [id, material] of emitters) {
+      const source = fixtureById.get(id);
+      if (source) material.emissiveIntensity = isOn(source) ? strength : 0;
+    }
+    for (const { source, light } of dining) {
+      const on = isOn(source);
+      if (on && !light.visible) light.shadow.needsUpdate = true;
+      light.visible = on;
+    }
+    for (const [index, source] of shadeSources.entries()) shadeSwitches.value[index] = Number(isOn(source));
+    hallLight.value = doorwayFixtures.filter(isOn).length / doorwayFixtures.length;
+    luminaires.update(night, isOn);
+  }
+
+  function setFixtures(room: string, sources: readonly LightSource[], on: boolean): void {
+    const changed = sources.some(source => isOn(source) !== on);
+    for (const source of sources) overrides.set(source.id, on);
+    if (!changed) return;
+    field.updateRoom(room, isOn, nightAmount.value === 1);
+    refreshEmitters();
+    invalidateShadows();
+    onFixtureChange?.();
+  }
+
+  const fixtureById = new Map(Object.values(roomSources).flat().map(source => [source.id, source]));
+  const sectionOrder = ['LD', 'K', '01', '02', '03', '04', '05', 'FO', 'H0', 'H1', 'H2', 'BA', 'BB', 'MB', 'WI', 'WC', 'UT', 'ST'];
+  const sections = sectionOrder.map(id => {
+    const title = RESIDENCE_ROOMS.find(room => room.id === id)!.label;
+    const sources = roomSources[id];
+    return {
+      id: `lighting-${id}`, title, category: 'lighting' as const,
+      controls: [
+        { kind: 'button' as const, id: 'on', label: '一括点灯', invoke: () => setFixtures(id, sources, true) },
+        { kind: 'button' as const, id: 'off', label: '一括消灯', invoke: () => setFixtures(id, sources, false) },
+        ...sources.map(source => ({
+          kind: 'toggle' as const, id: source.id, label: source.label,
+          get: () => isOn(source), set: (on: boolean) => setFixtures(id, [source], on),
+        })),
+      ],
+    };
+  });
 
   function bind(material: THREE.Material): void {
     if (!(material instanceof THREE.MeshStandardMaterial) || material.transparent || patched.has(material)) return;
     patched.add(material);
     const before = material.onBeforeCompile.bind(material);
     const cacheKey = material.customProgramCacheKey();
+    const id = material.userData.residenceFixtureId;
+    if (typeof id === 'string') emitters.set(id, material);
     const clothShade = material === materials.linenShade || material === materials.fabric;
     material.customProgramCacheKey = () => `${cacheKey}|residence-light-field|${clothShade}`;
     material.onBeforeCompile = (shader, renderer) => {
@@ -135,6 +289,9 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       shader.uniforms.residenceFieldOrigin = { value: residenceFieldOrigin };
       shader.uniforms.residenceFieldExtent = { value: residenceFieldExtent };
       shader.uniforms.residenceNight = nightAmount;
+      shader.uniforms.residenceWindowTransmission = windowTransmission;
+      shader.uniforms.residenceTeaDoor = teaDoor;
+      shader.uniforms.residenceHallLight = hallLight;
       shader.uniforms.residenceContactEnabled = contactEnabled;
       shader.uniforms.residenceContactMap = contactMap;
       shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
@@ -155,6 +312,13 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
         uniform vec3 residenceFieldOrigin;
         uniform vec3 residenceFieldExtent;
         uniform float residenceNight;
+        uniform float residenceWindowTransmission[${windowRooms.length}];
+        uniform float residenceTeaDoor;
+        uniform float residenceHallLight;
+        float windowTransmissionAt(vec2 point) {
+          ${apertureRooms}
+          return 1.0;
+        }
         uniform float residenceContactEnabled;
         uniform sampler2D residenceContactMap;`).replace('#include <lights_fragment_end>', `
         vec3 surfaceNormal = inverseTransformDirection(nonPerturbedNormal, viewMatrix);
@@ -169,6 +333,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
           probe.a *= 1.0 - 0.65 * contact * receiver;
         }
         vec4 portal = texture(residenceWindowVolume, fieldUV);
+        portal.a *= windowTransmissionAt(vec2(roomPoint.x, -roomPoint.z));
         vec3 toWindow = portal.rgb - vec3(0.5);
         toWindow *= inversesqrt(max(dot(toWindow, toWindow), 0.0002));
         float skyFacing = max(0.0, dot(roomNormal, toWindow));
@@ -182,6 +347,13 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
           + vec3(0.40, 0.57, 1.0) * (0.63 * skyAmount + 0.10 * probe.r);
         // Near-surface occlusion is inserted here for high quality.
         vec3 roomIrradiance = mix(daytime, evening, residenceNight) * probe.a;
+        if (residenceTeaDoor > 0.0 && roomPoint.x >= 3.65 && roomPoint.x <= 7.30
+          && roomPoint.z > -5.0 && roomPoint.z <= 0.0) {
+          vec3 fromDoor = vResidenceWorld - vec3(6.49, 0.36, -5.0);
+          float spill = residenceTeaDoor * residenceHallLight
+            * exp(-dot(fromDoor, fromDoor * vec3(1.7, 0.70, 0.34)));
+          roomIrradiance += vec3(1.0, 0.78, 0.52) * (1.05 * spill);
+        }
         irradiance += roomIrradiance * 0.75;
         iblIrradiance += roomIrradiance * 0.25;
         vec3 reflection = inverseTransformDirection(reflect(-geometryViewDir, geometryNormal), viewMatrix);
@@ -208,13 +380,16 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
         #include <lights_fragment_end>`);
       if (clothShade) {
         shader.uniforms.residenceFabricLamp = { value: lampCenters };
+        shader.uniforms.residenceFabricLampOn = shadeSwitches;
         shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_pars_fragment>', `
           #include <emissivemap_pars_fragment>
-          uniform vec4 residenceFabricLamp[${lampCenters.length}];`).replace('#include <emissivemap_fragment>', `
+          uniform vec4 residenceFabricLamp[${lampCenters.length}];
+          uniform float residenceFabricLampOn[${lampCenters.length}];`).replace('#include <emissivemap_fragment>', `
           #include <emissivemap_fragment>
-          if (residenceNight > 0.5) {
+          {
             float transmitted = 0.0;
             for (int i = 0; i < ${lampCenters.length}; i++) {
+              if (residenceFabricLampOn[i] < 0.5) continue;
               vec4 source = residenceFabricLamp[i];
               vec3 delta = vResidenceWorld - source.xyz;
               float radius = length(delta.xz);
@@ -223,7 +398,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
               float shadeTaper = smoothstep(-source.w, source.w, delta.y);
               transmitted = max(transmitted, within * mix(1.0, 0.53, shadeTaper));
             }
-            totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.74, 0.45) * (transmitted * 1.94);
+            totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.74, 0.45) * (transmitted * mix(1.1, 1.94, residenceNight));
           }`);
       }
     };
@@ -241,22 +416,29 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   for (const material of Object.values(materials)) {
     if (material instanceof THREE.Material) bind(material);
   }
-  attachMaterials(luminaires.group);
-  scene.add(daylight, daylight.target, luminaires.group, ...diningObjects);
+  attachMaterials(luminaires.group, switches.group);
+  scene.add(daylight, daylight.target, luminaires.group, switches.group, ...diningObjects);
+  refreshEmitters();
   return {
     attachInterior(shell: THREE.Object3D, furniture: THREE.Object3D) {
       furnitureGroup = furniture;
       attachMaterials(shell, furniture);
+      refreshEmitters();
     },
-    invalidateShadows() {
-      if (daylight.castShadow) daylight.shadow.needsUpdate = true;
+    sections,
+    nearby: switches.nearby,
+    invalidateShadows,
+    setDaylightTransmission(roomId: string, transmission: number) {
+      const index = windowRooms.findIndex(room => room.id === roomId);
+      if (index >= 0) windowTransmission.value[index] = THREE.MathUtils.clamp(transmission, 0, 1);
     },
+    setTeaDoorOpenness(openness: number) { teaDoor.value = THREE.MathUtils.clamp(openness, 0, 1); },
     setQuality(quality: CoastQuality) {
       if (quality === 'high' && !contactMap.value) contactMap.value = createResidenceContactMap(furnitureGroup, materials.rug);
       contactEnabled.value = Number(quality === 'high');
       resizeShadow(daylight.shadow, quality === 'high' ? 2048 : 1024);
       daylight.shadow.radius = quality === 'high' ? 3.4 : 2.35;
-      for (const lamp of dining) resizeShadow(lamp.shadow, quality === 'high' ? 1024 : 512);
+      for (const { light } of dining) resizeShadow(light.shadow, quality === 'high' ? 1024 : 512);
     },
     setTimeOfDay(time: CoastTimeOfDay) {
       const night = time === 'night';
@@ -265,24 +447,22 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       daylight.intensity = night ? 0 : sunPower;
       daylight.castShadow = !night;
       daylight.shadow.needsUpdate = !night;
-      for (const lamp of dining) {
-        lamp.visible = night;
-        lamp.shadow.needsUpdate = night;
-      }
+      for (const id of Object.keys(roomSources)) field.updateRoom(id, isOn, night);
+      refreshEmitters();
       materials.lamp.emissiveIntensity = night ? 1.18 : 0.10;
       materials.glass.opacity = night ? 0.027 : 0.050;
       materials.guard.opacity = night ? 0.061 : 0.090;
-      luminaires.setTimeOfDay(time);
     },
     dispose() {
-      scene.remove(daylight, daylight.target, luminaires.group, ...diningObjects);
+      scene.remove(daylight, daylight.target, luminaires.group, switches.group, ...diningObjects);
       daylight.shadow.dispose();
-      for (const lamp of dining) lamp.shadow.dispose();
+      for (const { light } of dining) light.shadow.dispose();
       field.diffuse.dispose();
       field.accent.dispose();
       field.daylight.dispose();
       contactMap.value?.dispose();
       luminaires.dispose();
+      switches.dispose();
     },
   };
 }
