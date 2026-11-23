@@ -7,6 +7,14 @@
 - [main.ts](../src/main.ts) が `#app` を取得し、[CoastApp](../src/coast/CoastApp.ts) で入り江と山道を起動する。`?world=overlook` のときは [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) を読み込んで丘陵展望台を開く。
 - `CoastApp` はレンダラー、カメラ、UI、フレームループ、操作を接続する。[CoastTravelPanel](../src/coast/CoastTravelPanel.ts) でファストトラベルと昼夜の切り替えを操作できる。[移動先の定義](../src/coast/coastDestinations.ts) は両ワールドの着地点と到着時の向きを持つ。選択した移動先と時間帯は URL の `world`、`place`、`time` に反映される。同一ワールド内では位置と入力状態をリセットして移動し、ワールドを移ると移動先と時間帯を渡してページを読み込み直す。
 
+## 仮想モニターの設計
+
+- `?monitor=sender` は [配信ページ](../src/monitor/monitorSender.ts) を起動する。共有ボタンの操作から `getDisplayMedia()` を呼び、ブラウザが選択と許可を管理する。macOSとWindowsは同じ [画面取得](../src/monitor/monitorCapture.ts) とトラック契約を使う。保護コンテンツは共有元の制限に従う。[W3C Screen Capture](https://www.w3.org/TR/screen-capture/) · [ChromiumのmacOSウィンドウ音声対応](https://chromium.googlesource.com/chromium/src/+/c27d9c73c94555e3ec51dcec1317aedd539537fb)
+- [シグナリング](../server/virtual-monitor-signaling.mjs) はViteの開発・プレビューで同一オリジンのPOSTを受ける。発行から2分以内にコードで視聴先1件を予約する。照合番号を確認して配信元が許可すると、役割別の一時トークンとリビジョン番号を使い、接続情報を交換する。許可済みセッションは片側の通信が90秒途絶えるか、開始から8時間で期限切れになる。一時情報はメモリ上に保持し、期限切れ・拒否・終了で破棄する。映像と音声は [WebRTC](../src/monitor/monitorSession.ts) で端末間を直接通り、録画・保存は行わない。サーバーは外部STUN・TURNを使わない。
+- [視聴パネル](../src/monitor/monitorView.ts) を初めて開くと、一枚の [映像面](../src/monitor/monitorObject.ts) を景観に追加できる。映像面の位置・向き・大きさはワールド座標に保持する。映像の縦横比に合わせて同じ平面を描き、映像を失ったらそこに状態を表示する。配置編集時はFPSのマウスロックを解除し、ドラッグを映像面に渡す。
+- [VR入力](../src/monitor/monitorXR.ts) はWebXRの `local-floor` に接続する。コントローラーの `squeeze` と手の関節座標によるピンチを個別に扱う。追跡を失った場合は掴みを解除し、その時点の姿勢に固定する。デスクトップの視点とFOVはVRセッションから独立している。[W3C WebXR](https://www.w3.org/TR/webxr/) · [WebXR Hand Input](https://www.w3.org/TR/webxr-hand-input-1/)
+- [モニター音声](../src/monitor/monitorAudio.ts) は受信音声専用のWeb Audioコンテキストを持つ。音量とミュートを滑らかに変更し、頭部固定ステレオとHRTFによる定位・距離減衰・指向性を切り替える。映像要素はミュートし、Web Audioに再生を集約する。描画品質は自然環境音・共有音声の処理に影響しない。
+
 ## 地形と移動
 
 - [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形、散策路、沢の水位](../src/coast/terrain.ts) を共有する。道の縦断勾配を滑らかにつなぎ、周囲の地面に応じて横断勾配を付ける。西の岩棚、東の潮棚、林内の分岐と沢は、地形と [岩・シダの配置](../src/coast/world/coastLandmarks.ts) を合わせて組む。素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
