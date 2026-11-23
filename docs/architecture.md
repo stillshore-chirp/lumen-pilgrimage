@@ -38,6 +38,7 @@
 - 図面の P1 を基準に、東を `x`、北を `-z`、70階の仕上げ床を `y=0` とし、単位をメートルにそろえる。部屋、壁、開口、手すりを描画と歩行判定で共有する。室内家具の外形は間接光の遮蔽に使い、歩行では通り抜けられる。主寝室の引戸は開き量を描画と音響に渡し、人が敷居を通れる幅まで開いてから通行できる。 [設計図 PDF](residence/residence-70f-drawings.pdf) · [平面](../src/coast/world/residence/residencePlan.ts) · [歩行判定](../src/coast/world/residence/residenceNavigation.ts)
 - 街路面は `y=-246`。南窓から大通り沿いの屋上と約277 m南の交差点を見下ろす。南北幹線を住戸の塔の東に通し、横断街路と沿道への出入りを担う街路をつなぐ。車道・歩道・走行経路と敷地は同じ道路網から決める。幹線を街区の外へ延ばし、車道とその先の見通しに建物や基壇が重ならないことを描画形状で確認する。夜は走行中の車両の灯りが舗装を照らす。 [基本設計](residence/residence-70f-design.md#街区と視線) · [高さ](../src/coast/world/residence/residenceFloor.ts) · [都市の描画](../src/coast/world/residence/residenceCity.ts)
 - 夜の街は建物の用途、部屋、ロビーに応じて窓の点灯と色を変える。住戸から見える遠方の高層棟は、窓が画面上の1画素より小さくなる距離で、まとまりのある小さな窓明かりに移行する。 [近景の外壁](../src/coast/world/residence/residenceCityMaterials.ts) · [遠景の高層棟](../src/coast/world/overlook/overlookCity.ts)
+- 住戸周辺のビルも、画面に投影された窓の大きさに合わせて個別の窓明かりを数室のまとまりへ連続的に移行させる。小さい窓の点灯が画素の境界を横切る際の明滅を減らし、遠くでの平均の明るさを保つ。 [近景の窓明かり](../src/coast/world/residence/residenceCityMaterials.ts)
 - 室内はオークや漆喰、織物の実寸の色・凹凸・粗さを使う。窓からの日射、間接光、夜の照明を組み合わせる。高品質では家具の実形状から床際の影を作る。デスクトップでは視点に応じて窓・鏡の反射を描き、高品質では室内の深度を使った近接陰影と、床材の粗さに応じた平面反射も加える。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [反射](../src/coast/world/residence/residenceReflections.ts) · [内装材の出典](../public/residence-materials/ATTRIBUTION.md)
 - 録音した交通音を南と東の街路に分散する。床の高さ、建物の外皮と間仕切り、引戸の開き量で伝わる音の強さと帯域を変える。室内の反射は部屋の寸法に合わせ、動く交通音は頭部伝達関数で定位させる。足音は床材に従い、引戸の開閉にも短い作動音を付ける。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
 
