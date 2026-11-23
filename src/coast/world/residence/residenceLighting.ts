@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { createResidenceContactMap } from './residenceContactMap';
+import { createResidenceLightSpill } from './residenceLightSpill';
+import { teaShojiTransmission } from './residenceShoji';
 import type { CoastQuality } from '../../CoastWorld';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { RESIDENCE_SUN } from './residenceCityMaterials';
@@ -8,7 +10,6 @@ import { createResidenceLightField, diningPendants, diningPendantHeight, diningP
 import type { ResidenceMaterials } from './residenceMaterials';
 import { RESIDENCE_ROOMS, type ResidenceRect } from './residencePlan';
 import { FurnitureModel } from './residenceFurnitureModel';
-import { teaShojiTransmission } from './residenceShoji';
 
 const switchMounts: Readonly<Record<string, readonly [east: number, north: number, heading: number]>> = {
   LD: [11.072, 4.78, Math.PI / 2],
@@ -173,18 +174,16 @@ function resizeShadow(shadow: THREE.LightShadow, size: number): void {
 export function createResidenceLighting(scene: THREE.Scene, materials: ResidenceMaterials,
   furnitureObstacles: readonly ResidenceRect[] = [], onFixtureChange?: () => void) {
   const field = createResidenceLightField(furnitureObstacles);
+  const spill = createResidenceLightSpill(residenceFieldOrigin, residenceFieldExtent);
   const nightAmount = { value: 0 };
   const overrides = new Map<string, boolean>();
   const windowTransmission = { value: new Float32Array(windowRooms.length).fill(1) };
-  const teaDoor = { value: 0 };
+  const windowRoomIndex = new Map(windowRooms.map((room, index) => [room.id, index]));
   const teaShoji = { value: teaShojiTransmission(1) };
-  const hallLight = { value: 0 };
-  const doorwayFixtures = roomSources.H1.filter(source => source.id === 'H1-foot-3' || source.id === 'H1-foot-4');
   const apertureRooms = windowRooms.map(({ id, rectangles }, index) => {
     const area = rectangles.map(([w, s, e, n]) =>
       `(point.x >= ${w.toFixed(2)} && point.x <= ${e.toFixed(2)} && point.y >= ${s.toFixed(2)} && point.y <= ${n.toFixed(2)})`);
-    const shojiTransmission = id === '04' ? ' * residenceTeaShojiTransmission' : '';
-    return `if (${area.join(' || ')}) return residenceWindowTransmission[${index}]${shojiTransmission};`;
+    return `if (${area.join(' || ')}) return residenceWindowTransmission[${index}]${id === '04' ? ' * residenceTeaShojiTransmission' : ''};`;
   }).join('\n');
   function isOn(source: LightSource): boolean {
     return overrides.get(source.id) ?? (nightAmount.value === 1 || source.daytime === true);
@@ -225,7 +224,18 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   const switches = createLightingSwitches(materials);
   const patched = new WeakSet<THREE.Material>();
 
+  function updateSpill(): void {
+    spill.update((id, east, north, height) => {
+      const [electric, sky] = field.doorwayLight(id, east, north, height, isOn);
+      const window = windowRoomIndex.get(id);
+      const curtains = window === undefined ? 1 : windowTransmission.value[window];
+      const shoji = id === '04' ? teaShoji.value : 1;
+      return [electric, sky * curtains * shoji];
+    });
+  }
+
   function invalidateShadows(): void {
+    updateSpill();
     if (daylight.castShadow) daylight.shadow.needsUpdate = true;
     for (const { light } of dining) if (light.visible) light.shadow.needsUpdate = true;
   }
@@ -243,7 +253,6 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       light.visible = on;
     }
     for (const [index, source] of shadeSources.entries()) shadeSwitches.value[index] = Number(isOn(source));
-    hallLight.value = doorwayFixtures.filter(isOn).length / doorwayFixtures.length;
     luminaires.update(night, isOn);
   }
 
@@ -252,6 +261,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     for (const source of sources) overrides.set(source.id, on);
     if (!changed) return;
     field.updateRoom(room, isOn, nightAmount.value === 1);
+    spill.invalidate();
     refreshEmitters();
     invalidateShadows();
     onFixtureChange?.();
@@ -289,13 +299,12 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       shader.uniforms.residenceLightVolume = { value: field.diffuse };
       shader.uniforms.residenceAccentVolume = { value: field.accent };
       shader.uniforms.residenceWindowVolume = { value: field.daylight };
+      shader.uniforms.residenceSpillVolume = { value: spill.texture };
       shader.uniforms.residenceFieldOrigin = { value: residenceFieldOrigin };
       shader.uniforms.residenceFieldExtent = { value: residenceFieldExtent };
       shader.uniforms.residenceNight = nightAmount;
       shader.uniforms.residenceWindowTransmission = windowTransmission;
-      shader.uniforms.residenceTeaDoor = teaDoor;
       shader.uniforms.residenceTeaShojiTransmission = teaShoji;
-      shader.uniforms.residenceHallLight = hallLight;
       shader.uniforms.residenceContactEnabled = contactEnabled;
       shader.uniforms.residenceContactMap = contactMap;
       shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
@@ -313,13 +322,12 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
         uniform highp sampler3D residenceLightVolume;
         uniform highp sampler3D residenceAccentVolume;
         uniform highp sampler3D residenceWindowVolume;
+        uniform highp sampler3D residenceSpillVolume;
         uniform vec3 residenceFieldOrigin;
         uniform vec3 residenceFieldExtent;
         uniform float residenceNight;
         uniform float residenceWindowTransmission[${windowRooms.length}];
-        uniform float residenceTeaDoor;
         uniform float residenceTeaShojiTransmission;
-        uniform float residenceHallLight;
         float windowTransmissionAt(vec2 point) {
           ${apertureRooms}
           return 1.0;
@@ -352,13 +360,10 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
           + vec3(0.40, 0.57, 1.0) * (0.63 * skyAmount + 0.10 * probe.r);
         // Near-surface occlusion is inserted here for high quality.
         vec3 roomIrradiance = mix(daytime, evening, residenceNight) * probe.a;
-        if (residenceTeaDoor > 0.0 && roomPoint.x >= 3.65 && roomPoint.x <= 7.30
-          && roomPoint.z > -5.0 && roomPoint.z <= 0.0) {
-          vec3 fromDoor = vResidenceWorld - vec3(6.49, 0.36, -5.0);
-          float spill = residenceTeaDoor * residenceHallLight
-            * exp(-dot(fromDoor, fromDoor * vec3(1.7, 0.70, 0.34)));
-          roomIrradiance += vec3(1.0, 0.78, 0.52) * (1.05 * spill);
-        }
+        vec2 spillLight = texture(residenceSpillVolume, fieldUV).rg;
+        vec3 indirect = vec3(1.0, 0.79, 0.57) * (1.02 * spillLight.r)
+          + vec3(0.69, 0.84, 1.0) * (spillLight.g * mix(1.35, 0.16, residenceNight));
+        roomIrradiance += indirect * probe.a;
         irradiance += roomIrradiance * 0.75;
         iblIrradiance += roomIrradiance * 0.25;
         vec3 reflection = inverseTransformDirection(reflect(-geometryViewDir, geometryNormal), viewMatrix);
@@ -424,6 +429,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   attachMaterials(luminaires.group, switches.group);
   scene.add(daylight, daylight.target, luminaires.group, switches.group, ...diningObjects);
   refreshEmitters();
+  updateSpill();
   return {
     attachInterior(shell: THREE.Object3D, furniture: THREE.Object3D) {
       furnitureGroup = furniture;
@@ -434,11 +440,22 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     nearby: switches.nearby,
     invalidateShadows,
     setDaylightTransmission(roomId: string, transmission: number) {
-      const index = windowRooms.findIndex(room => room.id === roomId);
-      if (index >= 0) windowTransmission.value[index] = THREE.MathUtils.clamp(transmission, 0, 1);
+      const index = windowRoomIndex.get(roomId);
+      if (index === undefined) return;
+      const value = Math.fround(THREE.MathUtils.clamp(transmission, 0, 1));
+      if (windowTransmission.value[index] !== value) {
+        windowTransmission.value[index] = value;
+        spill.invalidate();
+      }
     },
-    setTeaDoorOpenness(openness: number) { teaDoor.value = THREE.MathUtils.clamp(openness, 0, 1); },
-    setTeaShojiOpenness(openness: number) { teaShoji.value = teaShojiTransmission(openness); },
+    setTeaShojiOpenness(openness: number) {
+      const value = teaShojiTransmission(openness);
+      if (teaShoji.value !== value) {
+        teaShoji.value = value;
+        spill.invalidate();
+      }
+    },
+    setDoorOpenness: spill.setDoorOpenness,
     setQuality(quality: CoastQuality) {
       if (quality === 'high' && !contactMap.value) contactMap.value = createResidenceContactMap(furnitureGroup, materials.rug);
       contactEnabled.value = Number(quality === 'high');
@@ -455,6 +472,8 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       daylight.shadow.needsUpdate = !night;
       for (const id of Object.keys(roomSources)) field.updateRoom(id, isOn, night);
       refreshEmitters();
+      spill.invalidate();
+      updateSpill();
       materials.lamp.emissiveIntensity = night ? 1.18 : 0.10;
       materials.glass.opacity = night ? 0.027 : 0.050;
       materials.guard.opacity = night ? 0.061 : 0.090;
@@ -466,6 +485,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       field.diffuse.dispose();
       field.accent.dispose();
       field.daylight.dispose();
+      spill.texture.dispose();
       contactMap.value?.dispose();
       luminaires.dispose();
       switches.dispose();
