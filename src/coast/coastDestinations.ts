@@ -39,7 +39,7 @@ export const EXPLORATION_WORLDS = [
     label: RESIDENCE_LABEL,
     places: [
       { id: 'living-window', label: 'リビング南窓', x: 21.89, z: -1.12, yaw: Math.PI - 0.014, pitch: -0.29 },
-      { id: 'living-theater', label: 'リビングのホームシアター', x: 19.99, z: -2.82, yaw: 0, pitch: -0.115 },
+      { id: 'living-theater', label: 'リビングのホームシアター', x: 19.99, z: -3.06, yaw: 0, pitch: -0.115 },
       { id: 'foyer', label: '住戸の玄関', x: 11.80, z: -14.17, yaw: Math.PI, pitch: -0.01 },
       { id: 'primary-bedroom', label: '主寝室', x: 20.07, z: -13.575, yaw: -Math.PI / 2, pitch: -0.08 },
       { id: 'tea-room', label: roomLabel('04'), x: 6.57, z: -3.92, yaw: 2.50, pitch: -0.18 },
