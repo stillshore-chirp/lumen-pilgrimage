@@ -920,8 +920,10 @@ test('residence appliances work from the room menu and start localized audio', {
     const chimes = new WeakSet();
     window.residenceProbe.completionStarts = 0;
     AudioBufferSourceNode.prototype.connect = function (target, ...args) {
-      // Chimes are short one-shots sent straight to the appliance's spatial low-pass filter.
-      if (!this.loop && this.buffer?.duration < 1 && target instanceof BiquadFilterNode) chimes.add(this);
+      // The microwave's complete four-beep recording is one spatialized source.
+      if (!this.loop && Math.abs((this.buffer?.duration ?? 0) - 3.44) < .01 && target instanceof BiquadFilterNode) {
+        chimes.add(this);
+      }
       return connect.call(this, target, ...args);
     };
     AudioBufferSourceNode.prototype.start = function (...args) {

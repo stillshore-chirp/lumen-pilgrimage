@@ -63,14 +63,8 @@ function operatingLoop(context: BaseAudioContext, kind: ApplianceKind): AudioBuf
   return buffer;
 }
 
-function completionTone(context: BaseAudioContext, kind: ApplianceKind): AudioBuffer {
-  // The microwave gives three short beeps. The washer uses a softer descending chime.
-  const microwave = kind === 'microwave';
-  const notes = microwave ? [
-    { frequency: 880, onset: 0, duration: .14 },
-    { frequency: 880, onset: .19, duration: .14 },
-    { frequency: 1046, onset: .38, duration: .18 },
-  ] : [
+function washerCompletionTone(context: BaseAudioContext): AudioBuffer {
+  const notes = [
     { frequency: 659, onset: 0, duration: .23 },
     { frequency: 587, onset: .21, duration: .24 },
     { frequency: 523, onset: .43, duration: .35 },
@@ -78,17 +72,17 @@ function completionTone(context: BaseAudioContext, kind: ApplianceKind): AudioBu
   const last = notes[notes.length - 1];
   const buffer = context.createBuffer(1, Math.ceil(sampleRate * (last.onset + last.duration)), sampleRate);
   const channel = buffer.getChannelData(0);
-  const attack = microwave ? .014 : .021;
-  const release = microwave ? .037 : .068;
-  const level = microwave ? .27 : .235;
+  const attack = .021;
+  const release = .068;
+  const level = .235;
   for (const { frequency, onset, duration } of notes) {
     const start = Math.round(sampleRate * onset);
     for (let i = 0; i < Math.round(sampleRate * duration); i++) {
       const time = i / sampleRate;
       const edge = Math.min(time / attack, (duration - time) / release, 1);
-      const envelope = (.5 - .5 * Math.cos(Math.PI * edge)) * Math.exp(-time * (microwave ? 2.4 : 4.1));
+      const envelope = (.5 - .5 * Math.cos(Math.PI * edge)) * Math.exp(-time * 4.1);
       const phase = tau * time * frequency;
-      channel[start + i] += level * envelope * (Math.sin(phase) + (microwave ? .22 : .12) * Math.sin(phase * 2));
+      channel[start + i] += level * envelope * (Math.sin(phase) + .12 * Math.sin(phase * 2));
     }
   }
   return buffer;
@@ -135,11 +129,11 @@ function release(voice: Voice): void {
 }
 
 export function createResidenceApplianceAudio(context: BaseAudioContext, dry: AudioNode, wet: AudioNode,
-  sources: readonly ResidenceApplianceAudioSource[]) {
+  sources: readonly ResidenceApplianceAudioSource[], microwaveCompletion?: AudioBuffer) {
   const emitters = sources.map(source => ({ source, completed: source.completionCount?.() ?? 0,
     voice: undefined as Voice | undefined }));
   const loops = new Map<ApplianceKind, AudioBuffer>();
-  const chimes = new Map<ApplianceKind, AudioBuffer>();
+  let washerChime: AudioBuffer | undefined;
   const random = coastRandom(4687);
 
   return {
@@ -185,17 +179,15 @@ export function createResidenceApplianceAudio(context: BaseAudioContext, dry: Au
           voice.loop = loop;
         }
         if (audible && chime) {
-          let buffer = chimes.get(source.kind);
-          if (!buffer) {
-            buffer = completionTone(context, source.kind);
-            chimes.set(source.kind, buffer);
+          const buffer = source.kind === 'microwave' ? microwaveCompletion : (washerChime ??= washerCompletionTone(context));
+          if (buffer) {
+            const tone = context.createBufferSource();
+            tone.buffer = buffer;
+            tone.connect(voice.filter);
+            voice.tones.add(tone);
+            tone.onended = () => { tone.disconnect(); voice.tones.delete(tone); };
+            tone.start(time + .05);
           }
-          const tone = context.createBufferSource();
-          tone.buffer = buffer;
-          tone.connect(voice.filter);
-          voice.tones.add(tone);
-          tone.onended = () => { tone.disconnect(); voice.tones.delete(tone); };
-          tone.start(time + .05);
         }
         voice.operating.gain.setTargetAtTime(audible ? loopLevels[source.kind] * level : 0, time, .066);
         if (voice.loop && source.kind === 'washer' && level > 0) {
@@ -218,7 +210,7 @@ export function createResidenceApplianceAudio(context: BaseAudioContext, dry: Au
         emitter.voice = undefined;
       }
       loops.clear();
-      chimes.clear();
+      washerChime = undefined;
     },
   };
 }
