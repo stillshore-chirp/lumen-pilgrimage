@@ -362,7 +362,7 @@ export class ResidenceAudio {
       const before = motion.openness;
       const direction = Math.sign(openness - before);
       motion.openness = openness;
-      const sliding = opening.kind === 'fusuma';
+      const sliding = opening.kind === 'fusuma' || opening.kind === 'gallery-slide';
       const point = residenceOpeningPoint(wall, (opening.from + opening.to) * 0.5, sliding ? 0.68 : 0.96);
       if (direction === 0 && motion.direction !== 0 && openness > 0 && openness < 1 && motion.source) {
         // The animation can pause while the player occupies the swing path.

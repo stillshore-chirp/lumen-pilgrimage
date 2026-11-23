@@ -29,7 +29,8 @@ function apertureBands(wall: ResidenceWall, opening: ResidenceOpening, doorOpenn
   const fusuma = opening.kind === 'fusuma';
   const fraction = residenceDoorFraction(doorOpenness?.(wall, opening) ?? (balcony ? 0 : 1));
   // The hinged leaf rotates through 90 degrees and progressively uncovers its projection.
-  const openArea = balcony || fusuma ? fraction : 1 - Math.cos(fraction * Math.PI / 2);
+  const slides = balcony || fusuma || opening.kind === 'gallery-slide';
+  const openArea = slides ? fraction : 1 - Math.cos(fraction * Math.PI / 2);
   // Parallel paths through the closed panel/leaks and the uncovered part of the aperture.
   // Asakura (2009), Ch. 3; Raghuvanshi (2021), Sec. 5. Coefficients are scene estimates.
   return {

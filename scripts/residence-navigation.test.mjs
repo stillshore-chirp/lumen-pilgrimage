@@ -155,7 +155,7 @@ test('every dwelling door stays level, blocks walking when closed and reopens fr
   const poses = new Map();
   const doors = createResidenceDoors(({ id }, pose) => poses.set(id, pose));
   const nav = createResidenceNavigation(spawn, furniture.obstacles, () => false, doors);
-  assert.equal(RESIDENCE_DOORWAYS.length, 13);
+  assert.equal(RESIDENCE_DOORWAYS.length, 14);
   assert.equal(new Set(RESIDENCE_DOORWAYS.map(({ id }) => id)).size, RESIDENCE_DOORWAYS.length);
   for (const doorway of RESIDENCE_DOORWAYS) {
     const { id, label, opening, wall } = doorway;
@@ -186,6 +186,54 @@ test('every dwelling door stays level, blocks walking when closed and reopens fr
     doors.update(.55, clearOfSwing);
     assert.equal(doors.openness(id), 1, id);
     assertClearRoute(nav, route);
+  }
+});
+
+test('the gallery pocket door clears the entry route and protects the threshold during travel', () => {
+  const shell = createResidenceShell(materials);
+  try {
+    const { doors } = shell;
+    const gallery = RESIDENCE_DOORWAYS.find(({ id }) => id === 'gallery-living');
+    const { wall, opening } = gallery;
+    const nav = createResidenceNavigation(spawn, furniture.obstacles, () => false, doors);
+    const leaf = shell.group.getObjectByName('Gallery pocket door');
+    assert.ok(leaf);
+    assert.ok(leaf.children.some(mesh => mesh.castShadow && mesh.material === materials.cabinetry
+      && !mesh.material.transparent && mesh.material.transmission === 0));
+    const retracted = leaf.position.x;
+    assert.ok(retracted > opening.to);
+    for (const mesh of leaf.children) {
+      mesh.geometry.computeBoundingBox();
+      assert.ok(retracted + mesh.geometry.boundingBox.max.x < wall.to - .044);
+    }
+    for (const centre of [opening.from + .27, opening.to - .27]) {
+      assertClearRoute(nav, [[centre, 7.35], [centre, 6.05]]);
+      assert.equal(nav.groundHeight(centre, -wall.fixed), 0);
+    }
+    const hallway = doorwayCentre(gallery, .60);
+    const threshold = doorwayCentre(gallery);
+    assert.equal(doors.nearby(hallway)?.label, 'リビングの引戸を閉める');
+    doors.nearby(hallway).invoke();
+    assert.equal(doors.update(.55, threshold), false);
+    assert.equal(doors.opennessFor(wall, opening), 1);
+    assert.ok(doors.update(.275, hallway));
+    assert.equal(doors.opennessFor(wall, opening), .5);
+    assert.ok(!blocked(nav, opening.from + .29, wall.fixed));
+    assert.ok(blocked(nav, opening.to - .29, wall.fixed));
+    assert.ok(doors.update(.275, hallway));
+    assert.equal(doors.opennessFor(wall, opening), 0);
+    assert.ok(blocked(nav, threshold.x, -threshold.z));
+    assert.ok(blocked(nav, 13.20, 6.65));
+    assertClearRoute(nav, [[11.85, 7.7], [13.45, 7.7]]);
+    assertClearRoute(nav, [[16.8, 7.30], [16.8, 6.05], [11.55, 5.63], [10.70, 5.63]]);
+    const living = doorwayCentre(gallery, -.60);
+    assert.equal(doors.nearby(living)?.label, 'リビングの引戸を開ける');
+    doors.nearby(living).invoke();
+    assert.ok(doors.update(.55, living));
+    assert.equal(leaf.position.x, retracted);
+    assert.ok(!blocked(nav, threshold.x, -threshold.z));
+  } finally {
+    shell.dispose();
   }
 });
 
