@@ -80,7 +80,8 @@
 }
 
 .monitor-view-panel .monitor-view-volume,
-.monitor-view-panel .monitor-view-mode {
+.monitor-view-panel .monitor-view-mode,
+.monitor-view-panel .monitor-view-target {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -89,6 +90,10 @@
 
 .monitor-view-mode {
   margin-top: 8px;
+}
+
+.monitor-view-panel select {
+  max-width: 100%;
 }
 
 .monitor-editing {

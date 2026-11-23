@@ -11,16 +11,20 @@ const STATUS_WIDTH = 1024;
 const STATUS_HEIGHT = STATUS_WIDTH * 9 / 16;
 const INITIAL_STATUS = '映像は未接続です';
 
-function fitMonitorVideo(width: number, height: number): { width: number; height: number } {
-  const scale = Math.min(SCREEN_WIDTH / width, SCREEN_HEIGHT / height);
-  return { width: width * scale, height: height * scale };
+type MonitorSurface = THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+
+export interface MonitorTheater {
+  screen: MonitorSurface;
+  // Web Audio 5.1 channel order is L, R, C, LFE, SL, SR.
+  speakers: readonly THREE.Object3D[];
 }
 
 export class MonitorObject {
   readonly group = new THREE.Group();
-  private readonly screen: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private readonly screen: MonitorSurface;
   private readonly statusCanvas = document.createElement('canvas');
   private readonly statusTexture: THREE.CanvasTexture;
+  private target: MonitorSurface | null = null;
   private status = '';
   private video: HTMLVideoElement | null = null;
   private videoTexture: THREE.VideoTexture | null = null;
@@ -46,8 +50,27 @@ export class MonitorObject {
     this.setStatus(INITIAL_STATUS);
   }
 
+  get isVisible(): boolean {
+    return this.target ? this.screen.visible : this.group.visible;
+  }
+
+  get isFloating(): boolean {
+    return this.target === null;
+  }
+
+  setTarget(target: MonitorSurface | null): void {
+    if (this.target === target) return;
+    const visible = this.isVisible;
+    this.target = target;
+    (target ?? this.group).add(this.screen);
+    this.screen.position.z = target ? .002 : 0;
+    this.resizeFrame();
+    this.setVisible(visible);
+  }
+
   setVisible(visible: boolean): void {
-    this.group.visible = visible;
+    this.group.visible = this.isFloating && visible;
+    this.screen.visible = this.isFloating || visible;
     if (visible) this.update();
     else this.clearVideoTexture();
   }
@@ -97,7 +120,7 @@ export class MonitorObject {
   }
 
   update(): void {
-    if (!this.group.visible) return;
+    if (!this.isVisible) return;
 
     const video = this.video;
     if (!video || !this.hasVideoFrame(video)) {
@@ -118,8 +141,7 @@ export class MonitorObject {
     this.videoTexture = new THREE.VideoTexture(video);
     this.videoTexture.colorSpace = THREE.SRGBColorSpace;
     this.videoTexture.needsUpdate = true;
-    const frame = fitMonitorVideo(videoWidth, videoHeight);
-    this.screen.scale.set(frame.width, frame.height, 1);
+    this.resizeFrame();
     this.screen.material.map = this.videoTexture;
     this.screen.material.transparent = false;
     this.screen.material.needsUpdate = true;
@@ -133,11 +155,22 @@ export class MonitorObject {
 
   dispose(): void {
     this.setVisible(false);
+    this.setTarget(null);
     this.video = null;
     this.statusTexture.dispose();
     this.screen.geometry.dispose();
     this.screen.material.dispose();
     this.group.removeFromParent();
+  }
+
+  private resizeFrame(): void {
+    const { width, height } = this.target?.geometry.parameters ?? { width: SCREEN_WIDTH, height: SCREEN_HEIGHT };
+    if (!this.videoTexture) {
+      this.screen.scale.set(width, height, 1);
+      return;
+    }
+    const scale = Math.min(width / this.videoWidth, height / this.videoHeight);
+    this.screen.scale.set(this.videoWidth * scale, this.videoHeight * scale, 1);
   }
 
   private hasVideoFrame(video: HTMLVideoElement): boolean {
@@ -156,7 +189,7 @@ export class MonitorObject {
     this.videoTexture.dispose();
     this.videoTexture = null;
     this.videoSource = null;
-    this.screen.scale.set(SCREEN_WIDTH, SCREEN_HEIGHT, 1);
+    this.resizeFrame();
     this.screen.material.map = this.statusTexture;
     this.screen.material.transparent = true;
     this.screen.material.needsUpdate = true;

@@ -1,6 +1,6 @@
 import { MathUtils, Quaternion, Vector3, type Camera, type Object3D } from 'three';
 
-export type MonitorAudioMode = 'stereo' | 'spatial';
+export type MonitorAudioMode = 'stereo' | 'spatial' | 'television' | 'surround';
 export type MonitorAudioStatus = 'idle' | 'ready' | 'gesture-required' | 'unavailable' | 'stream-unavailable';
 
 const MAX_GAIN = 0.75;
@@ -37,11 +37,20 @@ class FadedGain {
   }
 }
 
+interface SurroundGraph {
+  layout: GainNode;
+  splitter: ChannelSplitterNode;
+  lowpass: BiquadFilterNode;
+  panners: PannerNode[];
+  level: FadedGain;
+}
+
 interface MonitorGraph {
   source: MediaStreamAudioSourceNode;
   master: FadedGain;
   stereo: FadedGain;
   spatial: { panner: PannerNode; level: FadedGain } | null;
+  surround: SurroundGraph | null;
 }
 
 function createMonitorPanner(context: AudioContext): PannerNode | null {
@@ -75,6 +84,7 @@ export class MonitorAudio {
   private muted = false;
   private enabled = true;
   private mode: MonitorAudioMode = 'stereo';
+  private theaterSpeakers: readonly Object3D[] | null = null;
 
   private readonly rotation = new Quaternion();
   private readonly position = new Vector3();
@@ -92,6 +102,20 @@ export class MonitorAudio {
     if (this.getStatus() === 'unavailable') return false;
     if (this.graph) return this.graph.spatial !== null;
     return !this.context || Boolean(this.context.listener.positionX && typeof this.context.createPanner === 'function');
+  }
+
+  supportsSurround(): boolean {
+    return this.theaterSpeakers?.length === 6 && (this.graph ? this.graph.surround !== null : this.supportsSpatial());
+  }
+
+  setTheaterSpeakers(speakers: readonly Object3D[] | null): void {
+    if (this.theaterSpeakers === speakers) return;
+    this.theaterSpeakers = speakers;
+    if (this.graph && this.context) {
+      this.disconnectSurround(this.graph);
+      this.graph.surround = this.createSurround(this.context, this.graph.source, this.graph.master.node);
+      this.setMode(this.mode);
+    }
   }
 
   // Invoke directly in the viewer's user gesture, before asynchronous pairing.
@@ -153,17 +177,19 @@ export class MonitorAudio {
   setMode(mode: MonitorAudioMode): void {
     this.mode = mode;
     const graph = this.graph;
-    if (!graph?.spatial || !this.context) return;
-    const spatial = mode === 'spatial' ? 1 : 0;
+    if (!graph || !this.context) return;
+    const spatial = graph.spatial !== null && (mode === 'spatial' || mode === 'television');
+    const surround = graph.surround !== null && mode === 'surround';
     const now = this.context.currentTime;
-    graph.stereo.fadeTo(1 - spatial, now, MODE_FADE_SECONDS);
-    graph.spatial.level.fadeTo(spatial, now, MODE_FADE_SECONDS);
+    graph.stereo.fadeTo(spatial || surround ? 0 : 1, now, MODE_FADE_SECONDS);
+    graph.spatial?.level.fadeTo(spatial ? 1 : 0, now, MODE_FADE_SECONDS);
+    graph.surround?.level.fadeTo(surround ? 1 : 0, now, MODE_FADE_SECONDS);
   }
 
   update(camera: Camera, monitor: Object3D): void {
     const panner = this.graph?.spatial?.panner;
     const listener = this.context?.listener;
-    if (!panner || !listener) return;
+    if ((!panner && !this.graph?.surround) || !listener) return;
 
     camera.getWorldQuaternion(this.rotation);
     this.position.setFromMatrixPosition(camera.matrixWorld);
@@ -179,8 +205,12 @@ export class MonitorAudio {
     listener.upY.value = this.up.y;
     listener.upZ.value = this.up.z;
 
-    monitor.getWorldQuaternion(this.rotation);
-    this.position.setFromMatrixPosition(monitor.matrixWorld);
+    if (panner) this.updatePanner(panner, monitor);
+  }
+
+  private updatePanner(panner: PannerNode, source: Object3D): void {
+    source.getWorldQuaternion(this.rotation);
+    this.position.setFromMatrixPosition(source.matrixWorld);
     this.forward.set(0, 0, 1).applyQuaternion(this.rotation);
     panner.positionX.value = this.position.x;
     panner.positionY.value = this.position.y;
@@ -203,6 +233,38 @@ export class MonitorAudio {
     this.disposed = true;
   }
 
+  private createSurround(context: AudioContext, source: MediaStreamAudioSourceNode, master: GainNode): SurroundGraph | null {
+    if (this.theaterSpeakers?.length !== 6) return null;
+    const panners: PannerNode[] = [];
+    for (const speaker of this.theaterSpeakers) {
+      const panner = createMonitorPanner(context);
+      if (!panner) return null;
+      this.updatePanner(panner, speaker);
+      panners.push(panner);
+    }
+
+    // Speaker interpretation applies the Web Audio mixing rules before the discrete split.
+    // Stereo stays on L/R, mono plays from C, and a 5.1 stream retains all six channels.
+    const layout = context.createGain();
+    layout.channelCount = 6;
+    layout.channelCountMode = 'explicit';
+    layout.channelInterpretation = 'speakers';
+    const splitter = context.createChannelSplitter(6);
+    const lowpass = context.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 120;
+    lowpass.Q.value = Math.SQRT1_2;
+    const level = new FadedGain(context.createGain(), 0);
+    source.connect(layout).connect(splitter);
+    panners.forEach((panner, channel) => {
+      if (channel === 3) splitter.connect(lowpass, channel).connect(panner);
+      else splitter.connect(panner, channel);
+      panner.connect(level.node);
+    });
+    level.node.connect(master);
+    return { layout, splitter, lowpass, panners, level };
+  }
+
   private readonly syncTrack = (): void => {
     const track = this.stream?.getAudioTracks().find(candidate => candidate.readyState === 'live') ?? null;
     if (track !== this.track) {
@@ -218,15 +280,20 @@ export class MonitorAudio {
       const source = context.createMediaStreamSource(new MediaStream([track]));
       const master = new FadedGain(context.createGain(), 0);
       const panner = createMonitorPanner(context);
-      const useSpatial = panner !== null && this.mode === 'spatial';
-      const stereo = new FadedGain(context.createGain(), useSpatial ? 0 : 1);
+      const surround = this.createSurround(context, source, master.node);
+      const useSpatial = panner !== null && (this.mode === 'spatial' || this.mode === 'television');
+      const useSurround = surround !== null && this.mode === 'surround';
+      const stereo = new FadedGain(context.createGain(), useSpatial || useSurround ? 0 : 1);
+      stereo.node.channelCount = 2;
+      stereo.node.channelCountMode = 'explicit';
       const spatial = panner ? { panner, level: new FadedGain(context.createGain(), useSpatial ? 1 : 0) } : null;
 
       source.connect(stereo.node).connect(master.node);
       if (spatial) source.connect(spatial.panner).connect(spatial.level.node).connect(master.node);
       master.node.connect(context.destination);
-      this.graph = { source, master, stereo, spatial };
+      this.graph = { source, master, stereo, spatial, surround };
       this.streamUnavailable = false;
+      this.setMode(this.mode);
       this.updateLevel();
     } catch {
       this.streamUnavailable = true;
@@ -242,11 +309,24 @@ export class MonitorAudio {
   private disconnectGraph(): void {
     const graph = this.graph;
     if (!graph) return;
+    this.disconnectSurround(graph);
     graph.master.node.disconnect();
     graph.source.disconnect();
     graph.stereo.node.disconnect();
     graph.spatial?.level.node.disconnect();
     graph.spatial?.panner.disconnect();
     this.graph = null;
+  }
+
+  private disconnectSurround(graph: MonitorGraph): void {
+    const surround = graph.surround;
+    if (!surround) return;
+    graph.source.disconnect(surround.layout);
+    surround.layout.disconnect();
+    surround.splitter.disconnect();
+    surround.lowpass.disconnect();
+    for (const panner of surround.panners) panner.disconnect();
+    surround.level.node.disconnect();
+    graph.surround = null;
   }
 }

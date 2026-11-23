@@ -33,20 +33,22 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   furniture.group.add(curtains.group);
   const scene = new Scene();
   scene.add(city.group, shell.group, furniture.group);
-  const lighting = createResidenceLighting(scene, materials, furniture.obstacles);
+  const lighting = createResidenceLighting(scene, materials, furniture.obstacles, () => reflections.invalidate());
   lighting.attachInterior(shell.group, furniture.group);
   const reflections = createResidenceReflections(scene, city.group, shell.group, furniture.group, materials);
 
   let door = 0;
   let opening = false;
   let previous = 0;
-  let invokeNearby: (() => void) | undefined;
+  let invokeNearby: (() => void | { openSection: string }) | undefined;
   const navigation = createResidenceNavigation(findDestination('residence', 'living-window')!,
     furniture.obstacles, () => door >= 0.96, shell.doors);
   shell.setBalconyDoor(door);
+  lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
 
   return {
     id: 'residence', navigation, audio: new ResidenceAudio({ balconyDoor: () => door }),
+    residenceControls: [...lighting.sections, ...curtains.sections],
     interaction: {
       label(position) {
         const distance = Math.hypot(position.x - doorEast, northDistanceToDoor(position.z));
@@ -62,13 +64,19 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
           invokeNearby = roomDoor.invoke;
           return roomDoor.label;
         }
-        invokeNearby = curtain?.invoke;
-        return curtain?.label ?? null;
+        if (curtain) {
+          invokeNearby = curtain.invoke;
+          return curtain.label;
+        }
+        const localLights = lighting.nearby(position);
+        invokeNearby = localLights ? () => ({ openSection: localLights.sectionId }) : undefined;
+        return localLights?.label ?? null;
       },
-      invoke() { invokeNearby?.(); },
+      invoke() { return invokeNearby?.(); },
     },
     world: {
       scene,
+      theater: furniture.theater,
       setTimeOfDay(time) {
         city.setTimeOfDay(time);
         shell.setTimeOfDay(time);
@@ -94,6 +102,10 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         }
         const curtainsMoved = curtains.update(dt);
         const roomDoorsMoved = shell.doors.update(dt, camera.position);
+        if (roomDoorsMoved) lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
+        if (curtainsMoved) {
+          for (const room of curtains.daylight) lighting.setDaylightTransmission(room.roomId, room.transmission());
+        }
         if (doorMoved || curtainsMoved || roomDoorsMoved) {
           lighting.invalidateShadows();
           reflections.invalidate();
