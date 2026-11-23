@@ -174,6 +174,8 @@ function button(page, name) {
 }
 
 async function requestPairing(sender, viewer) {
+  const previousSenderPeers = await sender.evaluate(() => window.monitorPeers.length);
+  const previousViewerPeers = await viewer.evaluate(() => window.monitorPeers.length);
   await button(sender, '画面共有を開始').click();
   await sender.waitForFunction(() => Boolean(document.querySelector('[data-monitor-pair-code]')?.textContent));
   const pairCode = await sender.evaluate(() => document.querySelector('[data-monitor-pair-code]')?.textContent);
@@ -195,8 +197,8 @@ async function requestPairing(sender, viewer) {
     document.querySelector('[data-monitor-verification]')?.textContent?.trim() === value, verification);
   assert.ok(verification && confirmed,
     'the sender and viewer display the same verification number');
-  assert.equal(await sender.evaluate(() => window.monitorPeers.length), 0);
-  assert.equal(await viewer.evaluate(() => window.monitorPeers.length), 0);
+  assert.equal(await sender.evaluate(() => window.monitorPeers.length), previousSenderPeers);
+  assert.equal(await viewer.evaluate(() => window.monitorPeers.length), previousViewerPeers);
   assert.equal(await viewer.locator(videoSelector).evaluate(video => video.srcObject), null);
 }
 
@@ -204,6 +206,7 @@ async function waitForVideo(viewer, expectedAudioTracks, [width, height] = [320,
   await viewer.waitForFunction(({ selector, expectedAudioTracks }) => {
     const video = document.querySelector(selector);
     return video?.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.currentTime > 0.15
+      && video.getVideoPlaybackQuality().totalVideoFrames > 1
       && video.srcObject?.getAudioTracks().length === expectedAudioTracks;
   }, { selector: videoSelector, expectedAudioTracks });
   const playback = await viewer.locator(videoSelector).evaluate(video => ({
@@ -497,6 +500,81 @@ test('the residence plays one WebRTC stream on the television and switches the a
     await sender.waitForFunction(() => window.monitorPeers[0]?.signalingState === 'closed');
     await button(viewer, '仮想モニター').click();
     assert.equal(await viewer.locator('[data-monitor-display-target]').isVisible(), false);
+    assert.deepEqual(errors, []);
+  } finally {
+    await Promise.all([sender.context().close(), viewer.context().close()]);
+  }
+});
+
+test('cinema projects one native WebRTC stream and pauses its own output during an emergency check', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  const errors = [];
+  viewer.on('pageerror', () => errors.push('viewer'));
+  viewer.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture),
+      sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers),
+      viewer.addInitScript(observeAudio),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    await viewer.goto(new URL('?world=cinema', url).href);
+    await button(viewer, '仮想モニター').click();
+    const target = viewer.getByRole('combobox', { name: '表示先' });
+    const mode = viewer.getByRole('combobox', { name: 'モニターの音響' });
+    assert.equal(await target.inputValue(), 'television');
+    assert.equal(await target.locator('option:checked').textContent(), '映画館のスクリーン');
+    assert.equal(await mode.inputValue(), 'cinema');
+    assert.equal(await button(viewer, '配置を編集').isDisabled(), true);
+
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    const picture = await screenPixels(viewer, 'cinema-shared');
+    assert.ok(picture.count > 8_000, 'the source is visible on the cinema screen');
+    assert.ok(Math.abs(picture.width / picture.height - 16 / 9) < .25, 'video retains its aspect');
+
+    const audible = () => window.monitorSound.read().find(context => context.hasStream)?.peak > .001;
+    const silent = () => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001;
+    const enable = button(viewer, 'モニター音を有効にする');
+    if (await enable.isEnabled()) await enable.click();
+    await viewer.waitForFunction(audible);
+    await mode.selectOption('stereo');
+    await viewer.waitForFunction(() => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      return audio?.stereo > .98 && audio.peak > .001;
+    });
+    await mode.selectOption('cinema');
+
+    await button(viewer, '上映設定').click();
+    const panel = viewer.getByRole('dialog', { name: '上映設定' });
+    await button(panel, '非常点検').click();
+    await button(panel, '閉じる').click();
+    await viewer.waitForFunction(silent);
+    assert.equal((await screenPixels(viewer)).count, 0);
+    assert.deepEqual(await viewer.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['connected']);
+    await button(viewer, '上映設定').click();
+    await button(panel, '上映').click();
+    await button(panel, '閉じる').click();
+    await viewer.waitForFunction(audible);
+    assert.ok((await screenPixels(viewer)).count > 8_000);
+
+    await button(sender, '共有を停止').click();
+    await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
+    await button(viewer, '仮想モニター').click();
+    await sender.evaluate(() => { window.captureFixture.mode = 'video-only'; });
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 0, [180, 320]);
+    const silentPicture = await screenPixels(viewer, 'cinema-silent-portrait');
+    assert.ok(silentPicture.count > 2_000);
+    assert.ok(Math.abs(silentPicture.width / silentPicture.height - 9 / 16) < .12);
+    await viewer.locator('[data-monitor-audio-status]').filter({ hasText: '共有音声が取得されていません' }).waitFor();
+    await button(sender, '共有を停止').click();
+    await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
+    assert.equal((await screenPixels(viewer)).count, 0);
     assert.deepEqual(errors, []);
   } finally {
     await Promise.all([sender.context().close(), viewer.context().close()]);

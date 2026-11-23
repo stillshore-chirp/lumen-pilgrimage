@@ -17,6 +17,7 @@ export interface CoastPose {
   readonly z: number;
   readonly yaw: number;
   readonly pitch: number;
+  readonly seatedEyeHeight?: number;
 }
 
 export interface CoastNavigation {
@@ -86,6 +87,7 @@ export class CoastControls {
   private flying = false;
   private divePhase: DivePhase | null = null;
   private posture: 'walk' | 'crouch' = 'walk';
+  private crouchEyeHeight = CROUCH_EYE_HEIGHT;
   private movementMode: CoastMovement = 'walk';
   private verticalVelocity = 0;
   private jumpQueued = false;
@@ -106,6 +108,7 @@ export class CoastControls {
 
     this.camera.rotation.order = 'YXZ';
     this.placeCamera(navigation.spawn);
+    this.updateMovementMode();
 
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
@@ -124,7 +127,7 @@ export class CoastControls {
   }
 
   get eyeHeight(): number {
-    return groundEyeHeight(this.posture);
+    return this.posture === 'crouch' ? this.crouchEyeHeight : EYE_HEIGHT;
   }
 
   relocate(pose: CoastPose): void {
@@ -133,7 +136,6 @@ export class CoastControls {
     this.syncGamepadButtons();
     this.flying = false;
     this.divePhase = null;
-    this.posture = 'walk';
     this.verticalVelocity = 0;
     this.placeCamera(pose);
     this.updateMovementMode();
@@ -142,7 +144,9 @@ export class CoastControls {
   private placeCamera(pose: CoastPose): void {
     const x = this.clampX(pose.x);
     const z = this.clampZ(pose.z);
-    this.camera.position.set(x, this.supportHeight(x, z) + EYE_HEIGHT, z);
+    this.posture = pose.seatedEyeHeight === undefined ? 'walk' : 'crouch';
+    this.crouchEyeHeight = pose.seatedEyeHeight ?? CROUCH_EYE_HEIGHT;
+    this.camera.position.set(x, this.supportHeight(x, z) + this.eyeHeight, z);
     this.camera.rotation.set(this.clampPitch(pose.pitch), pose.yaw, 0);
   }
 

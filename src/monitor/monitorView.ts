@@ -114,6 +114,7 @@ export class MonitorView {
             <option value="spatial">空間音響</option>
             <option value="television" hidden disabled>リビングのテレビから</option>
             <option value="surround" hidden disabled>リビングの5.1chスピーカー</option>
+            <option value="cinema" hidden disabled>映画館の空間音響</option>
           </select>
         </label>
         <button type="button" data-monitor-sound>モニター音を有効にする</button>
@@ -194,9 +195,18 @@ export class MonitorView {
     if (this.theater === theater) return;
     this.theater = theater;
     this.displayTargetRow.hidden = theater === null;
+    const cinema = theater?.cinema;
+    const screenOption = this.displayTarget.options[1];
+    screenOption.textContent = cinema ? '映画館のスクリーン' : 'リビングのテレビ';
+    if (cinema) {
+      this.displayTarget.value = screenOption.value;
+      this.audioMode.value = 'cinema';
+    }
     if (!theater) this.displayTarget.value = 'floating';
     this.audio.setTheaterSpeakers(theater?.speakers ?? null);
-    this.updateDisplayTarget(this.screen.isVisible);
+    this.audio.setCinema(cinema?.createAudio ?? null);
+    this.updateDisplayTarget(Boolean(cinema) || this.screen.isVisible);
+    this.syncSharedAudio();
   }
 
   update(frame?: XRFrame): PerspectiveCamera {
@@ -216,16 +226,36 @@ export class MonitorView {
     }
     this.xr.update(frame);
     this.screen.update();
+    const cinema = this.theater?.cinema;
+    if (cinema) {
+      const frameTexture = this.screen.projectedTexture;
+      const projected = !this.screen.isFloating && this.screen.isVisible ? frameTexture : null;
+      cinema.project(projected, projected ? this.video.videoWidth / this.video.videoHeight : undefined);
+      this.audio.setCinemaQuality(cinema.quality());
+      this.syncSharedAudio();
+    }
     const soundSource = this.audioMode.value === 'television' ? this.theater?.screen : this.screen.group;
     this.audio.update(viewer, soundSource ?? this.screen.group);
     if (!this.panel.hidden) this.updateAudioStatus();
     return viewer;
   }
 
+  relocateViewer(): void {
+    if (this.options.renderer.xr.isPresenting) this.anchorXR();
+  }
+
+  private anchorXR(): void {
+    const { camera } = this.options;
+    this.rig.position.copy(camera.position);
+    this.rig.position.y -= this.options.eyeHeight();
+    this.rig.rotation.set(0, camera.rotation.y, 0);
+  }
+
   release(): void {
     this.finishDrag();
     this.receiver.disconnect();
     this.audio.stop();
+    this.theater?.cinema?.project(null);
     this.xr.release();
     const session = this.options.renderer.xr.getSession();
     if (session) void session.end().catch(() => {});
@@ -257,14 +287,17 @@ export class MonitorView {
     this.screen.setVisible(visible);
     this.visibilityButton.textContent = this.screen.isFloating
       ? (visible ? 'モニターを隠す' : 'モニターを表示')
-      : (visible ? 'テレビの表示を切る' : 'テレビに表示');
+      : this.theater?.cinema
+        ? (visible ? '投影を止める' : 'スクリーンに映す')
+        : (visible ? 'テレビの表示を切る' : 'テレビに表示');
     const canEdit = visible && this.screen.isFloating;
     this.editButton.disabled = this.resetButton.disabled = !canEdit;
     if (!canEdit) this.setEditing(false);
   }
 
   private updateDisplayTarget(visible: boolean): void {
-    this.screen.setTarget(this.displayTarget.value === 'television' ? this.theater?.screen ?? null : null);
+    const target = this.displayTarget.value === 'television' ? this.theater : null;
+    this.screen.setTarget(target?.screen ?? null, Boolean(target?.cinema));
     this.setScreenVisible(visible);
     this.updateAudioModes();
   }
@@ -273,20 +306,24 @@ export class MonitorView {
     const canSpatialize = this.audio.supportsSpatial();
     const floating = this.screen.isFloating;
     const surround = this.audio.supportsSurround();
+    const cinema = this.audio.supportsCinema();
     for (const option of this.audioMode.options) {
       if (option.value === 'spatial') {
         option.hidden = !floating;
         option.disabled = !floating || !canSpatialize;
       } else if (option.value === 'television' || option.value === 'surround') {
-        option.hidden = !this.theater;
-        option.disabled = option.value === 'television' ? !this.theater || !canSpatialize : !surround;
+        option.hidden = !this.theater || Boolean(this.theater.cinema);
+        option.disabled = option.hidden || (option.value === 'television' ? !canSpatialize : !surround);
+      } else if (option.value === 'cinema') {
+        option.hidden = !this.theater?.cinema;
+        option.disabled = !cinema;
       }
     }
     if (this.audioMode.value === 'spatial' && !floating && canSpatialize) {
-      this.audioMode.value = 'television';
+      this.audioMode.value = cinema ? 'cinema' : 'television';
     }
     if (this.audioMode.selectedOptions[0]?.disabled) this.audioMode.value = 'stereo';
-    this.audioMode.disabled = !canSpatialize && !surround;
+    this.audioMode.disabled = !canSpatialize && !surround && !cinema;
     this.audioMode.title = this.audioMode.disabled ? 'このブラウザで空間音響を利用できません。' : '';
     this.audio.setMode(this.audioMode.value as MonitorAudioMode);
   }
@@ -296,12 +333,10 @@ export class MonitorView {
     this.setOpen(!presenting);
     if (presenting) {
       this.options.releaseInput();
-      this.rig.position.copy(camera.position);
-      this.rig.position.y -= this.options.eyeHeight();
-      this.rig.rotation.set(0, camera.rotation.y, 0);
+      this.anchorXR();
       this.xrRenderCamera.near = camera.near;
       this.xrRenderCamera.far = camera.far;
-      this.pendingXRSummon = !this.screen.isVisible;
+      this.pendingXRSummon = !this.screen.isVisible && (this.screen.isFloating || !this.theater?.cinema);
       if (this.pendingXRSummon) this.placed = false;
     } else {
       this.pendingXRSummon = false;
@@ -329,10 +364,17 @@ export class MonitorView {
     this.verification.hidden = !state.verification;
     this.verification.textContent = state.verification ?? '';
     this.verification.setAttribute('aria-label', '配信元と照合する確認番号');
-    this.audio.setEnabled(state.audio.available && state.audio.output !== 'pc');
+    this.syncSharedAudio();
     if (state.phase === 'ended' || state.phase === 'failed') this.audio.stop();
     this.updateAudioModes();
     this.updateAudioStatus();
+  }
+
+  private syncSharedAudio(): void {
+    const { available, output } = this.state.audio;
+    const cinema = this.theater?.cinema;
+    const videoPlaying = this.screen.isVisible && this.screen.projectedTexture !== null;
+    this.audio.setEnabled(available && output !== 'pc' && (!cinema || (!cinema.paused() && videoPlaying)));
   }
 
   private setStream(stream: MediaStream | null): void {

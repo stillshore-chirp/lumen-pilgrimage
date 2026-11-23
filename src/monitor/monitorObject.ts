@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { CinemaPlaybackFactory } from './monitorAudio';
 
 export const MONITOR_MIN_SCALE = 0.25;
 export const MONITOR_MAX_SCALE = 5;
@@ -17,6 +18,12 @@ export interface MonitorTheater {
   screen: MonitorSurface;
   // Web Audio 5.1 channel order is L, R, C, LFE, SL, SR.
   speakers: readonly THREE.Object3D[];
+  cinema?: {
+    project(texture: THREE.Texture | null, aspect?: number): void;
+    createAudio: CinemaPlaybackFactory;
+    quality(): 'light' | 'high';
+    paused(): boolean;
+  };
 }
 
 export class MonitorObject {
@@ -58,7 +65,12 @@ export class MonitorObject {
     return this.target === null;
   }
 
-  setTarget(target: MonitorSurface | null): void {
+  get projectedTexture(): THREE.VideoTexture | null {
+    return this.videoTexture;
+  }
+
+  setTarget(target: MonitorSurface | null, projectInTarget = false): void {
+    this.screen.material.visible = !projectInTarget;
     if (this.target === target) return;
     const visible = this.isVisible;
     this.target = target;

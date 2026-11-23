@@ -8,6 +8,7 @@ interface TravelPanelOptions {
   }[];
   worldId: string;
   time: TimeOfDay;
+  showTime?: boolean;
   onTravel(worldId: string, placeId: string): void;
   onTimeOfDay(time: TimeOfDay): void;
   onOpen?(): void;
@@ -120,6 +121,8 @@ export function createCoastTravelPanel(options: TravelPanelOptions) {
   timeButtons.night.addEventListener('click', () => options.onTimeOfDay('night'));
   setTimeOfDay(options.time);
   setPlace(options.worldId, '');
-  element.append(travel, time, dialog);
+  element.append(travel);
+  if (options.showTime !== false) element.append(time);
+  element.append(dialog);
   return { element, open, close, setTimeOfDay, setPlace };
 }

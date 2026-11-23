@@ -4,7 +4,7 @@
 
 ## 起動と状態遷移
 
-- [main.ts](../src/main.ts) が `#app` を取得し、[CoastApp](../src/coast/CoastApp.ts) で入り江と山道を起動する。`?world=overlook` は丘陵展望台、`?world=residence` は都心の70階住戸を遅延読み込みする。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)
+- [main.ts](../src/main.ts) が `#app` を取得し、[CoastApp](../src/coast/CoastApp.ts) で入り江と山道を起動する。`?world=overlook` は丘陵展望台、`?world=residence` は都心の70階住戸、`?world=cinema` は映画館シアター（大）を遅延読み込みする。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts) · [CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)
 - `CoastApp` はレンダラー、カメラ、UI、フレームループ、操作を接続する。ファストトラベルでは各ワールドの着地点と到着時の向きを使う。選択した移動先と時間帯は URL の `world`、`place`、`time` に反映される。同一ワールド内では位置と入力状態をリセットして移動し、ワールドを移ると移動先と時間帯を渡してページを読み込み直す。 [CoastTravelPanel](../src/coast/CoastTravelPanel.ts) · [移動先の定義](../src/coast/coastDestinations.ts)
 
 ## 仮想モニターの設計
@@ -45,6 +45,14 @@
 - 録音した交通音を南と東の街路に分散する。壁や扉を通る音と開口を回る音の低域・高域の強さを別々に見積もり、到来方向と室内の反射へ反映する。室内の反射は部屋の寸法に合わせ、扉を開けると接続先の残響を滑らかに混ぜる。歩行音には室内履きの柔らかな接地音と擦れを加え、床材ごとに音を変える。閉じた建具の係数はこの住戸モデル向けの推定値。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [開口の伝搬に関する実測・解析](https://gakui.dl.itc.u-tokyo.ac.jp/cgi-bin/gazo.cgi?no=124544) · [動的開口の研究](https://arxiv.org/abs/2107.11548) · [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
 
 - 住戸から見える遠方の旅客機は展望台と機体・灯火の描画を共有する。住戸の機体は南と東に通過経路を持ち、都市の地形を反転する変換から独立した座標に置く。機体は視覚だけで表現する。 [航空機の描画](../src/coast/world/overlook/overlookAirTraffic.ts) · [衝突防止灯の資料](https://www.govinfo.gov/content/pkg/CFR-2025-title14-vol1/xhtml/CFR-2025-title14-vol1-sec25-1401.html)
+
+## 映画館シアター
+
+- 幕面を `z=0`、客席方向を正とする。室内40 × 57 × 22 m、幅30 m、固定画高12.55 m。床・座席・扉・音響の経路は配置データを共有する。588席のうち8席が同伴席で、車いすスペース8か所を含む収容人数は596。座席の背は歩行を止め、縦通路は段差の位置に合わせた支持面でつなぐ。 [平面と断面 PDF](cinema/cinema-floor-plan.pdf) · [配置](../src/coast/world/cinema/cinemaLayout.ts) · [歩行判定](../src/coast/world/cinema/cinemaNavigation.ts)
+- 受信した映像テクスチャを固定画高で投影し、線形光量から映写系の散乱と室内の戻り光を求める。幕から壁・床へ届く光の分布はGPUで更新する。軽量と高品質で解像度と更新頻度が異なる。露出を固定し、暗順応は入退場時の場内灯の遷移へ適用する。段鼻・誘導灯は別系統で点灯する。 [照明](../src/coast/world/cinema/cinemaLighting.ts) · [光の伝達](../src/coast/world/cinema/cinemaLightTransport.ts)
+- 共有音から直接音、幕の透過、鏡像法の反射、帯域別の後期残響を合成する。直接音には座席までの距離に応じたゲインを使い、反射に経路差の遅れを加える。高品質は頭部伝達関数と最大12本、軽量は等電力パンと最大4本の初期反射を使う。足音、扉、空調、試聴の音声は共有音と独立する。 [音響](../src/coast/world/cinema/cinemaPlayback.ts) · [光と音の技術設計 PDF](cinema/cinema-light-sound-design.pdf)
+- 清掃・非常点検では現行の投影と共有音の出力を一時停止する。場内の扉は客席側で開き、退出操作で入り江へ移る。実施設計に必要な屋外避難・廊下以降の設備は、基本設計PDFに建物側の条件として記録した。
+- 同じシアター内で座席を変えると、デスクトップとWebXRで全画面を短時間暗くして着地点を変える。WebXRは座位と頭の向きを追跡し、スクリーンの投影を停止した状態で入っても停止を維持する。 [座席移動](../src/coast/world/cinema/cinemaSeatTransition.ts)
 
 ## 音響
 

@@ -1,4 +1,5 @@
 import { RESIDENCE_LABEL } from './coast/world/residence/residenceFloor';
+import { CINEMA_LABEL } from './coast/world/cinema/cinemaLayout';
 
 const mount = document.querySelector<HTMLDivElement>('#app');
 if (!mount) {
@@ -7,7 +8,8 @@ if (!mount) {
 
 const options = new URLSearchParams(location.search);
 const world = options.get('world');
-const name = world === 'overlook' ? '丘陵展望台' : world === 'residence' ? RESIDENCE_LABEL : null;
+const name = world === 'overlook' ? '丘陵展望台' : world === 'residence' ? RESIDENCE_LABEL :
+  world === 'cinema' ? CINEMA_LABEL : null;
 try {
   if (options.get('monitor') === 'sender') {
     const { mountMonitorSender } = await import('./monitor/monitorSender');
@@ -22,7 +24,9 @@ try {
       mount.replaceChildren(loading);
       const scene = world === 'residence'
         ? await (await import('./coast/world/residence/ResidenceWorld')).loadResidenceScene()
-        : await (await import('./coast/world/overlook/OverlookWorld')).loadOverlookScene();
+        : world === 'cinema'
+          ? (await import('./coast/world/cinema/CinemaWorld')).loadCinemaScene()
+          : await (await import('./coast/world/overlook/OverlookWorld')).loadOverlookScene();
       mount.replaceChildren();
       new CoastApp(mount, scene);
     } else {
