@@ -125,8 +125,7 @@ test('interior doors attenuate transmitted sound and its high frequencies indepe
 });
 
 test('the fusuma changes the arriving bearing, connected room reflections and south-window traffic', () => {
-  const teaDoor = RESIDENCE_INTERIOR_DOORS.find(({ wall, opening }) => wall.axis === 'e' && wall.fixed === 5
-    && opening.from === 6.01);
+  const teaDoor = RESIDENCE_INTERIOR_DOORS.find(({ id }) => id === 'tea-room');
   const besideTea = ear(6.49, 5.77);
   const openness = amount => (_wall, opening) => opening === teaDoor.opening ? amount : 1;
   const closed = residenceReceiver(besideTea, 0, openness(0));

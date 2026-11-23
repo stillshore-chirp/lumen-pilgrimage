@@ -150,7 +150,8 @@ const facadeLighting = /* glsl */`
     float balcony = 1.0 - step(0.5, abs(vFacade.z - 3.0));
     float lobby = step(3.5, vFacade.z);
     vec2 grid = m / vFacade.xy;
-    vec2 aa = clamp(fwidth(grid) * 0.55, vec2(0.003), vec2(0.19));
+    vec2 footprint = fwidth(grid);
+    vec2 aa = clamp(footprint * 0.55, vec2(0.003), vec2(0.19));
     vec2 cell = fract(grid);
     vec2 line = abs(cell - 0.5);
     vec2 limits = vec2(0.46 - 0.17 * stone - 0.07 * balcony, 0.32 + 0.128 * glazed + 0.109 * lobby);
@@ -222,8 +223,31 @@ const facadeLighting = /* glsl */`
       float glow = max(occupied, entry * 0.82) * (0.061 + equipment * (0.14 + 0.08 * glazed) + sources * 0.24)
         + 0.05 * upperRoom;
       glow *= (1.0 - 0.60 * shadeInGlass) * (1.0 - innerColumn * 0.41);
-      night = mix(night, vec3(0.0027, 0.0050, 0.0084) + glow * electric, window);
-      night *= 1.0 - railing * 0.56;
+      // Blend individual lights into groups as a pane approaches a pixel in size.
+      // The mean glow keeps the façade luminous when even the groups are subpixel.
+      float fixtureDetail = 1.0 - smoothstep(0.22, 0.68, max(footprint.x, footprint.y));
+      vec2 groupSpan = vec2(2.0, 2.4);
+      vec2 groupedGrid = (grid + vec2(0.0, 0.48)) / groupSpan;
+      vec2 groupedFootprint = footprint / groupSpan;
+      vec2 groupId = floor(groupedGrid) + vec2(vFacade.w * 61.0, vFacade.w * 27.0);
+      float groupUse = cellRandom(groupId + 9.7);
+      vec2 groupBounds = vec2(0.30, 0.23);
+      vec2 groupFilter = clamp(groupedFootprint * 0.57, vec2(0.003), vec2(0.34));
+      vec2 groupPane = 1.0 - smoothstep(groupBounds - groupFilter, groupBounds + groupFilter,
+        abs(fract(groupedGrid) - 0.5));
+      float groupVisibility = 1.0 - smoothstep(0.46, 1.05, max(groupedFootprint.x, groupedFootprint.y));
+      float groupLevel = mix(0.28, 0.80 + 4.0 * groupPane.x * groupPane.y, groupUse);
+      float averageGlow = mix(0.050, 0.108, buildingUse) * (1.0 + 0.12 * glazed - 0.15 * balcony);
+      float groupTint = mix(buildingUse * 0.5, groupUse, groupVisibility) * (1.0 - 0.65 * balcony);
+      vec3 averageElectric = mix(vec3(0.99, 0.68, 0.48), vec3(0.84, 0.86, 0.91), groupTint);
+      vec3 filteredLight = averageGlow * averageElectric * (4.0 * limits.x * limits.y)
+        * mix(1.0, groupLevel, groupVisibility);
+      vec3 detailedLight = glow * electric * window * (1.0 - railing * 0.56);
+      vec2 paneDetail = 1.0 - smoothstep(vec2(0.35), vec2(0.88), footprint);
+      vec2 filteredPane = mix(2.0 * limits, pane, paneDetail);
+      float filteredRail = balcony * mix(0.38, 1.0 - smoothstep(0.35, 0.41, cell.y), paneDetail.y) * filteredPane.x;
+      night = mix(night, vec3(0.0027, 0.0050, 0.0084), filteredPane.x * filteredPane.y) * (1.0 - filteredRail * 0.56);
+      night += mix(filteredLight, detailedLight, fixtureDetail);
     }
   }
 `;

@@ -7,16 +7,6 @@ export type ResidenceDoorOpenness = (wall: ResidenceWall, opening: ResidenceOpen
 export const RESIDENCE_PARTITIONS = RESIDENCE_WALLS.filter(wall => wall.kind === 'interior' || wall.kind === 'party');
 const SOUND_BARRIERS = RESIDENCE_WALLS.filter(wall => wall.kind !== 'guard');
 
-export function isResidenceInteriorDoor(opening: ResidenceOpening): boolean {
-  const kind: string = opening.kind;
-  return kind === 'door' || kind === 'fusuma';
-}
-
-export function isResidenceFusuma(wall: ResidenceWall, opening: ResidenceOpening): boolean {
-  const kind: string = opening.kind;
-  return kind === 'fusuma' || (kind === 'door' && wall.axis === 'e' && wall.fixed === 5 && opening.from === 6.01);
-}
-
 export function residenceDoorFraction(value: number): number {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }
@@ -36,7 +26,7 @@ function apertureBands(wall: ResidenceWall, opening: ResidenceOpening, doorOpenn
   if (opening.kind === 'passage') return { low: 1, high: 1, diffuse: 1 };
   if (opening.kind === 'window') return { low: 0.050 ** 2, high: 0.009 ** 2, diffuse: 0.040 ** 2 };
   const balcony = opening.kind === 'balcony-door';
-  const fusuma = isResidenceFusuma(wall, opening);
+  const fusuma = opening.kind === 'fusuma';
   const fraction = residenceDoorFraction(doorOpenness?.(wall, opening) ?? (balcony ? 0 : 1));
   // The hinged leaf rotates through 90 degrees and progressively uncovers its projection.
   const openArea = balcony || fusuma ? fraction : 1 - Math.cos(fraction * Math.PI / 2);

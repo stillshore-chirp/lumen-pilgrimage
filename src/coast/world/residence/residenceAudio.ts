@@ -12,7 +12,7 @@ import {
   createVehicleSample,
 } from './residenceAudioSamples';
 import type { ResidenceOpening } from './residencePlan';
-import { isResidenceFusuma, residenceDoorFraction, residenceOpeningPoint } from './residencePortalAcoustics';
+import { residenceDoorFraction, residenceOpeningPoint } from './residencePortalAcoustics';
 
 type Point = Readonly<CoastPoint>;
 type Receiver = ReturnType<typeof residenceReceiver>;
@@ -353,7 +353,7 @@ export class ResidenceAudio {
       const before = motion.openness;
       const direction = Math.sign(openness - before);
       motion.openness = openness;
-      const sliding = isResidenceFusuma(wall, opening);
+      const sliding = opening.kind === 'fusuma';
       const point = residenceOpeningPoint(wall, (opening.from + opening.to) * 0.5, sliding ? 0.68 : 0.96);
       if (direction === 0 && motion.direction !== 0 && openness > 0 && openness < 1 && motion.source) {
         // The animation can pause while the player occupies the swing path.

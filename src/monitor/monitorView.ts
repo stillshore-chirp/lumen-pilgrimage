@@ -1,7 +1,7 @@
 import { Group, PerspectiveCamera, Vector2, type Scene, type WebGLRenderer } from 'three';
-import { MonitorAudio } from './monitorAudio';
+import { MonitorAudio, type MonitorAudioMode } from './monitorAudio';
 import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
-import { MonitorObject } from './monitorObject';
+import { MonitorObject, type MonitorTheater } from './monitorObject';
 import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
 import { MonitorXR } from './monitorXR';
 import './monitorView.css';
@@ -30,6 +30,8 @@ export class MonitorView {
   private readonly panel = document.createElement('section');
   private readonly canvas: HTMLCanvasElement;
   private readonly video: HTMLVideoElement;
+  private readonly displayTargetRow: HTMLElement;
+  private readonly displayTarget: HTMLSelectElement;
   private readonly visibilityButton: HTMLButtonElement;
   private readonly editButton: HTMLButtonElement;
   private readonly dragControls: HTMLElement;
@@ -55,6 +57,7 @@ export class MonitorView {
   private dragMode: MonitorDragMode = 'move';
   private editing = false;
   private pendingXRSummon = false;
+  private theater: MonitorTheater | null = null;
 
   constructor(private readonly options: MonitorViewOptions) {
     const { entry, renderer, scene } = options;
@@ -63,6 +66,14 @@ export class MonitorView {
     this.panel.className = 'coast-panel monitor-view-panel';
     this.panel.setAttribute('aria-label', '仮想モニターの操作');
     this.panel.innerHTML = `
+      <div data-monitor-target-row hidden>
+        <label class="monitor-view-target">表示先
+          <select data-monitor-display-target>
+            <option value="floating">浮遊モニター</option>
+            <option value="television">リビングのテレビ</option>
+          </select>
+        </label>
+      </div>
       <div class="coast-row">
         <button type="button" data-monitor-visible>モニターを表示</button>
         <button type="button" data-monitor-edit aria-pressed="false" disabled>配置を編集</button>
@@ -101,6 +112,8 @@ export class MonitorView {
           <select data-monitor-sound-mode>
             <option value="stereo">ステレオ</option>
             <option value="spatial">空間音響</option>
+            <option value="television" hidden disabled>リビングのテレビから</option>
+            <option value="surround" hidden disabled>リビングの5.1chスピーカー</option>
           </select>
         </label>
         <button type="button" data-monitor-sound>モニター音を有効にする</button>
@@ -112,6 +125,8 @@ export class MonitorView {
       </div>
     `;
     const query = <T extends HTMLElement>(name: string) => this.panel.querySelector<T>(`[data-monitor-${name}]`)!;
+    this.displayTargetRow = query('target-row');
+    this.displayTarget = query('display-target');
     this.visibilityButton = query('visible');
     this.editButton = query('edit');
     this.dragControls = query('drag');
@@ -175,6 +190,15 @@ export class MonitorView {
     this.setOpen(false);
   }
 
+  setTheater(theater: MonitorTheater | null): void {
+    if (this.theater === theater) return;
+    this.theater = theater;
+    this.displayTargetRow.hidden = theater === null;
+    if (!theater) this.displayTarget.value = 'floating';
+    this.audio.setTheaterSpeakers(theater?.speakers ?? null);
+    this.updateDisplayTarget(this.screen.isVisible);
+  }
+
   update(frame?: XRFrame): PerspectiveCamera {
     const { camera, renderer } = this.options;
     const reference = frame && renderer.xr.getReferenceSpace();
@@ -191,8 +215,9 @@ export class MonitorView {
       }
     }
     this.xr.update(frame);
-    if (this.screen.group.visible) this.screen.update();
-    this.audio.update(viewer, this.screen.group);
+    this.screen.update();
+    const soundSource = this.audioMode.value === 'television' ? this.theater?.screen : this.screen.group;
+    this.audio.update(viewer, soundSource ?? this.screen.group);
     if (!this.panel.hidden) this.updateAudioStatus();
     return viewer;
   }
@@ -225,15 +250,45 @@ export class MonitorView {
   }
 
   private setScreenVisible(visible: boolean, camera = this.options.camera): void {
-    if (visible && !this.placed) {
+    if (visible && this.screen.isFloating && !this.placed) {
       this.screen.reset(camera);
       this.placed = true;
     }
     this.screen.setVisible(visible);
-    this.visibilityButton.textContent = visible ? 'モニターを隠す' : 'モニターを表示';
-    this.editButton.disabled = !visible;
-    this.resetButton.disabled = !visible;
-    if (!visible) this.setEditing(false);
+    this.visibilityButton.textContent = this.screen.isFloating
+      ? (visible ? 'モニターを隠す' : 'モニターを表示')
+      : (visible ? 'テレビの表示を切る' : 'テレビに表示');
+    const canEdit = visible && this.screen.isFloating;
+    this.editButton.disabled = this.resetButton.disabled = !canEdit;
+    if (!canEdit) this.setEditing(false);
+  }
+
+  private updateDisplayTarget(visible: boolean): void {
+    this.screen.setTarget(this.displayTarget.value === 'television' ? this.theater?.screen ?? null : null);
+    this.setScreenVisible(visible);
+    this.updateAudioModes();
+  }
+
+  private updateAudioModes(): void {
+    const canSpatialize = this.audio.supportsSpatial();
+    const floating = this.screen.isFloating;
+    const surround = this.audio.supportsSurround();
+    for (const option of this.audioMode.options) {
+      if (option.value === 'spatial') {
+        option.hidden = !floating;
+        option.disabled = !floating || !canSpatialize;
+      } else if (option.value === 'television' || option.value === 'surround') {
+        option.hidden = !this.theater;
+        option.disabled = option.value === 'television' ? !this.theater || !canSpatialize : !surround;
+      }
+    }
+    if (this.audioMode.value === 'spatial' && !floating && canSpatialize) {
+      this.audioMode.value = 'television';
+    }
+    if (this.audioMode.selectedOptions[0]?.disabled) this.audioMode.value = 'stereo';
+    this.audioMode.disabled = !canSpatialize && !surround;
+    this.audioMode.title = this.audioMode.disabled ? 'このブラウザで空間音響を利用できません。' : '';
+    this.audio.setMode(this.audioMode.value as MonitorAudioMode);
   }
 
   private setXRPresentation(presenting: boolean): void {
@@ -246,7 +301,7 @@ export class MonitorView {
       this.rig.rotation.set(0, camera.rotation.y, 0);
       this.xrRenderCamera.near = camera.near;
       this.xrRenderCamera.far = camera.far;
-      this.pendingXRSummon = !this.screen.group.visible;
+      this.pendingXRSummon = !this.screen.isVisible;
       if (this.pendingXRSummon) this.placed = false;
     } else {
       this.pendingXRSummon = false;
@@ -276,6 +331,7 @@ export class MonitorView {
     this.verification.setAttribute('aria-label', '配信元と照合する確認番号');
     this.audio.setEnabled(state.audio.available && state.audio.output !== 'pc');
     if (state.phase === 'ended' || state.phase === 'failed') this.audio.stop();
+    this.updateAudioModes();
     this.updateAudioStatus();
   }
 
@@ -285,6 +341,7 @@ export class MonitorView {
     this.video.srcObject = stream;
     this.screen.setVideo(stream ? this.video : null);
     this.audio.setStream(stream);
+    this.updateAudioModes();
     if (stream) void this.playVideo(stream);
   }
 
@@ -311,6 +368,7 @@ export class MonitorView {
       else if (audio.output === 'pc') message = '配信元で「PC側のみ」が選ばれています。';
       else if (audioStatus !== 'ready') message = '視聴側でも聞くには、モニター音を有効にしてください。';
       else if (audio.output === 'viewer') message = '配信元で「VR側のみ」が選ばれています。';
+      else if (this.audioMode.value === 'surround') message = 'ステレオ音源は左右のフロントスピーカーから再生します。';
     }
     if (this.audioStatus.textContent !== message) this.audioStatus.textContent = message;
     this.audioButton.disabled = audioStatus === 'ready' || audioStatus === 'unavailable';
@@ -319,7 +377,8 @@ export class MonitorView {
   private bindPanel(volume: HTMLInputElement, mute: HTMLButtonElement): void {
     const { signal } = this.events;
     const listen = { signal };
-    this.visibilityButton.addEventListener('click', () => this.setScreenVisible(!this.screen.group.visible), listen);
+    this.displayTarget.addEventListener('change', () => this.updateDisplayTarget(true), listen);
+    this.visibilityButton.addEventListener('click', () => this.setScreenVisible(!this.screen.isVisible), listen);
     this.editButton.addEventListener('click', () => this.setEditing(!this.editing), listen);
     this.resetButton.addEventListener('click', () => {
       this.finishDrag();
@@ -353,17 +412,12 @@ export class MonitorView {
       this.audio.setMuted(muted);
     }, listen);
     this.audioMode.addEventListener('change', () => {
-      this.audio.setMode(this.audioMode.value === 'spatial' ? 'spatial' : 'stereo');
+      this.audio.setMode(this.audioMode.value as MonitorAudioMode);
     }, listen);
     this.audioButton.addEventListener('click', async () => {
       this.audioButton.disabled = true;
       await this.audio.start();
-      if (!this.audio.supportsSpatial()) {
-        this.audioMode.value = 'stereo';
-        this.audioMode.disabled = true;
-        this.audio.setMode('stereo');
-        this.audioMode.title = 'このブラウザで空間音響を利用できません。';
-      }
+      this.updateAudioModes();
       this.updateAudioStatus();
     }, listen);
     this.xrButton.addEventListener('click', () => void this.xr.toggleSession(), listen);

@@ -1,5 +1,6 @@
 import { DoubleSide, type MeshStandardMaterial } from 'three';
 import type { ResidenceMaterials } from './residenceMaterials';
+import { fixtureFinish } from './residenceFixtureFinish';
 import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
 
 const eastFacing = Math.PI / 2;
@@ -159,8 +160,8 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
     counter.box(m.cabinetry, x, 1.989, -.02, .59, .924, .023, .003, 0, true);
   }
   counter.box(m.metal, 1.147, 1.50, -.109, .787, .043, .292, .006);
-  counter.box(m.lamp, -.540, 1.491, .061, 1.47, .007, .014, .002);
-  counter.box(m.lamp, 1.07, 1.491, .061, 1.47, .007, .014, .002);
+  counter.box(fixtureFinish(model, m.lamp, 'K-strip-west'), -.540, 1.491, .061, 1.47, .007, .014, .002);
+  counter.box(fixtureFinish(model, m.lamp, 'K-strip-east'), 1.07, 1.491, .061, 1.47, .007, .014, .002);
   counter.slab(cuttingBoard, -1.707, .892, .045, .489, .020, .269, .041);
   counter.vessel(glaze, 1.743, .888, -.122, .132, .132, [
     [0, 0], [.80, 0], [1, .026], [.97, .156], [.98, .171],
@@ -298,7 +299,7 @@ function addBathrooms(model: FurnitureModel, m: ResidenceMaterials): void {
 
   model.room('Shared bath');
   bathtub(model.at(.65, 7.9), m, .86, 1.68);
-  vanity(model.at(1.14, 9.4), m, towel, 1.74, .60);
+  vanity(model.at(1.14, 9.4), { ...m, lamp: fixtureFinish(model, m.lamp, 'BA-vanity') }, towel, 1.74, .60);
   toilet(model.at(2.63, 9.58), m);
   model.at(1.30, 8.311).slab(bathMat, 0, .003, 0, .391, .010, .741, .033);
   model.footprint(.219, 7.06, .862, 1.68);
@@ -307,20 +308,20 @@ function addBathrooms(model: FurnitureModel, m: ResidenceMaterials): void {
 
   model.room('Shared shower room');
   shower(model, m, 3.58, 8.85, 1.31, 1.12, 10.13);
-  vanity(model.at(5.63, 9.46), m, towel, .72, .56);
+  vanity(model.at(5.63, 9.46), { ...m, lamp: fixtureFinish(model, m.lamp, 'BB-vanity') }, towel, .72, .56);
   model.at(4.38, 8.540).slab(bathMat, 0, .003, 0, .701, .010, .412, .033);
   model.footprint(5.27, 9.18, .72, .56);
 
   model.room('Primary bath');
   bathtub(model.at(13.515, 14.68), m, .83, 1.30);
   shower(model, m, 13.93, 14.21, .97, 1.10, 15.47);
-  vanity(model.at(13.275, 12.814, eastFacing), m, towel, 1.53, .55);
+  vanity(model.at(13.275, 12.814, eastFacing), { ...m, lamp: fixtureFinish(model, m.lamp, 'MB-vanity') }, towel, 1.53, .55);
   model.at(14.216, 13.906).slab(bathMat, 0, .003, 0, .710, .010, .401, .033);
   model.footprint(13.10, 14.03, .83, 1.30);
   model.footprint(13.00, 12.049, .55, 1.53);
 
   model.room('Guest WC');
-  vanity(model.at(8.45, 10.96, eastFacing), m, towel, 1.48, .60);
+  vanity(model.at(8.45, 10.96, eastFacing), { ...m, lamp: fixtureFinish(model, m.lamp, 'WC-vanity') }, towel, 1.48, .60);
   toilet(model.at(9.50, 11.72), m);
   model.footprint(8.15, 10.22, .60, 1.48);
   model.footprint(9.285, 11.431, .43, .570);

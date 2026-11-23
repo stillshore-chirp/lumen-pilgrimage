@@ -3,10 +3,10 @@ import { smoothstep, type CoastPoint } from '../../terrain';
 import {
   RESIDENCE_AVENUE, RESIDENCE_BALCONY_REFLECTOR, RESIDENCE_CROSS_STREETS, RESIDENCE_STREET_LEVEL,
 } from './residenceCityPlan';
-import { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, RESIDENCE_STUDY_RUG, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS,
+import { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_STUDY_RUG, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS,
   type ResidenceRect } from './residencePlan';
 import {
-  RESIDENCE_PARTITIONS, isResidenceInteriorDoor, residenceDoorFraction, residenceOpeningPoint, traceResidenceWalls,
+  RESIDENCE_PARTITIONS, residenceDoorFraction, residenceOpeningPoint, traceResidenceWalls,
   type ResidenceDoorOpenness,
 } from './residencePortalAcoustics';
 
@@ -35,8 +35,7 @@ const WINDOWS: Window[] = RESIDENCE_WALLS.filter(wall => wall.kind === 'exterior
       y: (opening.top + opening.bottom) / 2 })));
 const SOUTH_WINDOWS = WINDOWS.filter(window => window.axis === 'e' && window.fixed === 0);
 const EAST_WINDOWS = WINDOWS.filter(window => window.axis === 'n');
-export const RESIDENCE_INTERIOR_DOORS = RESIDENCE_PARTITIONS.flatMap(wall => (wall.openings ?? [])
-  .filter(isResidenceInteriorDoor).map(opening => ({ wall, opening })));
+export const RESIDENCE_INTERIOR_DOORS = RESIDENCE_DOORWAYS;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 

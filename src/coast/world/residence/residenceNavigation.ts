@@ -1,11 +1,11 @@
 import type { CoastNavigation, CoastPose } from '../../CoastControls';
+import { createResidenceDoors, RESIDENCE_WALKER_RADIUS, type ResidenceDoors } from './residenceDoors';
 import {
-  RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_HINGED_DOOR, RESIDENCE_ROOMS,
-  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_WALLS, type ResidenceOpening, type ResidenceRect, type ResidenceWall,
+  RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_ROOMS,
+  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_WALLS, type ResidenceRect, type ResidenceWall,
 } from './residencePlan';
 
-const WALKER_RADIUS = 0.24;
-const WALKER_RADIUS_SQUARED = WALKER_RADIUS ** 2;
+const WALKER_RADIUS_SQUARED = RESIDENCE_WALKER_RADIUS ** 2;
 
 const floor = RESIDENCE_ROOMS.filter(room => room.id !== 'PS').flatMap(room => room.rectangles);
 const balconyFloor = RESIDENCE_ROOMS.filter(room => room.id === 'BL').flatMap(room => room.rectangles);
@@ -23,19 +23,6 @@ function wallFootprint(wall: ResidenceWall, from: number, to: number): Residence
     : [wall.fixed - halfThickness, from, wall.fixed + halfThickness, to];
 }
 
-function openDoorFootprint(wall: ResidenceWall, opening: ResidenceOpening,
-  swing: NonNullable<ResidenceOpening['swing']>): ResidenceRect {
-  const { hingeInset, skinOffset, leafInset, halfLeaf } = RESIDENCE_HINGED_DOOR;
-  const hinge = swing.hinge === 'from' ? opening.from + hingeInset : opening.to - hingeInset;
-  const start = wall.fixed + swing.side * skinOffset;
-  const end = start + swing.side * (opening.to - opening.from - leafInset);
-  const from = Math.min(start, end);
-  const to = Math.max(start, end);
-  return wall.axis === 'e'
-    ? [hinge - halfLeaf, from, hinge + halfLeaf, to]
-    : [from, hinge - halfLeaf, to, hinge + halfLeaf];
-}
-
 const permanentObstacles: ResidenceRect[] = [
   ...RESIDENCE_FACADE_PIERS, RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_STAIR_ENCLOSURE,
 ];
@@ -47,7 +34,6 @@ for (const wall of RESIDENCE_WALLS) {
     if (opening.kind === 'window') continue;
     if (cursor < opening.from) permanentObstacles.push(wallFootprint(wall, cursor, opening.from));
     if (opening.kind === 'balcony-door') closedBalconyDoor.push(wallFootprint(wall, opening.from, opening.to));
-    if (opening.swing) permanentObstacles.push(openDoorFootprint(wall, opening, opening.swing));
     cursor = opening.to;
   }
   if (cursor < wall.to) permanentObstacles.push(wallFootprint(wall, cursor, wall.to));
@@ -64,7 +50,7 @@ function overlapsWalker([west, south, east, north]: ResidenceRect, e: number, n:
 }
 
 export function createResidenceNavigation(spawn: CoastPose, furnitureFootprints: readonly ResidenceRect[],
-  balconyOpen: () => boolean): CoastNavigation {
+  balconyOpen: () => boolean, doors: Pick<ResidenceDoors, 'blocksWalking'> = createResidenceDoors()): CoastNavigation {
   const balconyFurniture = furnitureFootprints.filter(([west, south, east, north]) => balconyFloor.some(
     rect => contains(rect, west, south) && contains(rect, east, north),
   ));
@@ -77,6 +63,7 @@ export function createResidenceNavigation(spawn: CoastPose, furnitureFootprints:
       const n = -z;
       return !floor.some(rect => contains(rect, e, n))
         || obstacles.some(rect => overlapsWalker(rect, e, n))
+        || doors.blocksWalking(e, z)
         || (closedBalconyDoor.some(rect => overlapsWalker(rect, e, n)) && !balconyOpen());
     },
   };
