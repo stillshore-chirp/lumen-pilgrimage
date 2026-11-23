@@ -1,7 +1,7 @@
 import { CatmullRomCurve3, DoubleSide, Vector3, type MeshStandardMaterial } from 'three';
 import type { ResidenceMaterials } from './residenceMaterials';
 import type { ResidenceRect } from './residencePlan';
-import { addWindowDressing, foliage } from './residenceFurnitureDecor';
+import { foliage } from './residenceFurnitureDecor';
 import { FurnitureModel, type FurniturePiece } from './residenceFurnitureModel';
 import { addServiceFurniture } from './residenceFurnitureFixtures';
 import { addStudy } from './residenceStudy';
@@ -485,7 +485,6 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
   model.footprint(9.06, .57, .959, 1.018);
   addBalcony(model, materials, flax, leaves);
   addServiceFurniture(model, materials);
-  addWindowDressing(model, materials);
   model.finish();
   return { group: model.group, obstacles: model.obstacles, dispose: () => model.dispose() };
 }

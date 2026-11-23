@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
 import { preview } from 'vite';
+import { RESIDENCE_ROOMS } from '../src/coast/world/residence/residencePlan.ts';
 
 const screenshots = process.env.RESIDENCE_SCREENSHOTS;
 const viewport = screenshots ? { width: 1280, height: 800 } : { width: 960, height: 600 };
@@ -277,6 +278,115 @@ test('tea room and study are accessible in the travel panel and have flush walki
   assert.deepEqual(errors, []);
 });
 
+test('room switches draw, reverse and reopen the same woven curtain panels', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await page.addInitScript(() => {
+    window.curtainPanels = room => {
+      const panels = [];
+      window.residenceProbe.scene?.getObjectByName(`Residence curtains ${room}`)?.traverse(mesh => {
+        if (mesh.name !== 'Residence curtain panel') return;
+        const { widthSegments } = mesh.geometry.parameters;
+        const position = mesh.geometry.attributes.position;
+        let fabric = 0;
+        for (let col = 1; col <= widthSegments; col++) {
+          fabric += Math.hypot(position.getX(col) - position.getX(col - 1),
+            position.getZ(col) - position.getZ(col - 1));
+        }
+        panels.push({ span: Math.abs(position.getX(widthSegments) - position.getX(0)), fabric });
+      });
+      return panels;
+    };
+  });
+  await page.route('**/assets/CoastApp-*.js', async route => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const prepare = 'this.world.prepareRender?.(';
+    assert.ok(source.includes(prepare), 'The curtain review hook requires exploration render preparation');
+    const hook = 'window.residenceProbe.scene=this.world.scene,'
+      + 'window.residenceProbe.relocate??=(pose=>this.controls.relocate(pose)),';
+    await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
+  });
+  await page.goto(`${origin}/?world=residence`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor();
+  await page.waitForFunction(() => window.curtainPanels('LD').length === 6);
+  const start = await page.evaluate(() => window.curtainPanels('LD'));
+  const close = button(page, 'リビングのカーテンを閉める');
+  const open = button(page, 'リビングのカーテンを開ける');
+  await close.waitFor({ state: 'hidden' });
+  await hold(page, 'd', () => page.waitForFunction(() => window.residenceProbe.camera.x < 18.06));
+  await close.waitFor();
+
+  async function waitForExpansion(range) {
+    await page.waitForFunction(({ range: [low, high], start }) => window.curtainPanels('LD')
+      .every(({ span }, i) => span >= start[i].span * low && span <= start[i].span * high), { range, start });
+  }
+
+  await page.keyboard.press('e');
+  await open.waitFor();
+  await waitForExpansion([2.2, 5]);
+  await page.keyboard.press('e');
+  await close.waitFor();
+  await waitForExpansion([.99, 1.01]);
+
+  // Walk clear of the switch and change the time while the same cloth is still moving.
+  await page.keyboard.press('e');
+  await hold(page, 'd', () => page.waitForFunction(() => window.residenceProbe.camera.x < 17.28));
+  await open.waitFor({ state: 'hidden' });
+  await button(page, '昼').click();
+  await waitForExpansion([6.60, 6.64]);
+  const closed = await page.evaluate(() => window.curtainPanels('LD'));
+  for (const [i, panel] of closed.entries()) {
+    assert.ok(Math.abs(panel.fabric / start[i].fabric - 1) < .025,
+      `Panel ${i} changed its unrolled width from ${start[i].fabric} to ${panel.fabric}`);
+  }
+
+  async function relocate(x, z, yaw) {
+    await page.evaluate(({ x, z, yaw }) => window.residenceProbe.relocate({ x, z, yaw, pitch: -.10 }), { x, z, yaw });
+    await page.waitForFunction(({ x, z }) => {
+      const pose = window.residenceProbe.camera;
+      return pose && Math.hypot(pose.x - x, pose.z - z) < .015;
+    }, { x, z });
+  }
+
+  const landscape = '.coast-ui { visibility: hidden; }';
+  await relocate(20.34, -2.93, -2.36);
+  await capture(page, 'residence-curtains-closed-day', landscape);
+  await relocate(17.91, -1.23, Math.PI);
+  await open.click();
+  await waitForExpansion([.99, 1.01]);
+  await capture(page, 'residence-curtain-switch-day', landscape);
+  await relocate(20.34, -2.93, -2.36);
+  await capture(page, 'residence-curtains-open-day', landscape);
+  await button(page, '夜').click();
+  await capture(page, 'residence-curtains-open-night', landscape);
+
+  await relocate(7.06, -5.48, Math.PI);
+  const roomLabel = id => RESIDENCE_ROOMS.find(room => room.id === id).label;
+  await button(page, roomLabel('04') + 'のカーテンを閉める').waitFor({ state: 'hidden' });
+  for (const [id, x, z, yaw] of [
+    ['02', 18.57, -9.53, 0],
+    ['03', 3.24, -4.45, 0],
+    ['04', 6.76, -4.33, -Math.PI / 2],
+    ['05', 9.22, -4.35, 0],
+  ]) {
+    await relocate(x, z, yaw);
+    const label = roomLabel(id);
+    const curtain = button(page, `${label}のカーテンを閉める`);
+    const reopen = button(page, `${label}のカーテンを開ける`);
+    const initial = await page.evaluate(room => window.curtainPanels(room).map(panel => panel.span), id);
+    await curtain.click();
+    await reopen.waitFor();
+    await page.waitForFunction(({ id, initial }) => window.curtainPanels(id)
+      .every((panel, i) => panel.span > initial[i] * 2.5), { id, initial });
+    await reopen.click();
+  }
+
+  await relocate(17.91, -1.23, Math.PI);
+  await close.waitFor();
+  await waitForExpansion([.99, 1.01]);
+  assert.deepEqual(errors, []);
+});
+
 test('the primary bedroom slider gates balcony access and the glass rail stops walking', { timeout }, async t => {
   const { page, errors } = await openResidence(t, 'primary-bedroom');
   const open = button(page, 'バルコニーの引戸を開ける');
@@ -286,6 +396,12 @@ test('the primary bedroom slider gates balcony access and the glass rail stops w
     `Unexpected primary bedroom spawn ${JSON.stringify(bedroom)}`);
   await open.waitFor();
   await capture(page, 'residence-bedroom-night');
+  await hold(page, 'a', () => page.waitForFunction(() => window.residenceProbe.camera.z < -14.84));
+  await button(page, '主寝室のカーテンを閉める').click();
+  await button(page, '主寝室のカーテンを開ける').waitFor();
+  await page.evaluate(() => document.activeElement.blur());
+  await hold(page, 'd', () => page.waitForFunction(() => window.residenceProbe.camera.z > -13.67));
+  await open.waitFor();
 
   await button(page, '環境音を開始').click();
   await button(page, '環境音を再開').waitFor();
@@ -312,6 +428,9 @@ test('the primary bedroom slider gates balcony access and the glass rail stops w
   await open.waitFor({ state: 'hidden' });
   await page.waitForFunction(() => window.residenceProbe.lowpassCutoffs()
     .filter(cutoff => cutoff > 1000).length >= 3);
+  await hold(page, 'w', () => walkEastTo(20.61));
+  await close.waitFor({ state: 'hidden' });
+  await page.keyboard.press('e');
   await hold(page, 'w', () => walkEastTo(21.9));
   await close.waitFor({ state: 'hidden' });
   const balcony = await camera(page);

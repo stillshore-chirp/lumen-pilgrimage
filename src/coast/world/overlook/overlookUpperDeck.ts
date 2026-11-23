@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import type { DeckContact } from './overlookDeckDetail';
 import { OverlookModel, type OverlookFinishes } from './overlookModel';
 import { DECK_LEVEL } from './overlookTerrain';
 
-const height = 7.2;
+export const OVERLOOK_UPPER_DECK_HEIGHT = 7.2;
+const height = OVERLOOK_UPPER_DECK_HEIGHT;
 const flightRise = height / 2;
 const risers = 22;
 const going = 0.30;
@@ -124,7 +126,7 @@ function addStair(model: OverlookModel, finish: OverlookFinishes, pools: THREE.B
 }
 
 function addGuard(model: OverlookModel, finish: OverlookFinishes,
-  start: Point, end: Point): void {
+  start: Point, end: Point, addContact: DeckContact): void {
   const [x1, z1] = start, [x2, z2] = end;
   const length = Math.hypot(x2 - x1, z2 - z1);
   const bays = Math.ceil(length / 1.8);
@@ -141,6 +143,7 @@ function addGuard(model: OverlookModel, finish: OverlookFinishes,
     const post = at(i / bays, 0);
     model.block(finish.iron, post.x, post.y + 0.49, post.z, 0.077, 1.11, 0.077);
     model.block(finish.bronze, post.x, post.y + 0.047, post.z, 0.15, 0.094, 0.15);
+    if (post.y === height) addContact('upper', post.x, post.z, 0.15, 0.15, 0.29, 0.82);
     const pickets = Math.ceil(length / bays / 0.20);
     for (let j = 1; j < pickets; j += 1) {
       const t = (i + j / pickets) / bays;
@@ -163,10 +166,12 @@ function addLandingPier(model: OverlookModel, finish: OverlookFinishes, x: numbe
   model.block(finish.cream, x, stem + 0.04, z, 0.91, 0.12, 0.91);
 }
 
-function addLowLights(model: OverlookModel, finish: OverlookFinishes, pools: THREE.BufferGeometry[]): void {
+function addLowLights(model: OverlookModel, finish: OverlookFinishes,
+  pools: THREE.BufferGeometry[], addContact: DeckContact): void {
   const front = terrace.minZ;
   for (const x of [12.33, 16.17, 20.03, 23.24]) {
     model.block(finish.limestone, x, height + 0.154, front + 0.079, 0.55, 0.31, 0.26);
+    addContact('upper', x, front + 0.079, 0.55, 0.26, 0.40, 0.75);
     model.block(finish.bronze, x, height + 0.14, front + 0.211, 0.40, 0.094, 0.060);
     model.block(finish.frosted, x, height + 0.104, front + 0.236, 0.33, 0.031, 0.059);
     pools.push(new THREE.PlaneGeometry(1.7, 1.4).rotateX(-Math.PI / 2)
@@ -179,19 +184,20 @@ function addLowLights(model: OverlookModel, finish: OverlookFinishes, pools: THR
     .translate(x - 0.74, height + 0.007, z));
 }
 
-export function addOverlookUpperDeck(model: OverlookModel, finish: OverlookFinishes): THREE.BufferGeometry[] {
+export function addOverlookUpperDeck(model: OverlookModel, finish: OverlookFinishes,
+  addContact: DeckContact): THREE.BufferGeometry[] {
   const pools: THREE.BufferGeometry[] = [];
   addStair(model, finish, pools);
   addStoneSlab(model, finish, terrace, height);
   addStoneSlab(model, finish, landing, height);
   addLandingPier(model, finish, landing.maxX - 0.49, landing.maxZ - 0.49);
   addLandingPier(model, finish, landing.maxX - 0.49, landing.minZ + 0.53);
-  for (const { start, end } of edges) addGuard(model, finish, start, end);
+  for (const { start, end } of edges) addGuard(model, finish, start, end, addContact);
   model.block(finish.iron, stairs.maxX, 0.51, stairStart, 0.077, 1.05, 0.077);
   for (const x of [stairs.minX, stairs.maxX]) {
     model.block(finish.limestone, x, 0.24, stairStart, 0.28, 0.48, 0.36);
     model.block(finish.cream, x, 0.50, stairStart, 0.33, 0.070, 0.41);
   }
-  addLowLights(model, finish, pools);
+  addLowLights(model, finish, pools, addContact);
   return pools;
 }
