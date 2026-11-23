@@ -76,4 +76,4 @@ VRで見る場合はヘッドセットのブラウザで接続と音声の準備
 
 ## 素材の出典
 
-素材の出典・再配布条件は [海岸の録音](../public/coast-audio/ATTRIBUTION.md)、[景観素材](../public/coast-materials/ATTRIBUTION.md)、[丘陵展望台の地形・街路・録音](../public/coast-overlook/ATTRIBUTION.md) を参照してください。
+素材の出典・再配布条件は [海岸の録音](../public/coast-audio/ATTRIBUTION.md)、[景観素材](../public/coast-materials/ATTRIBUTION.md)、[住戸の仕上げ材](../public/residence-materials/ATTRIBUTION.md)、[丘陵展望台の地形・街路・録音](../public/coast-overlook/ATTRIBUTION.md) を参照してください。

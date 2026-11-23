@@ -26,6 +26,7 @@ interface ExplorationWorld {
   setQuality(quality: CoastQuality): void;
   setTimeOfDay(time: CoastTimeOfDay): void;
   update(elapsed: number, camera: PerspectiveCamera): readonly CoastBirdCue[];
+  prepareRender?(renderer: WebGLRenderer, camera: PerspectiveCamera): void;
   diveObstacleHeight?(x: number, z: number): number | undefined;
   dispose(): void;
 }
@@ -424,7 +425,9 @@ export class CoastApp {
     viewer.getWorldDirection(this.forward);
     this.up.copy(viewer.up).applyQuaternion(viewer.quaternion);
     this.audio.update(viewer.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
-    this.renderer.render(this.world.scene, this.monitor?.renderCamera ?? this.camera);
+    const view = this.monitor?.renderCamera ?? this.camera;
+    this.world.prepareRender?.(this.renderer, view);
+    this.renderer.render(this.world.scene, view);
   };
 
   private readonly onPageHide = (event: PageTransitionEvent): void => {

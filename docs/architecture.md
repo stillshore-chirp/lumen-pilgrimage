@@ -35,7 +35,7 @@
 
 - 図面の P1 を基準に、東を `x`、北を `-z`、50階の仕上げ床を `y=0` とし、単位をメートルにそろえる。部屋、壁、開口、手すりを描画と歩行判定で共有する。室内家具の外形は間接光の遮蔽に使い、歩行では通り抜けられる。主寝室の引戸は開き量を描画と音響に渡し、人が敷居を通れる幅まで開いてから通行できる。 [設計図 PDF](residence/residence-50f-drawings.pdf) · [平面](../src/coast/world/residence/residencePlan.ts) · [歩行判定](../src/coast/world/residence/residenceNavigation.ts)
 - 街路面は `y=-176`。大通りの軸、交差点、両脇の高層塔を住戸の窓からの眺望断面と照合し、その外側に展望台と共有する都市を接続する。昼夜で建物の窓明かりと車の灯火を切り替える。ガラスの下枠と外周床は視線断面に合わせ、着座・立位のどちらでも路面が見える。 [基本設計](residence/residence-50f-design.md#街区と視線) · [都市の描画](../src/coast/world/residence/residenceCity.ts) · [住戸の躯体](../src/coast/world/residence/residenceShell.ts)
-- 室内はオーク、石、タイル、布の模様と反射を実寸で設定する。昼は窓方位に合わせた日射と室内の間接光、夜は照明器具と天井・壁の間接光を使う。軽量と高品質で間取りと光源の位置を共有し、影の解像度と描画密度を変える。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [内装材](../src/coast/world/residence/residenceMaterials.ts)
+- 室内はオークや漆喰、織物の実寸の色・凹凸・粗さを使う。窓側の日射と方向のある間接光、壁や家具の接地陰影、夜の間接照明を組み合わせる。デスクトップでは視点に応じて窓と鏡の反射を描き、表示位置と描画設定に応じて反射の計算範囲や解像度を調整する。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [反射](../src/coast/world/residence/residenceReflections.ts) · [内装材の出典](../public/residence-materials/ATTRIBUTION.md)
 - 録音した交通音を南と東の街路に配置する。高さと距離で減衰させ、窓ガラスと引戸の開き量で透過する音を変える。室内、敷居、屋外で反射と足音を変え、頭部伝達関数で方向を表現する。録音は展望台と同じライセンス済み素材を使う。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [録音の出典と再配布条件](../public/coast-overlook/ATTRIBUTION.md)
 
 ## 音響
