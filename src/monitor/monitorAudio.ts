@@ -1,7 +1,17 @@
 import { MathUtils, Quaternion, Vector3, type Camera, type Object3D } from 'three';
 
-export type MonitorAudioMode = 'stereo' | 'spatial' | 'television' | 'surround';
+export type MonitorAudioMode = 'stereo' | 'spatial' | 'television' | 'surround' | 'cinema';
 export type MonitorAudioStatus = 'idle' | 'ready' | 'gesture-required' | 'unavailable' | 'stream-unavailable';
+
+export interface CinemaMonitorPlayback {
+  setQuality(quality: 'light' | 'high'): void;
+  update(camera: Camera): void;
+  dispose(): void;
+}
+
+export type CinemaPlaybackFactory = (
+  context: AudioContext, source: AudioNode, output: AudioNode, channelCount: number,
+) => CinemaMonitorPlayback;
 
 const MAX_GAIN = 0.75;
 const LEVEL_FADE_SECONDS = 0.08;
@@ -51,6 +61,7 @@ interface MonitorGraph {
   stereo: FadedGain;
   spatial: { panner: PannerNode; level: FadedGain } | null;
   surround: SurroundGraph | null;
+  cinema: { playback: CinemaMonitorPlayback; level: FadedGain } | null;
 }
 
 function createMonitorPanner(context: AudioContext): PannerNode | null {
@@ -85,6 +96,8 @@ export class MonitorAudio {
   private enabled = true;
   private mode: MonitorAudioMode = 'stereo';
   private theaterSpeakers: readonly Object3D[] | null = null;
+  private cinemaPlayback: CinemaPlaybackFactory | null = null;
+  private cinemaQuality: 'light' | 'high' = 'light';
 
   private readonly rotation = new Quaternion();
   private readonly position = new Vector3();
@@ -106,6 +119,24 @@ export class MonitorAudio {
 
   supportsSurround(): boolean {
     return this.theaterSpeakers?.length === 6 && (this.graph ? this.graph.surround !== null : this.supportsSpatial());
+  }
+
+  supportsCinema(): boolean {
+    return this.cinemaPlayback !== null && this.getStatus() !== 'unavailable'
+      && (!this.graph || this.graph.cinema !== null);
+  }
+
+  setCinema(factory: CinemaPlaybackFactory | null): void {
+    if (this.cinemaPlayback === factory) return;
+    this.cinemaPlayback = factory;
+    this.disconnectGraph();
+    this.syncTrack();
+  }
+
+  setCinemaQuality(quality: 'light' | 'high'): void {
+    if (this.cinemaQuality === quality) return;
+    this.cinemaQuality = quality;
+    this.graph?.cinema?.playback.setQuality(quality);
   }
 
   setTheaterSpeakers(speakers: readonly Object3D[] | null): void {
@@ -170,6 +201,7 @@ export class MonitorAudio {
   }
 
   setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;
     this.enabled = enabled;
     this.updateLevel();
   }
@@ -180,13 +212,16 @@ export class MonitorAudio {
     if (!graph || !this.context) return;
     const spatial = graph.spatial !== null && (mode === 'spatial' || mode === 'television');
     const surround = graph.surround !== null && mode === 'surround';
+    const cinema = graph.cinema !== null && mode === 'cinema';
     const now = this.context.currentTime;
-    graph.stereo.fadeTo(spatial || surround ? 0 : 1, now, MODE_FADE_SECONDS);
+    graph.stereo.fadeTo(spatial || surround || cinema ? 0 : 1, now, MODE_FADE_SECONDS);
     graph.spatial?.level.fadeTo(spatial ? 1 : 0, now, MODE_FADE_SECONDS);
     graph.surround?.level.fadeTo(surround ? 1 : 0, now, MODE_FADE_SECONDS);
+    graph.cinema?.level.fadeTo(cinema ? 1 : 0, now, MODE_FADE_SECONDS);
   }
 
   update(camera: Camera, monitor: Object3D): void {
+    if (this.mode === 'cinema' && this.enabled) this.graph?.cinema?.playback.update(camera);
     const panner = this.graph?.spatial?.panner;
     const listener = this.context?.listener;
     if ((!panner && !this.graph?.surround) || !listener) return;
@@ -265,6 +300,22 @@ export class MonitorAudio {
     return { layout, splitter, lowpass, panners, level };
   }
 
+  private createCinema(context: AudioContext, source: AudioNode, master: GainNode, track: MediaStreamTrack) {
+    if (!this.cinemaPlayback || !context.listener.positionX) return null;
+    const level = new FadedGain(context.createGain(), this.mode === 'cinema' ? 1 : 0);
+    const channelCount = track.getSettings().channelCount ?? 2;
+    try {
+      const playback = this.cinemaPlayback(context, source, level.node, channelCount);
+      playback.setQuality(this.cinemaQuality);
+      level.node.connect(master);
+      return { playback, level };
+    } catch {
+      // Keep headphone stereo available if this browser cannot build the cinema graph.
+      level.node.disconnect();
+      return null;
+    }
+  }
+
   private readonly syncTrack = (): void => {
     const track = this.stream?.getAudioTracks().find(candidate => candidate.readyState === 'live') ?? null;
     if (track !== this.track) {
@@ -281,9 +332,11 @@ export class MonitorAudio {
       const master = new FadedGain(context.createGain(), 0);
       const panner = createMonitorPanner(context);
       const surround = this.createSurround(context, source, master.node);
+      const cinema = this.createCinema(context, source, master.node, track);
       const useSpatial = panner !== null && (this.mode === 'spatial' || this.mode === 'television');
       const useSurround = surround !== null && this.mode === 'surround';
-      const stereo = new FadedGain(context.createGain(), useSpatial || useSurround ? 0 : 1);
+      const useCinema = cinema !== null && this.mode === 'cinema';
+      const stereo = new FadedGain(context.createGain(), useSpatial || useSurround || useCinema ? 0 : 1);
       stereo.node.channelCount = 2;
       stereo.node.channelCountMode = 'explicit';
       const spatial = panner ? { panner, level: new FadedGain(context.createGain(), useSpatial ? 1 : 0) } : null;
@@ -291,7 +344,7 @@ export class MonitorAudio {
       source.connect(stereo.node).connect(master.node);
       if (spatial) source.connect(spatial.panner).connect(spatial.level.node).connect(master.node);
       master.node.connect(context.destination);
-      this.graph = { source, master, stereo, spatial, surround };
+      this.graph = { source, master, stereo, spatial, surround, cinema };
       this.streamUnavailable = false;
       this.setMode(this.mode);
       this.updateLevel();
@@ -310,6 +363,8 @@ export class MonitorAudio {
     const graph = this.graph;
     if (!graph) return;
     this.disconnectSurround(graph);
+    graph.cinema?.playback.dispose();
+    graph.cinema?.level.node.disconnect();
     graph.master.node.disconnect();
     graph.source.disconnect();
     graph.stereo.node.disconnect();

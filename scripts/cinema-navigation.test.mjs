@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
+import { Scene } from 'three';
 
 const source = new URL('../src/coast/world/cinema/', import.meta.url).href;
 const hooks = registerHooks({
@@ -14,6 +15,7 @@ const {
   CINEMA_EXITS, CINEMA_PLACES, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN, cinemaGroundHeight,
 } = await import('../src/coast/world/cinema/cinemaLayout.ts');
 const { cinemaNavigation } = await import('../src/coast/world/cinema/cinemaNavigation.ts');
+const { createCinemaSeatTransition } = await import('../src/coast/world/cinema/cinemaSeatTransition.ts');
 hooks.deregister();
 
 function clearRoute(a, b) {
@@ -84,4 +86,24 @@ test('cinema destinations start on the corresponding deck and face the center of
     const target = y + place.seatedEyeHeight + Math.tan(place.pitch) * Math.hypot(place.x, place.z);
     assert.ok(Math.abs(target - (CINEMA_SCREEN.bottom + CINEMA_SCREEN.height / 2)) < 1e-8);
   }
+});
+
+test('seat travel replaces a pending destination and relocates in a fully covered frame', () => {
+  const scene = new Scene();
+  const transition = createCinemaSeatTransition(scene);
+  const cover = scene.getObjectByName('Cinema seat transition');
+  let seat = 'center';
+  transition.start(() => { seat = 'front'; });
+  transition.update(0);
+  assert.equal(transition.active, true);
+  transition.update(.06);
+  transition.start(() => { seat = 'rear'; });
+  assert.equal(seat, 'center');
+  transition.update(.06);
+  assert.equal(seat, 'rear');
+  assert.equal(cover.material.uniforms.darkness.value, 1);
+  transition.update(.15);
+  assert.equal(transition.active, false);
+  transition.dispose();
+  assert.equal(scene.children.length, 0);
 });

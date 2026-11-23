@@ -3,6 +3,10 @@
   color-scheme: dark;
 }
 
+.coast-cinema {
+  background: #090d0d;
+}
+
 .coast-view {
   width: 100%;
   height: 100%;
@@ -345,6 +349,16 @@
 .coast-travel-heading h2 {
   margin: 0;
   font-size: 1.2em;
+}
+
+.cinema-screening-dialog .coast-row + .coast-row {
+  padding-top: 0.875rem;
+  border-top: 1px solid #bfe2dc40;
+}
+
+.cinema-screening-dialog button:disabled {
+  opacity: .5;
+  cursor: default;
 }
 
 .coast-travel-dialog section {
