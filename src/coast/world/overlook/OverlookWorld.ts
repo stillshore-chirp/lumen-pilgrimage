@@ -48,8 +48,9 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
   const city = createOverlookCity(heightAt, {
     sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x272c35, blocksFootprint: isOverlookRoadway,
   });
-  const ground = createOverlookSurface(heightAt, streets, atmosphere.night);
-  const deck = createOverlookDeck();
+  const high = { value: 0 };
+  const ground = createOverlookSurface(heightAt, streets, atmosphere.night, high);
+  const deck = createOverlookDeck(high, atmosphere.night);
   const scene = new THREE.Scene();
   scene.add(sky.dome, sky.clouds, ground, deck.group, city.group, traffic.group, airTraffic.group, createOverlookHillside(heightAt));
   const lighting = createCoastLighting(scene, atmosphere, heightAt, { nightIntensityScale: 0.28 });
@@ -65,6 +66,8 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
     world: {
       scene,
       setQuality(quality: CoastQuality) {
+        high.value = Number(quality === 'high');
+        deck.setQuality(high.value === 1);
         lighting.setQuality(quality);
         city.setQuality(quality);
         traffic.setQuality(quality);
@@ -87,6 +90,7 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
       dispose() {
         sky.dispose();
         lighting.dispose();
+        deck.dispose();
         traffic.dispose();
         airTraffic.dispose();
         atmosphere.sky.value.dispose();
