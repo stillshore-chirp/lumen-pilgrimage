@@ -6,23 +6,25 @@ if (!mount) {
 }
 
 const options = new URLSearchParams(location.search);
-const overlook = options.get('world') === 'overlook';
+const world = options.get('world');
+const name = world === 'overlook' ? '丘陵展望台' : world === 'residence' ? '都心の50階住戸' : null;
 try {
   if (options.get('monitor') === 'sender') {
     const { mountMonitorSender } = await import('./monitor/monitorSender');
     mountMonitorSender(mount);
   } else {
     const { CoastApp } = await import('./coast/CoastApp');
-    if (overlook) {
+    if (name) {
       const loading = document.createElement('main');
       loading.className = 'coast-error';
       loading.setAttribute('role', 'status');
-      loading.textContent = '丘陵展望台を読み込んでいます。';
+      loading.textContent = `${name}を読み込んでいます。`;
       mount.replaceChildren(loading);
-      const { loadOverlookScene } = await import('./coast/world/overlook/OverlookWorld');
-      const world = await loadOverlookScene();
+      const scene = world === 'residence'
+        ? await (await import('./coast/world/residence/ResidenceWorld')).loadResidenceScene()
+        : await (await import('./coast/world/overlook/OverlookWorld')).loadOverlookScene();
       mount.replaceChildren();
-      new CoastApp(mount, world);
+      new CoastApp(mount, scene);
     } else {
       new CoastApp(mount);
     }
@@ -34,11 +36,11 @@ try {
   const message = document.createElement('p');
   message.textContent = options.get('monitor') === 'sender'
     ? '画面共有ページを読み込めませんでした。ページを再読み込みしてください。'
-    : overlook
-      ? '丘陵展望台を読み込めませんでした。ページを再読み込みしてください。'
+    : name
+      ? `${name}を読み込めませんでした。ページを再読み込みしてください。`
       : '海岸の描画を開始できませんでした。Chrome の WebGL 2 とグラフィック アクセラレーションの設定を確認してください。';
   notice.append(message);
-  if (overlook) {
+  if (name) {
     const coast = document.createElement('a');
     coast.href = '?world=coast';
     coast.textContent = '入り江と山道へ';

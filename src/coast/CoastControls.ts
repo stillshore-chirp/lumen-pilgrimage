@@ -27,6 +27,9 @@ export interface CoastNavigation {
   readonly blocksWalking?: (x: number, z: number, foot: number) => boolean;
   readonly blocksFlight?: (x: number, z: number) => boolean;
   readonly flightCeiling: number;
+  readonly flightEnabled?: boolean;
+  readonly jumpEnabled?: boolean;
+  readonly walkSpeed?: number;
 }
 
 export const EYE_HEIGHT = 1.65;
@@ -153,7 +156,7 @@ export class CoastControls {
   }
 
   toggleFlight(): void {
-    if (this.disposed) return;
+    if (this.disposed || this.navigation.flightEnabled === false) return;
 
     this.flying = !this.flying;
     this.verticalVelocity = 0;
@@ -420,7 +423,7 @@ export class CoastControls {
     const depth = this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z);
     const onSupport = this.verticalVelocity <= 0
       && foot <= this.supportHeight(position.x, position.z) + FOOT_CLEARANCE;
-    const jumping = this.jumpQueued && onSupport && depth < SWIM_DEPTH;
+    const jumping = this.navigation.jumpEnabled !== false && this.jumpQueued && onSupport && depth < SWIM_DEPTH;
     this.jumpQueued = false;
     const fallSpeed = jumping ? JUMP_SPEED : this.verticalVelocity;
     const nextVelocity = Math.max(-MAX_FALL_SPEED, fallSpeed - GRAVITY * dt);
@@ -429,7 +432,8 @@ export class CoastControls {
     let followSupport = onSupport && !jumping;
     if (this.movement.lengthSq() > 0) {
       const water = smoothstep(0.12, SWIM_DEPTH, depth);
-      const speed = WALK_SPEED * pace * (1 - water) + SWIM_SPEED * water;
+      const walkSpeed = this.navigation.walkSpeed ?? WALK_SPEED;
+      const speed = walkSpeed * pace * (1 - water) + SWIM_SPEED * water;
       this.movement.multiplyScalar(speed * dt);
       followSupport = this.moveAlongSupport(this.movement.x, this.movement.z, foot, verticalStep, followSupport);
     }

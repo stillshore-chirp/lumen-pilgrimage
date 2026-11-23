@@ -1,7 +1,7 @@
 import type { CoastPose } from './CoastControls';
 import { SPAWN } from './terrain';
 
-export type ExplorationWorldId = 'coast' | 'overlook';
+export type ExplorationWorldId = 'coast' | 'overlook' | 'residence';
 
 export interface CoastDestination extends CoastPose {
   readonly id: string;
@@ -28,6 +28,15 @@ export const EXPLORATION_WORLDS = [
       { id: 'west-terrace', label: '西テラス', x: -29, z: -21.2, yaw: 0.07, pitch: -0.10 },
       { id: 'east-terrace', label: '東テラス', x: 29, z: -21.2, yaw: -0.82, pitch: -0.10 },
       { id: 'upper-deck', label: '2階展望デッキ', x: 17.4, z: 13.35, yaw: -0.42, pitch: -0.16 },
+    ],
+  },
+  {
+    id: 'residence',
+    label: '都心の50階住戸',
+    places: [
+      { id: 'living-window', label: 'リビング南窓', x: 21.89, z: -1.12, yaw: Math.PI - 0.014, pitch: -0.29 },
+      { id: 'foyer', label: '住戸の玄関', x: 11.80, z: -14.17, yaw: Math.PI, pitch: -0.01 },
+      { id: 'primary-bedroom', label: '主寝室', x: 20.07, z: -13.575, yaw: -Math.PI / 2, pitch: -0.08 },
     ],
   },
 ] as const satisfies readonly { id: ExplorationWorldId; label: string; places: readonly CoastDestination[] }[];
