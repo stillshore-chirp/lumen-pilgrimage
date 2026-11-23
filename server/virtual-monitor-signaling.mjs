@@ -232,10 +232,14 @@ export function createVirtualMonitorSignaling({ now = Date.now, pollWait = POLL_
       room.expiresAt = time + SESSION_TTL;
       room.seen.viewer = time;
     } else if (action === 'audio') {
-      const { available, output } = body.audio ?? {};
-      if (typeof available !== 'boolean' || !OUTPUTS.has(output)) throw new SignalError(400, 'invalid-audio');
-      if (room.audio.available === available && room.audio.output === output) return;
-      room.audio = { available, output };
+      const { available, output, pcPlaybackSuppressed } = body.audio ?? {};
+      if (typeof available !== 'boolean' || !OUTPUTS.has(output)
+        || (pcPlaybackSuppressed !== undefined && (pcPlaybackSuppressed !== true || !available || output !== 'pc'))) {
+        throw new SignalError(400, 'invalid-audio');
+      }
+      if (room.audio.available === available && room.audio.output === output
+        && room.audio.pcPlaybackSuppressed === pcPlaybackSuppressed) return;
+      room.audio = pcPlaybackSuppressed ? { available, output, pcPlaybackSuppressed } : { available, output };
     } else {
       if (room.phase !== 'approved' || room[action] || (action === 'answer' && !room.offer)) {
         throw new SignalError(409, 'invalid-phase');

@@ -114,7 +114,12 @@ test('signaling reserves one viewer and relays SDP only after sender approval', 
   assert.deepEqual(negotiated.snapshot.answer, answer);
   const unchanged = await checked(act(sender, 'audio', { audio }));
   assert.equal(unchanged.snapshot.revision, negotiated.snapshot.revision);
-  const awaitingStop = await pollEntered(viewer, unchanged.snapshot.revision);
+  const muted = { available: true, output: 'pc', pcPlaybackSuppressed: true };
+  await checked(act(sender, 'audio', { audio: { ...muted, output: 'both' } }), 400);
+  await checked(act(sender, 'audio', { audio: muted }));
+  const viewerMuted = await checked(act(viewer, 'poll', { revision: unchanged.snapshot.revision }));
+  assert.deepEqual(viewerMuted.snapshot.audio, muted);
+  const awaitingStop = await pollEntered(viewer, viewerMuted.snapshot.revision);
   await checked(act(sender, 'close'));
   const closed = await checked(awaitingStop.result);
   assert.equal(closed.snapshot.phase, 'closed');

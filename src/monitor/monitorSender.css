@@ -1,0 +1,159 @@
+.monitor-sender {
+  --sender-surface: #112829;
+  --sender-border: #53716b;
+  --sender-text: #f6fbf7;
+  --sender-muted: #c1d7d0;
+  --sender-accent: #c8eddf;
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  color-scheme: dark;
+  background: #081b1c;
+  color: var(--sender-text);
+  line-height: 1.6;
+  padding: clamp(16px, 4vw, 56px);
+}
+
+.monitor-sender__content {
+  max-width: 42rem;
+  margin-inline: auto;
+}
+
+.monitor-sender__header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-bottom: 20px;
+}
+
+.monitor-sender h1,
+.monitor-sender h2,
+.monitor-sender p {
+  margin: 0;
+}
+
+.monitor-sender h1 {
+  font-size: clamp(1.35rem, 4vw, 1.85rem);
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.monitor-sender h2 {
+  margin-bottom: 4px;
+  font-size: 1rem;
+}
+
+.monitor-sender p {
+  color: var(--sender-muted);
+}
+
+.monitor-sender a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--sender-accent);
+  text-underline-offset: 0.2em;
+}
+
+.monitor-sender__panel {
+  padding: clamp(16px, 4vw, 24px);
+  border: 1px solid var(--sender-border);
+  border-radius: 14px;
+  background: var(--sender-surface);
+}
+
+.monitor-sender .monitor-sender__status {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border-left: 3px solid #8ca59e;
+  background: #081b1c;
+  color: var(--sender-text);
+}
+
+.monitor-sender .monitor-sender__status[data-active="true"] {
+  border-color: var(--sender-accent);
+}
+
+.monitor-sender label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.monitor-sender select,
+.monitor-sender button {
+  box-sizing: border-box;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--sender-border);
+  border-radius: 8px;
+  background: #081b1c;
+  color: var(--sender-text);
+  font: inherit;
+}
+
+.monitor-sender select {
+  margin-bottom: 8px;
+}
+
+.monitor-sender [data-monitor-capture-audio] {
+  margin-top: 8px;
+  color: var(--sender-text);
+}
+
+.monitor-sender__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.monitor-sender button:not(:disabled) {
+  cursor: pointer;
+}
+
+.monitor-sender button:not(:disabled):hover {
+  border-color: var(--sender-accent);
+}
+
+.monitor-sender button:disabled,
+.monitor-sender select:disabled {
+  opacity: 0.65;
+}
+
+.monitor-sender [data-share-button],
+.monitor-sender [data-approve] {
+  border-color: var(--sender-accent);
+  background: var(--sender-accent);
+  color: #123731;
+  font-weight: 650;
+}
+
+.monitor-sender [data-share-button]:hover:not(:disabled),
+.monitor-sender [data-approve]:hover:not(:disabled) {
+  background: #e7fff7;
+}
+
+.monitor-sender :is(a, button, select):focus-visible {
+  outline: 2px solid var(--sender-accent);
+  outline-offset: 3px;
+}
+
+.monitor-sender section {
+  margin-top: 20px;
+  border-top: 1px solid var(--sender-border);
+  padding-top: 16px;
+}
+
+.monitor-sender code {
+  display: inline-block;
+  margin: 4px 0;
+  color: var(--sender-accent);
+  font-size: clamp(1.15rem, 5vw, 1.65rem);
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

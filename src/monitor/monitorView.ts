@@ -1,0 +1,424 @@
+import { Group, PerspectiveCamera, Vector2, type Scene, type WebGLRenderer } from 'three';
+import { MonitorAudio } from './monitorAudio';
+import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
+import { MonitorObject } from './monitorObject';
+import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
+import { MonitorXR } from './monitorXR';
+import './monitorView.css';
+
+interface MonitorViewOptions {
+  entry: HTMLElement;
+  toggle: HTMLButtonElement;
+  renderer: WebGLRenderer;
+  scene: Scene;
+  camera: PerspectiveCamera;
+  eyeHeight: number;
+  releaseInput(): void;
+}
+
+export class MonitorView {
+  private readonly screen = new MonitorObject();
+  private readonly desktop = new MonitorDesktop(this.screen);
+  private readonly audio = new MonitorAudio();
+  private readonly rig = new Group();
+  private readonly xrRenderCamera = new PerspectiveCamera();
+  private readonly xrViewCamera = new PerspectiveCamera();
+  private readonly xr: MonitorXR;
+  private readonly receiver: MonitorReceiver;
+  private readonly events = new AbortController();
+  private readonly pointer = new Vector2();
+  private readonly panel = document.createElement('section');
+  private readonly canvas: HTMLCanvasElement;
+  private readonly video: HTMLVideoElement;
+  private readonly visibilityButton: HTMLButtonElement;
+  private readonly editButton: HTMLButtonElement;
+  private readonly dragControls: HTMLElement;
+  private readonly resetButton: HTMLButtonElement;
+  private readonly form: HTMLFormElement;
+  private readonly code: HTMLInputElement;
+  private readonly connectButton: HTMLButtonElement;
+  private readonly verification: HTMLOutputElement;
+  private readonly status: HTMLElement;
+  private readonly retryVideo: HTMLButtonElement;
+  private readonly audioButton: HTMLButtonElement;
+  private readonly audioMode: HTMLSelectElement;
+  private readonly audioStatus: HTMLElement;
+  private readonly xrButton: HTMLButtonElement;
+  private readonly xrStatus: HTMLElement;
+  private state: MonitorConnectionState = {
+    phase: 'idle',
+    detail: '配信元の接続コードを入力してください。',
+    audio: { available: false, output: 'both' },
+  };
+  private placed = false;
+  private pointerId: number | null = null;
+  private dragMode: MonitorDragMode = 'move';
+  private editing = false;
+  private pendingXRSummon = false;
+
+  constructor(private readonly options: MonitorViewOptions) {
+    const { entry, renderer, scene } = options;
+    this.canvas = renderer.domElement;
+    this.panel.id = 'monitor-view-panel';
+    this.panel.className = 'coast-panel monitor-view-panel';
+    this.panel.setAttribute('aria-label', '仮想モニターの操作');
+    this.panel.innerHTML = `
+      <div class="coast-row">
+        <button type="button" data-monitor-visible>モニターを表示</button>
+        <button type="button" data-monitor-edit aria-pressed="false" disabled>配置を編集</button>
+      </div>
+      <div class="monitor-view-drag" data-monitor-drag hidden>
+        <div class="coast-row" role="group" aria-label="配置の操作">
+          <button type="button" data-monitor-mode="move" aria-pressed="true">移動</button>
+          <button type="button" data-monitor-mode="rotate" aria-pressed="false">回転</button>
+          <button type="button" data-monitor-mode="scale" aria-pressed="false">拡大縮小</button>
+        </div>
+        <p>モニターをドラッグして調整します。Escで編集を終了します。</p>
+      </div>
+      <button type="button" data-monitor-reset disabled>位置・サイズを戻す</button>
+      <div class="monitor-view-section">
+        <a data-monitor-sender-link target="_blank" rel="noopener">配信画面を開く</a>
+        <form data-monitor-form>
+          <label for="monitor-join-code">接続コード</label>
+          <div class="coast-row">
+            <input id="monitor-join-code" type="text" required maxlength="24" autocomplete="off"
+              autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX">
+            <button type="submit" data-monitor-connect>接続</button>
+          </div>
+        </form>
+        <output data-monitor-verification hidden></output>
+        <p data-monitor-status role="status"></p>
+        <button type="button" data-monitor-retry-video hidden>映像を再生</button>
+      </div>
+      <div class="monitor-view-section" role="group" aria-label="モニター音声">
+        <div class="coast-row">
+          <label class="monitor-view-volume">モニター音量
+            <input data-monitor-volume type="range" min="0" max="100" step="1" value="75">
+          </label>
+          <button type="button" data-monitor-mute aria-pressed="false">モニター音をミュート</button>
+        </div>
+        <label class="monitor-view-mode">モニターの音響
+          <select data-monitor-sound-mode>
+            <option value="stereo">ステレオ</option>
+            <option value="spatial">空間音響</option>
+          </select>
+        </label>
+        <button type="button" data-monitor-sound>モニター音を有効にする</button>
+        <p role="status" data-monitor-audio-status></p>
+      </div>
+      <div class="monitor-view-section">
+        <button type="button" data-monitor-xr disabled>VRで見る</button>
+        <p role="status" data-monitor-xr-status></p>
+      </div>
+    `;
+    const query = <T extends HTMLElement>(name: string) => this.panel.querySelector<T>(`[data-monitor-${name}]`)!;
+    this.visibilityButton = query('visible');
+    this.editButton = query('edit');
+    this.dragControls = query('drag');
+    this.resetButton = query('reset');
+    this.form = query('form');
+    this.code = this.panel.querySelector('#monitor-join-code')!;
+    this.connectButton = query('connect');
+    this.verification = query('verification');
+    this.status = query('status');
+    this.retryVideo = query('retry-video');
+    this.audioButton = query('sound');
+    this.audioMode = query('sound-mode');
+    this.audioStatus = query('audio-status');
+    this.xrButton = query('xr');
+    this.xrStatus = query('xr-status');
+    const sender = new URL(location.pathname, location.origin);
+    sender.searchParams.set('monitor', 'sender');
+    query<HTMLAnchorElement>('sender-link').href = sender.href;
+    this.video = document.createElement('video');
+    this.video.hidden = true;
+    this.video.muted = true;
+    this.video.playsInline = true;
+    this.video.setAttribute('data-monitor-video', '');
+    entry.append(this.panel, this.video);
+
+    this.xrRenderCamera.copy(options.camera);
+    this.rig.add(this.xrRenderCamera);
+    scene.add(this.rig, this.screen.group);
+    this.xr = new MonitorXR(renderer.xr, this.rig, this.screen, {
+      onStatusChange: ({ state, message }) => {
+        this.xrButton.disabled = state === 'checking' || state === 'unavailable' || state === 'starting';
+        this.xrButton.textContent = state === 'presenting' ? 'VRを終了' : 'VRで見る';
+        this.xrStatus.textContent = message;
+      },
+      onSessionChange: (presenting) => this.setXRPresentation(presenting),
+    });
+    this.receiver = new MonitorReceiver({
+      onState: state => this.setConnectionState(state),
+      onStream: stream => this.setStream(stream),
+    });
+    this.bindPanel(query('volume'), query('mute'));
+    this.bindPointer();
+    this.setConnectionState(this.state);
+    this.setOpen(true);
+    void this.xr.checkSupport();
+  }
+
+  get blocksSceneInput(): boolean {
+    return this.editing || this.options.renderer.xr.isPresenting;
+  }
+
+  get renderCamera(): PerspectiveCamera {
+    return this.options.renderer.xr.isPresenting ? this.xrRenderCamera : this.options.camera;
+  }
+
+  togglePanel(): void {
+    this.setOpen(this.panel.hidden);
+  }
+
+  closePanel(): void {
+    this.setOpen(false);
+  }
+
+  update(frame?: XRFrame): PerspectiveCamera {
+    const { camera, renderer } = this.options;
+    const reference = frame && renderer.xr.getReferenceSpace();
+    const pose = reference && frame?.getViewerPose(reference);
+    let viewer = camera;
+    if (pose) {
+      this.rig.updateMatrixWorld();
+      this.xrViewCamera.matrix.fromArray(pose.transform.matrix).premultiply(this.rig.matrixWorld);
+      this.xrViewCamera.matrix.decompose(this.xrViewCamera.position, this.xrViewCamera.quaternion, this.xrViewCamera.scale);
+      viewer = this.xrViewCamera;
+      if (this.pendingXRSummon) {
+        this.pendingXRSummon = false;
+        this.setScreenVisible(true, viewer);
+      }
+    }
+    this.xr.update(frame);
+    if (this.screen.group.visible) this.screen.update();
+    this.audio.update(viewer, this.screen.group);
+    if (!this.panel.hidden) this.updateAudioStatus();
+    return viewer;
+  }
+
+  release(): void {
+    this.finishDrag();
+    this.receiver.disconnect();
+    this.audio.stop();
+    this.xr.release();
+    const session = this.options.renderer.xr.getSession();
+    if (session) void session.end().catch(() => {});
+  }
+
+  dispose(): void {
+    this.release();
+    this.events.abort();
+    this.xr.dispose();
+    this.audio.dispose();
+    this.screen.dispose();
+    this.options.scene.remove(this.rig, this.screen.group);
+    this.panel.remove();
+    this.video.remove();
+  }
+
+  private setOpen(open: boolean): void {
+    this.panel.hidden = !open;
+    this.options.toggle.setAttribute('aria-expanded', String(open));
+    if (open) this.options.releaseInput();
+    else this.setEditing(false);
+  }
+
+  private setScreenVisible(visible: boolean, camera = this.options.camera): void {
+    if (visible && !this.placed) {
+      this.screen.reset(camera);
+      this.placed = true;
+    }
+    this.screen.setVisible(visible);
+    this.visibilityButton.textContent = visible ? 'モニターを隠す' : 'モニターを表示';
+    this.editButton.disabled = !visible;
+    this.resetButton.disabled = !visible;
+    if (!visible) this.setEditing(false);
+  }
+
+  private setXRPresentation(presenting: boolean): void {
+    const { camera, eyeHeight } = this.options;
+    this.setOpen(!presenting);
+    if (presenting) {
+      this.options.releaseInput();
+      this.rig.position.copy(camera.position);
+      this.rig.position.y -= eyeHeight;
+      this.rig.rotation.set(0, camera.rotation.y, 0);
+      this.xrRenderCamera.near = camera.near;
+      this.xrRenderCamera.far = camera.far;
+      this.pendingXRSummon = !this.screen.group.visible;
+      if (this.pendingXRSummon) this.placed = false;
+    } else {
+      this.pendingXRSummon = false;
+    }
+  }
+
+  private setEditing(editing: boolean): void {
+    if (this.editing === editing) return;
+    this.editing = editing;
+    this.editButton.setAttribute('aria-pressed', String(editing));
+    this.dragControls.hidden = !editing;
+    this.canvas.classList.toggle('monitor-editing', editing);
+    this.options.releaseInput();
+    if (!editing) this.finishDrag();
+  }
+
+  private setConnectionState(state: MonitorConnectionState): void {
+    this.state = state;
+    this.status.textContent = state.detail;
+    this.screen.setStatus(state.detail);
+    const active = state.phase === 'approval' || state.phase === 'connecting' || state.phase === 'connected';
+    this.code.disabled = active;
+    this.code.required = !active;
+    this.connectButton.textContent = active ? '切断' : '接続';
+    this.verification.hidden = !state.verification;
+    this.verification.textContent = state.verification ?? '';
+    this.verification.setAttribute('aria-label', '配信元と照合する確認番号');
+    this.audio.setEnabled(state.audio.available && state.audio.output !== 'pc');
+    if (state.phase === 'ended' || state.phase === 'failed') this.audio.stop();
+    this.updateAudioStatus();
+  }
+
+  private setStream(stream: MediaStream | null): void {
+    this.retryVideo.hidden = true;
+    this.video.pause();
+    this.video.srcObject = stream;
+    this.screen.setVideo(stream ? this.video : null);
+    this.audio.setStream(stream);
+    if (stream) void this.playVideo(stream);
+  }
+
+  private async playVideo(stream: MediaStream): Promise<void> {
+    try {
+      await this.video.play();
+      if (this.video.srcObject === stream) this.retryVideo.hidden = true;
+    } catch {
+      if (this.video.srcObject !== stream) return;
+      this.retryVideo.hidden = false;
+      this.screen.setStatus('パネルの「映像を再生」を押してください。');
+    }
+  }
+
+  private updateAudioStatus(): void {
+    const audioStatus = this.audio.getStatus();
+    const { phase, audio } = this.state;
+    let message = '';
+    if (audioStatus === 'unavailable' || audioStatus === 'stream-unavailable') {
+      message = 'この視聴ブラウザで共有音声を再生できません。';
+    } else if (phase === 'connected') {
+      if (!audio.available) message = '配信元から共有音声が取得されていません。';
+      else if (audio.pcPlaybackSuppressed) message = '共有音声は停止中です。PC側の再生は配信元で共有対象を選び直すと再開します。';
+      else if (audio.output === 'pc') message = '配信元で「PC側のみ」が選ばれています。';
+      else if (audioStatus !== 'ready') message = '視聴側でも聞くには、モニター音を有効にしてください。';
+      else if (audio.output === 'viewer') message = '配信元で「VR側のみ」が選ばれています。';
+    }
+    if (this.audioStatus.textContent !== message) this.audioStatus.textContent = message;
+    this.audioButton.disabled = audioStatus === 'ready' || audioStatus === 'unavailable';
+  }
+
+  private bindPanel(volume: HTMLInputElement, mute: HTMLButtonElement): void {
+    const { signal } = this.events;
+    const listen = { signal };
+    this.visibilityButton.addEventListener('click', () => this.setScreenVisible(!this.screen.group.visible), listen);
+    this.editButton.addEventListener('click', () => this.setEditing(!this.editing), listen);
+    this.resetButton.addEventListener('click', () => {
+      this.finishDrag();
+      this.screen.reset(this.options.camera);
+    }, listen);
+    const modes = this.dragControls.querySelectorAll<HTMLButtonElement>('[data-monitor-mode]');
+    for (const button of modes) {
+      button.addEventListener('click', () => {
+        this.finishDrag();
+        this.dragMode = button.dataset.monitorMode as MonitorDragMode;
+        for (const other of modes) other.setAttribute('aria-pressed', String(other === button));
+      }, listen);
+    }
+    this.form.addEventListener('submit', event => {
+      event.preventDefault();
+      if (this.code.disabled) this.receiver.disconnect();
+      else {
+        this.setScreenVisible(true);
+        const code = this.code.value;
+        this.code.value = '';
+        void this.receiver.connect(code);
+      }
+    }, listen);
+    this.retryVideo.addEventListener('click', () => {
+      if (this.video.srcObject instanceof MediaStream) void this.playVideo(this.video.srcObject);
+    }, listen);
+    volume.addEventListener('input', () => this.audio.setVolume(volume.valueAsNumber / 100), listen);
+    mute.addEventListener('click', () => {
+      const muted = mute.getAttribute('aria-pressed') !== 'true';
+      mute.setAttribute('aria-pressed', String(muted));
+      this.audio.setMuted(muted);
+    }, listen);
+    this.audioMode.addEventListener('change', () => {
+      this.audio.setMode(this.audioMode.value === 'spatial' ? 'spatial' : 'stereo');
+    }, listen);
+    this.audioButton.addEventListener('click', async () => {
+      this.audioButton.disabled = true;
+      await this.audio.start();
+      if (!this.audio.supportsSpatial()) {
+        this.audioMode.value = 'stereo';
+        this.audioMode.disabled = true;
+        this.audio.setMode('stereo');
+        this.audioMode.title = 'このブラウザで空間音響を利用できません。';
+      }
+      this.updateAudioStatus();
+    }, listen);
+    this.xrButton.addEventListener('click', () => void this.xr.toggleSession(), listen);
+    this.panel.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        if (this.editing) this.setEditing(false);
+        else {
+          this.setOpen(false);
+          this.options.toggle.focus();
+        }
+      }
+      event.stopPropagation();
+    }, listen);
+  }
+
+  private bindPointer(): void {
+    const { signal } = this.events;
+    const listen = { signal };
+    const canvas = this.canvas;
+    const position = ({ clientX, clientY }: PointerEvent) => {
+      const area = canvas.getBoundingClientRect();
+      return this.pointer.set(2 * (clientX - area.left) / area.width - 1, 1 - 2 * (clientY - area.top) / area.height);
+    };
+    canvas.addEventListener('pointerdown', event => {
+      if (!this.editing || this.pointerId !== null || event.button !== 0) return;
+      if (!this.desktop.begin(this.options.camera, position(event), this.dragMode,
+        event.pointerId, event.clientX, event.clientY)) return;
+      this.pointerId = event.pointerId;
+      canvas.setPointerCapture(event.pointerId);
+      canvas.focus({ preventScroll: true });
+      event.preventDefault();
+    }, listen);
+    canvas.addEventListener('pointermove', event => {
+      if (this.pointerId !== event.pointerId) return;
+      this.desktop.move(this.options.camera, position(event), event.pointerId, event.clientX, event.clientY);
+    }, listen);
+    const finish = (event: PointerEvent) => {
+      if (this.pointerId === event.pointerId) this.finishDrag();
+    };
+    canvas.addEventListener('pointerup', finish, listen);
+    canvas.addEventListener('pointercancel', finish, listen);
+    canvas.addEventListener('lostpointercapture', finish, listen);
+    canvas.addEventListener('keydown', event => {
+      if (!this.editing) return;
+      if (event.key === 'Escape') this.setEditing(false);
+      event.stopPropagation();
+    }, listen);
+    window.addEventListener('blur', () => this.finishDrag(), listen);
+  }
+
+  private finishDrag(): void {
+    if (this.pointerId === null) return;
+    const id = this.pointerId;
+    this.pointerId = null;
+    this.desktop.end(id);
+    if (this.canvas.hasPointerCapture(id)) this.canvas.releasePointerCapture(id);
+  }
+}

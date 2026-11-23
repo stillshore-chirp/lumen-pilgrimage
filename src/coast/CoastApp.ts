@@ -2,7 +2,8 @@ import {
   NeutralToneMapping, PCFShadowMap, PerspectiveCamera, Vector3, WebGLRenderer, type Scene,
 } from 'three';
 import { CoastAudio } from './CoastAudio';
-import { CoastControls, type CoastMovement, type CoastNavigation } from './CoastControls';
+import { CoastControls, EYE_HEIGHT, type CoastMovement, type CoastNavigation } from './CoastControls';
+import type { MonitorView } from '../monitor/monitorView';
 import type { CoastBirdCue } from './coastBirdCue';
 import { EXPLORATION_WORLDS, findDestination, type ExplorationWorldId } from './coastDestinations';
 import { createCoastTravelPanel } from './CoastTravelPanel';
@@ -51,11 +52,12 @@ export class CoastApp {
   private readonly travel: ReturnType<typeof createCoastTravelPanel>;
   private readonly travelDialog: HTMLDialogElement;
   private readonly resize: ResizeObserver;
+  private monitor?: MonitorView;
   private time: CoastTimeOfDay;
   private quality: CoastQuality = 'light';
   private lastFrame = 0;
   private elapsed = 0;
-  private frameId = 0;
+  private disposed = false;
 
   constructor(private readonly mount: HTMLElement, overlook?: OverlookScene) {
     const path = new URLSearchParams(location.search);
@@ -166,8 +168,11 @@ export class CoastApp {
       },
     }, overlook?.navigation);
     if (destination) this.controls.relocate(destination);
-    lock.addEventListener('click', () => this.controls.requestLock());
-    canvas.addEventListener('click', () => this.controls.requestLock());
+    const lockView = () => {
+      if (!this.monitor?.blocksSceneInput) this.controls.requestLock();
+    };
+    lock.addEventListener('click', lockView);
+    canvas.addEventListener('click', lockView);
     flight.addEventListener('click', () => {
       this.controls.toggleFlight();
       canvas.focus({ preventScroll: true });
@@ -175,7 +180,10 @@ export class CoastApp {
 
     this.travel = createCoastTravelPanel({
       worlds: EXPLORATION_WORLDS, worldId: this.worldId, time: this.time,
-      onOpen: () => this.controls.releaseInput(),
+      onOpen: () => {
+        this.monitor?.closePanel();
+        this.controls.releaseInput();
+      },
       onTravel: (worldId, placeId) => this.goTo(worldId, placeId),
       onTimeOfDay: time => this.setTimeOfDay(time),
     });
@@ -183,6 +191,7 @@ export class CoastApp {
     this.travelDialog = this.travel.element.querySelector('dialog')!;
     const actions = ui.querySelector('.coast-header-actions')!;
     actions.prepend(this.travel.element);
+    this.bindMonitor(actions);
     window.addEventListener('keydown', this.onTravelKey);
 
     this.bindQuality(ui);
@@ -191,7 +200,7 @@ export class CoastApp {
     this.resize = new ResizeObserver(() => this.resizeViewport());
     this.resize.observe(this.mount);
     this.resizeViewport();
-    this.frameId = requestAnimationFrame(this.render);
+    this.renderer.setAnimationLoop(this.render);
     window.addEventListener('pagehide', this.onPageHide);
   }
 
@@ -227,6 +236,37 @@ export class CoastApp {
     const address = new URL(location.href);
     address.searchParams.set('time', time);
     history.replaceState(null, '', address);
+  }
+
+  private bindMonitor(actions: Element): void {
+    const entry = document.createElement('div');
+    entry.className = 'coast-travel-panel monitor-entry';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.textContent = '仮想モニター';
+    toggle.setAttribute('aria-expanded', 'false');
+    entry.append(toggle);
+    actions.append(entry);
+    toggle.addEventListener('click', async () => {
+      if (this.monitor) {
+        this.monitor.togglePanel();
+        return;
+      }
+      toggle.disabled = true;
+      try {
+        const { MonitorView } = await import('../monitor/monitorView');
+        if (this.disposed) return;
+        this.monitor = new MonitorView({
+          entry, toggle, renderer: this.renderer, scene: this.world.scene, camera: this.camera,
+          eyeHeight: EYE_HEIGHT, releaseInput: () => this.controls.releaseInput(),
+        });
+        toggle.setAttribute('aria-controls', 'monitor-view-panel');
+      } catch {
+        toggle.textContent = '仮想モニターを再読み込み';
+      } finally {
+        toggle.disabled = false;
+      }
+    });
   }
 
   private bindQuality(ui: HTMLElement): void {
@@ -309,6 +349,7 @@ export class CoastApp {
   }
 
   private resizeViewport(): void {
+    if (this.renderer.xr.isPresenting) return;
     const width = Math.max(1, this.mount.clientWidth);
     const height = Math.max(1, this.mount.clientHeight);
     const resolution = qualitySettings[this.quality];
@@ -321,25 +362,30 @@ export class CoastApp {
     this.camera.updateProjectionMatrix();
   }
 
-  private readonly render = (now: number): void => {
+  private readonly render = (now: number, frame?: XRFrame): void => {
     const dt = this.lastFrame === 0 ? 0 : Math.min((now - this.lastFrame) / 1000, 0.05);
     this.lastFrame = now;
     this.elapsed += dt;
-    if (!this.travelDialog.open) this.controls.update(dt);
-    const birdCues = this.world.update(this.elapsed, this.camera);
-    this.camera.getWorldDirection(this.forward);
-    this.up.copy(this.camera.up).applyQuaternion(this.camera.quaternion);
-    this.audio.update(this.camera.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
-    this.renderer.render(this.world.scene, this.camera);
-    this.frameId = requestAnimationFrame(this.render);
+    if (!this.travelDialog.open && !this.monitor?.blocksSceneInput) this.controls.update(dt);
+    const viewer = this.monitor?.update(frame) ?? this.camera;
+    const birdCues = this.world.update(this.elapsed, viewer);
+    viewer.getWorldDirection(this.forward);
+    this.up.copy(viewer.up).applyQuaternion(viewer.quaternion);
+    this.audio.update(viewer.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
+    this.renderer.render(this.world.scene, this.monitor?.renderCamera ?? this.camera);
   };
 
   private readonly onPageHide = (event: PageTransitionEvent): void => {
-    if (event.persisted) return;
+    if (event.persisted) {
+      this.monitor?.release();
+      return;
+    }
+    this.disposed = true;
     window.removeEventListener('pagehide', this.onPageHide);
     window.removeEventListener('keydown', this.onTravelKey);
-    cancelAnimationFrame(this.frameId);
+    this.renderer.setAnimationLoop(null);
     this.resize.disconnect();
+    this.monitor?.dispose();
     this.controls.dispose();
     this.audio.dispose();
     this.world.dispose();

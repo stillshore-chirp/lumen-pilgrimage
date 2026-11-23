@@ -1,0 +1,115 @@
+.monitor-entry {
+  position: relative;
+}
+
+.coast-locked .monitor-entry {
+  visibility: hidden;
+}
+
+.monitor-view-panel {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: calc(100% + 8px);
+  inset-inline-end: 0;
+  box-sizing: border-box;
+  width: min(24rem, calc(100vw - 24px));
+  max-inline-size: none;
+  max-block-size: min(72dvh, 42rem);
+  padding: 12px;
+  font-size: clamp(1rem, 2.2vw, 1.2rem);
+  scroll-padding: 12px;
+}
+
+.monitor-view-panel p {
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.monitor-view-panel a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #c8eddf;
+}
+
+.monitor-view-panel [data-monitor-reset],
+.monitor-view-drag {
+  margin-top: 8px;
+}
+
+.monitor-view-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #bfe2dc45;
+}
+
+.monitor-view-panel label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.monitor-view-panel input[type="text"],
+.monitor-view-panel select {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 5px 9px;
+  border: 1px solid #bfe2dc75;
+  border-radius: 8px;
+  background: #0c1d1f;
+  color: inherit;
+  font: inherit;
+}
+
+.monitor-view-panel input[type="text"] {
+  flex: 1 1 10rem;
+  min-width: 0;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.monitor-view-panel [data-monitor-verification]:not([hidden]) {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 8px;
+  border: 1px solid #bfe2dc75;
+  border-radius: 6px;
+  color: #e3fff6;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.15em;
+}
+
+.monitor-view-panel .monitor-view-volume,
+.monitor-view-panel .monitor-view-mode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.monitor-view-mode {
+  margin-top: 8px;
+}
+
+.monitor-editing {
+  cursor: grab;
+  touch-action: none;
+}
+
+.monitor-editing:active {
+  cursor: grabbing;
+}
+
+@media (max-width: 900px) {
+  .coast-header:has(.monitor-view-panel:not([hidden])) {
+    position: relative;
+  }
+
+  .monitor-entry {
+    position: static;
+  }
+
+  .monitor-view-panel {
+    max-block-size: min(66dvh, 42rem);
+  }
+}
