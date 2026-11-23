@@ -387,6 +387,57 @@ test('room switches draw, reverse and reopen the same woven curtain panels', { t
   assert.deepEqual(errors, []);
 });
 
+test('residence menu keeps fixture, zone and wall curtain controls in sync', { timeout }, async t => {
+  const { page, errors } = await openResidence(t);
+  const trigger = button(page, '住戸の操作');
+  const dialog = page.getByRole('dialog', { name: '住戸の操作' });
+  const livingLights = dialog.locator('[data-residence-section="lighting-LD"]');
+  const west = livingLights.getByRole('button', { name: 'ペンダント灯（西）', exact: true });
+  const east = livingLights.getByRole('button', { name: 'ペンダント灯（東）', exact: true });
+  const atStart = await camera(page);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await dialog.waitFor();
+  await hold(page, 'd', () => moreMovementFrames(page));
+  assert.deepEqual(await camera(page), atStart, 'A modal must suspend scene movement');
+  await livingLights.locator('summary').click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'true');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  await west.click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  await livingLights.getByRole('button', { name: '一括消灯', exact: true }).click();
+  assert.equal(await east.getAttribute('aria-pressed'), 'false');
+  await livingLights.getByRole('button', { name: '一括点灯', exact: true }).click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'true');
+  await west.click();
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
+  await button(page, '昼').click();
+  await button(page, '高品質').click();
+  await trigger.click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+
+  await dialog.getByRole('button', { name: 'カーテン', exact: true }).click();
+  const curtains = dialog.locator('[data-residence-section="curtains-LD"]');
+  await curtains.locator('summary').click();
+  const drape = curtains.getByRole('button', { name: 'カーテン', exact: true });
+  await drape.click();
+  assert.equal(await drape.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await button(page, '軽量').click();
+  await hold(page, 'd', () => page.waitForFunction(() => window.residenceProbe.camera.x < 18.06));
+  await button(page, 'リビングのカーテンを開ける').click();
+  await trigger.click();
+  assert.equal(await drape.getAttribute('aria-pressed'), 'true');
+  await capture(page, 'residence-control-menu');
+  await page.setViewportSize({ width: 375, height: 710 });
+  assert.ok(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  assert.deepEqual(errors, []);
+});
+
 test('the primary bedroom slider gates balcony access and the glass rail stops walking', { timeout }, async t => {
   const { page, errors } = await openResidence(t, 'primary-bedroom');
   const open = button(page, 'バルコニーの引戸を開ける');

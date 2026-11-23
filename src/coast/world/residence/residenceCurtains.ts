@@ -66,6 +66,7 @@ const ARC_SAMPLES = 48;
 const ROWS = [0, .009, .03, .13, .29, .46, .64, .80, .93, .976, .992, 1] as const;
 const RAIL_INSET = .029;
 const MOTOR_RATE = 4.9;
+const CLOSED_TRANSMISSION = .22;
 
 const wave = Array.from({ length: ARC_SAMPLES + 1 }, (_, sample) => Math.sin(2 * Math.PI * sample / ARC_SAMPLES));
 
@@ -233,9 +234,16 @@ export function createResidenceCurtains(m: ResidenceMaterials) {
     let target = 1;
     let openness = 1;
     let velocity = 0;
+    function setOpen(open: boolean): void { target = Number(open); }
     for (const panel of panels) panel.update(openness);
 
     return {
+      section: {
+        id: `curtains-${id}`, title: displayLabel ?? label, category: 'curtains' as const,
+        controls: [{ kind: 'toggle' as const, id: 'open', label: 'カーテン',
+          get: () => target === 1, set: setOpen }],
+      },
+      daylight: { roomId: id, transmission: () => THREE.MathUtils.lerp(CLOSED_TRANSMISSION, 1, openness) },
       candidate(position: THREE.Vector3) {
         const dx = position.x - east;
         const dz = position.z + north;
@@ -247,7 +255,7 @@ export function createResidenceCurtains(m: ResidenceMaterials) {
         return {
           distance,
           label: `${displayLabel ?? label}のカーテンを${target === 1 ? '閉める' : '開ける'}`,
-          invoke() { target = 1 - target; },
+          invoke() { setOpen(target === 0); },
         };
       },
       update(dt: number) {
@@ -272,6 +280,8 @@ export function createResidenceCurtains(m: ResidenceMaterials) {
   furniture.finish();
   return {
     group,
+    sections: controllers.map(controller => controller.section),
+    daylight: controllers.map(controller => controller.daylight),
     nearby(position: THREE.Vector3) {
       for (const controller of controllers) {
         const candidate = controller.candidate(position);

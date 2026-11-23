@@ -8,6 +8,7 @@ import type { CoastBirdCue } from './coastBirdCue';
 import { EXPLORATION_WORLDS, findDestination, type ExplorationWorldId } from './coastDestinations';
 import { createCoastTravelPanel } from './CoastTravelPanel';
 import { CoastWorld, type CoastQuality } from './CoastWorld';
+import { createResidenceControlPanel, type ResidenceControlSection } from './ResidenceControlPanel';
 import type { CoastTimeOfDay } from './world/coastAtmosphere';
 import './coast.css';
 
@@ -37,7 +38,7 @@ type ExplorationAudio = Pick<CoastAudio, 'start' | 'setLevel' | 'update' | 'disp
 
 interface ExplorationInteraction {
   label(position: Vector3): string | null;
-  invoke(): void;
+  invoke(): void | { readonly openSection: string };
 }
 
 export interface ExplorationScene {
@@ -46,6 +47,7 @@ export interface ExplorationScene {
   readonly navigation: CoastNavigation;
   readonly audio: ExplorationAudio;
   readonly interaction?: ExplorationInteraction;
+  readonly residenceControls?: readonly ResidenceControlSection[];
 }
 
 export class CoastApp {
@@ -62,6 +64,7 @@ export class CoastApp {
   private readonly resize: ResizeObserver;
   private readonly interaction?: ExplorationInteraction;
   private readonly interactionButton?: HTMLButtonElement;
+  private readonly residencePanel?: ReturnType<typeof createResidenceControlPanel>;
   private monitor?: MonitorView;
   private time: CoastTimeOfDay;
   private quality: CoastQuality = 'light';
@@ -213,6 +216,13 @@ export class CoastApp {
     const actions = ui.querySelector('.coast-header-actions')!;
     actions.prepend(this.travel.element);
     this.bindMonitor(actions);
+    if (loaded?.residenceControls?.length) {
+      this.residencePanel = createResidenceControlPanel(loaded.residenceControls, () => {
+        this.monitor?.closePanel();
+        this.controls.releaseInput();
+      });
+      actions.append(this.residencePanel.element);
+    }
     if (this.interaction) {
       this.interactionButton = document.createElement('button');
       this.interactionButton.type = 'button';
@@ -220,7 +230,7 @@ export class CoastApp {
       this.interactionButton.hidden = true;
       this.interactionButton.setAttribute('aria-keyshortcuts', 'E');
       this.interactionButton.addEventListener('click', () => {
-        if (this.invokeInteraction()) canvas.focus({ preventScroll: true });
+        if (this.invokeInteraction() && !this.residencePanel?.dialog.open) canvas.focus({ preventScroll: true });
       });
       ui.append(this.interactionButton);
     }
@@ -239,7 +249,7 @@ export class CoastApp {
   private readonly onSceneKey = (event: KeyboardEvent): void => {
     if ((event.code !== 'KeyT' && event.code !== 'KeyE') || event.repeat
       || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-    if (this.travelDialog.open || (event.target instanceof Element
+    if (this.travelDialog.open || this.residencePanel?.dialog.open || (event.target instanceof Element
       && event.target.closest('input, textarea, select, [contenteditable]'))) return;
     if (event.code === 'KeyT') {
       event.preventDefault();
@@ -250,13 +260,14 @@ export class CoastApp {
   };
 
   private interactionLabel(): string | null {
-    if (this.travelDialog.open || this.monitor?.blocksSceneInput) return null;
+    if (this.travelDialog.open || this.residencePanel?.dialog.open || this.monitor?.blocksSceneInput) return null;
     return this.interaction?.label(this.camera.position) ?? null;
   }
 
   private invokeInteraction(): boolean {
     if (!this.interaction || !this.interactionLabel()) return false;
-    this.interaction.invoke();
+    const action = this.interaction.invoke();
+    if (action) this.residencePanel?.open(action.openSection);
     return true;
   }
 
@@ -418,9 +429,10 @@ export class CoastApp {
     const dt = this.lastFrame === 0 ? 0 : Math.min((now - this.lastFrame) / 1000, 0.05);
     this.lastFrame = now;
     this.elapsed += dt;
-    if (!this.travelDialog.open && !this.monitor?.blocksSceneInput) this.controls.update(dt);
+    if (!this.travelDialog.open && !this.residencePanel?.dialog.open && !this.monitor?.blocksSceneInput) this.controls.update(dt);
     const viewer = this.monitor?.update(frame) ?? this.camera;
     const birdCues = this.world.update(this.elapsed, viewer);
+    this.residencePanel?.sync();
     if (this.interactionButton) {
       const label = this.interactionLabel();
       this.interactionButton.hidden = !label;
