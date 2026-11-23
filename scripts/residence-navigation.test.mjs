@@ -10,12 +10,14 @@ const hooks = registerHooks({
   },
 });
 const { EXPLORATION_WORLDS, findDestination } = await import('../src/coast/coastDestinations.ts');
+const { createResidenceDoors } = await import('../src/coast/world/residence/residenceDoors.ts');
 const { createResidenceNavigation } = await import('../src/coast/world/residence/residenceNavigation.ts');
-const { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS,
+const { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS,
   RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS } =
   await import('../src/coast/world/residence/residencePlan.ts');
 const { createResidenceMaterials } = await import('../src/coast/world/residence/residenceMaterials.ts');
 const { createResidenceFurniture } = await import('../src/coast/world/residence/residenceFurniture.ts');
+const { createResidenceShell } = await import('../src/coast/world/residence/residenceShell.ts');
 hooks.deregister();
 
 const materials = createResidenceMaterials();
@@ -142,6 +144,93 @@ test('walking crosses the indoor sofa, dining table and chairs, kitchen island a
   assertClearRoute(nav, [[15.98, 3.3], [15.98, 6.1]]);
   assertClearRoute(nav, [[13.35, 7.715], [16.7, 7.715]]);
   assertClearRoute(nav, [[11.65, 14.84], [12.48, 14.84]]);
+});
+
+function doorwayCentre({ wall, opening }, offset = 0) {
+  const centre = (opening.from + opening.to) / 2;
+  return wall.axis === 'e' ? { x: centre, z: -(wall.fixed + offset) } : { x: wall.fixed + offset, z: -centre };
+}
+
+test('every dwelling door stays level, blocks walking when closed and reopens from both sides', () => {
+  const poses = new Map();
+  const doors = createResidenceDoors(({ id }, pose) => poses.set(id, pose));
+  const nav = createResidenceNavigation(spawn, furniture.obstacles, () => false, doors);
+  assert.equal(RESIDENCE_DOORWAYS.length, 13);
+  assert.equal(new Set(RESIDENCE_DOORWAYS.map(({ id }) => id)).size, RESIDENCE_DOORWAYS.length);
+  for (const doorway of RESIDENCE_DOORWAYS) {
+    const { id, label, opening, wall } = doorway;
+    const side = opening.kind === 'door' ? opening.swing.side : -1;
+    const threshold = doorwayCentre(doorway);
+    const approach = doorwayCentre(doorway, -.61 * side);
+    const opposite = doorwayCentre(doorway, .41 * side);
+    const isBlocked = ({ x, z }) => nav.blocksWalking(x, z, 0);
+    const route = [approach, opposite].map(({ x, z }) => [x, -z]);
+    assertClearRoute(nav, route);
+    assert.equal(nav.groundHeight(threshold.x, threshold.z), 0, id);
+    assert.equal(doors.nearby(approach)?.label, `${label}を閉める`);
+    doors.nearby(approach).invoke();
+    assert.ok(doors.update(.275, approach), id);
+    assert.equal(doors.opennessFor(wall, opening), .5, id);
+    const pose = poses.get(id);
+    assert.ok(nav.blocksWalking(pose.east + Math.cos(pose.angle) * pose.width / 2,
+      -pose.north - Math.sin(pose.angle) * pose.width / 2, 0), id);
+    doors.update(.275, approach);
+    assert.equal(doors.openness(id), 0, id);
+    assert.equal(isBlocked(threshold), true, id);
+    assert.equal(isBlocked(approach), false, id);
+    assert.equal(isBlocked(opposite), false, id);
+    assert.equal(doors.nearby(opposite)?.label, `${label}を開ける`);
+    doors.nearby(opposite).invoke();
+    const clearOfSwing = doorwayCentre(doorway, 1.45 * side);
+    assertClearRoute(nav, [[opposite.x, -opposite.z], [clearOfSwing.x, -clearOfSwing.z]]);
+    doors.update(.55, clearOfSwing);
+    assert.equal(doors.openness(id), 1, id);
+    assertClearRoute(nav, route);
+  }
+});
+
+test('a hinged leaf and the fusuma cannot sweep through someone while closing', () => {
+  const doors = createResidenceDoors();
+  const entrance = RESIDENCE_DOORWAYS.find(({ id }) => id === 'entrance');
+  const outside = doorwayCentre(entrance, .66);
+  const insideSwing = { x: 10.91, z: -15.13 };
+  doors.nearby(outside).invoke();
+  assert.equal(doors.blocksWalking(insideSwing.x, insideSwing.z), false);
+  assert.equal(doors.update(.55, insideSwing), false);
+  assert.equal(doors.openness('entrance'), 1);
+  doors.update(.55, outside);
+  assert.equal(doors.openness('entrance'), 0);
+  assert.equal(doors.blocksWalking(insideSwing.x, insideSwing.z), false);
+
+  const tea = RESIDENCE_DOORWAYS.find(({ id }) => id === 'tea-room');
+  const hallway = doorwayCentre(tea, .60);
+  doors.nearby(hallway).invoke();
+  assert.equal(doors.update(.55, doorwayCentre(tea)), false);
+  assert.equal(doors.openness('tea-room'), 1);
+  assert.ok(doors.update(.55, hallway));
+  assert.equal(doors.openness('tea-room'), 0);
+  assert.equal(doors.openness('bedroom-03'), 1);
+});
+
+test('the tea-room fusuma moves an opaque shadow-casting leaf in the shell', () => {
+  const shell = createResidenceShell(materials);
+  try {
+    const leaf = shell.group.getObjectByName('Tea room fusuma');
+    assert.ok(leaf);
+    assert.ok(leaf.children.some(mesh => mesh.castShadow && mesh.material === materials.washi
+      && !mesh.material.transparent && mesh.material.transmission === 0));
+    const openEast = leaf.position.x;
+    const tea = RESIDENCE_DOORWAYS.find(({ id }) => id === 'tea-room');
+    const hallway = doorwayCentre(tea, .60);
+    shell.doors.nearby(hallway).invoke();
+    shell.doors.update(.55, hallway);
+    assert.ok(leaf.position.x - openEast > .96);
+    assert.equal(shell.doors.openness('tea-room'), 0);
+    const southWindowWall = RESIDENCE_WALLS.find(wall => wall.axis === 'e' && wall.fixed === 0);
+    assert.equal(shell.doors.opennessFor(southWindowWall, southWindowWall.openings[1]), 1);
+  } finally {
+    shell.dispose();
+  }
 });
 
 test('only the sliding door opens onto the balcony and its furniture still blocks walking', () => {

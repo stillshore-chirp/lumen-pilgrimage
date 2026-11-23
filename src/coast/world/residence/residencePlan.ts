@@ -9,14 +9,22 @@ export interface ResidenceRoom {
   readonly ceiling: number | null;
 }
 
-export interface ResidenceOpening {
-  readonly kind: 'window' | 'door' | 'passage' | 'balcony-door';
+interface OpeningBounds {
   readonly from: number;
   readonly to: number;
   readonly bottom: number;
   readonly top: number;
-  readonly swing?: { readonly hinge: 'from' | 'to'; readonly side: -1 | 1 };
 }
+
+type DoorSwing = { readonly hinge: 'from' | 'to'; readonly side: -1 | 1 };
+
+export type ResidenceDoorOpening = OpeningBounds & { readonly id: string; readonly label: string } & (
+  { readonly kind: 'door'; readonly swing: DoorSwing } | { readonly kind: 'fusuma' }
+);
+
+export type ResidenceOpening = ResidenceDoorOpening | (
+  OpeningBounds & { readonly kind: 'window' | 'passage' | 'balcony-door' }
+);
 
 export interface ResidenceWall {
   readonly axis: 'e' | 'n';
@@ -67,7 +75,6 @@ export const RESIDENCE_TEA_HEARTH: ResidenceRect = [4.98, 2.065, 5.404, 2.489];
 export const RESIDENCE_STUDY_RUG: ResidenceRect = [8.42, 1.69, 10.47, 3.92];
 
 export const RESIDENCE_BALCONY_DOOR = { e: 20.7, nFrom: 13.05, nTo: 14.1 } as const;
-export const RESIDENCE_HINGED_DOOR = { hingeInset: 0.019, skinOffset: 0.013, leafInset: 0.063, halfLeaf: 0.021 } as const;
 
 export const RESIDENCE_FACADE_PIERS: readonly ResidenceRect[] = [
   [17.71, -0.12, 18.15, 0.43],
@@ -84,9 +91,12 @@ function windowOpening(from: number, to: number, top: number): ResidenceOpening 
   return { kind: 'window', from, to, bottom: 0.12, top };
 }
 
-function clearOpening(kind: 'door' | 'passage' | 'balcony-door', from: number, to: number, top: number,
-  swing?: ResidenceOpening['swing']): ResidenceOpening {
-  return { kind, from, to, bottom: 0, top, swing };
+function clearOpening(kind: 'passage' | 'balcony-door', from: number, to: number, top: number): ResidenceOpening {
+  return { kind, from, to, bottom: 0, top };
+}
+
+function door(id: string, label: string, from: number, to: number, swing: DoorSwing, top = 2.2): ResidenceDoorOpening {
+  return { kind: 'door', id, label, from, to, bottom: 0, top, swing };
 }
 
 function wall(axis: ResidenceWall['axis'], fixed: number, from: number, to: number,
@@ -111,7 +121,7 @@ export const RESIDENCE_WALLS: readonly ResidenceWall[] = [
   wall('n', 0, 0, 11.1, 'exterior'),
   wall('e', 11.1, 0, 8, 'party'),
   wall('n', 8, 11.1, 15.6, 'party'),
-  wall('e', 15.6, 8, 16.5, 'party', [clearOpening('door', 10.38, 11.54, 2.35, bedroomSwing)]),
+  wall('e', 15.6, 8, 16.5, 'party', [door('entrance', '玄関の扉', 10.38, 11.54, bedroomSwing, 2.35)]),
   wall('e', 15.6, 16.5, 22.8, 'exterior'),
   wall('e', 11.6, 20.7, 22.8, 'exterior', [windowOpening(20.99, 22.53, 2.73)], 0.24),
   wall('n', balconyWest, 11.6, 15.6, 'exterior', [
@@ -124,19 +134,19 @@ export const RESIDENCE_WALLS: readonly ResidenceWall[] = [
   wall('n', 3.65, 0, 5),
   wall('n', 7.3, 0, 5),
   wall('e', 5, 0, 11, 'interior', [
-    clearOpening('door', 2.36, 3.32, 2.2, bedroomSwing),
-    clearOpening('door', 6.01, 6.97, 2.2, bedroomSwing),
-    clearOpening('door', 9.57, 10.53, 2.2, bedroomSwing),
+    door('bedroom-03', '寝室03の扉', 2.36, 3.32, bedroomSwing),
+    { kind: 'fusuma', id: 'tea-room', label: '茶室の襖', from: 6.01, to: 6.97, bottom: 0, top: 2.2 },
+    door('study', '書斎の扉', 9.57, 10.53, bedroomSwing),
   ]),
   wall('n', 11, 0, 12.1, 'interior', [
     clearOpening('passage', 5.08, 6.57, 2.65),
-    clearOpening('door', 10.49, 11.47, 2.2, bedroomSwing),
+    door('guest-wc', '来客用WCの扉', 10.49, 11.47, bedroomSwing),
   ]),
   wall('e', 6.65, 0, 11, 'interior', [
-    clearOpening('door', 1.98, 2.94, 2.2, northSwing),
-    clearOpening('door', 4.89, 5.81, 2.2, northSwing),
-    clearOpening('door', 6.61, 7.53, 2.2, northSwing),
-    clearOpening('door', 9.48, 10.4, 2.2, northSwing),
+    door('bath-a', '浴室Aの扉', 1.98, 2.94, northSwing),
+    door('bath-b', '浴室Bの扉', 4.89, 5.81, northSwing),
+    door('laundry', '洗濯室の扉', 6.61, 7.53, northSwing),
+    door('storage', '収納の扉', 9.48, 10.4, northSwing),
   ]),
   wall('n', 3.35, 6.65, 10.2),
   wall('n', 6.25, 6.65, 11.1),
@@ -145,13 +155,14 @@ export const RESIDENCE_WALLS: readonly ResidenceWall[] = [
   wall('e', 9.7, 8, 11),
   wall('e', 12.1, 8, 11),
   wall('n', 12.8, 11.6, 15.6),
-  wall('e', 9.95, 12.8, 19, 'interior', [clearOpening('door', 17.9, 18.86, 2.2, bedroomSwing)]),
+  wall('e', 9.95, 12.8, 19, 'interior', [door('bedroom-02', '寝室02の扉', 17.9, 18.86, bedroomSwing)]),
   wall('n', 19, 9.95, 11.6),
   wall('e', 6.65, 17.35, 22.8),
   wall('n', 17.35, 6.65, 9.95),
-  wall('e', 11.6, 12.8, 19, 'interior', [clearOpening('door', 17.59, 18.63, 2.2, northSwing)]),
-  wall('n', 15.15, 11.6, 15.6, 'interior', [clearOpening('door', 12.07, 13.01, 2.2, bedroomSwing)]),
-  wall('n', 17.05, 11.6, 15.6, 'interior', [clearOpening('door', 12.07, 13.01, 2.2, bedroomSwing)]),
+  // Keep the swing on the east jamb so the closet entrance remains clear.
+  wall('e', 11.6, 12.8, 19, 'interior', [door('primary-bedroom', '主寝室の扉', 17.59, 18.63, { hinge: 'to', side: 1 })]),
+  wall('n', 15.15, 11.6, 15.6, 'interior', [door('primary-bath', '主浴室の扉', 12.07, 13.01, bedroomSwing)]),
+  wall('n', 17.05, 11.6, 15.6, 'interior', [door('walk-in-closet', 'ウォークインクローゼットの扉', 12.07, 13.01, bedroomSwing)]),
 
   wall('n', 0, 11.1, 17.7, 'party'),
   wall('e', 17.7, 0, 16.5, 'party'),
@@ -161,3 +172,14 @@ export const RESIDENCE_WALLS: readonly ResidenceWall[] = [
   wall('e', stairSouth, stairWest, stairEast, 'party'),
   wall('e', stairNorth, stairWest, stairEast, 'party'),
 ];
+
+export type ResidenceDoorway = {
+  readonly id: string;
+  readonly label: string;
+  readonly wall: ResidenceWall;
+  readonly opening: ResidenceDoorOpening;
+};
+
+export const RESIDENCE_DOORWAYS: readonly ResidenceDoorway[] = RESIDENCE_WALLS.flatMap(wall =>
+  (wall.openings ?? []).filter(opening => opening.kind === 'door' || opening.kind === 'fusuma')
+    .map(opening => ({ id: opening.id, label: opening.label, wall, opening })));

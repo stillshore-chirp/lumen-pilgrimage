@@ -42,8 +42,9 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   let previous = 0;
   let invokeNearby: (() => void | { openSection: string }) | undefined;
   const navigation = createResidenceNavigation(findDestination('residence', 'living-window')!,
-    furniture.obstacles, () => door >= 0.96);
+    furniture.obstacles, () => door >= 0.96, shell.doors);
   shell.setBalconyDoor(door);
+  lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
 
   return {
     id: 'residence', navigation, audio: new ResidenceAudio({ balconyDoor: () => door }),
@@ -52,10 +53,16 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
       label(position) {
         const distance = Math.hypot(position.x - doorEast, northDistanceToDoor(position.z));
         const curtain = curtains.nearby(position);
+        const roomDoor = shell.doors.nearby(position);
         const canUseDoor = distance <= DOOR_REACH && !(opening && occupiesDoorway(position));
         if (canUseDoor && (!curtain || distance <= curtain.distance)) {
           invokeNearby = () => { opening = !opening; };
           return opening ? 'バルコニーの引戸を閉める' : 'バルコニーの引戸を開ける';
+        }
+        // A switch mounted against the jamb stays easy to pick from inside its room.
+        if (roomDoor && (!curtain || roomDoor.distance + .12 < curtain.distance)) {
+          invokeNearby = roomDoor.invoke;
+          return roomDoor.label;
         }
         if (curtain) {
           invokeNearby = curtain.invoke;
@@ -94,10 +101,12 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
           shell.setBalconyDoor(door);
         }
         const curtainsMoved = curtains.update(dt);
+        const roomDoorsMoved = shell.doors.update(dt, camera.position);
+        if (roomDoorsMoved) lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
         if (curtainsMoved) {
           for (const room of curtains.daylight) lighting.setDaylightTransmission(room.roomId, room.transmission());
         }
-        if (doorMoved || curtainsMoved) {
+        if (doorMoved || curtainsMoved || roomDoorsMoved) {
           lighting.invalidateShadows();
           reflections.invalidate();
         }
