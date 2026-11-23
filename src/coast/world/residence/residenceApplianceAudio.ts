@@ -64,16 +64,31 @@ function operatingLoop(context: BaseAudioContext, kind: ApplianceKind): AudioBuf
 }
 
 function completionTone(context: BaseAudioContext, kind: ApplianceKind): AudioBuffer {
-  const buffer = context.createBuffer(1, Math.round(sampleRate * .47), sampleRate);
+  // The microwave gives three short beeps. The washer uses a softer descending chime.
+  const microwave = kind === 'microwave';
+  const notes = microwave ? [
+    { frequency: 880, onset: 0, duration: .14 },
+    { frequency: 880, onset: .19, duration: .14 },
+    { frequency: 1046, onset: .38, duration: .18 },
+  ] : [
+    { frequency: 659, onset: 0, duration: .23 },
+    { frequency: 587, onset: .21, duration: .24 },
+    { frequency: 523, onset: .43, duration: .35 },
+  ];
+  const last = notes[notes.length - 1];
+  const buffer = context.createBuffer(1, Math.ceil(sampleRate * (last.onset + last.duration)), sampleRate);
   const channel = buffer.getChannelData(0);
-  const notes = kind === 'microwave' ? [784, 988] : [523, 659];
-  for (const [index, frequency] of notes.entries()) {
-    const start = sampleRate * .18 * index;
-    for (let i = 0; i < .24 * sampleRate; i++) {
+  const attack = microwave ? .014 : .021;
+  const release = microwave ? .037 : .068;
+  const level = microwave ? .27 : .235;
+  for (const { frequency, onset, duration } of notes) {
+    const start = Math.round(sampleRate * onset);
+    for (let i = 0; i < Math.round(sampleRate * duration); i++) {
       const time = i / sampleRate;
-      const envelope = Math.min(time / .012, 1) * Math.exp(-time * 16) * Math.min(1, (.24 - time) / .025);
+      const edge = Math.min(time / attack, (duration - time) / release, 1);
+      const envelope = (.5 - .5 * Math.cos(Math.PI * edge)) * Math.exp(-time * (microwave ? 2.4 : 4.1));
       const phase = tau * time * frequency;
-      channel[start + i] += .066 * envelope * (Math.sin(phase) + .12 * Math.sin(phase * 2));
+      channel[start + i] += level * envelope * (Math.sin(phase) + (microwave ? .22 : .12) * Math.sin(phase * 2));
     }
   }
   return buffer;
