@@ -104,7 +104,7 @@ test('the actual sliding door changes the primary bedroom continuously and stays
 });
 
 test('interior doors attenuate transmitted sound and its high frequencies independently', () => {
-  assert.equal(RESIDENCE_INTERIOR_DOORS.length, 13);
+  assert.equal(RESIDENCE_INTERIOR_DOORS.length, 14);
   for (const { wall, opening } of RESIDENCE_INTERIOR_DOORS) {
     const at = (offset) => {
       const center = (opening.from + opening.to) / 2;

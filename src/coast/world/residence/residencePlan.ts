@@ -19,7 +19,7 @@ interface OpeningBounds {
 type DoorSwing = { readonly hinge: 'from' | 'to'; readonly side: -1 | 1 };
 
 export type ResidenceDoorOpening = OpeningBounds & { readonly id: string; readonly label: string } & (
-  { readonly kind: 'door'; readonly swing: DoorSwing } | { readonly kind: 'fusuma' }
+  { readonly kind: 'door'; readonly swing: DoorSwing } | { readonly kind: 'fusuma' } | { readonly kind: 'gallery-slide' }
 );
 
 export type ResidenceOpening = ResidenceDoorOpening | (
@@ -148,6 +148,9 @@ export const RESIDENCE_WALLS: readonly ResidenceWall[] = [
     door('laundry', '洗濯室の扉', 6.61, 7.53, northSwing),
     door('storage', '収納の扉', 9.48, 10.4, northSwing),
   ]),
+  wall('e', 6.65, 11, 14.64, 'interior', [
+    { kind: 'gallery-slide', id: 'gallery-living', label: 'リビングの引戸', from: 11.07, to: 12.8, bottom: 0, top: 2.55 },
+  ]),
   wall('n', 3.35, 6.65, 10.2),
   wall('n', 6.25, 6.65, 11.1),
   wall('n', 8, 6.65, 11.1),
@@ -181,5 +184,9 @@ export type ResidenceDoorway = {
 };
 
 export const RESIDENCE_DOORWAYS: readonly ResidenceDoorway[] = RESIDENCE_WALLS.flatMap(wall =>
-  (wall.openings ?? []).filter(opening => opening.kind === 'door' || opening.kind === 'fusuma')
+  (wall.openings ?? []).filter(isResidenceDoorOpening)
     .map(opening => ({ id: opening.id, label: opening.label, wall, opening })));
+
+export function isResidenceDoorOpening(opening: ResidenceOpening): opening is ResidenceDoorOpening {
+  return opening.kind === 'door' || opening.kind === 'fusuma' || opening.kind === 'gallery-slide';
+}

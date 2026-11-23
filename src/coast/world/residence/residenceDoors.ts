@@ -1,11 +1,12 @@
-import { RESIDENCE_DOORWAYS, type ResidenceDoorway, type ResidenceOpening, type ResidenceWall } from './residencePlan';
+import { isResidenceDoorOpening, RESIDENCE_DOORWAYS, type ResidenceDoorway, type ResidenceOpening,
+  type ResidenceWall } from './residencePlan';
 
 const DOOR_REACH = 1.12;
 const DOOR_SECONDS = .55;
 const HINGE_INSET = .019;
 const HINGE_OFFSET = .013;
 const HINGED_HALF_DEPTH = .021;
-const FUSUMA_OVERLAP = .014;
+const SLIDING_OVERLAP = .014;
 export const RESIDENCE_WALKER_RADIUS = .24;
 
 type Position = { readonly x: number; readonly z: number };
@@ -29,13 +30,14 @@ function leafPose({ wall, opening }: ResidenceDoorway, amount: number): LeafPose
   const alongEast = wall.axis === 'e';
   const alongAngle = alongEast ? 0 : Math.PI / 2;
   const span = opening.to - opening.from;
-  if (opening.kind === 'fusuma') {
-    const width = span + 2 * FUSUMA_OVERLAP;
-    const along = opening.from - FUSUMA_OVERLAP - amount * width;
+  if (opening.kind !== 'door') {
+    const fusuma = opening.kind === 'fusuma';
+    const width = span + 2 * SLIDING_OVERLAP;
+    const along = opening.from - SLIDING_OVERLAP + (fusuma ? -1 : 1) * amount * width;
     // The hallway face has room for the track beside the tea-room alcove.
-    const across = wall.fixed + wall.thickness / 2 + .025;
+    const across = wall.fixed + (fusuma ? wall.thickness / 2 + .025 : 0);
     return { east: alongEast ? along : across, north: alongEast ? across : along,
-      angle: alongAngle, width, halfDepth: .018 };
+      angle: alongAngle, width, halfDepth: fusuma ? .018 : .028 };
   }
 
   const { hinge, side } = opening.swing;
@@ -64,13 +66,14 @@ function leafBlocks(pose: LeafPose, east: number, north: number, angle = pose.an
   return endGap ** 2 + across ** 2 < (RESIDENCE_WALKER_RADIUS + pose.halfDepth) ** 2;
 }
 
-function sweepBlocks(door: DoorState, next: LeafPose, amount: number, { x, z }: Position): boolean {
+function sweepBlocks(door: DoorState, next: LeafPose, { x, z }: Position): boolean {
   const { pose } = door;
-  if (door.doorway.opening.kind === 'fusuma') {
+  if (door.doorway.opening.kind !== 'door') {
     // The moving leaf covers one continuous span along its track.
-    const first = amount > door.amount ? next : pose;
-    const travel = pose.width * Math.abs(amount - door.amount);
-    return leafBlocks(first, x, -z, first.angle, first.width + travel);
+    const first = next.east < pose.east || next.north < pose.north ? next : pose;
+    const travel = Math.hypot(next.east - pose.east, next.north - pose.north);
+    const width = exposedWidth(door.doorway, first, first.width + travel);
+    return width > 0 && leafBlocks(first, x, -z, first.angle, width);
   }
   // Distance to the hinged leaf is smallest at the angle closest to the walker.
   const mid = (pose.angle + next.angle) / 2;
@@ -79,6 +82,13 @@ function sweepBlocks(door: DoorState, next: LeafPose, amount: number, { x, z }: 
   const relative = Math.atan2(Math.sin(offset), Math.cos(offset));
   const closestAngle = mid + Math.max(-halfSwing, Math.min(halfSwing, relative));
   return leafBlocks(pose, x, -z, closestAngle);
+}
+
+function exposedWidth({ wall, opening }: ResidenceDoorway, pose: LeafPose, width = pose.width): number {
+  if (opening.kind !== 'gallery-slide') return width;
+  // The pocket itself already has a permanent wall collision.
+  const start = wall.axis === 'e' ? pose.east : pose.north;
+  return Math.min(width, opening.to - start);
 }
 
 function doorwayDistance({ wall, opening }: ResidenceDoorway, { x, z }: Position): number {
@@ -106,7 +116,7 @@ export function createResidenceDoors(
     openness,
     opennessFor(_wall: ResidenceWall, opening: ResidenceOpening): number {
       if (opening.kind === 'balcony-door') return balconyOpenness();
-      return opening.kind === 'door' || opening.kind === 'fusuma' ? openness(opening.id) : 1;
+      return isResidenceDoorOpening(opening) ? openness(opening.id) : 1;
     },
     nearby(position: Position) {
       let nearest: DoorState | undefined;
@@ -131,7 +141,7 @@ export function createResidenceDoors(
         const amount = door.target === 1 ? Math.min(1, door.amount + step) : Math.max(0, door.amount - step);
         if (door.amount === amount) continue;
         const pose = leafPose(door.doorway, amount);
-        if (sweepBlocks(door, pose, amount, position)) continue;
+        if (sweepBlocks(door, pose, position)) continue;
         door.amount = amount;
         door.pose = pose;
         positionLeaf?.(door.doorway, pose);
@@ -140,8 +150,9 @@ export function createResidenceDoors(
       return moved;
     },
     blocksWalking(x: number, z: number): boolean {
-      for (const { pose } of doors.values()) {
-        if (leafBlocks(pose, x, -z)) return true;
+      for (const { doorway, pose } of doors.values()) {
+        const width = exposedWidth(doorway, pose);
+        if (width > 0 && leafBlocks(pose, x, -z, pose.angle, width)) return true;
       }
       return false;
     },

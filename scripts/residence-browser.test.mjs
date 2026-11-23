@@ -748,3 +748,59 @@ test('residence appliances work from the room menu and start localized audio', {
   await panel.waitFor({ state: 'hidden' });
   assert.deepEqual(errors, []);
 });
+
+test('the gallery pocket door closes, stops walking, and reopens both ways', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&time=day`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+  const open = button(page, 'リビングの引戸を開ける');
+  const close = button(page, 'リビングの引戸を閉める');
+  const waitForLeaf = x => page.waitForFunction(x => {
+    const door = window.residenceProbe.scene.getObjectByName('Gallery pocket door');
+    return door && Math.abs(door.position.x - x) < .005;
+  }, x);
+  const gallery = { x: 11.94, z: -7.68, yaw: Math.PI, pitch: -.04 };
+  const living = { x: 11.94, z: -5.68, yaw: 0, pitch: -.04 };
+  async function relocate(pose) {
+    await page.evaluate(pose => window.residenceProbe.relocate(pose), pose);
+    await page.waitForFunction(({ x, z }) => {
+      const at = window.residenceProbe.camera;
+      return at && Math.hypot(x - at.x, z - at.z) < .015;
+    }, pose);
+  }
+  const landscape = '.coast-ui { visibility: hidden; }';
+
+  await relocate(gallery);
+  await close.waitFor();
+  await waitForLeaf(12.814);
+  await relocate({ ...gallery, z: -8.75, pitch: -.11 });
+  await capture(page, 'gallery-door-open', landscape);
+  await relocate(gallery);
+  await close.waitFor();
+  await page.keyboard.press('e');
+  await open.waitFor();
+  await waitForLeaf(11.056);
+  await relocate({ ...gallery, z: -8.75, pitch: -.11 });
+  await capture(page, 'gallery-door-closed', landscape);
+  await relocate(gallery);
+  await hold(page, 'w', async () => {
+    await page.waitForFunction(() => window.residenceProbe.camera.z > -7.25);
+    await moreMovementFrames(page);
+    const pose = await camera(page);
+    assert.ok(pose.z < -6.91 && pose.z > -7.13, JSON.stringify(pose));
+  });
+  await open.click();
+  await waitForLeaf(12.814);
+  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z > -6.02));
+  await relocate(living);
+  await close.click();
+  await waitForLeaf(11.056);
+  await relocate({ ...living, z: -4.72, pitch: -.11 });
+  await capture(page, 'gallery-door-living', landscape);
+  await relocate(living);
+  await open.click();
+  await waitForLeaf(12.814);
+  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z < -7.26));
+  assert.deepEqual(errors, []);
+});

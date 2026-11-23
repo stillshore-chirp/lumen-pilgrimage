@@ -303,6 +303,62 @@ function addFusuma(blade: THREE.Group, geometry: ShellGeometry, materials: Resid
   }
 }
 
+function addGalleryPocket(geometry: ShellGeometry, materials: ResidenceMaterials, wall: Wall, opening: Opening) {
+  const { from, to, top } = opening;
+  const half = wall.thickness / 2;
+  const slot = .040;
+  const end = wall.to - .044;
+  const box = (finish: THREE.Material, left: number, right: number, near: number, far: number,
+    low: number, high: number, verticalGrain = false) =>
+    geometry.box(finish, lineRect(wall, left, right, near, far), low, high, undefined, 0, verticalGrain);
+  for (const [near, far] of [[-half, -slot], [slot, half]]) {
+    box(materials.wall, to, end, near, far, 0, top);
+    box(materials.cabinetry, to - .016, to + .019, near - .002, far + .002, .001, top, true);
+  }
+  box(materials.wall, end, wall.to, -half, half, 0, top);
+  box(materials.wall, to, wall.to, -half, half, top, wall.height);
+  box(materials.cabinetry, from - .019, from + .012, -half - .006, half + .006, .001, top, true);
+  for (const [near, far] of [[-half - .006, -slot], [slot, half + .006]]) {
+    box(materials.cabinetry, from, to, near, far, top - .027, top + .021);
+  }
+  box(materials.darkMetal, from, end, -slot, slot, top - .013, top + .003);
+  addRoomSideFinishes(geometry, materials, wall, to, wall.to);
+}
+
+function addGalleryLeaf(blade: THREE.Group, geometry: ShellGeometry, materials: ResidenceMaterials,
+  top: number, width: number, halfDepth: number) {
+  const bottom = .009;
+  const pullLeft = .059;
+  const pullRight = .101;
+  const pullBottom = .852;
+  const pullTop = 1.095;
+  const face = (left: number, right: number, low: number, high: number) =>
+    geometry.box(materials.cabinetry, [left, -halfDepth + .003, right, halfDepth - .003], low, high, blade, 0, true);
+  face(0, pullLeft, bottom, top);
+  face(pullRight, width, bottom, top);
+  face(pullLeft, pullRight, bottom, pullBottom);
+  face(pullLeft, pullRight, pullTop, top);
+  geometry.box(materials.darkMetal, [pullLeft, -.017, pullRight, .017], pullBottom, pullTop, blade);
+  for (const sign of [-1, 1]) {
+    const inner = sign * (halfDepth - .008);
+    const outer = sign * (halfDepth - .003);
+    const between = (left: number, right: number, low: number, high: number, material: THREE.Material) =>
+      geometry.box(material, [left, Math.min(inner, outer), right, Math.max(inner, outer)], low, high, blade);
+    between(pullLeft, pullLeft + .008, pullBottom, pullTop, materials.metal);
+    between(pullRight - .005, pullRight, pullBottom, pullTop, materials.metal);
+    for (const edge of [pullBottom, pullTop - .005]) {
+      between(pullLeft + .008, pullRight - .005, edge, edge + .005, materials.metal);
+    }
+    for (let index = 1; index <= 7; index++) {
+      const centre = width - .036 - index * .033;
+      const near = sign * (halfDepth - .004);
+      const far = sign * halfDepth;
+      geometry.box(materials.cabinetry, [centre - .009, Math.min(near, far), centre + .009, Math.max(near, far)],
+        bottom + .020, top - .019, blade, 0, true);
+    }
+  }
+}
+
 function addBalconySidelight(geometry: ShellGeometry, materials: ResidenceMaterials, wall: Wall, opening: Opening) {
   const { from, to, bottom, top } = opening;
   const jamb = .028;
@@ -453,6 +509,10 @@ export function createResidenceShell(materials: ResidenceMaterials) {
         }
       } else if (opening.kind === 'balcony-door') {
         addBalconyOpening(geometry, materials, wall, opening, leaf);
+      } else if (opening.kind === 'gallery-slide') {
+        addGalleryPocket(geometry, materials, wall, opening);
+        from = wall.to;
+        break;
       } else if (opening.kind === 'door' || opening.kind === 'fusuma') {
         const fusuma = opening.kind === 'fusuma';
         addDoorFrame(geometry, fusuma ? materials.cedar : materials.trim, wall, opening);
@@ -478,12 +538,15 @@ export function createResidenceShell(materials: ResidenceMaterials) {
     let blade = movingLeaves.get(opening);
     if (!blade) {
       blade = new THREE.Group();
-      blade.name = opening.kind === 'fusuma' ? 'Tea room fusuma' : `Hinged door: ${opening.id}`;
+      blade.name = opening.kind === 'door' ? `Hinged door: ${opening.id}`
+        : opening.kind === 'fusuma' ? 'Tea room fusuma' : 'Gallery pocket door';
       group.add(blade);
       movingLeaves.set(opening, blade);
       if (opening.kind === 'fusuma') {
         const offset = (wall.axis === 'e' ? pose.north : pose.east) - wall.fixed;
         addFusuma(blade, geometry, materials, wall, opening, pose.width, pose.halfDepth, offset);
+      } else if (opening.kind === 'gallery-slide') {
+        addGalleryLeaf(blade, geometry, materials, opening.top - .015, pose.width, pose.halfDepth);
       } else {
         addHingedLeaf(blade, geometry, materials, opening, pose.width, pose.halfDepth);
       }
