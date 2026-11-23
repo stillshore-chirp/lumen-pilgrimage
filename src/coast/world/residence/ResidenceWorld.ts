@@ -47,7 +47,8 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   lighting.setTeaDoorOpenness(shell.doors.openness('tea-room'));
 
   return {
-    id: 'residence', navigation, audio: new ResidenceAudio({ balconyDoor: () => door }),
+    id: 'residence', navigation,
+    audio: new ResidenceAudio({ balconyDoor: () => door, doorOpenness: shell.doors.opennessFor }),
     residenceControls: [...lighting.sections, ...curtains.sections],
     interaction: {
       label(position) {

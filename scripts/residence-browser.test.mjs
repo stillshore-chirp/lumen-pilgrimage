@@ -33,7 +33,7 @@ after(async () => {
 });
 
 function observeResidence() {
-  const probe = { camera: null, contexts: 0, analyser: null, trafficFilters: new Set() };
+  const probe = { camera: null, contexts: 0, analyser: null, trafficFilters: new Set(), roomSends: [] };
   window.residenceProbe = probe;
   const gl = WebGL2RenderingContext.prototype;
   const cameraUniforms = new WeakSet();
@@ -65,6 +65,7 @@ function observeResidence() {
     if (this instanceof AudioBufferSourceNode && this.loop && destination instanceof BiquadFilterNode) {
       probe.trafficFilters.add(destination);
     }
+    if (this instanceof GainNode && destination instanceof ConvolverNode) probe.roomSends.push(this);
     return connect.call(this, destination, ...args);
   };
   probe.audioPeak = () => {
@@ -510,6 +511,37 @@ test('residence menu keeps fixture, zone and wall curtain controls in sync', { t
   await capture(page, 'residence-control-menu');
   await page.setViewportSize({ width: 375, height: 710 });
   assert.ok(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  assert.deepEqual(errors, []);
+});
+
+test('closing the fusuma reduces street treble and adjoining-room reverb at a fixed hallway viewpoint', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&place=tea-room&time=night`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+  await page.evaluate(() => window.residenceProbe.relocate({ x: 6.49, z: -5.62, yaw: Math.PI, pitch: 0 }));
+  const close = button(page, '茶室の襖を閉める');
+  await close.waitFor();
+  await button(page, '環境音を開始').click();
+  await button(page, '環境音を再開').waitFor();
+  await page.waitForFunction(() => {
+    const probe = window.residenceProbe;
+    return probe.roomSends[5]?.gain.value > .015 && probe.lowpassCutoffs().length >= 3
+      && probe.lowpassCutoffs().every(value => value < 900);
+  });
+  const measure = () => page.evaluate(() => ({
+    cutoffs: window.residenceProbe.lowpassCutoffs(),
+    teaReverb: window.residenceProbe.roomSends[5].gain.value,
+  }));
+  const opened = await measure();
+  await close.click();
+  await page.waitForFunction(() => window.residenceProbe.roomSends[5].gain.value < .003);
+  await page.waitForFunction(opened => window.residenceProbe.lowpassCutoffs()
+    .some((value, i) => value < opened[i] - 18), opened.cutoffs);
+  const closed = await measure();
+  t.diagnostic(`Fusuma acoustic parameters ${JSON.stringify({ opened, closed })}`);
+  await button(page, '茶室の襖を開ける').click();
+  await page.waitForFunction(() => window.residenceProbe.roomSends[5].gain.value > .015);
   assert.deepEqual(errors, []);
 });
 

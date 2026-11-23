@@ -3,22 +3,31 @@ import type { CoastBirdCue } from '../../coastBirdCue';
 import { coastRandom, type CoastPoint } from '../../terrain';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import {
-  BALCONY_DOOR, RESIDENCE_ROADS, STREET_REFLECTION, residenceReceiver, residenceSurfaceAt, residenceTrafficPath,
-  type ResidenceSurface,
+  BALCONY_DOOR, RESIDENCE_INTERIOR_DOORS, RESIDENCE_ROADS, STREET_REFLECTION,
+  residenceReceiver, residenceSoundPath, residenceSurfaceAt, residenceTrafficPath,
+  type ResidenceDoorOpenness, type ResidenceSurface,
 } from './residenceAcoustics';
 import {
-  RESIDENCE_ROOM_RESPONSES, createBreeze, createFootfall, createRoomImpulse, createSlider, createVehicleSample,
+  RESIDENCE_ROOM_RESPONSES, createBreeze, createFootfall, createInteriorDoorSound, createRoomImpulse, createSlider,
+  createVehicleSample,
 } from './residenceAudioSamples';
+import type { ResidenceOpening } from './residencePlan';
+import { residenceDoorFraction, residenceOpeningPoint } from './residencePortalAcoustics';
 
 type Point = Readonly<CoastPoint>;
 type Receiver = ReturnType<typeof residenceReceiver>;
-type TrafficVoice = { filter: BiquadFilterNode; gain: GainNode; panner: PannerNode };
+type TrafficVoice = { filter: BiquadFilterNode; gain: GainNode; wetGain: GainNode; panner: PannerNode };
 type FootVoice = { panner: PannerNode; gain: GainNode; busy: boolean };
+type DoorMotion = {
+  openness: number; direction: number; voice?: TrafficVoice; source?: AudioBufferSourceNode;
+};
 type Road = typeof RESIDENCE_ROADS[number];
 type PassBy = { from: Point; to: Point; start: number; duration: number; level: number };
 
 type Graph = {
   master: GainNode;
+  dry: AudioNode;
+  wet: AudioNode;
   roomLevels: GainNode[];
   traffic: { road: Road; position: Point; voice: TrafficVoice }[];
   reflected: TrafficVoice;
@@ -29,6 +38,7 @@ type Graph = {
   breezeSample: AudioBuffer;
   slider: GainNode;
   sliderSamples: AudioBuffer[];
+  doorSamples: AudioBuffer[][];
   feet: FootVoice[];
 };
 
@@ -36,6 +46,7 @@ type Graph = {
 const TRAFFIC_FILE = `${import.meta.env?.BASE_URL ?? '/'}coast-overlook/distant-traffic.ogg`;
 const OFFSET_SECONDS = [3.5, 30.1, 53.4, 78.7, 15.8, 96.5] as const;
 const LISTENER_PERIOD = 0.05;
+const FOOTFALL_INTERVAL = 0.52;
 
 function pointAt(node: PannerNode, point: Point, time: number, glide = 0): void {
   const { positionX, positionY, positionZ } = node;
@@ -57,18 +68,21 @@ function spatialVoice(context: AudioContext, dry: AudioNode, wet: AudioNode): Tr
   filter.frequency.value = 260;
   const gain = context.createGain();
   gain.gain.value = 0;
+  const wetGain = context.createGain();
+  wetGain.gain.value = 0;
   const panner = context.createPanner();
   panner.panningModel = 'HRTF';
   panner.rolloffFactor = 0;
   filter.connect(gain).connect(panner).connect(dry);
-  gain.connect(wet);
-  return { filter, gain, panner };
+  filter.connect(wetGain).connect(wet);
+  return { filter, gain, wetGain, panner };
 }
 
 function updateArrival(voice: TrafficVoice, receiver: Receiver, source: Point, line: boolean,
   gain: number, now: number, ceiling = Infinity): void {
   const arrival = residenceTrafficPath(receiver, source, line);
   voice.gain.gain.setTargetAtTime(arrival.gain * gain, now, 0.11);
+  voice.wetGain.gain.setTargetAtTime(arrival.diffuseGain * gain, now, 0.11);
   voice.filter.frequency.setTargetAtTime(Math.min(ceiling, arrival.cutoff), now, 0.12);
   pointAt(voice.panner, arrival.arrival, now, 0.08);
 }
@@ -78,6 +92,7 @@ export class ResidenceAudio {
   private readonly random = coastRandom(48167);
   private readonly sources = new Set<AudioBufferSourceNode>();
   private readonly footfalls = new Map<ResidenceSurface, AudioBuffer[]>();
+  private readonly doorMotions = new Map<ResidenceOpening, DoorMotion>();
   private context: AudioContext | undefined;
   private graph: Graph | undefined;
   private pendingStart: Promise<void> | undefined;
@@ -94,7 +109,10 @@ export class ResidenceAudio {
   private traveled = 0;
   private side = 1;
 
-  constructor(private readonly options: { readonly balconyDoor: () => number }) {}
+  constructor(private readonly options: {
+    readonly balconyDoor: () => number;
+    readonly doorOpenness?: ResidenceDoorOpenness;
+  }) {}
 
   start(): Promise<void> {
     if (this.request.signal.aborted) return Promise.reject(new Error('The residence audio has been disposed'));
@@ -151,10 +169,11 @@ export class ResidenceAudio {
     listener.upZ.value = up.z;
     const opening = this.options.balconyDoor();
     this.updateSlider(context, graph, opening, now);
+    this.updateInteriorDoors(context, graph, position, now);
     this.updateFootfalls(context, graph, position, elapsed, movement, now);
     if (now < this.nextUpdate) return;
     this.nextUpdate = now + LISTENER_PERIOD;
-    const receiver = residenceReceiver(position, opening);
+    const receiver = residenceReceiver(position, opening, this.options.doorOpenness);
     for (const [index, { road, position: emitter, voice }] of graph.traffic.entries()) {
       const flow = 0.92 + 0.08 * Math.sin(now * (0.17 + 0.014 * index) + 3 * index);
       updateArrival(voice, receiver, emitter, true, road.activity[this.time] * flow * Math.SQRT1_2, now);
@@ -235,6 +254,8 @@ export class ResidenceAudio {
     slider.connect(sliderPoint).connect(dry);
     sliderPoint.connect(wet);
     const sliderSamples = [createSlider(context, false), createSlider(context, true)];
+    const doorSamples = this.options.doorOpenness ? [false, true].map(sliding =>
+      [false, true].map(closing => createInteriorDoorSound(context, sliding, closing))) : [];
     const feet = Array.from({ length: 3 }, (): FootVoice => {
       const panner = context.createPanner();
       panner.panningModel = 'HRTF';
@@ -252,8 +273,8 @@ export class ResidenceAudio {
     this.nextUpdate = 0;
     this.nextPass = now + this.passGap(true);
     this.nextBreeze = now + 24 + this.random() * 18;
-    return { master, roomLevels, traffic, reflected, reflectionDelay, vehicles, vehicleSamples, breeze, breezeSample,
-      slider, sliderSamples, feet };
+    return { master, dry, wet, roomLevels, traffic, reflected, reflectionDelay, vehicles, vehicleSamples, breeze,
+      breezeSample, slider, sliderSamples, doorSamples, feet };
   }
 
   private passGap(initial: boolean): number {
@@ -290,6 +311,7 @@ export class ResidenceAudio {
       if (phase >= 1) {
         vehicle.pass = undefined;
         voice.gain.gain.setTargetAtTime(0, now, 0.10);
+        voice.wetGain.gain.setTargetAtTime(0, now, 0.10);
         continue;
       }
       const position = {
@@ -317,6 +339,52 @@ export class ResidenceAudio {
     this.doorSource = source;
   }
 
+  private updateInteriorDoors(context: AudioContext, graph: Graph, listener: Point, now: number): void {
+    const { doorOpenness } = this.options;
+    if (!doorOpenness) return;
+    for (const { wall, opening } of RESIDENCE_INTERIOR_DOORS) {
+      const openness = residenceDoorFraction(doorOpenness(wall, opening));
+      let motion = this.doorMotions.get(opening);
+      if (!motion) {
+        motion = { openness, direction: 0 };
+        this.doorMotions.set(opening, motion);
+        continue;
+      }
+      const before = motion.openness;
+      const direction = Math.sign(openness - before);
+      motion.openness = openness;
+      const sliding = opening.kind === 'fusuma';
+      const point = residenceOpeningPoint(wall, (opening.from + opening.to) * 0.5, sliding ? 0.68 : 0.96);
+      if (direction === 0 && motion.direction !== 0 && openness > 0 && openness < 1 && motion.source) {
+        // The animation can pause while the player occupies the swing path.
+        const voice = motion.voice!;
+        voice.gain.gain.setTargetAtTime(0, now, 0.010);
+        voice.wetGain.gain.setTargetAtTime(0, now, 0.010);
+        motion.direction = 0;
+        motion.source.stop(now + 0.045);
+        continue;
+      }
+      if (direction !== 0 && direction !== motion.direction) {
+        motion.direction = direction;
+        motion.source?.stop(now);
+        motion.voice ??= spatialVoice(context, graph.dry, graph.wet);
+        const sample = graph.doorSamples[Number(sliding)][Number(direction < 0)];
+        const offset = (direction > 0 ? before : 1 - before) * sample.duration;
+        const active = motion;
+        const source = this.play(context, sample, motion.voice.filter, now, 1, offset, false,
+          () => { if (active.source === source) active.source = undefined; });
+        motion.source = source;
+      }
+      if (!motion.source || !motion.voice || motion.direction === 0) continue;
+      const path = residenceSoundPath(listener, point, (pathWall, gap) =>
+        gap.kind === 'balcony-door' ? this.options.balconyDoor() : doorOpenness(pathWall, gap));
+      motion.voice.gain.gain.setTargetAtTime(path.gain * 0.24, now, 0.020);
+      motion.voice.wetGain.gain.setTargetAtTime(path.diffuseGain * 0.18, now, 0.030);
+      motion.voice.filter.frequency.setTargetAtTime(path.cutoff, now, 0.040);
+      pointAt(motion.voice.panner, path.arrival, now, 0.025);
+    }
+  }
+
   private updateFootfalls(context: AudioContext, graph: Graph, position: Point, elapsed: number,
     movement: CoastMovement, now: number): void {
     const previous = this.previousStep;
@@ -335,7 +403,7 @@ export class ResidenceAudio {
       return;
     }
     if (distance < 0.001) return;
-    const stride = Math.max(0.66, distance / seconds * 0.285);
+    const stride = Math.max(0.82, distance / seconds * FOOTFALL_INTERVAL);
     this.traveled += distance;
     if (this.traveled < stride) return;
     this.traveled -= stride;
@@ -351,7 +419,7 @@ export class ResidenceAudio {
       this.footfalls.set(surface, samples);
     }
     pointAt(foot.panner, impact, now);
-    foot.gain.gain.setValueAtTime(0.36 + this.random() * 0.11, now);
+    foot.gain.gain.setValueAtTime(0.24 + this.random() * 0.07, now);
     const sample = samples[Math.floor(this.random() * samples.length)];
     this.play(context, sample, foot.gain, now, 0.93 + this.random() * 0.17, 0, false, () => { foot.busy = false; });
     foot.busy = true;
@@ -382,6 +450,7 @@ export class ResidenceAudio {
     }
     this.sources.clear();
     this.footfalls.clear();
+    this.doorMotions.clear();
     this.graph?.master.disconnect();
     this.graph = undefined;
     this.previousDoor = undefined;
