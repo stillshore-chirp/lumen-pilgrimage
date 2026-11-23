@@ -264,6 +264,45 @@ test('the residence accepts startup walking and preserves its views across time,
   assert.deepEqual(errors, []);
 });
 
+test('C crouches and stands at the living-room window and fast travel restores standing', { timeout }, async t => {
+  const { page, errors } = await openResidence(t);
+  const mode = page.locator('.coast-mode');
+  const spawn = await camera(page);
+  assert.ok(Math.abs(spawn.y - 1.65) < 0.001);
+  await capture(page, 'residence-south-window-standing');
+
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => Math.abs(window.residenceProbe.camera.y - 1.15) < 0.001);
+  const crouched = await camera(page);
+  assert.deepEqual([crouched.x, crouched.z], [spawn.x, spawn.z]);
+  assert.equal(await mode.textContent(), 'しゃがみ');
+  await capture(page, 'residence-south-window-crouched');
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => Math.abs(window.residenceProbe.camera.y - 1.65) < 0.001);
+  assert.deepEqual(await camera(page), spawn);
+  assert.equal(await mode.textContent(), '歩行');
+
+  await page.keyboard.press('t');
+  const dialog = page.getByRole('dialog', { name: 'ファストトラベル' });
+  await dialog.waitFor();
+  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.deepEqual(await camera(page), spawn);
+  assert.equal(await mode.textContent(), '歩行');
+
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => Math.abs(window.residenceProbe.camera.y - 1.15) < 0.001);
+  await hold(page, 'd', () => page.waitForFunction(x => window.residenceProbe.camera.x < x - 0.7, spawn.x));
+  assert.ok(Math.abs((await camera(page)).y - 1.15) < 0.001);
+  await travel(page, 'リビング南窓', 'residence', 'living-window', 'night');
+  await page.waitForFunction(() => Math.abs(window.residenceProbe.camera.y - 1.65) < 0.001);
+  assert.deepEqual(await camera(page), spawn);
+  assert.equal(await mode.textContent(), '歩行');
+  assert.deepEqual(errors, []);
+});
+
 test('tea room and study are accessible in the travel panel and have flush walking paths', { timeout }, async t => {
   const { page, errors } = await openResidence(t, 'foyer');
   const landscape = '.coast-ui { visibility: hidden; }';

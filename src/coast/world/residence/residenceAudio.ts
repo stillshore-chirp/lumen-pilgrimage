@@ -1,4 +1,4 @@
-import { EYE_HEIGHT, type CoastMovement } from '../../CoastControls';
+import { groundEyeHeight, type CoastMovement } from '../../CoastControls';
 import type { CoastBirdCue } from '../../coastBirdCue';
 import { coastRandom, type CoastPoint } from '../../terrain';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
@@ -398,8 +398,10 @@ export class ResidenceAudio {
     movement: CoastMovement, now: number): void {
     const previous = this.previousStep;
     this.previousStep = { ...position, elapsed, movement };
-    if (!previous || movement !== 'walk' || previous.movement !== 'walk'
-      || Math.abs(position.y - EYE_HEIGHT) > 0.18 || Math.abs(previous.y - EYE_HEIGHT) > 0.18) {
+    if (!previous || (movement !== 'walk' && movement !== 'crouch')
+      || (previous.movement !== 'walk' && previous.movement !== 'crouch')
+      || Math.abs(position.y - groundEyeHeight(movement)) > 0.18
+      || Math.abs(previous.y - groundEyeHeight(previous.movement)) > 0.18) {
       this.traveled = 0;
       return;
     }
