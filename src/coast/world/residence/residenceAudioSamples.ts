@@ -84,35 +84,38 @@ export function createRoomImpulse(context: BaseAudioContext, profile: RoomRespon
 }
 
 const SURFACES = {
-  oak: { duration: 0.19, body: 0.18, pitch: 113, texture: 0.22, cutoff: 1_450, tap: 0.09 },
-  stone: { duration: 0.16, body: 0.15, pitch: 158, texture: 0.23, cutoff: 3_450, tap: 0.34 },
-  tile: { duration: 0.15, body: 0.13, pitch: 192, texture: 0.27, cutoff: 4_700, tap: 0.41 },
-  balcony: { duration: 0.18, body: 0.13, pitch: 124, texture: 0.36, cutoff: 2_880, tap: 0.17 },
-  tatami: { duration: 0.18, body: 0.080, pitch: 91, texture: 0.17, cutoff: 690, tap: 0.011 },
-  wool: { duration: 0.17, body: 0.065, pitch: 79, texture: 0.105, cutoff: 510, tap: 0.009 },
+  oak: { duration: 0.21, body: 0.074, pitch: 96, texture: 0.122, cutoff: 1_150 },
+  stone: { duration: 0.20, body: 0.067, pitch: 125, texture: 0.148, cutoff: 1_720 },
+  tile: { duration: 0.19, body: 0.063, pitch: 149, texture: 0.156, cutoff: 2_050 },
+  balcony: { duration: 0.22, body: 0.064, pitch: 112, texture: 0.183, cutoff: 1_520 },
+  tatami: { duration: 0.22, body: 0.038, pitch: 78, texture: 0.086, cutoff: 690 },
+  wool: { duration: 0.20, body: 0.032, pitch: 67, texture: 0.069, cutoff: 480 },
 } satisfies Record<ResidenceSurface, Record<string, number>>;
 
 export function createFootfall(context: BaseAudioContext, surface: ResidenceSurface, seed: number): AudioBuffer {
-  const { duration, body, pitch, texture, cutoff, tap } = SURFACES[surface];
+  const { duration, body, pitch, texture, cutoff } = SURFACES[surface];
   const random = coastRandom(seed);
-  const toeAt = 0.042 + 0.025 * random();
-  const tone = pitch * (0.89 + random() * 0.22);
+  const soleAt = 0.073 + 0.028 * random();
+  const tone = pitch * (0.91 + random() * 0.18);
   const damping = coefficient(cutoff);
+  const clothLow = coefficient(180);
   const buffer = context.createBuffer(1, Math.ceil(duration * SAMPLE_RATE), SAMPLE_RATE);
   const data = buffer.getChannelData(0);
   let filtered = 0;
+  let low = 0;
   for (let i = 0; i < data.length; i += 1) {
     const time = i / SAMPLE_RATE;
     const noise = random() * 2 - 1;
     filtered += (noise - filtered) * damping;
-    const heel = Math.min(1, time * 680) * Math.exp(-time * 51);
-    const toeAge = Math.max(0, time - toeAt);
-    const toe = Math.min(1, toeAge * 260) * Math.exp(-toeAge * 56);
-    const pressure = (Math.sin(TAU * tone * time) * 0.7 + Math.sin(TAU * (tone * 1.73) * time) * 0.3)
-      * body * (heel + toe * 0.22);
-    const scuff = filtered * texture * (heel * 0.68 + toe * 0.49);
-    const click = (noise - filtered) * tap * (Math.exp(-time * 360) + 0.28 * toe);
-    data[i] = (pressure + scuff + click * Math.min(1, time * 1800)) * (1 - smoothstep(duration - 0.025, duration, time));
+    low += (noise - low) * clothLow;
+    const landing = smoothstep(0, 0.016, time) * Math.exp(-time * 38);
+    const soleAge = Math.max(0, time - soleAt);
+    const sole = smoothstep(0, 0.019, soleAge) * Math.exp(-soleAge * 43);
+    const pressure = body * ((Math.sin(TAU * tone * time) * 0.76 + Math.sin(TAU * tone * 1.64 * time) * 0.24)
+      * landing + Math.sin(TAU * tone * 0.89 * soleAge) * sole * 0.23);
+    const brush = smoothstep(0.007, 0.043, time) * (1 - smoothstep(0.052, 0.153, time));
+    const scuff = (filtered - low * 0.68) * texture * (brush * 0.77 + sole * 0.44);
+    data[i] = (pressure + scuff) * (1 - smoothstep(duration - 0.025, duration, time));
   }
   return buffer;
 }
@@ -165,6 +168,32 @@ export function createSlider(context: BaseAudioContext, closing: boolean): Audio
     data[i] = (low * 0.22 + (grit - low) * 0.056) * roll
       + (low * 0.45 + Math.sin(TAU * (closing ? 119 : 161) * end) * 0.12)
       * latch * (closing ? 0.75 : 0.41) * (1 - smoothstep(0.54, duration, time));
+  }
+  return buffer;
+}
+
+export function createInteriorDoorSound(context: BaseAudioContext, sliding: boolean, closing: boolean): AudioBuffer {
+  const duration = 0.55;
+  const random = coastRandom(sliding ? 705 : 1048);
+  const buffer = context.createBuffer(1, Math.ceil(SAMPLE_RATE * duration), SAMPLE_RATE);
+  const data = buffer.getChannelData(0);
+  const grain = coefficient(sliding ? 820 : 1_470);
+  const weight = coefficient(220);
+  let detail = 0;
+  let low = 0;
+  for (let i = 0; i < data.length; i += 1) {
+    const time = i / SAMPLE_RATE;
+    const noise = random() * 2 - 1;
+    detail += (noise - detail) * grain;
+    low += (noise - low) * weight;
+    const moving = smoothstep(0.008, 0.080, time) * (1 - smoothstep(0.36, 0.47, time));
+    const contact = time - (closing ? 0.47 : 0.036);
+    const settle = smoothstep(0, 0.009, contact) * Math.exp(-Math.max(0, contact) * 54);
+    const latch = Math.sin(TAU * (sliding ? 142 : 184) * contact) * 0.037 + low * 0.087;
+    const slide = low * 0.12 + (detail - low) * 0.061;
+    const swing = low * 0.047 + (detail - low) * (0.011 + 0.022 * Math.sin(TAU * 5.8 * time) ** 2);
+    data[i] = ((sliding ? slide : swing) * moving + latch * settle * (closing ? 1 : 0.64))
+      * (1 - smoothstep(0.52, duration, time));
   }
   return buffer;
 }

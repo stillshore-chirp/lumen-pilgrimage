@@ -5,6 +5,12 @@ import {
 } from './residenceCityPlan';
 import { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, RESIDENCE_STUDY_RUG, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS,
   type ResidenceRect } from './residencePlan';
+import {
+  RESIDENCE_PARTITIONS, isResidenceInteriorDoor, residenceDoorFraction, residenceOpeningPoint, traceResidenceWalls,
+  type ResidenceDoorOpenness,
+} from './residencePortalAcoustics';
+
+export { residenceSoundPath, type ResidenceDoorOpenness } from './residencePortalAcoustics';
 
 type Point = Readonly<CoastPoint>;
 type Window = { axis: 'e' | 'n'; fixed: number; from: number; to: number; y: number };
@@ -29,7 +35,8 @@ const WINDOWS: Window[] = RESIDENCE_WALLS.filter(wall => wall.kind === 'exterior
       y: (opening.top + opening.bottom) / 2 })));
 const SOUTH_WINDOWS = WINDOWS.filter(window => window.axis === 'e' && window.fixed === 0);
 const EAST_WINDOWS = WINDOWS.filter(window => window.axis === 'n');
-const PARTITIONS = RESIDENCE_WALLS.filter(wall => wall.kind === 'interior' || wall.kind === 'party');
+export const RESIDENCE_INTERIOR_DOORS = RESIDENCE_PARTITIONS.flatMap(wall => (wall.openings ?? [])
+  .filter(isResidenceInteriorDoor).map(opening => ({ wall, opening })));
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -49,7 +56,7 @@ function insideTransmission(point: Point, aperture: Point): number {
   const dx = aperture.x - point.x;
   const dz = aperture.z - point.z;
   let transmission = 1;
-  for (const wall of PARTITIONS) {
+  for (const wall of RESIDENCE_PARTITIONS) {
     const span = wall.axis === 'e' ? -dz : dx;
     if (Math.abs(span) < 0.001) continue;
     const offset = wall.axis === 'e' ? -point.z : point.x;
@@ -65,15 +72,18 @@ function insideTransmission(point: Point, aperture: Point): number {
   return transmission;
 }
 
-function strongestPane(point: Point, windows: readonly Window[]) {
-  let best = { point, gain: 0.0005, cutoff: 160 };
+function strongestPane(point: Point, windows: readonly Window[], doorOpenness?: ResidenceDoorOpenness) {
+  let best = { point, gain: 0.0005, cutoff: 160, diffuseGain: 0.0005 };
   for (const { axis, fixed, from, to, y } of windows) {
     const edge = clamp(axis === 'e' ? point.x : -point.z, from, to);
     const pane = axis === 'e' ? { x: edge, y, z: -fixed } : { x: fixed, y, z: -edge };
-    const transmission = insideTransmission(point, pane);
+    const route = doorOpenness ? traceResidenceWalls(point, pane, RESIDENCE_PARTITIONS, doorOpenness) : undefined;
+    const transmission = route?.gain ?? insideTransmission(point, pane);
     const near = 1 - smoothstep(0.5, 9.6, distance(point, pane));
-    const gain = (0.004 + 0.075 * near) * transmission;
-    if (gain > best.gain) best = { point: pane, gain, cutoff: 160 + 265 * near * transmission };
+    const glass = 0.004 + 0.075 * near;
+    const gain = glass * transmission;
+    if (gain > best.gain) best = { point: route?.arrival ?? pane, gain, cutoff: 160 + 265 * near * transmission,
+      diffuseGain: glass * (route?.diffuseGain ?? transmission) };
   }
   return best;
 }
@@ -87,14 +97,45 @@ export function residenceSurfaceAt(point: Point): ResidenceSurface {
   return floor ?? 'oak';
 }
 
-export function residenceReceiver(point: Point, opening: number) {
-  const openness = Number.isFinite(opening) ? clamp(opening, 0, 1) : 0;
+function roomMix(point: Point): number[] {
   const primary = roomWeight(point, PRIMARY);
   const bedroom = roomWeight(point, BEDROOMS) * (1 - primary);
   const tea = roomWeight(point, TEA_ROOM) * (1 - primary - bedroom);
   const study = roomWeight(point, STUDY) * (1 - primary - bedroom - tea);
   const tiled = roomWeight(point, TILED) * (1 - primary - bedroom - tea - study);
   const living = roomWeight(point, LIVING) * (1 - primary - bedroom - tea - study - tiled);
+  return [living, primary, bedroom, 1 - living - primary - bedroom - tea - study - tiled, tiled, tea, study];
+}
+
+const DOOR_ROOM_MIXES = RESIDENCE_INTERIOR_DOORS.map(({ wall, opening }) => {
+  const point = residenceOpeningPoint(wall, (opening.from + opening.to) / 2, 1.65);
+  const x = wall.axis === 'n' ? 0.54 : 0;
+  const z = wall.axis === 'e' ? 0.54 : 0;
+  return { wall, opening, point, rooms: [roomMix({ ...point, x: point.x - x, z: point.z - z }),
+    roomMix({ ...point, x: point.x + x, z: point.z + z })] };
+});
+
+function listenerRoomMix(point: Point, exterior: number, doorOpenness?: ResidenceDoorOpenness): number[] {
+  const wet = roomMix(point);
+  if (doorOpenness) {
+    for (const door of DOOR_ROOM_MIXES) {
+      const openness = residenceDoorFraction(doorOpenness(door.wall, door.opening));
+      const distance = Math.hypot(point.x - door.point.x, point.z - door.point.z);
+      const coupling = openness * 0.28 * (1 - smoothstep(0.25, 2.7, distance));
+      if (coupling === 0) continue;
+      const offset = door.wall.axis === 'e' ? point.z - door.point.z : point.x - door.point.x;
+      const side = smoothstep(-0.24, 0.24, offset);
+      for (const [index, level] of wet.entries()) {
+        const neighbor = door.rooms[0][index] * side + door.rooms[1][index] * (1 - side);
+        wet[index] = level + (neighbor - level) * coupling;
+      }
+    }
+  }
+  return wet.map(room => (1 - exterior) * Math.max(0, room));
+}
+
+export function residenceReceiver(point: Point, opening: number, doorOpenness?: ResidenceDoorOpenness) {
+  const openness = residenceDoorFraction(opening);
   const doorDistance = Math.hypot(point.x - BALCONY_DOOR.x, point.z - BALCONY_DOOR.z);
   // Outside the flush threshold the direct field replaces the sound coming through the opening.
   const doorSpan = Math.min(-point.z - doorSouth, doorNorth + point.z);
@@ -104,10 +145,9 @@ export function residenceReceiver(point: Point, opening: number) {
   const exterior = smoothstep(0, 0.64, balconyDepth);
   return {
     point, exterior, openness,
-    south: strongestPane(point, SOUTH_WINDOWS), east: strongestPane(point, EAST_WINDOWS),
-    doorReach: primary * (1 - smoothstep(0.5, 5.4, doorDistance)),
-    wet: [living, primary, bedroom, 1 - living - primary - bedroom - tea - study - tiled, tiled, tea, study]
-      .map(room => (1 - exterior) * Math.max(0, room)),
+    south: strongestPane(point, SOUTH_WINDOWS, doorOpenness), east: strongestPane(point, EAST_WINDOWS, doorOpenness),
+    doorReach: roomWeight(point, PRIMARY) * (1 - smoothstep(0.5, 5.4, doorDistance)),
+    wet: listenerRoomMix(point, exterior, doorOpenness),
   };
 }
 
@@ -153,6 +193,8 @@ export function residenceTrafficPath(receiver: ReturnType<typeof residenceReceiv
   const southFacing = smoothstep(-0.35, 0.72, (source.z - point.z) / span);
   const southGlass = south.gain * (0.15 + 0.85 * southFacing);
   const eastGlass = east.gain * (0.15 + 0.85 * eastFacing);
+  const southDiffuse = south.diffuseGain * (0.15 + 0.85 * southFacing);
+  const eastDiffuse = east.diffuseGain * (0.15 + 0.85 * eastFacing);
   const door = 0.29 * Math.sqrt(openness) * doorReach * (0.23 + 0.77 * eastFacing);
   // The recessed balcony slab and return wall screen steep arrivals. The retaining low band
   // models diffraction until the receiver approaches the exposed edge.
@@ -179,5 +221,7 @@ export function residenceTrafficPath(receiver: ReturnType<typeof residenceReceiv
     virtual.y += (arrival.y - point.y) * scale;
     virtual.z += (arrival.z - point.z) * scale;
   }
-  return { gain: spreading * Math.sqrt(power), cutoff, arrival: virtual };
+  const diffusePower = (southDiffuse ** 2 + eastDiffuse ** 2) * (1 - exterior) + doorWeight + outsideWeight;
+  return { gain: spreading * Math.sqrt(power), cutoff, arrival: virtual,
+    diffuseGain: spreading * Math.sqrt(diffusePower) };
 }

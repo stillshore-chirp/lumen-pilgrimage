@@ -39,7 +39,7 @@
 - 街路面は `y=-246`。南窓から大通り沿いの屋上と約277 m南の交差点を見下ろす。南北幹線を住戸の塔の東に通し、横断街路と沿道への出入りを担う街路をつなぐ。車道・歩道・走行経路と敷地は同じ道路網から決める。幹線を街区の外へ延ばし、車道とその先の見通しに建物や基壇が重ならないことを描画形状で確認する。夜は走行中の車両の灯りが舗装を照らす。 [基本設計](residence/residence-70f-design.md#街区と視線) · [高さ](../src/coast/world/residence/residenceFloor.ts) · [都市の描画](../src/coast/world/residence/residenceCity.ts)
 - 夜の街は建物の用途、部屋、ロビーに応じて窓の点灯と色を変える。住戸から見える遠方の高層棟は、窓が画面上の1画素より小さくなる距離で、まとまりのある小さな窓明かりに移行する。 [近景の外壁](../src/coast/world/residence/residenceCityMaterials.ts) · [遠景の高層棟](../src/coast/world/overlook/overlookCity.ts)
 - 室内はオークや漆喰、織物の実寸の色・凹凸・粗さを使う。窓からの日射、間接光、夜の照明を組み合わせる。高品質では家具の実形状から床際の影を作る。デスクトップでは視点に応じて窓・鏡の反射を描き、高品質では室内の深度を使った近接陰影と、床材の粗さに応じた平面反射も加える。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [反射](../src/coast/world/residence/residenceReflections.ts) · [内装材の出典](../public/residence-materials/ATTRIBUTION.md)
-- 録音した交通音を南と東の街路に分散する。床の高さ、建物の外皮と間仕切り、引戸の開き量で伝わる音の強さと帯域を変える。室内の反射は部屋の寸法に合わせ、動く交通音は頭部伝達関数で定位させる。足音は床材に従い、引戸の開閉にも短い作動音を付ける。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
+- 録音した交通音を南と東の街路に分散する。壁や扉を通る音と開口を回る音の低域・高域の強さを別々に見積もり、到来方向と室内の反射へ反映する。室内の反射は部屋の寸法に合わせ、扉を開けると接続先の残響を滑らかに混ぜる。歩行音には室内履きの柔らかな接地音と擦れを加え、床材ごとに音を変える。閉じた建具の係数はこの住戸モデル向けの推定値。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [開口の伝搬に関する実測・解析](https://gakui.dl.itc.u-tokyo.ac.jp/cgi-bin/gazo.cgi?no=124544) · [動的開口の研究](https://arxiv.org/abs/2107.11548) · [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
 
 - 住戸から見える遠方の旅客機は展望台と機体・灯火の描画を共有する。住戸の機体は南と東に通過経路を持ち、都市の地形を反転する変換から独立した座標に置く。機体は視覚だけで表現する。 [航空機の描画](../src/coast/world/overlook/overlookAirTraffic.ts) · [衝突防止灯の資料](https://www.govinfo.gov/content/pkg/CFR-2025-title14-vol1/xhtml/CFR-2025-title14-vol1-sec25-1401.html)
 

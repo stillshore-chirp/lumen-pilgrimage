@@ -9,12 +9,14 @@ const hooks = registerHooks({
     return nextResolve(internal ? `${specifier}.ts` : specifier, context);
   },
 });
-const { BALCONY_DOOR, RESIDENCE_ROADS, STREET_REFLECTION, residenceReceiver, residenceSurfaceAt, residenceTrafficPath } =
-  await import('../src/coast/world/residence/residenceAcoustics.ts');
+const {
+  BALCONY_DOOR, RESIDENCE_INTERIOR_DOORS, RESIDENCE_ROADS, STREET_REFLECTION,
+  residenceReceiver, residenceSoundPath, residenceSurfaceAt, residenceTrafficPath,
+} = await import('../src/coast/world/residence/residenceAcoustics.ts');
 const { RESIDENCE_AVENUE, RESIDENCE_BALCONY_REFLECTOR, RESIDENCE_CROSS_STREETS, RESIDENCE_STREET_LEVEL } =
   await import('../src/coast/world/residence/residenceCityPlan.ts');
 const { RESIDENCE_FLOOR_ABOVE_STREET } = await import('../src/coast/world/residence/residenceFloor.ts');
-const { RESIDENCE_ROOM_RESPONSES, createFootfall, createRoomImpulse, createSlider } =
+const { RESIDENCE_ROOM_RESPONSES, createFootfall, createInteriorDoorSound, createRoomImpulse, createSlider } =
   await import('../src/coast/world/residence/residenceAudioSamples.ts');
 hooks.deregister();
 
@@ -101,6 +103,47 @@ test('the actual sliding door changes the primary bedroom continuously and stays
   assert.ok(threshold.every((gain, i) => i === 0 || Math.abs(gain - threshold[i - 1]) < 0.07));
 });
 
+test('interior doors attenuate transmitted sound and its high frequencies independently', () => {
+  assert.equal(RESIDENCE_INTERIOR_DOORS.length, 13);
+  for (const { wall, opening } of RESIDENCE_INTERIOR_DOORS) {
+    const at = (offset) => {
+      const center = (opening.from + opening.to) / 2;
+      return wall.axis === 'e' ? ear(center, wall.fixed + offset) : ear(wall.fixed + offset, center);
+    };
+    const listener = at(-0.78);
+    const source = at(0.88);
+    const paths = [0, 0.06, 0.24, 0.60, 1].map(amount => residenceSoundPath(listener, source,
+      (_wall, gap) => gap === opening ? amount : 0));
+    for (let index = 1; index < paths.length; index += 1) {
+      assert.ok(paths[index].gain > paths[index - 1].gain);
+      assert.ok(paths[index].cutoff > paths[index - 1].cutoff);
+      assert.ok(paths[index].diffuseGain > paths[index - 1].diffuseGain);
+    }
+    assert.ok(paths[4].gain > paths[0].gain * 3.8);
+    assert.ok(paths[4].cutoff > paths[0].cutoff * 10);
+  }
+});
+
+test('the fusuma changes the arriving bearing, connected room reflections and south-window traffic', () => {
+  const teaDoor = RESIDENCE_INTERIOR_DOORS.find(({ wall, opening }) => wall.axis === 'e' && wall.fixed === 5
+    && opening.from === 6.01);
+  const besideTea = ear(6.49, 5.77);
+  const openness = amount => (_wall, opening) => opening === teaDoor.opening ? amount : 1;
+  const closed = residenceReceiver(besideTea, 0, openness(0));
+  const partway = residenceReceiver(besideTea, 0, openness(0.5));
+  const open = residenceReceiver(besideTea, 0, openness(1));
+  assert.ok(closed.wet[5] < partway.wet[5] && partway.wet[5] < open.wet[5]);
+  assert.ok(Math.abs(open.wet.reduce((sum, value) => sum + value, 0) - 1) < 1e-8);
+  assert.ok(open.south.gain > closed.south.gain * 3 && open.south.cutoff > closed.south.cutoff * 1.25);
+  const offAxisListener = ear(5.2, 5.79);
+  const offAxisSource = ear(5.2, 3.8);
+  const path = residenceSoundPath(offAxisListener, offAxisSource, openness(1));
+  assert.ok(path.arrival.x > 6 && Math.abs(path.arrival.z + 5) < 0.01);
+  assert.ok(path.cutoff > residenceSoundPath(offAxisListener, offAxisSource, openness(0)).cutoff * 4);
+  assert.deepEqual(residenceSoundPath(ear(6.2, 3.5), offAxisSource, openness(0)),
+    residenceSoundPath(ear(6.2, 3.5), offAxisSource, openness(1)));
+});
+
 class AudioBuffers {
   sampleRate = 48_000;
 
@@ -155,6 +198,11 @@ test('room decay and footfalls follow the floor plan and the audio device rate',
   const power = audio => audio.getChannelData(0).reduce((sum, sample) => sum + sample ** 2, 0);
   assert.ok(power(createFootfall(contexts, 'tatami', 81)) < power(wood) * .60);
   assert.ok(power(createFootfall(contexts, 'wool', 81)) < power(wood) * .55);
+  const woodSamples = wood.getChannelData(0);
+  const firstFiveMilliseconds = woodSamples.slice(0, 120);
+  assert.ok(firstFiveMilliseconds.every(value => Math.abs(value) < 0.007));
+  assert.ok(woodSamples.slice(1_000, 2_400).some(value => Math.abs(value) > 0.025));
+  assert.ok(tile.getChannelData(0).every(value => Math.abs(value) < 0.10));
 });
 
 test('slider rolls and settles without starting or ending in a click', () => {
@@ -166,4 +214,17 @@ test('slider rolls and settles without starting or ending in a click', () => {
   assert.ok(Math.abs(close[close.length - 1]) < 1e-6);
   assert.ok(peak(open.slice(4_000, 9_000)) > 0.015);
   assert.ok(peak(close.slice(11_520)) > peak(open.slice(11_520)) * 1.4);
+});
+
+test('interior sash and hinged doors have quiet, distinct action sounds', () => {
+  const context = new AudioBuffers();
+  const swing = createInteriorDoorSound(context, false, true).getChannelData(0);
+  const slide = createInteriorDoorSound(context, true, true).getChannelData(0);
+  const middlePower = samples => samples.slice(4_800, 9_600).reduce((sum, value) => sum + value ** 2, 0);
+  assert.ok(middlePower(slide) > middlePower(swing) * 2);
+  for (const samples of [slide, swing]) {
+    assert.equal(Math.abs(samples[0]), 0);
+    assert.ok(Math.abs(samples.at(-1)) < 1e-6);
+    assert.ok(samples.every(value => Math.abs(value) < 0.10));
+  }
 });
