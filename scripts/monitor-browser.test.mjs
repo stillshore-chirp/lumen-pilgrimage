@@ -206,6 +206,7 @@ async function waitForVideo(viewer, expectedAudioTracks, [width, height] = [320,
   await viewer.waitForFunction(({ selector, expectedAudioTracks }) => {
     const video = document.querySelector(selector);
     return video?.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.currentTime > 0.15
+      && video.getVideoPlaybackQuality().totalVideoFrames > 1
       && video.srcObject?.getAudioTracks().length === expectedAudioTracks;
   }, { selector: videoSelector, expectedAudioTracks });
   const playback = await viewer.locator(videoSelector).evaluate(video => ({
