@@ -118,6 +118,23 @@ function woven(threads: number, irregularity: number): SurfaceSampler {
   };
 }
 
+function rush(u: number, v: number, detail: number): Texel {
+  const strand = Math.floor(v * 136);
+  const crossover = Math.cos(u * Math.PI * 138) * ((strand % 2) * 2 - 1);
+  const reed = Math.sin(v * Math.PI * 272 + .058 * Math.sin(u * Math.PI * 12));
+  const dye = hash(strand, 81) - .5;
+  const flecks = noise(u, v, 63, 99);
+  const grain = reed * (.70 + crossover * .21) + crossover * .11;
+  return [dye * 14 + grain * 8 + flecks * 7 + detail * 4, .55 + grain * .25 + dye * .035, .82 + grain * .055];
+}
+
+function cedarGrain(u: number, v: number, detail: number): Texel {
+  const drift = v + .020 * noise(u, v, 5, 13) + .011 * Math.sin(u * Math.PI * 2);
+  const fine = noise(u, drift, 9, 137);
+  const early = noise(u, drift, 6, 37);
+  return [early * 31 + fine * 13 + detail * 4, .53 + fine * .19 + early * .055, .69 + fine * .10];
+}
+
 function endGrain(u: number, v: number, detail: number): Texel {
   const x = u - .5;
   const y = v - .5;
@@ -222,6 +239,16 @@ export function createResidenceMaterials() {
   const felt = textured('Pressed wool felt',
     surface('Wool felt', [.25, .25], [192, 192], [111, 105, 99], woven(52, 14)), .00042,
     { sheen: .8, sheenColor: new THREE.Color(0xaaa49d), sheenRoughness: .94 });
+  const tatami = textured('Woven igusa rush', surface('Igusa rush', [.56, .43], [512, 512], [174, 169, 131], rush),
+    .00079, { sheen: .42, sheenColor: new THREE.Color(0xc5ba89), specularIntensity: .29 });
+  const cedar = textured('Quarter-sawn cedar', surface('Cedar', [1.71, .51], [384, 256], [176, 130, 88], cedarGrain),
+    .00062, { roughness: .95, specularIntensity: .37 });
+  const washi = textured('Shoji kozo paper', surface('Kozo paper', [.73, .61], [256, 256], [233, 225, 205],
+    (u, v, detail) => {
+      const fibers = noise(u, v, 53, 128) + noise(u, v, 119, 41) * .3;
+      const pulp = noise(u, v, 19, 14);
+      return [fibers * 9 + pulp * 14 + detail * 4, .58 + fibers * .24, .92 + pulp * .14];
+    }), .00028, { specularIntensity: .15 });
   const trim = solid('Pale stained timber trim', {
     normalMap: cabinetry.normalMap, normalScale: new THREE.Vector2(.15, .15),
     color: 0xbda887, roughness: .58, clearcoat: .13, clearcoatRoughness: .43,
@@ -242,7 +269,7 @@ export function createResidenceMaterials() {
   const guard = glazing('Balcony clear laminated glass', 0xc2dbdc, .090, .14);
 
   return { oak, stone, counterStone, tile, deck, core, wall, ceiling, trim, metal, glass, guard, fabric, rug, bedding,
-    cabinetry, woodEnd, ceramic, darkMetal, brushedSteel, clearMirror, felt, linenShade, lamp,
+    cabinetry, woodEnd, ceramic, darkMetal, brushedSteel, clearMirror, felt, linenShade, lamp, tatami, cedar, washi,
     dispose() {
       materials.forEach(material => material.dispose());
       textures.forEach(texture => texture.dispose());

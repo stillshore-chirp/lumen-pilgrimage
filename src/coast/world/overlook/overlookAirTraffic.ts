@@ -1,13 +1,24 @@
 import * as THREE from 'three';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 
-const flights = [
+export type AirTrafficRoute = Readonly<{
+  centerX: number;
+  centerZ: number;
+  eastRadius: number;
+  northRadius: number;
+  altitude: number;
+  phase: number;
+  rate: number;
+  scale: number;
+}>;
+
+const overlookFlights = [
   { centerX: -1350, centerZ: -15300, eastRadius: 8950, northRadius: 5820, altitude: 1760, phase: 2.17, rate: 0.022, scale: 0.94 },
   { centerX: 1700, centerZ: -15600, eastRadius: 7030, northRadius: 5200, altitude: 2490, phase: 4.29, rate: -0.026, scale: 1.12 },
   { centerX: 1980, centerZ: -14500, eastRadius: 7580, northRadius: 5300, altitude: 1510, phase: 1.30, rate: -0.025, scale: 0.82 },
   { centerX: 3200, centerZ: -15900, eastRadius: 9600, northRadius: 6550, altitude: 3190, phase: 5.42, rate: 0.021, scale: 1.05 },
   { centerX: 6100, centerZ: -13800, eastRadius: 7650, northRadius: 5450, altitude: 1990, phase: 1.00, rate: 0.024, scale: 0.90 },
-] as const;
+] satisfies readonly AirTrafficRoute[];
 
 // White strobe and red beacon rates (flashes/minute), each with its own phase.
 const flashTiming = [
@@ -31,6 +42,10 @@ function wing(outline: [number, number][], thickness: number): THREE.ExtrudeGeom
 }
 
 export function createOverlookAirTraffic() {
+  return createAirTraffic(overlookFlights);
+}
+
+export function createAirTraffic(flights: readonly AirTrafficRoute[]) {
   const group = new THREE.Group();
   group.name = 'Distant passenger aircraft';
 
@@ -148,7 +163,7 @@ export function createOverlookAirTraffic() {
       const pitch = Math.atan2(85 * cosine * rate, speed);
       const bank = -Math.atan(eastRadius * northRadius * rate ** 3 / (9.81 * speed));
       model.rotation.set(pitch, Math.atan2(-vx, -vz), bank);
-      const [strobeRate, strobePhase, beaconRate, beaconPhase] = flashTiming[i];
+      const [strobeRate, strobePhase, beaconRate, beaconPhase] = flashTiming[i % flashTiming.length];
       lights.material.uniforms.uFlashes.value.set(
         flash(elapsed, strobeRate, strobePhase, 0.049, 0.100),
         flash(elapsed, beaconRate, beaconPhase, 0.066, 0.146),

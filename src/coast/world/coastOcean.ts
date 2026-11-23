@@ -180,6 +180,7 @@ function oceanShader(sand: THREE.Texture) {
       textureMatrix: { value: null },
       color: { value: null },
       uTime: { value: 0 },
+      uWaterDetailLevel: { value: 0 },
       uLiveReflection: { value: 0 },
       uDepth: { value: createDepthTexture() },
       uWaterDetail: { value: createWaterDetailTexture() },
@@ -224,7 +225,7 @@ function oceanShader(sand: THREE.Texture) {
     `,
     fragmentShader: /* glsl */`
       uniform sampler2D uSand, uWaterDetail, tDiffuse;
-      uniform float uLiveReflection;
+      uniform float uLiveReflection, uWaterDetailLevel;
       uniform vec3 uLagoon, uWater, uDeep, uWash;
       uniform vec3 uUnderwaterScatter;
       varying vec3 vSurface;
@@ -289,11 +290,25 @@ function oceanShader(sand: THREE.Texture) {
           p * 0.32 + vec2(uTime * 0.071, -uTime * 0.033) + 0.04 * sin(p.yx * 0.69),
           dFdx(p) * 0.32, dFdy(p) * 0.32).rg - 0.5;
         slope += 0.13 * capillary * (1.0 - smoothstep(0.22, 3.1, length(fwidth(p))));
+        vec2 dpdx = dFdx(p);
+        vec2 dpdy = dFdy(p);
+        float footprint = length(fwidth(p));
+        // Short crossed wind waves break up long swell fronts and soften distant reflected shapes.
+        if (uWaterDetailLevel > 0.0 && distance < 210.0) {
+          vec2 wind = vec2(0.79, -0.61);
+          mat2 acrossWind = mat2(wind, vec2(-wind.y, wind.x));
+          vec2 cells = acrossWind * p;
+          float drift = textureGrad(uWaterDetail, cells * 0.075 + vec2(uTime * 0.017, -0.016 * uTime),
+            acrossWind * dpdx * 0.075, acrossWind * dpdy * 0.075).r;
+          vec2 ripple = vec2(sin(cells.x * 3.24 - cells.y * 0.90 - uTime * 3.38 + drift * 13.5),
+            sin(cells.y * 4.43 + cells.x * 0.69 + uTime * 4.36 + drift * 9.30));
+          vec2 chop = (0.58 + 0.42 * drift) * transpose(acrossWind) * ripple * vec2(0.086, 0.061);
+          slope += chop * (1.0 - smoothstep(0.20, 1.8, footprint))
+            * (1.0 - smoothstep(86.0, 210.0, distance));
+        }
         vec3 normal = normalize(vec3(-slope.x*rippleFade, 1.0, -slope.y*rippleFade));
         float thickness = max(depth + vSurface.y, 0.0);
         float sunlit = getShadowMask();
-        vec2 dpdx = dFdx(p);
-        vec2 dpdy = dFdy(p);
         if (!gl_FrontFacing) {
           if (thickness <= 0.015) discard;
           vec2 ripples = 0.035 * vec2(cos(phaseD * 2.49), sin(phaseC * 2.31 + phaseB)) * rippleFade;
@@ -313,6 +328,13 @@ function oceanShader(sand: THREE.Texture) {
           float bottom = exp(-thickness * (0.34 + max(0.0, 0.35 - eye.y) * 0.38))
             * (1.0 - smoothstep(9.0, 12.0, depth));
           vec2 refractUv = p + slope * min(thickness, 7.0) * 0.45;
+          if (uWaterDetailLevel > 0.0) {
+            // Bend the visible ray at the water surface before sampling the sea bed.
+            vec3 submergedRay = refract(-eye, normal, 0.7504);
+            float travel = thickness / max(0.48, -submergedRay.y);
+            refractUv = p + submergedRay.xz * travel;
+            bottom *= exp(-0.18 * max(0.0, travel - thickness));
+          }
           vec3 sand = textureGrad(uSand, refractUv * 0.42, dpdx * 0.42, dpdy * 0.42).rgb;
           // Moving refraction folds two light fields together over the sand.
           vec2 lightFlow = refractUv + 0.66 * sin(refractUv.yx * 1.39 + uTime * vec2(0.85, -0.64));
@@ -327,6 +349,25 @@ function oceanShader(sand: THREE.Texture) {
           vec3 seaBed = sand * mix(vec3(1.02, 0.99, 0.93), vec3(0.75, 1.12, 1.05),
             smoothstep(0.02, 1.25, thickness));
           seaBed += vec3(0.54, 0.88, 0.72) * caustics * 0.15 * sunlit;
+          if (uWaterDetailLevel > 0.0) {
+            // Project the crossed moving wave fronts along the refracted solar direction.
+            vec3 sunRay = refract(-uCoastSunDirection, vec3(0.0, 1.0, 0.0), 0.7504);
+            vec2 focus = refractUv - sunRay.xz * thickness / max(0.5, -sunRay.y);
+            mat2 lattice = mat2(0.162, -0.096, 0.083, 0.185);
+            vec2 focusedUv = lattice * focus + 0.022 * vec2(uTime, -uTime * 0.73);
+            vec2 warp = focus.yx * 1.37 + vec2(-uTime, uTime * 0.68);
+            focusedUv += 0.083 * sin(warp);
+            vec2 warpSlope = 0.114 * cos(warp);
+            vec2 lens = textureGrad(uWaterDetail, focusedUv,
+              lattice * dpdx + warpSlope * dpdx.yx, lattice * dpdy + warpSlope * dpdy.yx).rg;
+            float crossing = smoothstep(0.09, 0.61, crossedLight * 0.71 + current * 0.39);
+            float sunFocus = smoothstep(0.18, 0.94, lens.g)
+              * (0.32 + 0.68 * (1.0 - abs(2.0 * lens.r - 1.0))) * mix(0.30, 1.0, crossing);
+            float bedFocus = smoothstep(0.10, 0.47, thickness) * exp(-0.24 * thickness)
+              * (1.0 - smoothstep(0.45, 2.8, footprint)) * sunlit * (1.0 - uCoastNight);
+            seaBed *= 1.0 - 0.10 * bedFocus;
+            seaBed += uCoastSolarColor * (0.22 + 1.19 * seaBed) * (sunFocus * bedFocus);
+          }
           water = mix(water, seaBed, bottom * 0.97);
         }
         water *= (0.69 + 0.31*sunlit) * (0.96 + 0.08*swell + rippleFade
@@ -343,16 +384,18 @@ function oceanShader(sand: THREE.Texture) {
           broadSky * (0.63 + 0.17 * sunlit), skyOpening);
         if (uLiveReflection > 0.0 && vReflection.w > 0.0) {
           float resolvedRipples = 1.0 - smoothstep(0.9, 4.1, length(fwidth(p)));
-          vec2 uvReflect = vReflection.xy / vReflection.w + slope * vec2(0.010, 0.016) * resolvedRipples;
+          vec2 uvReflect = vReflection.xy / vReflection.w
+            + (slope * vec2(0.042, 0.075) + slope.yx * vec2(0.014, -0.010)) * resolvedRipples;
           float edge = min(min(uvReflect.x, uvReflect.y), min(1.0 - uvReflect.x, 1.0 - uvReflect.y));
           vec2 center = clamp(uvReflect, 0.005, 0.995);
-          vec2 footprint = vec2(0.0012, 0.0009) * (1.0 + smoothstep(18.0, 180.0, distance) * 1.8);
+          vec2 reflectionBlur = mix(vec2(0.0012, 0.0009), vec2(0.0031, 0.0016),
+            smoothstep(14.0, 178.0, distance));
           // Average reflections over the unresolved ripple slopes at grazing angles.
           vec3 sceneReflection = texture2D(tDiffuse, center).rgb * 0.40;
-          sceneReflection += 0.15 * (texture2D(tDiffuse, center + vec2(footprint.x, 0.0)).rgb
-            + texture2D(tDiffuse, center - vec2(footprint.x, 0.0)).rgb
-            + texture2D(tDiffuse, center + vec2(0.0, footprint.y)).rgb
-            + texture2D(tDiffuse, center - vec2(0.0, footprint.y)).rgb);
+          sceneReflection += 0.15 * (texture2D(tDiffuse, center + vec2(reflectionBlur.x, 0.0)).rgb
+            + texture2D(tDiffuse, center - vec2(reflectionBlur.x, 0.0)).rgb
+            + texture2D(tDiffuse, center + vec2(0.0, reflectionBlur.y)).rgb
+            + texture2D(tDiffuse, center - vec2(0.0, reflectionBlur.y)).rgb);
           float reflectionWeight = smoothstep(0.012, 0.075, edge) * (0.45 + 0.33 * resolvedRipples);
           reflected = mix(reflected, sceneReflection, reflectionWeight);
         }
@@ -388,6 +431,17 @@ function oceanShader(sand: THREE.Texture) {
             bubbles.r * 0.51 + flecks * 0.34 + groups * 0.19 + bubbles.g * 0.12);
           float residue = trailFoam * (0.055 * broken + (0.28 + 0.20 * breaker) * driftingLace);
           float shoreFoam = crestFoam + residue * (1.0 - crestFoam);
+          if (uWaterDetailLevel > 0.0) {
+            mat2 streak = mat2(0.217, -0.082, 0.123, 0.324);
+            vec2 detail = textureGrad(uWaterDetail, streak * frothUv + vec2(uTime * -0.037, uTime * 0.023),
+              streak * dpdx, streak * dpdy).rg;
+            float meshFoam = smoothstep(0.17, 0.79, detail.g + bubbles.r * 0.18)
+              * (0.51 + 0.49 * detail.r);
+            float resolving = 1.0 - smoothstep(0.33, 2.8, footprint);
+            float porousCrest = crestFoam * (0.41 + 0.63 * meshFoam) + foamLift * lip * meshFoam * 0.28;
+            float laceTail = residue * (0.67 + 0.51 * meshFoam) + trailFoam * meshFoam * 0.23;
+            shoreFoam = mix(shoreFoam, clamp(porousCrest + laceTail * (1.0 - porousCrest), 0.0, 1.0), resolving);
+          }
           water = mix(water, uWash * uCoastSurfaceLight * (0.69 + 0.31 * sunlit), shoreFoam);
         }
 
@@ -435,6 +489,7 @@ export function createCoastOcean(time: THREE.IUniform<number>, atmosphere: Coast
     mesh,
     setQuality(quality: CoastQuality) {
       high = quality === 'high';
+      surface.uniforms.uWaterDetailLevel.value = Number(high);
       lastReflection = -Infinity;
     },
   };

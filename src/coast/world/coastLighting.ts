@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { CoastQuality } from '../CoastWorld';
 import { groundHeight } from '../terrain';
 import { bindCoastSky, coastAerialGlsl, coastSkyGlsl, type CoastAtmosphere, type CoastTimeOfDay } from './coastAtmosphere';
+import { coastForestLight } from './coastForestLight';
 
 const broadHalfWidth = 230;
 const broadMapSize = 1024;
@@ -119,7 +120,7 @@ const directLight = THREE.ShaderChunk.lights_fragment_begin.replace(
 );
 
 function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
-  updated: WeakSet<THREE.Material>, nightIntensityScale: number): void {
+  updated: WeakSet<THREE.Material>, nightIntensityScale: number, forestScattering: boolean): void {
   scene.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
     const materials: THREE.Material[] = Array.isArray(object.material) ? object.material : [object.material];
@@ -133,7 +134,8 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
       updated.add(material);
       const compile = material.onBeforeCompile;
       const programKey = material.customProgramCacheKey();
-      material.customProgramCacheKey = () => `${programKey}|coast-lighting`;
+      const forestAir = forestScattering && (standard || water);
+      material.customProgramCacheKey = () => `${programKey}|coast-lighting${forestAir ? '|forest-air' : ''}`;
       material.onBeforeCompile = (shader, renderer) => {
         compile.call(material, shader, renderer);
         bindCoastSky(shader.uniforms, atmosphere);
@@ -155,10 +157,12 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
             ${addWorldPoint ? 'varying vec3 vCoastWorldPoint;' : ''}
             ${sky}
             ${coastAerialGlsl}
+            ${forestAir ? coastForestLight : ''}
             void main()`)
           // The ocean shader may return through an underwater-specific branch.
           .replaceAll('#include <tonemapping_fragment>', `
             gl_FragColor.rgb = coastApplyAerial(gl_FragColor.rgb, ${worldPoint});
+            ${forestAir ? `gl_FragColor.rgb = coastForestInscatter(gl_FragColor.rgb, ${worldPoint});` : ''}
             #include <tonemapping_fragment>`)
           .replace('#include <fog_fragment>', `
             #ifdef USE_FOG
@@ -191,7 +195,7 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
 }
 
 export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosphere, heightAt = groundHeight,
-  { nightIntensityScale = 1 }: { nightIntensityScale?: number } = {}): {
+  { nightIntensityScale = 1, forestScattering = false }: { nightIntensityScale?: number; forestScattering?: boolean } = {}): {
   addScenery: (scenery: THREE.Object3D) => void;
   setQuality: (quality: CoastQuality) => void;
   setTimeOfDay: (time: CoastTimeOfDay) => void;
@@ -226,11 +230,11 @@ export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosph
     point.addScaledVector(lightUp, Math.round(v / texel) * texel - v);
   };
   scene.add(skyFill, bounce, sun, sun.target, local, local.target);
-  applyCoastLighting(scene, atmosphere, materials, nightIntensityScale);
+  applyCoastLighting(scene, atmosphere, materials, nightIntensityScale, forestScattering);
 
   return {
     addScenery(scenery) {
-      applyCoastLighting(scenery, atmosphere, materials, nightIntensityScale);
+      applyCoastLighting(scenery, atmosphere, materials, nightIntensityScale, forestScattering);
       sun.shadow.needsUpdate = true;
       lastShadow = -Infinity;
     },

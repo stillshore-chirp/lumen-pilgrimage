@@ -32,8 +32,8 @@ export interface ResidenceWall {
 // Dimensions are measured at wall centrelines. The common core is outside the dwelling area.
 export const RESIDENCE_ROOMS: readonly ResidenceRoom[] = [
   { id: '03', label: '寝室03', rectangles: [[0, 0, 3.65, 5]], floor: 'oak', ceiling: 2.85 },
-  { id: '04', label: '寝室04', rectangles: [[3.65, 0, 7.30, 5]], floor: 'oak', ceiling: 2.85 },
-  { id: '05', label: '寝室05・書斎', rectangles: [[7.30, 0, 11, 5]], floor: 'oak', ceiling: 2.85 },
+  { id: '04', label: '茶室04', rectangles: [[3.65, 0, 7.30, 5]], floor: 'oak', ceiling: 2.85 },
+  { id: '05', label: '書斎05', rectangles: [[7.30, 0, 11, 5]], floor: 'oak', ceiling: 2.85 },
   { id: 'LD', label: 'リビング・ダイニング', rectangles: [[11, 0, 22.8, 6.65]], floor: 'oak', ceiling: 3 },
   { id: 'H1', label: '寝室側廊下', rectangles: [[0, 5, 11, 6.65]], floor: 'oak', ceiling: 2.65 },
   { id: 'BA', label: '浴室A', rectangles: [[0, 6.65, 3.35, 10.2]], floor: 'tile', ceiling: 2.55 },
@@ -54,6 +54,17 @@ export const RESIDENCE_ROOMS: readonly ResidenceRoom[] = [
   { id: 'C0', label: '共用コア', rectangles: [[0, 11.1, 8, 15.6]], floor: 'core', ceiling: 2.65 },
   { id: 'C1', label: 'エレベーターホール・共用廊下', rectangles: [[0, 15.6, 16.5, 17.7]], floor: 'core', ceiling: 2.65 },
 ];
+
+export const RESIDENCE_TEA_TATAMI: ResidenceRect = [4.00, .61, 6.865, 3.475];
+export const RESIDENCE_TEA_MATS: readonly ResidenceRect[] = [
+  [4.00, .61, 5.91, 1.565],
+  [5.91, .61, 6.865, 2.52],
+  [4.955, 2.52, 6.865, 3.475],
+  [4.00, 1.565, 4.955, 3.475],
+  [4.955, 1.565, 5.91, 2.52],
+];
+export const RESIDENCE_TEA_HEARTH: ResidenceRect = [4.98, 2.065, 5.404, 2.489];
+export const RESIDENCE_STUDY_RUG: ResidenceRect = [8.42, 1.69, 10.47, 3.92];
 
 export const RESIDENCE_BALCONY_DOOR = { e: 20.7, nFrom: 13.05, nTo: 14.1 } as const;
 export const RESIDENCE_HINGED_DOOR = { hingeInset: 0.019, skinOffset: 0.013, leafInset: 0.063, halfLeaf: 0.021 } as const;

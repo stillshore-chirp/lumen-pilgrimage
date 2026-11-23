@@ -1,9 +1,11 @@
 import { CatmullRomCurve3, DoubleSide, Vector3, type MeshStandardMaterial } from 'three';
 import type { ResidenceMaterials } from './residenceMaterials';
 import type { ResidenceRect } from './residencePlan';
-import { addWindowDressing, foliage } from './residenceFurnitureDecor';
+import { foliage } from './residenceFurnitureDecor';
 import { FurnitureModel, type FurniturePiece } from './residenceFurnitureModel';
 import { addServiceFurniture } from './residenceFurnitureFixtures';
+import { addStudy } from './residenceStudy';
+import { addTeaRoom } from './residenceTeaRoom';
 
 const northFacing = Math.PI;
 const eastFacing = Math.PI / 2;
@@ -310,8 +312,6 @@ type Bedroom = {
 
 const bedrooms: readonly Bedroom[] = [
   { name: 'Bedroom 03', bed: [.49, 1.18, 1.56, 2.12], textile: 0x9d896e, headboard: 0xcab29c, rug: 0xb7ab90 },
-  { name: 'Bedroom 04', bed: [4.09, 1.18, 1.50, 2.12], textile: 0x646b6c, headboard: 0x939f99, rug: 0xa39d93 },
-  { name: 'Bedroom 05', bed: [7.69, 1.11, 1.37, 2.10], textile: 0x876862, headboard: 0xa98574, rug: 0xaf9285 },
   { name: 'Bedroom 02', bed: [19.53, 7.27, 1.55, 2.07], textile: 0x7d8272, headboard: 0xb3ad97, rug: 0xa6a690 },
   { name: 'Primary bedroom', bed: [17.82, 13.35, 1.83, 2.10], textile: 0xb8a586, headboard: 0x9c8170, rug: 0xb4a395 },
 ];
@@ -378,32 +378,6 @@ function makeBed(model: FurnitureModel, m: ResidenceMaterials, bedroom: Bedroom)
   rug(model.at(centerE + .18, centerN - .29), carpet, carpet, width + .70, depth + .50);
 }
 
-function desk(piece: FurniturePiece, m: ResidenceMaterials, laptop: boolean): void {
-  piece.slab(m.cabinetry, 0, .716, 0, 1.276, .036, .615, .069);
-  for (const side of [-1, 1]) {
-    const x = side * .531;
-    piece.rod(m.cabinetry, [x * 1.055, .01, .239], [x, .72, .227], .024, .035);
-    piece.rod(m.cabinetry, [x * 1.055, .01, -.232], [x, .72, -.220], .024, .035);
-    piece.box(m.cabinetry, x, .608, .002, .048, .059, .46, .012);
-  }
-  piece.box(m.cabinetry, .29, .662, -.01, .476, .107, .474, .020);
-  piece.box(m.metal, .29, .665, .221, .123, .014, .010, .004);
-  piece.slab(m.darkMetal, .045, .751, .03, .455, .006, .289, .017);
-  if (laptop) {
-    piece.box(m.darkMetal, .065, .917, -.104, .446, .304, .019, .008, -.10);
-    piece.box(m.metal, .065, .769, .031, .446, .025, .267, .008);
-  } else {
-    books(piece, m.fabric, m.bedding, .064, .757, .03);
-  }
-  piece.cylinder(m.darkMetal, -.454, .765, -.152, .079, .026);
-  piece.rod(m.metal, [-.454, .765, -.152], [-.489, 1.025, -.176], .006);
-  piece.rod(m.metal, [-.489, 1.025, -.176], [-.420, 1.108, .008], .006);
-  piece.vessel(m.darkMetal, -.420, 1.07, .017, .175, .175, [
-    [.92, 0], [1, .009], [.68, .068], [.40, .085], [0, .086],
-  ]);
-  piece.cylinder(m.lamp, -.420, 1.08, .017, .076, .010);
-}
-
 function addBedrooms(model: FurnitureModel, m: ResidenceMaterials, olive: MeshStandardMaterial,
   tobacco: MeshStandardMaterial, flax: MeshStandardMaterial): void {
   for (const bedroom of bedrooms) {
@@ -420,7 +394,7 @@ function addBedrooms(model: FurnitureModel, m: ResidenceMaterials, olive: MeshSt
     bedside(model.at(nightstandE, nightstandN), m, .44, .423);
     const nightstand = model.at(nightstandE, nightstandN + .057);
     tableLamp(nightstand, m, .487, .32);
-    if (bedroom.name === 'Bedroom 04' || bedroom.name === 'Primary bedroom') {
+    if (bedroom.name === 'Primary bedroom') {
       books(nightstand, model.tone(m.fabric, bedroom.headboard), m.bedding, -.012, .486, .123);
     } else {
       nightstand.vessel(m.ceramic, .060, .486, .121, .087, .087, [
@@ -433,18 +407,6 @@ function addBedrooms(model: FurnitureModel, m: ResidenceMaterials, olive: MeshSt
     if (bedroom.name === 'Bedroom 03') {
       loungeChair(model.at(2.945, .75, westFacing), m, tobacco, .68, .73);
       model.footprint(2.55, .394, .79, .71);
-    }
-    if (bedroom.name === 'Bedroom 04') {
-      desk(model.at(6.765, .872, westFacing), m, false);
-      chair(model.at(6.30, .79, eastFacing), m, olive, .47, .43);
-      model.footprint(6.438, .232, .64, 1.28);
-      model.footprint(6.075, .55, .45, .48);
-    }
-    if (bedroom.name === 'Bedroom 05') {
-      desk(model.at(10.21, .94, westFacing), m, true);
-      chair(model.at(9.752, .85, eastFacing), m, tobacco, .48, .44);
-      model.footprint(9.895, .30, .63, 1.28);
-      model.footprint(9.526, .602, .452, .496);
     }
     if (bedroom.name === 'Bedroom 02') {
       wardrobe(model.at(17.763, 7.875, eastFacing), m, 1.91, .554, 2.32);
@@ -515,9 +477,14 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
   addLiving(model, materials, flax, tobacco, olive);
   addDining(model, materials, flax, olive, leaves);
   addBedrooms(model, materials, olive, tobacco, flax);
+  addTeaRoom(model, materials);
+  addStudy(model, materials);
+  chair(model.at(8.63, 2.39, westFacing - .10), materials, olive, .513, .465);
+  model.footprint(8.38, 2.10, .495, .572);
+  loungeChair(model.at(9.54, 1.08, -.435), materials, flax, .741, .763);
+  model.footprint(9.06, .57, .959, 1.018);
   addBalcony(model, materials, flax, leaves);
   addServiceFurniture(model, materials);
-  addWindowDressing(model, materials);
   model.finish();
   return { group: model.group, obstacles: model.obstacles, dispose: () => model.dispose() };
 }

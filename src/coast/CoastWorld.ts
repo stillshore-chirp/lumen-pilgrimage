@@ -140,7 +140,7 @@ export class CoastWorld {
 
     this.waterfalls = createWaterfalls([...COAST_FALLS, UPLAND_FALL], this.time, this.atmosphere);
     this.scene.add(this.waterfalls.group, this.birds.group);
-    this.lighting = createCoastLighting(this.scene, this.atmosphere);
+    this.lighting = createCoastLighting(this.scene, this.atmosphere, groundHeight, { forestScattering: true });
     void loadCoastScenery().then(scenery => {
       if (this.disposed) return;
       const landmarks = createCoastLandmarks(scenery);

@@ -12,6 +12,7 @@ type Level = { group: THREE.Object3D; limit: Range };
 type Tile = { origin: THREE.Vector3; levels: Level[]; active: number };
 
 class CoastVegetation extends THREE.Group {
+  readonly leafDetail = { value: 0 };
   private readonly tiles: Tile[] = [];
   private quality: Quality = 'high';
   private readonly lastCamera = new THREE.Vector3(Infinity, Infinity, Infinity);
@@ -32,6 +33,7 @@ class CoastVegetation extends THREE.Group {
   setQuality(quality: Quality): void {
     if (quality === this.quality) return;
     this.quality = quality;
+    this.leafDetail.value = Number(quality === 'high');
     this.lastCamera.set(Infinity, Infinity, Infinity);
   }
 
@@ -81,7 +83,8 @@ function instances(geometry: THREE.BufferGeometry, material: THREE.Material, pla
 
 type Foliage = { surface: THREE.MeshStandardMaterial; depth?: THREE.MeshDepthMaterial };
 
-function createFoliage(time: THREE.IUniform<number>, mode: 'canopy' | 'understory' | 'distant'): Foliage {
+function createFoliage(time: THREE.IUniform<number>, mode: 'canopy' | 'understory' | 'distant',
+  detail: THREE.IUniform<number>): Foliage {
   const near = mode !== 'distant';
   const flex = mode === 'canopy' ? 0.36 : 0.9;
   const surface = new THREE.MeshStandardMaterial({
@@ -103,6 +106,7 @@ function createFoliage(time: THREE.IUniform<number>, mode: 'canopy' | 'understor
   surface.onBeforeCompile = shader => {
     if (near) {
       shader.uniforms.uBreezeTime = time;
+      shader.uniforms.uCoastLeafDetail = detail;
       shader.vertexShader = wind(shader.vertexShader);
     }
     shader.vertexShader = shader.vertexShader
@@ -112,7 +116,10 @@ function createFoliage(time: THREE.IUniform<number>, mode: 'canopy' | 'understor
       `)
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBlade = bladeUv;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vBlade;')
+      .replace('#include <common>', `#include <common>
+        varying vec2 vBlade;
+        ${near ? `uniform float uCoastLeafDetail;\n${coastNoise}` : ''}
+      `)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float across = abs(vBlade.x - 0.5) * 2.0;
         float rib = 1.0 - smoothstep(0.016, 0.073, across);
@@ -122,6 +129,28 @@ function createFoliage(time: THREE.IUniform<number>, mode: 'canopy' | 'understor
         float base = smoothstep(0.0, 0.42, vBlade.y);
         vec3 tint = mix(vec3(0.80, 0.88, 0.77), vec3(1.08, 1.03, 0.87), base);
         diffuseColor.rgb *= tint * (1.0 + resolved * (rib * 0.29 + veinlets * 0.086) * base);
+        ${near ? `
+          float bladeRelief = 0.0;
+          float bladeRoughness = 1.0;
+          if (uCoastLeafDetail > 0.0) {
+            float spread = pow(across, 0.73);
+            float ribs = (vBlade.y - 0.19 * spread + 0.075 * across * vBlade.y) * 8.8;
+            float lateralVein = 1.0 - smoothstep(0.025, 0.112 + 0.2 * fwidth(ribs), abs(fract(ribs) - 0.5));
+            float membrane = smoothstep(0.06, 0.42, vBlade.y) * (1.0 - smoothstep(0.86, 1.0, vBlade.y));
+            float visibleRibs = 1.0 - smoothstep(0.16, 0.67, fwidth(ribs));
+            float vein = (0.76 * rib + lateralVein * (1.0 - 0.43 * across)) * membrane * visibleRibs;
+            vec2 microUV = vBlade * vec2(19.0, 28.0) + vec2(0.31 * sin(25.0 * vBlade.y), 0.0);
+            float grain = coastNoise(microUV);
+            float patina = smoothstep(0.56, 0.83, coastNoise(microUV * 0.38 + vec2(2.0, 5.0)));
+            float fine = 1.0 - smoothstep(0.28, 1.24, length(fwidth(microUV)));
+            diffuseColor.rgb *= mix(vec3(1.0), vec3(0.92, 0.85, 0.63), patina * fine * 0.65);
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.13, 1.19, 1.08)
+              + vec3(0.014, 0.025, 0.007), vein * 0.66);
+            bladeRelief = (0.0056 * vein + 0.0022 * (grain - 0.5) * fine) * membrane;
+            bladeRoughness = mix(${mode === 'understory' ? '0.59' : '0.76'}, 0.96,
+              clamp(patina * 0.31 + vein * 0.27 + across * 0.20, 0.0, 1.0));
+          }
+        ` : ''}
       `)
       .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
 
@@ -137,11 +166,35 @@ function createFoliage(time: THREE.IUniform<number>, mode: 'canopy' | 'understor
           float tissue = mix(0.45, 1.0, smoothstep(0.08, 0.94, edge));
           reflectedLight.directDiffuse += material.diffuseColor * directLight.color * vec3(0.84, 1.0, 0.55)
             * backlight * tissue * (0.11 + 0.21 * through * through);
+          ${near ? `if (uCoastLeafDetail > 0.0) {
+            float lateralTissue = 0.52 + 0.48 * smoothstep(0.065, 0.70, edge);
+            float membrane = smoothstep(0.06, 0.65, vBlade.y) * lateralTissue;
+            vec3 tissueColor = vec3(0.82, 0.97, 0.40);
+            reflectedLight.directDiffuse += material.diffuseColor * directLight.color * tissueColor
+              * membrane * backlight * (0.23 + 0.40 * through * through);
+          }` : ''}
         }
 
         #undef RE_Direct
         #define RE_Direct RE_Direct_CoastLeaf
       `);
+    if (near) {
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+          roughnessFactor *= bladeRoughness;
+        `)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+          if (uCoastLeafDetail > 0.0) {
+            vec3 leafDx = dFdx(-vViewPosition);
+            vec3 leafDy = dFdy(-vViewPosition);
+            vec3 leafR1 = cross(leafDy, normal);
+            vec3 leafR2 = cross(normal, leafDx);
+            float leafDet = dot(leafDx, leafR1) * faceDirection;
+            vec3 gradient = sign(leafDet) * (dFdx(bladeRelief) * leafR1 + dFdy(bladeRelief) * leafR2);
+            normal = normalize(max(0.000001, abs(leafDet)) * normal - gradient);
+          }
+        `);
+    }
   };
   surface.customProgramCacheKey = () => `coast-leaf-${mode}`;
   if (!near) return { surface };
@@ -477,9 +530,9 @@ export function createCoastVegetation(time: THREE.IUniform<number>, distanceToPa
   streamDistance: PlantingDistance = () => Infinity): CoastVegetation {
   const vegetation = new CoastVegetation();
   vegetation.name = 'Rainforest canopy, palms and understory';
-  const floor = createFoliage(time, 'understory');
-  const canopy = createFoliage(time, 'canopy');
-  const distant = createFoliage(time, 'distant');
+  const floor = createFoliage(time, 'understory', vegetation.leafDetail);
+  const canopy = createFoliage(time, 'canopy', vegetation.leafDetail);
+  const distant = createFoliage(time, 'distant', vegetation.leafDetail);
   const barkAlbedo = loadCoastTexture('forest-bark.webp', true);
   const barkHeight = loadCoastTexture('forest-bark-height.webp', true);
   barkHeight.colorSpace = THREE.NoColorSpace;

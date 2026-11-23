@@ -258,7 +258,7 @@ const roadLampTint = /* glsl */`
   }
 `;
 
-function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
+function roadwaySurface(roads: Road[], night: THREE.IUniform<number>, high: THREE.IUniform<number>) {
   const positions: number[] = [], uv: number[] = [], indices: number[] = [];
   const laneStyles: number[] = [];
   const walls: number[] = [], wallIndices: number[] = [];
@@ -299,6 +299,7 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
   const material = new THREE.MeshStandardMaterial({ roughness: 0.87 });
   material.onBeforeCompile = shader => {
     shader.uniforms.uRoadNight = night;
+    shader.uniforms.uRoadHigh = high;
     shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
       attribute float laneStyle;
       varying vec2 vTrafficUv;
@@ -308,6 +309,7 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uRoadNight;
+        uniform float uRoadHigh;
         varying vec2 vTrafficUv;
         varying vec2 vRoadXZ;
         varying float vLaneStyle;
@@ -334,6 +336,13 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
         lanes = mix(lanes, paintLine(0.44, 0.014, feather), vLaneStyle);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.47, 0.49, 0.49), max(edge, lanes * dash * fadeDashes));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.51, 0.36, 0.14), median);
+        if (uRoadHigh > 0.0) {
+          // Recessed gutters and a lighter concrete leading edge read as separate surfaces.
+          float gutter = paintLine(0.855, 0.048, feather) + paintLine(0.101, 0.024, feather) * 0.45;
+          float coping = paintLine(0.958, 0.029, feather);
+          diffuseColor.rgb *= 1.0 - gutter * 0.48;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.25, 0.226, 0.184), coping * 0.69);
+        }
       `)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         if (uRoadNight > 0.0) {
@@ -346,6 +355,14 @@ function roadwaySurface(roads: Road[], night: THREE.IUniform<number>) {
           float edgeReflection = (lateral - 0.84) * 7.0;
           float distanceLift = smoothstep(3800.0, 13800.0, length(vViewPosition));
           float reflection = roadPool * mix(0.27, 0.40, distanceLift) + exp(-edgeReflection * edgeReflection) * 0.054;
+          if (uRoadHigh > 0.0) {
+            float nearLamp = fromLamp * 5.4;
+            float across = (lateral - 0.72) * 3.9;
+            float diffusePool = exp(-nearLamp * nearLamp - across * across);
+            float resolved = 1.0 - smoothstep(0.23, 0.78, fwidth(station));
+            float gutter = paintLine(0.855, 0.048, feather);
+            reflection = mix(reflection, reflection * (0.55 - 0.18 * gutter) + diffusePool * 0.18, resolved);
+          }
           totalEmissiveRadiance += uRoadNight * reflection * roadLampTint(vRoadXZ);
         }
       `);
@@ -542,7 +559,8 @@ export function createOverlookTraffic(heightAt: HeightAt) {
     return [{ points, weight }];
   });
   const night = { value: 0 };
-  const { surface, fascias } = roadwaySurface(graded, night);
+  const high = { value: 0 };
+  const { surface, fascias } = roadwaySurface(graded, night, high);
   const box = new THREE.BoxGeometry(1, 1, 1);
   const lightsMaterial = new THREE.ShaderMaterial({
     uniforms: { uPixelFactor: { value: 1 } }, vertexShader: lightsVertex, fragmentShader: lightsFragment,
@@ -617,7 +635,8 @@ export function createOverlookTraffic(heightAt: HeightAt) {
   }
 
   function setQuality(quality: CoastQuality): void {
-    bodies.count = quality === 'high' ? vehicles.length : lightCount;
+    high.value = Number(quality === 'high');
+    bodies.count = high.value === 1 ? vehicles.length : lightCount;
     movingLights.geometry.setDrawRange(0, bodies.count * 2);
     update(elapsed);
   }

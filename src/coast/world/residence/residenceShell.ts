@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import type { ResidenceMaterials } from './residenceMaterials';
 import { RESIDENCE_BALCONY_DOOR, RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_HINGED_DOOR, RESIDENCE_ROOMS,
-  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_WALLS, type ResidenceRect } from './residencePlan';
+  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS, type ResidenceRect } from './residencePlan';
 
 type Wall = (typeof RESIDENCE_WALLS)[number];
 type Opening = NonNullable<Wall['openings']>[number];
@@ -17,6 +17,12 @@ const UPPER_SLAB_BOTTOM = 3.19;
 
 function lineRect({ axis, fixed }: WallLine, from: number, to: number, near: number, far: number): ResidenceRect {
   return axis === 'e' ? [from, fixed + near, to, fixed + far] : [fixed + near, from, fixed + far, to];
+}
+
+function floorAround([west, south, east, north]: ResidenceRect,
+  [cutWest, cutSouth, cutEast, cutNorth]: ResidenceRect): ResidenceRect[] {
+  return [[west, south, cutWest, north], [cutEast, south, east, north],
+    [cutWest, south, cutEast, cutSouth], [cutWest, cutNorth, cutEast, north]];
 }
 
 function createShellGeometry(root: THREE.Group) {
@@ -129,8 +135,14 @@ function addFloorsAndCeilings(geometry: ShellGeometry, materials: ResidenceMater
         east === 22.8 && room.floor !== 'deck' ? EAST_GLASS_EAST : east,
         north,
       ];
-      geometry.box(materials.core, finish, -.31, -.035);
-      geometry.box(materials[room.floor], finish, -.035, 0, undefined, room.floor === 'deck' ? .006 : 0);
+      if (room.id === '04') {
+        for (const slab of floorAround(finish, RESIDENCE_TEA_HEARTH)) geometry.box(materials.core, slab, -.31, -.035);
+        geometry.box(materials.core, RESIDENCE_TEA_HEARTH, -.31, -.15);
+        for (const oak of floorAround(finish, RESIDENCE_TEA_TATAMI)) geometry.box(materials.oak, oak, -.035, 0);
+      } else {
+        geometry.box(materials.core, finish, -.31, -.035);
+        geometry.box(materials[room.floor], finish, -.035, 0, undefined, room.floor === 'deck' ? .006 : 0);
+      }
       // The upper floor slab forms the soffit over the recessed deck.
       geometry.box(materials.core, rect, UPPER_SLAB_BOTTOM, 3.50);
       if (room.ceiling !== null) {

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import { createOverlookDeckContacts, PARAPET_CAP } from './overlookDeckDetail';
 import { OverlookModel, overlookFinishes, seededDetail, type OverlookFinishes } from './overlookModel';
 import { addOverlookPavilion } from './overlookPavilion';
 import { DECK_FRONT, DECK_LEVEL, DECK_SIDE } from './overlookTerrain';
-import { addOverlookUpperDeck } from './overlookUpperDeck';
+import { addOverlookUpperDeck, OVERLOOK_UPPER_DECK_HEIGHT } from './overlookUpperDeck';
 
 const benchLocations = [[-0.3, -21.8], [-22.5, -10.2], [22.5, -10.2], [-29.2, 4.7], [29.2, 4.7]] as const;
 const viewerLocations = [[-19.3, -21.17, 0.14], [18.7, -21.17, -0.56]] as const;
@@ -211,9 +212,9 @@ function addParapet(model: OverlookModel, finish: OverlookFinishes,
   stone(finish.shadowStone, from, to, 0.39, 0.76, 0.72);
   stone(finish.shadowStone, from, to, 0.047, 0.15, 1.02);
   stone(finish.cream, from, to, 0.139, 0.054, 0.92);
-  for (const [offset, y, height] of [[1.08, 0.30, 0.251], [2.15, 0.54, 0.211]]) {
+  for (const [offset, y, height] of [[1.08, 0.30, 0.251], [PARAPET_CAP.pitch, 0.54, 0.211]]) {
     let left = from;
-    for (let edge = from + offset; edge < to - 0.38; edge += 2.15) {
+    for (let edge = from + offset; edge < to - 0.38; edge += PARAPET_CAP.pitch) {
       stone(finish.limestone, left + 0.008, edge - 0.008, y, height, 0.76);
       left = edge;
     }
@@ -221,7 +222,7 @@ function addParapet(model: OverlookModel, finish: OverlookFinishes,
   }
   stone(finish.shadowStone, from, to, 0.659, 0.027, 0.82);
   stone(finish.cream, from, to, 0.718, 0.105, 0.94);
-  stone(finish.limestone, from, to, 0.787, 0.054, 0.88);
+  stone(finish.limestone, from, to, PARAPET_CAP.y, PARAPET_CAP.height, PARAPET_CAP.width);
 }
 
 function addBench(model: OverlookModel, finish: OverlookFinishes, x: number, z: number): void {
@@ -274,7 +275,7 @@ function addViewer(model: OverlookModel, finish: OverlookFinishes, x: number, z:
 }
 
 function addLampPools(group: THREE.Group, model: OverlookModel, finish: OverlookFinishes,
-  upperPools: readonly THREE.BufferGeometry[]): THREE.Group {
+  upperPools: readonly THREE.BufferGeometry[]) {
   const resolution = 64;
   const pixels = new Uint8Array(resolution ** 2 * 4);
   for (let y = 0; y < resolution; y += 1) {
@@ -295,6 +296,7 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
   const lamps = new THREE.Group();
   lamps.name = 'Amber grazing light and terrace lanterns';
   const pools = new OverlookModel();
+  const wallPools = new OverlookModel();
   const wash = haze.clone();
   wash.color.setHex(0xffb960);
   wash.opacity = 0.34;
@@ -307,7 +309,7 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
     const floor = new THREE.PlaneGeometry(3.6, 2.35);
     const uv = floor.getAttribute('uv');
     for (let i = 0; i < uv.count; i += 1) uv.setY(i, uv.getY(i) * 0.5);
-    pools.mesh(floor.rotateX(-Math.PI / 2).rotateY(yaw).translate(x + 1.64 * nx, 0.014, z + 1.64 * nz), wash, false);
+    wallPools.mesh(floor.rotateX(-Math.PI / 2).rotateY(yaw).translate(x + 1.64 * nx, 0.014, z + 1.64 * nz), wash, false);
 
     const wall = new THREE.PlaneGeometry(1.95, 0.56);
     const wallUv = wall.getAttribute('uv'), positions = wall.getAttribute('position');
@@ -315,55 +317,71 @@ function addLampPools(group: THREE.Group, model: OverlookModel, finish: Overlook
       if (wallUv.getY(i) === 1) positions.setX(i, positions.getX(i) * 0.17);
       wallUv.setY(i, wallUv.getY(i) * 0.5);
     }
-    pools.mesh(wall.rotateY(yaw).translate(x + 0.384 * nx, 0.276, z + 0.384 * nz), wash, false);
+    wallPools.mesh(wall.rotateY(yaw).translate(x + 0.384 * nx, 0.276, z + 0.384 * nz), wash, false);
   }
   for (const [x, z] of [[-33.55, -6], [33.55, -6], [-33.55, 11], [33.55, 11]]) {
     pools.mesh(new THREE.PlaneGeometry(3.8, 3.8).rotateX(-Math.PI / 2).translate(x, 0.017, z), haze, false);
   }
   for (const pool of upperPools) pools.mesh(pool, wash, false);
   pools.finish(lamps);
+  const wallLight = new THREE.Group();
+  wallLight.name = 'Baked parapet lamp pools';
+  wallPools.finish(wallLight);
+  lamps.add(wallLight);
   for (const x of [-5.68, 5.68]) {
     const lamp = new THREE.PointLight(0xffbf7d, 50, 9.5, 2);
     lamp.position.set(x, 3.37, 7.97);
     lamps.add(lamp);
   }
   group.add(lamps);
-  return lamps;
+  return { lamps, wallLight };
 }
 
-export function createOverlookDeck(): { group: THREE.Group; setTimeOfDay(time: 'day' | 'night'): void } {
+export function createOverlookDeck(high: THREE.IUniform<number>, nightAmount: THREE.IUniform<number>) {
   const group = new THREE.Group();
   group.name = 'Hilltop observatory terrace';
   group.position.y = DECK_LEVEL;
   const model = new OverlookModel();
   const finish = overlookFinishes();
+  const contacts = createOverlookDeckContacts();
   addPaving(model, finish);
   addCompass(model, finish);
   const sidePiers = [-15, -6, 2.5, 11, 24];
   addParapet(model, finish, DECK_FRONT, -DECK_SIDE - 0.51, DECK_SIDE + 0.51, 'x');
+  contacts.add('main', 0, DECK_FRONT, 2 * DECK_SIDE + 1.02, 1.02, 0.95, 0.92);
   for (const side of [-1, 1]) {
     const x = side * DECK_SIDE;
     addParapet(model, finish, x, DECK_FRONT + 0.39, sidePiers[0], 'z');
     addPier(model, finish, x, DECK_FRONT);
     addRail(model, finish, x, sidePiers, 'z');
+    contacts.add('main', x, 0, 0.92, 48, 0.82, 0.83);
     for (const z of sidePiers) addPier(model, finish, x, z, z === -6 || z === 11);
     addRail(model, finish, 24, side < 0 ? [x, -24.25] : [24.25, x], 'x');
     addPier(model, finish, side * 24.25, 24);
   }
-  for (const [x, z] of benchLocations) addBench(model, finish, x, z);
-  for (const [x, z, yaw] of viewerLocations) addViewer(model, finish, x, z, yaw);
+  for (const [x, z] of benchLocations) {
+    addBench(model, finish, x, z);
+    contacts.add('main', x, z, 3.5, 0.85, 0.62, 0.62);
+  }
+  for (const [x, z, yaw] of viewerLocations) {
+    addViewer(model, finish, x, z, yaw);
+    contacts.add('main', x, z, 0.76, 0.76, 0.46, 0.83);
+  }
   addOverlookPavilion(model, finish);
-  const upperPools = addOverlookUpperDeck(model, finish);
-  const lamps = addLampPools(group, model, finish, upperPools);
+  const upperPools = addOverlookUpperDeck(model, finish, contacts.add);
+  const { lamps, wallLight } = addLampPools(group, model, finish, upperPools);
+  const contactTexture = contacts.apply(finish, wallLamps, OVERLOOK_UPPER_DECK_HEIGHT, high, nightAmount);
   model.finish(group);
   lamps.visible = false;
   return {
     group,
-    setTimeOfDay(time) {
+    setQuality(highQuality: boolean) { wallLight.visible = !highQuality; },
+    setTimeOfDay(time: 'day' | 'night') {
       const night = time === 'night';
       finish.frosted.emissiveIntensity = night ? 0.80 : 0.04;
       finish.window.emissiveIntensity = night ? 0.36 : 0;
       lamps.visible = night;
     },
+    dispose() { contactTexture.dispose(); },
   };
 }

@@ -91,7 +91,7 @@ function terrainAxis(minimum: number, maximum: number): number[] {
 
 export function createOverlookSurface(
   heightAt: (x: number, z: number) => number, streets: { texture: THREE.Texture; bounds: THREE.Vector4 },
-  night: THREE.IUniform<number>,
+  night: THREE.IUniform<number>, high?: THREE.IUniform<number>,
 ): THREE.Mesh {
   const xs = terrainAxis(-23000, 23000), zs = terrainAxis(-26000, 11000);
   // Sample the top and toe of the cut independently of the regular grid.
@@ -136,19 +136,28 @@ export function createOverlookSurface(
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
   geometry.computeVertexNormals();
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+  material.customProgramCacheKey = () => high ? 'overlook-terrain-detail' : 'overlook-terrain';
   material.onBeforeCompile = shader => {
+    if (high) shader.uniforms.uHillHigh = high;
     shader.uniforms.uStreets = { value: streets.texture };
     shader.uniforms.uStreetBounds = { value: streets.bounds };
     shader.uniforms.uHillNight = night;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vHillPoint;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHillPoint = position;');
+      .replace('#include <common>', `#include <common>
+        varying vec3 vHillPoint;
+        ${high ? 'varying float vHillSteepness;' : ''}
+      `)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vHillPoint = position;
+        ${high ? 'vHillSteepness = 1.0 - normal.y;' : ''}
+      `);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         varying vec3 vHillPoint;
         uniform sampler2D uStreets;
         uniform vec4 uStreetBounds;
         uniform float uHillNight;
+        ${high ? 'uniform float uHillHigh; varying float vHillSteepness;' : ''}
         ${coastNoise}
       `)
       .replace('#include <color_fragment>', `#include <color_fragment>
@@ -167,9 +176,26 @@ export function createOverlookSurface(
         block = mix(block, vec3(0.094, 0.131, 0.080), planting * 0.94);
         diffuseColor.rgb = mix(diffuseColor.rgb, block, cityGround.r * 0.94);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.066, 0.074, 0.078), cityGround.g * (0.55 + cityGround.b * 0.28));
+        ${high ? `
+          float bankRelief = 0.0;
+          if (uHillHigh > 0.0) {
+            float bank = smoothstep(35.0, 150.0, vHillPoint.y) * (1.0 - smoothstep(1500.0, 5300.0, hillDistance));
+            float scrubPatch = coastNoise(soil * vec2(0.013, 0.020));
+            float cover = coastNoise(soil * 0.052);
+            float granular = coastNoise(soil * 0.21);
+            float exposure = smoothstep(0.09, 0.44, vHillSteepness + 0.22 * scrubPatch);
+            float bareSoil = smoothstep(0.27, 0.75, 0.36 * scrubPatch + 0.32 * cover + 0.64 * exposure);
+            vec3 vegetation = mix(vec3(0.095, 0.123, 0.052), vec3(0.25, 0.262, 0.107), cover);
+            vec3 rockyScree = mix(vec3(0.22, 0.181, 0.112), vec3(0.38, 0.322, 0.205), granular);
+            float exposedBank = bank * (1.0 - max(cityGround.r, cityGround.g));
+            diffuseColor.rgb = mix(diffuseColor.rgb, mix(vegetation, rockyScree, bareSoil), exposedBank * 0.79);
+            bankRelief = exposedBank * (0.27 * scrubPatch + 0.20 * cover + 0.09 * granular) * (0.45 + bareSoil);
+          }
+        ` : ''}
+
       `)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        float hillRelief = soilDetail * (0.018 * chips + 0.035 * paleGravel);
+        float hillRelief = soilDetail * (0.018 * chips + 0.035 * paleGravel) ${high ? "+ bankRelief" : ""};
         vec3 tangentX = dFdx(-vViewPosition);
         vec3 tangentY = dFdy(-vViewPosition);
         vec3 acrossX = cross(tangentY, normal);
@@ -181,6 +207,26 @@ export function createOverlookSurface(
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += uHillNight * vec3(0.044, 0.023, 0.008)
           * (cityGround.b * 0.45 + cityGround.r * 0.34);
+        ${high ? `
+          if (uHillHigh > 0.0 && uHillNight > 0.0) {
+            // Broaden arterial spill by a texel on each side of the mapped road bed.
+            vec2 texel = 1.0 / vec2(textureSize(uStreets, 0));
+            vec2 xStep = vec2(texel.x, 0.0), zStep = vec2(0.0, texel.y);
+            vec3 shoulders = 0.25 * (texture2D(uStreets, streetUv - xStep).rgb + texture2D(uStreets, streetUv + xStep).rgb
+                                  + texture2D(uStreets, streetUv - zStep).rgb + texture2D(uStreets, streetUv + zStep).rgb);
+            float district = coastNoise(soil * 0.0027 + 7.2);
+            float pixelSpan = max(length(dFdx(soil)), length(dFdy(soil)));
+            float nodes = mix(coastNoise(soil * 0.049), 0.50, smoothstep(8.0, 24.0, pixelSpan));
+            float arterial = max(cityGround.b, 0.38 * shoulders.b);
+            float sideStreet = cityGround.g * (1.0 - cityGround.b) * smoothstep(0.06, 0.58, cityGround.r);
+            vec3 amber = vec3(0.035, 0.020, 0.008);
+            vec3 neutral = vec3(0.019, 0.031, 0.034);
+            vec3 spill = mix(amber, neutral, smoothstep(0.38, 0.71, district));
+            float lights = arterial * (0.38 + 0.56 * nodes) + sideStreet * (0.27 + 0.73 * nodes);
+            totalEmissiveRadiance += spill * lights * (1.0 - smoothstep(6200.0, 15500.0, hillDistance));
+          }
+        ` : ''}
+
       `);
   };
   const mesh = new THREE.Mesh(geometry, material);

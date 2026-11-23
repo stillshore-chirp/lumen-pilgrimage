@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { CoastQuality } from '../../CoastWorld';
 import { createCoastAtmosphere, type CoastTimeOfDay } from '../coastAtmosphere';
 import { createCoastSky } from '../coastSky';
+import { createAirTraffic, type AirTrafficRoute } from '../overlook/overlookAirTraffic';
 import { createOverlookCity, createOverlookCityGround } from '../overlook/overlookCity';
 import { createOverlookSurface, loadOverlookTerrain } from '../overlook/overlookTerrain';
 import { isOverlookRoadway } from '../overlook/overlookTraffic';
@@ -14,6 +15,14 @@ import {
 import { createResidenceBlocks } from './residenceDistrictGround';
 import { createResidenceNeighborhood } from './residenceNeighborhood';
 import { createResidenceStreetTraffic } from './residenceStreetTraffic';
+
+// The two southern passes run in opposite directions. A third passes east of the balcony.
+// Keep them in residence coordinates so the surveyed ground's reflection does not mirror the aircraft.
+const residenceFlights = [
+  { centerX: 650, centerZ: 15800, eastRadius: 9650, northRadius: 6200, altitude: 1190, phase: -1.83, rate: 0.013, scale: 0.90 },
+  { centerX: -1550, centerZ: 24000, eastRadius: 10300, northRadius: 8800, altitude: 2400, phase: -0.99, rate: -0.011, scale: 1.08 },
+  { centerX: 21500, centerZ: -2200, eastRadius: 8250, northRadius: 9300, altitude: 1680, phase: 2.79, rate: 0.013, scale: 0.96 },
+] satisfies readonly AirTrafficRoute[];
 
 function distanceFromNeighborhood(x: number, z: number, areas: readonly CityRect[]): number {
   const east = x - RESIDENCE_REGIONAL_ORIGIN.x;
@@ -141,14 +150,16 @@ export async function createResidenceCity() {
   region.add(terrain, basin.group);
 
   const traffic = createResidenceStreetTraffic(atmosphere.night);
+  const airTraffic = createAirTraffic(residenceFlights);
   const group = new THREE.Group();
   group.name = 'Downtown at the residence';
-  group.add(sky.dome, sky.clouds, region, neighborhood.group, traffic.group);
+  group.add(sky.dome, sky.clouds, region, neighborhood.group, traffic.group, airTraffic.group);
   function dispose(): void {
     sky.dispose();
     streets.texture.dispose();
     atmosphere.sky.value.dispose();
     neighborhood.dispose();
+    airTraffic.dispose();
     for (const part of [region, neighborhood.group, traffic.group]) disposeDrawables(part);
   }
   let elapsed = 0;
@@ -157,6 +168,7 @@ export async function createResidenceCity() {
     atmosphere.setTimeOfDay(time);
     sky.setTimeOfDay(time);
     basin.setTimeOfDay(time);
+    airTraffic.setTimeOfDay(time);
     neighborhood.setNight(night);
     traffic.setNight(night);
     traffic.update(elapsed);
@@ -175,6 +187,7 @@ export async function createResidenceCity() {
     update(time: number, _camera?: THREE.PerspectiveCamera) {
       elapsed = time;
       traffic.update(time);
+      airTraffic.update(time);
     },
     dispose,
   };

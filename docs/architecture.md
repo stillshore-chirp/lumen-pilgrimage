@@ -20,7 +20,7 @@
 - [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形、散策路、沢の水位](../src/coast/terrain.ts) を共有する。道の縦断勾配を滑らかにつなぎ、周囲の地面に応じて横断勾配を付ける。西の岩棚、東の潮棚、林内の分岐と沢は、地形と [岩・シダの配置](../src/coast/world/coastLandmarks.ts) を合わせて組む。素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
 - 地上の登坂判定に引っかかったときは横方向の移動を試す。急な下りとジャンプは重力で接地させる。遊泳と潜水は海・沢・湖の水位を参照し、潜水時に水底への進入を止める。水底が浅くなると浮上し、岸で接地する。水中の視界は深さで減衰し、水面の裏側と水底に届く光を描く。
 - 密林の高所から峠、湖の周回路、稜線へつながる。[朱の参道](../src/coast/world/coastInariTrail.ts) は湖の周回路から分かれ、地形の二つの歩行路に沿って石段と鳥居を置く。山の鞍部と樹冠の高さを調整し、南東から楼門や前庭、石段の入口に日が入る。小社からの下り道は稜線への道に合流する。路肩の地形、ベンチと屋外休憩所の座標、視界を空ける範囲を地形定義に持つ。[休憩所](../src/coast/world/coastRestAreas.ts) は地形に合わせて木製ベンチと低い石の縁を置く。
-- [2階展望デッキ](../src/coast/world/overlook/overlookUpperDeck.ts) は東側の階段と踊り場をパビリオンの屋外デッキにつなぐ。階段の滑らかな歩行面と各踊り場の高さを共有し、手すりの位置で歩行を止める。ファストトラベルで選んだ着地点にも同じ高さを適用する。1階はテラスの縁、建物、望遠鏡に沿って歩行を制限する。夜は石の縁と段鼻の灯りが足元を照らす。各ワールドのベンチは通り抜けられる。
+- [2階展望デッキ](../src/coast/world/overlook/overlookUpperDeck.ts) は東側の階段と踊り場をパビリオンの屋外デッキにつなぐ。階段の滑らかな歩行面と各踊り場の高さを共有し、手すりの位置で歩行を止める。ファストトラベルで選んだ着地点にも同じ高さを適用する。1階はテラスの縁、建物、望遠鏡に沿って歩行を制限する。夜は石の縁と段鼻の灯りが足元を照らす。展望台の高品質設定では、石材の凹凸と床に接する部分の影、手すりに反射する夜空の光、斜面の植生と露岩を描き分ける。夜の街路には道路面と周囲への光の広がりを加える。各ワールドのベンチは通り抜けられる。
 
 ## 景観と描画
 
@@ -33,10 +33,15 @@
 
 ## 都心の70階住戸
 
+窓のある居間・個室は室内の壁スイッチでカーテンを動かす。部屋の内側から近づいたときに操作でき、バルコニー引戸の近くでは距離で操作対象を選ぶ。布のひだに沿った長さを保ちながらレール方向の幅を変え、動いている間は窓の反射と影の更新を要求する。 [カーテン](../src/coast/world/residence/residenceCurtains.ts)
+
 - 図面の P1 を基準に、東を `x`、北を `-z`、70階の仕上げ床を `y=0` とし、単位をメートルにそろえる。部屋、壁、開口、手すりを描画と歩行判定で共有する。室内家具の外形は間接光の遮蔽に使い、歩行では通り抜けられる。主寝室の引戸は開き量を描画と音響に渡し、人が敷居を通れる幅まで開いてから通行できる。 [設計図 PDF](residence/residence-70f-drawings.pdf) · [平面](../src/coast/world/residence/residencePlan.ts) · [歩行判定](../src/coast/world/residence/residenceNavigation.ts)
 - 街路面は `y=-246`。南窓から大通り沿いの屋上と約277 m南の交差点を見下ろす。南北幹線を住戸の塔の東に通し、横断街路と沿道への出入りを担う街路をつなぐ。車道・歩道・走行経路と敷地は同じ道路網から決める。幹線を街区の外へ延ばし、車道とその先の見通しに建物や基壇が重ならないことを描画形状で確認する。夜は走行中の車両の灯りが舗装を照らす。 [基本設計](residence/residence-70f-design.md#街区と視線) · [高さ](../src/coast/world/residence/residenceFloor.ts) · [都市の描画](../src/coast/world/residence/residenceCity.ts)
+- 夜の街は建物の用途、部屋、ロビーに応じて窓の点灯と色を変える。住戸から見える遠方の高層棟は、窓が画面上の1画素より小さくなる距離で、まとまりのある小さな窓明かりに移行する。 [近景の外壁](../src/coast/world/residence/residenceCityMaterials.ts) · [遠景の高層棟](../src/coast/world/overlook/overlookCity.ts)
 - 室内はオークや漆喰、織物の実寸の色・凹凸・粗さを使う。窓からの日射、間接光、夜の照明を組み合わせる。高品質では家具の実形状から床際の影を作る。デスクトップでは視点に応じて窓・鏡の反射を描き、高品質では室内の深度を使った近接陰影と、床材の粗さに応じた平面反射も加える。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [反射](../src/coast/world/residence/residenceReflections.ts) · [内装材の出典](../public/residence-materials/ATTRIBUTION.md)
 - 録音した交通音を南と東の街路に分散する。床の高さ、建物の外皮と間仕切り、引戸の開き量で伝わる音の強さと帯域を変える。室内の反射は部屋の寸法に合わせ、動く交通音は頭部伝達関数で定位させる。足音は床材に従い、引戸の開閉にも短い作動音を付ける。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
+
+- 住戸から見える遠方の旅客機は展望台と機体・灯火の描画を共有する。住戸の機体は南と東に通過経路を持ち、都市の地形を反転する変換から独立した座標に置く。機体は視覚だけで表現する。 [航空機の描画](../src/coast/world/overlook/overlookAirTraffic.ts) · [衝突防止灯の資料](https://www.govinfo.gov/content/pkg/CFR-2025-title14-vol1/xhtml/CFR-2025-title14-vol1-sec25-1401.html)
 
 ## 音響
 
