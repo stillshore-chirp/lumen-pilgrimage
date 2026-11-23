@@ -12,7 +12,7 @@ interface MonitorViewOptions {
   renderer: WebGLRenderer;
   scene: Scene;
   camera: PerspectiveCamera;
-  eyeHeight: number;
+  eyeHeight(): number;
   releaseInput(): void;
 }
 
@@ -292,12 +292,12 @@ export class MonitorView {
   }
 
   private setXRPresentation(presenting: boolean): void {
-    const { camera, eyeHeight } = this.options;
+    const { camera } = this.options;
     this.setOpen(!presenting);
     if (presenting) {
       this.options.releaseInput();
       this.rig.position.copy(camera.position);
-      this.rig.position.y -= eyeHeight;
+      this.rig.position.y -= this.options.eyeHeight();
       this.rig.rotation.set(0, camera.rotation.y, 0);
       this.xrRenderCamera.near = camera.near;
       this.xrRenderCamera.far = camera.far;

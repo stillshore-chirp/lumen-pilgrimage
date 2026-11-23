@@ -75,6 +75,7 @@ export const RESIDENCE_TEA_HEARTH: ResidenceRect = [4.98, 2.065, 5.404, 2.489];
 export const RESIDENCE_STUDY_RUG: ResidenceRect = [8.42, 1.69, 10.47, 3.92];
 
 export const RESIDENCE_BALCONY_DOOR = { e: 20.7, nFrom: 13.05, nTo: 14.1 } as const;
+export const RESIDENCE_FOYER_POCKET = { west: 9.24, stowLimit: 11, cap: .044 } as const;
 
 export const RESIDENCE_FACADE_PIERS: readonly ResidenceRect[] = [
   [17.71, -0.12, 18.15, 0.43],
@@ -148,15 +149,14 @@ export const RESIDENCE_WALLS: readonly ResidenceWall[] = [
     door('laundry', '洗濯室の扉', 6.61, 7.53, northSwing),
     door('storage', '収納の扉', 9.48, 10.4, northSwing),
   ]),
-  wall('e', 6.65, 11, 14.64, 'interior', [
-    { kind: 'gallery-slide', id: 'gallery-living', label: 'リビングの引戸', from: 11.07, to: 12.8, bottom: 0, top: 2.55 },
-  ]),
   wall('n', 3.35, 6.65, 10.2),
   wall('n', 6.25, 6.65, 11.1),
   wall('n', 8, 6.65, 11.1),
   wall('e', 10.2, 0, 6.25),
   wall('e', 9.7, 8, 11),
-  wall('e', 12.1, 8, 11),
+  wall('e', 12.1, 8, 12.8, 'interior', [
+    { kind: 'gallery-slide', id: 'foyer-gallery', label: '玄関前室の引戸', from: 11.07, to: 12.73, bottom: 0, top: 2.55 },
+  ]),
   wall('n', 12.8, 11.6, 15.6),
   wall('e', 9.95, 12.8, 19, 'interior', [door('bedroom-02', '寝室02の扉', 17.9, 18.86, bedroomSwing)]),
   wall('n', 19, 9.95, 11.6),

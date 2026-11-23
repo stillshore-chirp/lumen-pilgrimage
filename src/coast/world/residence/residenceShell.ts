@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { createResidenceDoors } from './residenceDoors';
 import type { ResidenceMaterials } from './residenceMaterials';
-import { RESIDENCE_BALCONY_DOOR, RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_ROOMS,
+import { RESIDENCE_BALCONY_DOOR, RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_FOYER_POCKET, RESIDENCE_ROOMS,
   RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS,
   type ResidenceDoorOpening, type ResidenceRect } from './residencePlan';
 
@@ -177,7 +177,7 @@ function addFloorsAndCeilings(geometry: ShellGeometry, materials: ResidenceMater
 }
 
 function addRoomSideFinishes(geometry: ShellGeometry, materials: ResidenceMaterials, wall: Wall,
-  from: number, to: number) {
+  from: number, to: number, parent?: THREE.Group) {
   const half = wall.thickness / 2;
   for (const room of RESIDENCE_ROOMS) {
     if (room.floor === 'deck') continue;
@@ -192,12 +192,12 @@ function addRoomSideFinishes(geometry: ShellGeometry, materials: ResidenceMateri
       const face = (depth: number, inset = 0) => lineRect(wall, start + inset, end - inset,
         side > 0 ? half - .002 : -half - depth, side > 0 ? half + depth : -half + .002);
       if (room.floor === 'tile') {
-        geometry.box(materials.tile, face(.011), .005, 2.16);
-        geometry.box(materials.metal, face(.014), 2.16, 2.168);
+        geometry.box(materials.tile, face(.011), .005, 2.16, parent);
+        geometry.box(materials.metal, face(.014), 2.16, 2.168, parent);
       } else {
         const base = room.floor === 'core' ? materials.darkMetal : materials.trim;
-        geometry.box(base, face(.013, .006), .008, .069);
-        geometry.box(base, face(.008, .006), .069, .077);
+        geometry.box(base, face(.013, .006), .008, .069, parent);
+        geometry.box(base, face(.008, .006), .069, .077, parent);
       }
     }
   }
@@ -303,33 +303,39 @@ function addFusuma(blade: THREE.Group, geometry: ShellGeometry, materials: Resid
   }
 }
 
-function addGalleryPocket(geometry: ShellGeometry, materials: ResidenceMaterials, wall: Wall, opening: Opening) {
+function addFoyerPocketFrame(parent: THREE.Group, geometry: ShellGeometry, materials: ResidenceMaterials,
+  wall: Wall, opening: Opening) {
+  const frame = new THREE.Group();
+  frame.name = 'Foyer pocket frame';
+  parent.add(frame);
   const { from, to, top } = opening;
   const half = wall.thickness / 2;
   const slot = .040;
-  const end = wall.to - .044;
+  const start = RESIDENCE_FOYER_POCKET.west + RESIDENCE_FOYER_POCKET.cap;
   const box = (finish: THREE.Material, left: number, right: number, near: number, far: number,
     low: number, high: number, verticalGrain = false) =>
-    geometry.box(finish, lineRect(wall, left, right, near, far), low, high, undefined, 0, verticalGrain);
+    geometry.box(finish, lineRect(wall, left, right, near, far), low, high, frame, 0, verticalGrain);
+  box(materials.wall, wall.from, start, -half, half, 0, wall.height);
+  box(materials.wall, start, to, -half, half, top, wall.height);
   for (const [near, far] of [[-half, -slot], [slot, half]]) {
-    box(materials.wall, to, end, near, far, 0, top);
-    box(materials.cabinetry, to - .016, to + .019, near - .002, far + .002, .001, top, true);
+    box(materials.wall, start, from, near, far, 0, top);
+    box(materials.cabinetry, from - .019, from + .016, near - .002, far + .002, .001, top, true);
   }
-  box(materials.wall, end, wall.to, -half, half, 0, top);
-  box(materials.wall, to, wall.to, -half, half, top, wall.height);
-  box(materials.cabinetry, from - .019, from + .012, -half - .006, half + .006, .001, top, true);
+  box(materials.wall, to, wall.to, -half, half, 0, wall.height);
+  box(materials.cabinetry, to - .012, to + .019, -half - .006, half + .006, .001, top, true);
   for (const [near, far] of [[-half - .006, -slot], [slot, half + .006]]) {
     box(materials.cabinetry, from, to, near, far, top - .027, top + .021);
   }
-  box(materials.darkMetal, from, end, -slot, slot, top - .013, top + .003);
-  addRoomSideFinishes(geometry, materials, wall, to, wall.to);
+  box(materials.darkMetal, start, to, -slot, slot, top - .013, top + .003);
+  addRoomSideFinishes(geometry, materials, wall, wall.from, from, frame);
+  addRoomSideFinishes(geometry, materials, wall, to, wall.to, frame);
 }
 
-function addGalleryLeaf(blade: THREE.Group, geometry: ShellGeometry, materials: ResidenceMaterials,
+function addFoyerLeaf(blade: THREE.Group, geometry: ShellGeometry, materials: ResidenceMaterials,
   top: number, width: number, halfDepth: number) {
   const bottom = .009;
-  const pullLeft = .059;
-  const pullRight = .101;
+  const pullLeft = width - .101;
+  const pullRight = width - .059;
   const pullBottom = .852;
   const pullTop = 1.095;
   const face = (left: number, right: number, low: number, high: number) =>
@@ -350,7 +356,7 @@ function addGalleryLeaf(blade: THREE.Group, geometry: ShellGeometry, materials: 
       between(pullLeft + .008, pullRight - .005, edge, edge + .005, materials.metal);
     }
     for (let index = 1; index <= 7; index++) {
-      const centre = width - .036 - index * .033;
+      const centre = .036 + index * .033;
       const near = sign * (halfDepth - .004);
       const far = sign * halfDepth;
       geometry.box(materials.cabinetry, [centre - .009, Math.min(near, far), centre + .009, Math.max(near, far)],
@@ -469,7 +475,7 @@ export function createResidenceShell(materials: ResidenceMaterials) {
   leaf.name = 'Primary bedroom balcony sliding panel';
   group.add(leaf);
   const geometry = createShellGeometry(group);
-  const movingLeaves = new Map<ResidenceDoorOpening, THREE.Group>();
+  const movingLeaves = new Map<string, THREE.Group>();
   let balconyOpenAmount = 0;
   const indicator = new THREE.MeshBasicMaterial({ name: 'Elevator indicator', color: 0x9d9c80 });
   materials.glass.side = THREE.DoubleSide;
@@ -487,6 +493,11 @@ export function createResidenceShell(materials: ResidenceMaterials) {
     }
     if (wall.axis === 'e' && wall.fixed === 17.70 && wall.from === 0) {
       addElevators(geometry, materials, indicator, wall);
+      continue;
+    }
+    const foyerOpening = wall.openings?.find(opening => opening.kind === 'gallery-slide');
+    if (foyerOpening) {
+      addFoyerPocketFrame(group, geometry, materials, wall, foyerOpening);
       continue;
     }
     const half = wall.thickness / 2;
@@ -509,10 +520,6 @@ export function createResidenceShell(materials: ResidenceMaterials) {
         }
       } else if (opening.kind === 'balcony-door') {
         addBalconyOpening(geometry, materials, wall, opening, leaf);
-      } else if (opening.kind === 'gallery-slide') {
-        addGalleryPocket(geometry, materials, wall, opening);
-        from = wall.to;
-        break;
       } else if (opening.kind === 'door' || opening.kind === 'fusuma') {
         const fusuma = opening.kind === 'fusuma';
         addDoorFrame(geometry, fusuma ? materials.cedar : materials.trim, wall, opening);
@@ -535,18 +542,18 @@ export function createResidenceShell(materials: ResidenceMaterials) {
   }
 
   const doors = createResidenceDoors(({ wall, opening }, pose) => {
-    let blade = movingLeaves.get(opening);
+    let blade = movingLeaves.get(opening.id);
     if (!blade) {
       blade = new THREE.Group();
       blade.name = opening.kind === 'door' ? `Hinged door: ${opening.id}`
-        : opening.kind === 'fusuma' ? 'Tea room fusuma' : 'Gallery pocket door';
+        : opening.kind === 'fusuma' ? 'Tea room fusuma' : 'Foyer pocket door';
       group.add(blade);
-      movingLeaves.set(opening, blade);
+      movingLeaves.set(opening.id, blade);
       if (opening.kind === 'fusuma') {
         const offset = (wall.axis === 'e' ? pose.north : pose.east) - wall.fixed;
         addFusuma(blade, geometry, materials, wall, opening, pose.width, pose.halfDepth, offset);
       } else if (opening.kind === 'gallery-slide') {
-        addGalleryLeaf(blade, geometry, materials, opening.top - .015, pose.width, pose.halfDepth);
+        addFoyerLeaf(blade, geometry, materials, opening.top - .015, pose.width, pose.halfDepth);
       } else {
         addHingedLeaf(blade, geometry, materials, opening, pose.width, pose.halfDepth);
       }

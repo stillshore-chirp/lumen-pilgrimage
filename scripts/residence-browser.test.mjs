@@ -281,6 +281,45 @@ test('the residence accepts startup walking and preserves its views across time,
   assert.deepEqual(errors, []);
 });
 
+test('C crouches and stands at the living-room window and fast travel restores standing', { timeout }, async t => {
+  const { page, errors } = await openResidence(t);
+  const mode = page.locator('.coast-mode');
+  const spawn = await camera(page);
+  assert.ok(Math.abs(spawn.y - 1.65) < 0.001);
+  await capture(page, 'residence-south-window-standing');
+
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => Math.abs(window.residenceProbe.camera.y - 1.15) < 0.001);
+  const crouched = await camera(page);
+  assert.deepEqual([crouched.x, crouched.z], [spawn.x, spawn.z]);
+  assert.equal(await mode.textContent(), 'しゃがみ');
+  await capture(page, 'residence-south-window-crouched');
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => Math.abs(window.residenceProbe.camera.y - 1.65) < 0.001);
+  assert.deepEqual(await camera(page), spawn);
+  assert.equal(await mode.textContent(), '歩行');
+
+  await page.keyboard.press('t');
+  const dialog = page.getByRole('dialog', { name: 'ファストトラベル' });
+  await dialog.waitFor();
+  await page.keyboard.press('c');
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.deepEqual(await camera(page), spawn);
+  assert.equal(await mode.textContent(), '歩行');
+
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => Math.abs(window.residenceProbe.camera.y - 1.15) < 0.001);
+  await hold(page, 'd', () => page.waitForFunction(x => window.residenceProbe.camera.x < x - 0.7, spawn.x));
+  assert.ok(Math.abs((await camera(page)).y - 1.15) < 0.001);
+  await travel(page, 'リビング南窓', 'residence', 'living-window', 'night');
+  await page.waitForFunction(() => Math.abs(window.residenceProbe.camera.y - 1.65) < 0.001);
+  assert.deepEqual(await camera(page), spawn);
+  assert.equal(await mode.textContent(), '歩行');
+  assert.deepEqual(errors, []);
+});
+
 test('tea room and study are accessible in the travel panel and have flush walking paths', { timeout }, async t => {
   const { page, errors } = await openResidence(t, 'foyer');
   const landscape = '.coast-ui { visibility: hidden; }';
@@ -630,15 +669,15 @@ test('the residence menu opens individual controls and keeps remote and wall con
   assert.deepEqual(errors, []);
 });
 
-test('an open gallery doorway softly lights the living floor with its own fixtures off', { timeout }, async t => {
+test('the open foyer door lights the gallery floor with its own fixtures off', { timeout }, async t => {
   const { page, errors } = await createPage(t);
   await exposeResidenceScene(page);
   await page.goto(`${origin}/?world=residence&time=night`, { waitUntil: 'commit' });
   await page.waitForFunction(() => window.residenceProbe.relocate);
 
   const canvas = page.locator('canvas').first();
-  const view = { x: 11.94, z: -4.85, yaw: 0, pitch: -.46 };
-  const reachDoor = { ...view, z: -5.70 };
+  const view = { x: 11.90, z: -10.28, yaw: 0, pitch: -.46 };
+  const reachDoor = { ...view, z: -11.22 };
   const area = [.38, .80, .25, .16];
   async function move(pose) {
     await page.evaluate(pose => window.residenceProbe.relocate(pose), pose);
@@ -648,28 +687,32 @@ test('an open gallery doorway softly lights the living floor with its own fixtur
     }, pose);
   }
   const leafAt = x => page.waitForFunction(x => {
-    const door = window.residenceProbe.scene.getObjectByName('Gallery pocket door');
+    const door = window.residenceProbe.scene.getObjectByName('Foyer pocket door');
     return door && Math.abs(door.position.x - x) < .005;
   }, x);
 
-  const living = await openResidenceDevice(page, '照明', 'リビング・ダイニング');
-  await button(living, '一括消灯').click();
-  await button(living, '設備一覧へ戻る').click();
+  const gallery = await openResidenceDevice(page, '照明', '玄関ギャラリー');
+  await button(gallery, '一括消灯').click();
+  await button(gallery, '設備一覧へ戻る').click();
   const kitchen = await selectResidenceDevice(page, '照明', 'キッチン');
   await button(kitchen, '一括消灯').click();
+  await button(kitchen, '設備一覧へ戻る').click();
+  const foyer = await selectResidenceDevice(page, '照明', '玄関・前室');
+  await button(foyer, '一括点灯').click();
   await page.keyboard.press('Escape');
 
   await move(view);
-  await leafAt(12.814);
+  await leafAt(9.298);
   const lit = await brightness(canvas, area);
-  await capture(page, 'residence-spill-gallery-open', '.coast-ui { visibility: hidden; }');
+  await capture(page, 'residence-spill-foyer-open', '.coast-ui { visibility: hidden; }');
   await move(reachDoor);
-  await button(page, 'リビングの引戸を閉める').click();
+  await button(page, '玄関前室の引戸を閉める').click();
   await leafAt(11.056);
   await move(view);
   const shaded = await brightness(canvas, area);
-  await capture(page, 'residence-spill-gallery-closed', '.coast-ui { visibility: hidden; }');
+  await capture(page, 'residence-spill-foyer-closed', '.coast-ui { visibility: hidden; }');
   assert.ok(lit.mean > shaded.mean + .8, JSON.stringify({ lit, shaded }));
+  t.diagnostic(`Foyer spill brightness ${JSON.stringify({ lit: lit.mean, shaded: shaded.mean })}`);
   assert.deepEqual(errors, []);
 });
 
@@ -713,8 +756,8 @@ test('theater mode sets RGB illumination and restores the normal living-room lig
   assert.equal(await east.getAttribute('aria-pressed'), 'true');
   await toggle.focus();
   await toggle.press('Space');
-  assert.equal(await west.isDisabled(), true);
-  assert.equal(await east.isDisabled(), true);
+  assert.equal(await west.isEnabled(), true);
+  assert.equal(await east.isEnabled(), true);
   assert.equal(await east.getAttribute('aria-pressed'), 'false');
   assert.equal(await tint.inputValue(), '#ffb875');
   await button(living, '設備一覧へ戻る').click();
@@ -738,6 +781,9 @@ test('theater mode sets RGB illumination and restores the normal living-room lig
   await button(page, '夜').click();
   await openResidenceDevice(page, '照明', 'リビング・ダイニング');
   assert.equal(await tint.inputValue(), '#70bdff');
+  await west.click();
+  assert.equal(await west.getAttribute('aria-pressed'), 'true');
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
   await toggle.click();
   assert.equal(await west.isEnabled(), true);
   assert.equal(await west.getAttribute('aria-pressed'), 'false');
@@ -910,8 +956,9 @@ test('nearby appliances open individual controls and start localized audio', { t
     const chimes = new WeakSet();
     window.residenceProbe.completionStarts = 0;
     AudioBufferSourceNode.prototype.connect = function (target, ...args) {
-      // Chimes are short one-shots sent straight to the appliance's spatial low-pass filter.
-      if (!this.loop && this.buffer?.duration < 1 && target instanceof BiquadFilterNode) chimes.add(this);
+      const duration = this.buffer?.duration ?? 0;
+      const completion = [3.44, .78].some(seconds => Math.abs(duration - seconds) < .01);
+      if (!this.loop && completion && target instanceof BiquadFilterNode) chimes.add(this);
       return connect.call(this, target, ...args);
     };
     AudioBufferSourceNode.prototype.start = function (...args) {
@@ -990,33 +1037,72 @@ test('nearby appliances open individual controls and start localized audio', { t
     assert.equal(await mode.inputValue(), selected);
   }
   const power = washer.getByRole('button', { name: '運転', exact: true });
+  const addWashSeconds = washer.getByRole('button', { name: '+10秒', exact: true });
+  const addWashMinute = washer.getByRole('button', { name: '+1分', exact: true });
+  const subtractWashMinute = washer.getByRole('button', { name: '−1分', exact: true });
+  const resetWash = washer.getByRole('button', { name: '標準時間に戻す', exact: true });
+  await washer.getByText('待機中・設定 00:22', { exact: true }).waitFor();
+  await addWashMinute.click();
+  await washer.getByText('待機中・設定 01:22', { exact: true }).waitFor();
+  await resetWash.click();
+  await addWashSeconds.click();
+  await washer.getByText('待機中・設定 00:32', { exact: true }).waitFor();
   const loopsBeforeWasher = await page.evaluate(() => window.residenceProbe.loopStarts);
   await power.click();
   await washer.getByText(/脱水中/).waitFor();
   assert.ok(await mode.isDisabled());
+  assert.ok(await addWashSeconds.isDisabled());
+  assert.ok(await resetWash.isDisabled());
   await page.waitForFunction(initial => window.residenceProbe.loopStarts > initial, loopsBeforeWasher);
   await power.click();
   await washer.getByText(/停止中/).waitFor();
   assert.ok(await mode.isEnabled());
+  await addWashMinute.click();
+  await washer.getByText(/停止中・残り 01:/).waitFor();
   assert.equal(await page.evaluate(() => window.residenceProbe.completionStarts), 1);
+  await resetWash.click();
+  await washer.getByText('停止中・残り 00:22', { exact: true }).waitFor();
+  await subtractWashMinute.click();
+  await washer.getByText('停止中・残り 00:10', { exact: true }).waitFor();
+  await capture(page, 'residence-washer-adjustment');
+  await button(washer, '閉じる').click();
+  const otherWasher = await openResidenceDevice(page, '家電・水栓', '洗濯機（奥側）');
+  await otherWasher.getByText('待機中・設定 00:40', { exact: true }).waitFor();
+  await button(otherWasher, '設備一覧へ戻る').click();
+  await selectResidenceDevice(page, '家電・水栓', '洗濯機（入口側）');
+  await power.click();
+  await washer.getByText('完了', { exact: true }).waitFor();
+  await page.waitForFunction(() => window.residenceProbe.completionStarts === 2);
   await page.keyboard.press('Escape');
   await washer.waitFor({ state: 'hidden' });
   assert.deepEqual(errors, []);
 });
 
-test('the gallery pocket door closes, stops walking, and reopens both ways', { timeout }, async t => {
+test('the foyer pocket door closes locally while the gallery, living room and kitchen remain open', { timeout }, async t => {
   const { page, errors } = await createPage(t);
+  await page.addInitScript(() => {
+    const dryGains = new WeakMap();
+    const connect = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (destination, ...args) {
+      if (this instanceof BiquadFilterNode && destination instanceof GainNode && !dryGains.has(this)) {
+        dryGains.set(this, destination.gain);
+      }
+      return connect.call(this, destination, ...args);
+    };
+    window.foyerTrafficGains = () => [...window.residenceProbe.trafficFilters]
+      .map(filter => dryGains.get(filter)?.value ?? 0);
+  });
   await exposeResidenceScene(page);
   await page.goto(`${origin}/?world=residence&time=day`, { waitUntil: 'commit' });
   await page.waitForFunction(() => window.residenceProbe.relocate);
-  const open = button(page, 'リビングの引戸を開ける');
-  const close = button(page, 'リビングの引戸を閉める');
-  const waitForLeaf = x => page.waitForFunction(x => {
-    const door = window.residenceProbe.scene.getObjectByName('Gallery pocket door');
-    return door && Math.abs(door.position.x - x) < .005;
-  }, x);
-  const gallery = { x: 11.94, z: -7.68, yaw: Math.PI, pitch: -.04 };
-  const living = { x: 11.94, z: -5.68, yaw: 0, pitch: -.04 };
+  const open = button(page, '玄関前室の引戸を開ける');
+  const close = button(page, '玄関前室の引戸を閉める');
+  const waitForLeaf = opened => page.waitForFunction(expected => {
+    const leaf = window.residenceProbe.scene.getObjectByName('Foyer pocket door');
+    return leaf && Math.abs(leaf.position.x - expected) < .005;
+  }, opened ? 9.298 : 11.056);
+  const foyer = { x: 11.90, z: -12.94, yaw: Math.PI, pitch: -.04 };
+  const gallery = { x: 11.90, z: -11.22, yaw: 0, pitch: -.04 };
   async function relocate(pose) {
     await page.evaluate(pose => window.residenceProbe.relocate(pose), pose);
     await page.waitForFunction(({ x, z }) => {
@@ -1025,37 +1111,211 @@ test('the gallery pocket door closes, stops walking, and reopens both ways', { t
     }, pose);
   }
   const landscape = '.coast-ui { visibility: hidden; }';
+  async function walkAcrossLivingBoundary() {
+    await relocate({ x: 11.90, z: -7.72, yaw: -Math.PI / 2, pitch: 0 });
+    await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.x > 13.14));
+    for (const x of [11.35, 11.90, 12.45, 13.25, 14.05, 15.5, 16.9]) {
+      await relocate({ x, z: -7.12, yaw: Math.PI, pitch: 0 });
+      await hold(page, 'w', () => page.waitForFunction(x => {
+        const pose = window.residenceProbe.camera;
+        return pose.z > -6.27 && Math.abs(pose.x - x) < .045 && Math.abs(pose.y - 1.65) < .04;
+      }, x));
+    }
+  }
 
-  await relocate(gallery);
+  await relocate(foyer);
   await close.waitFor();
-  await waitForLeaf(12.814);
-  await relocate({ ...gallery, z: -8.75, pitch: -.11 });
-  await capture(page, 'gallery-door-open', landscape);
-  await relocate(gallery);
+  await waitForLeaf(true);
+  await relocate({ ...foyer, z: -14.75, pitch: -.11 });
+  await capture(page, 'foyer-door-open', landscape);
+  await relocate(foyer);
+  await button(page, '環境音を開始').click();
+  await page.evaluate(() => document.activeElement.blur());
+  await page.waitForFunction(() => window.foyerTrafficGains().some(gain => gain > .0002));
+  await moreMovementFrames(page);
+  const openGains = await page.evaluate(() => window.foyerTrafficGains());
+  await relocate({ ...foyer, z: -12.10 });
   await close.waitFor();
   await page.keyboard.press('e');
   await open.waitFor();
-  await waitForLeaf(11.056);
-  await relocate({ ...gallery, z: -8.75, pitch: -.11 });
-  await capture(page, 'gallery-door-closed', landscape);
-  await relocate(gallery);
+  await moreMovementFrames(page);
+  const pausedEast = await page.evaluate(() => window.residenceProbe.scene.getObjectByName('Foyer pocket door').position.x);
+  assert.ok(pausedEast + 1.688 <= foyer.x - .24, JSON.stringify(pausedEast));
+  await relocate(foyer);
+  await waitForLeaf(false);
+  await page.waitForFunction(opened => window.foyerTrafficGains()
+    .some((gain, index) => opened[index] > .0002 && gain < opened[index] * .38), openGains);
+  const closedGains = await page.evaluate(() => window.foyerTrafficGains());
+  const index = openGains.findIndex((gain, i) => gain > .0002 && closedGains[i] < gain * .38);
+  t.diagnostic(`Foyer traffic dry gain ${JSON.stringify({ open: openGains[index], closed: closedGains[index] })}`);
+  await relocate({ ...foyer, z: -14.75, pitch: -.11 });
+  await capture(page, 'foyer-door-closed', landscape);
+  await relocate(foyer);
   await hold(page, 'w', async () => {
-    await page.waitForFunction(() => window.residenceProbe.camera.z > -7.25);
+    await page.waitForFunction(() => window.residenceProbe.camera.z > -12.69);
     await moreMovementFrames(page);
     const pose = await camera(page);
-    assert.ok(pose.z < -6.91 && pose.z > -7.13, JSON.stringify(pose));
+    assert.ok(pose.z < -12.36 && pose.z > -12.58, JSON.stringify(pose));
   });
   await open.click();
-  await waitForLeaf(12.814);
-  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z > -6.02));
-  await relocate(living);
-  await close.click();
-  await waitForLeaf(11.056);
-  await relocate({ ...living, z: -4.72, pitch: -.11 });
-  await capture(page, 'gallery-door-living', landscape);
-  await relocate(living);
-  await open.click();
-  await waitForLeaf(12.814);
-  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z < -7.26));
+  await waitForLeaf(true);
+  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z > -11.55));
+  await relocate(gallery);
+  await page.keyboard.press('e');
+  await waitForLeaf(false);
+  await relocate({ ...gallery, z: -9.50, pitch: -.11 });
+  await capture(page, 'foyer-door-gallery-side', landscape);
+  await walkAcrossLivingBoundary();
+  await relocate(gallery);
+  await page.keyboard.press('e');
+  await waitForLeaf(true);
+  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z < -12.68));
+  await walkAcrossLivingBoundary();
+  await relocate({ x: 9.94, z: -5.72, yaw: 0, pitch: 0 });
+  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z < -7.14));
+  assert.deepEqual(errors, []);
+});
+
+test('nearby lighting controls switch a zone or one lamp without opening the residence menu', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&time=night`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+
+  const dialog = page.locator('#residence-control-dialog');
+  const living = residenceDialog(page, 'リビング・ダイニング');
+  const study = residenceDialog(page, '書斎05');
+  const tea = residenceDialog(page, '茶室04');
+  const table = living.getByRole('button', { name: 'ソファ横のランプ', exact: true });
+  const pendant = living.getByRole('button', { name: 'ペンダント灯（東）', exact: true });
+  const theater = living.getByRole('button', { name: 'シアター照明', exact: true });
+  const nightLight = living.getByRole('button', { name: '常夜灯', exact: true });
+  const desk = study.getByRole('button', { name: 'デスクライト', exact: true });
+  const lantern = tea.getByRole('button', { name: '行灯', exact: true });
+  const canvas = page.locator('canvas.coast-view');
+  const landscape = '.coast-ui { visibility: hidden; }';
+  const go = pose => page.evaluate(pose => window.residenceProbe.relocate(pose), pose);
+  const pressed = (control, on) => control.and(dialog.getByRole('button', { pressed: on })).waitFor();
+  const light = (id, on) => page.waitForFunction(({ id, on }) => {
+    let amount;
+    window.residenceProbe.scene.traverse(object => {
+      if (object.material?.userData?.residenceFixtureId === id) amount = object.material.emissiveIntensity;
+    });
+    return typeof amount === 'number' && (amount > 0) === on;
+  }, { id, on });
+
+  await go({ x: 11.65, z: -4.78, yaw: Math.PI / 2, pitch: -.35 });
+  await button(page, 'リビング・ダイニングの照明を一括消灯').waitFor();
+  await page.keyboard.press('e');
+  await button(page, 'リビング・ダイニングの照明を一括点灯').waitFor();
+  assert.equal(await dialog.isVisible(), false);
+  await light('LD-table', false);
+  await light('LD-pendant-east', false);
+  await light('K-strip-east', true);
+  await button(page, 'リビング・ダイニングの照明を一括点灯').click();
+  await light('LD-table', true);
+  await light('LD-pendant-east', true);
+
+  await go({ x: 17.97, z: -1.55, yaw: Math.PI, pitch: -.72 });
+  await button(page, 'ソファ横のランプを消す').click();
+  await light('LD-table', false);
+  await light('LD-pendant-east', true);
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  await pressed(table, false);
+  await pressed(pendant, true);
+  await pressed(nightLight, true);
+
+  await pendant.click();
+  await theater.click();
+  assert.equal(await table.isEnabled(), true);
+  assert.equal(await pendant.isEnabled(), true);
+  await pressed(pendant, false);
+  await page.keyboard.press('Escape');
+
+  await go({ x: 11.65, z: -4.78, yaw: Math.PI / 2, pitch: -.35 });
+  await button(page, 'リビング・ダイニングの照明を一括点灯').waitFor();
+  await page.keyboard.press('e');
+  await light('LD-pendant-east', true);
+  assert.equal(await dialog.isVisible(), false);
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  await pressed(theater, true);
+  await pressed(pendant, true);
+  await pressed(nightLight, true);
+  await nightLight.click();
+  await pressed(nightLight, false);
+  await page.waitForFunction(() => {
+    const fixture = window.residenceProbe.scene.getObjectByName('Residence light fixture LD-night');
+    return fixture && fixture.material.isMeshStandardMaterial === true;
+  });
+  await page.keyboard.press('Escape');
+  await button(page, 'リビング・ダイニングの照明を一括消灯').click();
+  await light('LD-pendant-east', false);
+
+  await go({ x: 17.97, z: -1.55, yaw: Math.PI, pitch: -.72 });
+  await button(page, 'ソファ横のランプを点ける').waitFor();
+  const dark = await brightness(canvas, [.29, .44, .42, .39]);
+  await capture(page, 'residence-local-light-theater-off', landscape);
+  await page.keyboard.press('e');
+  await light('LD-table', true);
+  await light('LD-pendant-east', false);
+  const lit = await brightness(canvas, [.29, .44, .42, .39]);
+  assert.ok(lit.mean > dark.mean + 1, JSON.stringify({ dark, lit }));
+  await capture(page, 'residence-local-light-theater-table', landscape);
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  await pressed(theater, true);
+  await pressed(table, true);
+  await table.click();
+  await pendant.click();
+  await pressed(pendant, true);
+  await pressed(theater, true);
+  await page.keyboard.press('Escape');
+  await light('LD-pendant-east', true);
+  await button(page, 'ソファ横のランプを点ける').waitFor();
+  await button(page, 'ソファ横のランプを点ける').click();
+  await light('LD-table', true);
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  await theater.click();
+  await pressed(table, false);
+  await pressed(pendant, false);
+  await pressed(nightLight, true);
+  await page.keyboard.press('Escape');
+  await light('LD-table', false);
+
+  await go({ x: 12.72, z: -1.27, yaw: Math.PI / 2, pitch: -.18 });
+  await button(page, 'フロアランプを消す').click();
+  await light('LD-floor', false);
+
+  await go({ x: 6.20, z: -3.414, yaw: -Math.PI / 2, pitch: -.8 });
+  await button(page, '行灯を消す').click();
+  await light('04-alcove', true);
+  await openResidenceDevice(page, '照明', '茶室04');
+  await pressed(lantern, false);
+  await page.keyboard.press('Escape');
+
+  await go({ x: 8.63, z: -2.025, yaw: Math.PI / 2, pitch: -.54 });
+  await button(page, 'デスクライトを消す').click();
+  await light('05-desk', false);
+  await light('05-reading', true);
+  await openResidenceDevice(page, '照明', '書斎05');
+  await pressed(desk, false);
+  await desk.click();
+  await page.keyboard.press('Escape');
+  await button(page, 'デスクライトを消す').waitFor();
+  await light('05-desk', true);
+
+  await go({ x: 10.68, z: -4.42, yaw: 0, pitch: -.35 });
+  await button(page, '書斎05の照明を一括消灯').click();
+  await light('05-reading', false);
+  await light('05-desk', false);
+  assert.equal(await dialog.isVisible(), false);
+
+  await go({ x: 7.24, z: -2.025, yaw: -Math.PI / 2, pitch: -.54 });
+  await page.waitForFunction(() => window.residenceProbe.camera.x < 7.30);
+  assert.equal(await button(page, 'デスクライトを点ける').isVisible(), false);
+
+  await go({ x: 19.77, z: -14.53, yaw: 0, pitch: -.7 });
+  await button(page, 'ベッド脇のランプ（東）を消す').click();
+  await light('01-bed-east', false);
+  await light('01-bed-west', true);
   assert.deepEqual(errors, []);
 });

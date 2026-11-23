@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RESIDENCE_ROOMS, RESIDENCE_WALLS, type ResidenceRect } from './residencePlan';
 
 type Mount = 'north' | 'west' | 'south';
+type FootMount = Mount | 'east';
 
 interface Source {
   readonly id: string;
@@ -16,16 +17,18 @@ interface Source {
 
 export type LightSource = Source & (
   | { readonly kind: 'cove'; readonly mount: Mount }
-  | { readonly kind: 'foot' | 'task' | 'down' | 'pendant' }
+  | { readonly kind: 'foot'; readonly mount: FootMount }
+  | { readonly kind: 'task' | 'down' | 'pendant' }
 );
 
 const cove = (id: string, label: string, span: ResidenceRect, height: number, spread: number,
   level: number, mount: Mount): LightSource => ({ id, label, span, height, spread, level, mount, kind: 'cove' });
-const foot = (room: string, positions: readonly (readonly [east: number, north: number])[]): LightSource[] =>
-  positions.map(([east, north], index) => ({
-    id: `${room}-foot-${index + 1}`, label: `足元灯 ${index + 1}`,
-    span: [east, north, east, north], height: .20, spread: .65, level: .43, kind: 'foot',
-  }));
+const foot = (id: string, label: string, east: number, north: number, mount: FootMount,
+  spread = .86, level = .36): LightSource => ({
+  id, label, span: [east, north, east, north], height: .20, spread, level, mount, kind: 'foot',
+});
+const corridorFeet = (room: string, mount: FootMount, positions: readonly (readonly [number, number])[]): LightSource[] =>
+  positions.map(([east, north], index) => foot(`${room}-foot-${index + 1}`, `足元灯 ${index + 1}`, east, north, mount));
 const task = (id: string, label: string, span: ResidenceRect, height: number,
   spread: number, level: number, accent: number): LightSource =>
   ({ id, label, span, height, spread, level, accent, kind: 'task' });
@@ -62,8 +65,11 @@ export const roomSources: Readonly<Record<string, readonly LightSource[]>> = {
     cove('LD-cove-west', '西側の間接照明', [11.19, 1.16, 11.19, 4.62], 2.72, 2.84, 1.18, 'west'),
     ...diningPendants.map(({ id, east, label }) => down(id, east, diningPendantNorth, diningPendantHeight, .25, false, label, 'pendant')),
     ...fabricLampSources('LD'),
+    foot('LD-night', '常夜灯', 11.07, 4.67, 'west', .97, .31),
+    foot('LD-foot-window', '足元灯（窓側）', 22.38, 6.58, 'north', .82, .29),
   ],
-  '01': [cove('01-cove', '間接照明', [17.39, 15.37, 20.33, 15.37], 2.61, 1.77, .96, 'north'), ...fabricLampSources('01')],
+  '01': [cove('01-cove', '間接照明', [17.39, 15.37, 20.33, 15.37], 2.61, 1.77, .96, 'north'),
+    ...fabricLampSources('01'), foot('01-foot-balcony', '足元灯（バルコニー側）', 20.23, 15.47, 'north', .98, .31)],
   '02': [cove('02-cove', '間接照明', [18.07, 6.87, 21.46, 6.87], 2.61, 1.65, .81, 'south'), ...fabricLampSources('02')],
   '03': [cove('03-cove', '間接照明', [.32, 4.77, 2.10, 4.77], 2.61, 1.83, .86, 'north'), ...fabricLampSources('03')],
   '04': [cove('04-cove', '間接照明', [3.95, 4.77, 5.70, 4.77], 2.61, 1.83, .74, 'north'), ...fabricLampSources('04'),
@@ -72,26 +78,30 @@ export const roomSources: Readonly<Record<string, readonly LightSource[]>> = {
     task('05-desk', 'デスクライト', [8.005, 2.025, 8.005, 2.025], 1.092, 1.22, .60, .57),
     task('05-reading', '読書灯', [9.978, 1.437, 9.978, 1.437], 1.27, 1.19, .47, .51),
     task('05-bookcase', '書棚の照明', [10.64, 2.55, 10.64, 3.26], 2.404, 1.14, .39, .38)],
-  H1: foot('H1', [.96, 3.30, 5.99, 8.56, 10.68].map(east => [east, 6.54])),
+  H1: corridorFeet('H1', 'north', [.96, 3.30, 5.99, 8.56, 10.68].map(east => [east, 6.58])),
   H0: [cove('H0-cove', '間接照明', [11.19, 7.19, 11.19, 11.74], 2.49, 1.20, .49, 'west'),
-    ...foot('H0', [7.12, 8.73, 11.85].map(north => [11.11, north]))],
-  H2: foot('H2', [13.21, 15.02, 16.77, 18.78].map(east => [east, 11.50])),
+    ...corridorFeet('H0', 'west', [7.12, 8.73, 11.85].map(north => [11.07, north]))],
+  H2: corridorFeet('H2', 'north', [13.21, 15.02, 16.77, 18.78].map(east => [east, 11.53])),
   FO: [cove('FO-cove', '間接照明', [8.22, 13.15, 8.22, 15.21], 2.35, 1.75, .83, 'west'),
-    ...foot('FO', [12.56, 14.47].map(north => [12.67, north]))],
+    ...corridorFeet('FO', 'east', [12.56, 14.47].map(north => [12.73, north])),
+    foot('FO-foot-entry', '足元灯（玄関扉脇）', 11.78, 15.47, 'north')],
   BA: [down('BA-down', 1.85, 8.64, 2.55, .85),
     task('BA-vanity', '鏡の照明', [.53, 9.18, 1.75, 9.18], 1.91, .83, .34, .35)],
   BB: [down('BB-down', 4.74, 8.63, 2.55, .68),
     task('BB-vanity', '鏡の照明', [5.38, 9.24, 5.86, 9.24], 1.91, .76, .31, .31)],
-  UT: [down('UT-down', 7.25, 8.50, 2.55, .75)],
+  UT: [down('UT-down', 7.25, 8.50, 2.55, .75),
+    foot('UT-foot-door', '足元灯', 7.919, 7.92, 'east')],
   ST: [down('ST-down', 9.63, 8.20, 2.55, .65)],
   WC: [down('WC-down', 9.52, 10.95, 2.55, .71),
-    task('WC-vanity', '鏡の照明', [8.25, 10.35, 8.25, 11.57], 1.91, .79, .32, .35)],
+    task('WC-vanity', '鏡の照明', [8.25, 10.35, 8.25, 11.57], 1.91, .79, .32, .35),
+    foot('WC-foot-door', '足元灯', 10.919, 9.99, 'east')],
   MB: [down('MB-down', 13.93, 13.39, 2.55, .83),
     task('MB-vanity', '鏡の照明', [13.10, 12.19, 13.10, 13.43], 1.91, .87, .38, .39)],
   WI: [down('WI-down', 16.23, 13.92, 2.55, .66)],
   K: [down('K-down', 15.19, 7.79, 2.85, .70, false),
     task('K-strip-west', '作業台の照明（西）', [13.87, 9.48, 15.34, 9.48], 1.49, 1.03, .64, .25),
-    task('K-strip-east', '作業台の照明（東）', [15.48, 9.48, 16.95, 9.48], 1.49, 1.03, .64, .25)],
+    task('K-strip-east', '作業台の照明（東）', [15.48, 9.48, 16.95, 9.48], 1.49, 1.03, .64, .25),
+    foot('K-foot-aisle', '足元灯（通路）', 17.28, 8.42, 'east')],
   C1: [1.70, 4.15, 6.60, 9.3, 12.0, 14.7].map((east, index) => down(`C1-down-${index + 1}`, east, 16.65, 2.65, .76)),
 };
 
@@ -154,7 +164,7 @@ function probeLight(source: LightSource, distance: number, y: number): number {
         + .54 * source.level * THREE.MathUtils.smoothstep(y, source.height, source.height + .24)
           * Math.exp(-distance / .86);
     case 'foot':
-      return source.level * Math.exp(-((distance / source.spread) ** 2) - (vertical / .49) ** 2);
+      return source.level * Math.exp(-((distance / source.spread) ** 2) - ((y - .055) / .30) ** 2);
     case 'task':
       return source.level * Math.exp(-((distance / source.spread) ** 2) - ((vertical - .30) / .99) ** 2)
         * (1 - .80 * THREE.MathUtils.smoothstep(y, source.height, source.height + .28));
@@ -283,12 +293,14 @@ export function createResidenceLightField(obstacles: readonly ResidenceRect[]) {
     if (!columns) return;
     const fixtures = roomSources[id];
     const active = new Set(fixtures.filter(enabled));
-    const totalLevel = fixtures.reduce((sum, fixture) => sum + fixture.level, 0);
-    const activeLevel = fixtures.reduce((sum, fixture) => sum + (active.has(fixture) ? fixture.level : 0), 0);
+    // Footlights illuminate a patch of floor without raising the room's ceiling and wall bounce.
+    const overhead = fixtures.filter(fixture => fixture.kind !== 'foot');
+    const totalLevel = overhead.reduce((sum, fixture) => sum + fixture.level, 0);
+    const activeLevel = overhead.reduce((sum, fixture) => sum + (active.has(fixture) ? fixture.level : 0), 0);
     const daytimeCount = fixtures.filter(fixture => fixture.daytime).length;
     const activeDaytime = fixtures.filter(fixture => fixture.daytime && active.has(fixture)).length;
-    const nightBounce = id === '04' ? .42 : id === 'LD' ? .35 : id === 'H1' || id === 'H2' ? .23 : .28;
-    const ambient = THREE.MathUtils.lerp(.018, nightBounce, activeLevel / totalLevel);
+    const nightBounce = id === '04' ? .42 : id === 'LD' ? .35 : .28;
+    const ambient = THREE.MathUtils.lerp(.018, nightBounce, totalLevel > 0 ? activeLevel / totalLevel : 0);
     const dayBounce = daytimeCount > 0 ? .38 * activeDaytime / daytimeCount : 0;
 
     // Change only the affected room's probes. Window direction and static contact shadow stay baked.

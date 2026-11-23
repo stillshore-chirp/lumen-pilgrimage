@@ -2,7 +2,7 @@ import {
   NeutralToneMapping, PCFShadowMap, PerspectiveCamera, Vector3, WebGLRenderer, type Scene,
 } from 'three';
 import { CoastAudio } from './CoastAudio';
-import { CoastControls, EYE_HEIGHT, type CoastMovement, type CoastNavigation } from './CoastControls';
+import { CoastControls, type CoastMovement, type CoastNavigation } from './CoastControls';
 import type { MonitorTheater } from '../monitor/monitorObject';
 import type { MonitorView } from '../monitor/monitorView';
 import type { CoastBirdCue } from './coastBirdCue';
@@ -20,7 +20,7 @@ const qualitySettings = {
 const FOV_STORAGE_KEY = 'lumen-pilgrimage:fov';
 
 const movementLabels: Record<CoastMovement, string> = {
-  walk: '歩行', wade: '浅瀬', swim: '遊泳', dive: '潜水', flight: '自由飛行',
+  walk: '歩行', crouch: 'しゃがみ', wade: '浅瀬', swim: '遊泳', dive: '潜水', flight: '自由飛行',
 };
 
 interface ExplorationWorld {
@@ -39,7 +39,7 @@ type ExplorationAudio = Pick<CoastAudio, 'start' | 'setLevel' | 'update' | 'disp
 };
 
 interface ExplorationInteraction {
-  label(position: Vector3): string | null;
+  label(position: Vector3, facing: Vector3): string | null;
   invoke(): void | { readonly openSection: string };
 }
 
@@ -123,6 +123,7 @@ export class CoastApp {
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
             <p class="coast-jump-guide">地上で <kbd>Space</kbd> ジャンプ</p>
+            <p>地上で <kbd>C</kbd> しゃがむ／立つ</p>
             <p class="coast-water-guide">泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
             <p><kbd>T</kbd> ファストトラベル</p>
             <p class="coast-flight-guide"><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
@@ -263,7 +264,7 @@ export class CoastApp {
 
   private interactionLabel(): string | null {
     if (this.travelDialog.open || this.residencePanel?.dialog.open || this.monitor?.blocksSceneInput) return null;
-    return this.interaction?.label(this.camera.position) ?? null;
+    return this.interaction?.label(this.camera.position, this.camera.getWorldDirection(this.forward)) ?? null;
   }
 
   private invokeInteraction(): boolean {
@@ -319,7 +320,7 @@ export class CoastApp {
         if (this.disposed) return;
         this.monitor = new MonitorView({
           entry, toggle, renderer: this.renderer, scene: this.world.scene, camera: this.camera,
-          eyeHeight: EYE_HEIGHT, releaseInput: () => this.controls.releaseInput(),
+          eyeHeight: () => this.controls.eyeHeight, releaseInput: () => this.controls.releaseInput(),
         });
         this.monitor.setTheater(this.world.theater ?? null);
         toggle.setAttribute('aria-controls', 'monitor-view-panel');
@@ -443,7 +444,9 @@ export class CoastApp {
     }
     viewer.getWorldDirection(this.forward);
     this.up.copy(viewer.up).applyQuaternion(viewer.quaternion);
-    this.audio.update(viewer.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
+    const movement = this.controls.currentMovement;
+    this.audio.update(viewer.position, this.forward, this.up, this.elapsed,
+      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues);
     const view = this.monitor?.renderCamera ?? this.camera;
     this.world.prepareRender?.(this.renderer, view);
     this.renderer.render(this.world.scene, view);

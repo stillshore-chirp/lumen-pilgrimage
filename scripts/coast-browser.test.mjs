@@ -53,7 +53,7 @@ function observeCameraWithoutAudio() {
     return location;
   };
   gl.uniform3f = function (location, x, y, z) {
-    if (cameraUniforms.has(location)) window.startupCameraPosition = [x, z];
+    if (cameraUniforms.has(location)) window.startupCameraPosition = [x, z, y];
     return writePosition.call(this, location, x, y, z);
   };
 }
@@ -400,6 +400,14 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     const flightHeight = walked.y + (screenshotDirectory ? 9 : 3);
     await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y, flightHeight);
     await page.keyboard.up('Space');
+    const beforeDescent = await page.evaluate(audioPosition);
+    await page.keyboard.down('c');
+    try {
+      await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value < y - 0.5, beforeDescent.y);
+    } finally {
+      await page.keyboard.up('c');
+    }
+    assert.equal(await page.locator('.coast-mode').textContent(), '自由飛行');
     await page.evaluate(() => document.exitPointerLock());
     await flight.waitFor();
     await capture(page, 'lagoon-flight');
@@ -448,6 +456,16 @@ test('both worlds accept the first movement key when the browser finishes focusi
       assert.equal(await page.evaluate(() => document.activeElement === document.body
         && document.hasFocus() && document.pointerLockElement === null), true);
 
+      const spawn = await page.evaluate(() => window.startupCameraPosition);
+      await page.keyboard.press('c');
+      await page.waitForFunction(([x, z, y]) => {
+        const [currentX, currentZ, currentY] = window.startupCameraPosition;
+        return currentX === x && currentZ === z && Math.abs(currentY - y + 0.5) < 0.001
+          && document.querySelector('.coast-mode')?.textContent === 'しゃがみ';
+      }, spawn);
+      await page.keyboard.press('c');
+      await page.waitForFunction(([, , y]) => Math.abs(window.startupCameraPosition[2] - y) < 0.001, spawn);
+
       for (const key of ['w', 'a', 's', 'd']) {
         const start = await page.evaluate(() => window.startupCameraPosition);
         await page.keyboard.down(key);
@@ -472,8 +490,8 @@ test('both worlds accept the first movement key when the browser finishes focusi
     } finally {
       await page.keyboard.up('w');
     }
-    await page.keyboard.type('asd');
-    assert.equal(await code.inputValue(), 'wasd');
+    await page.keyboard.type('asdc');
+    assert.equal(await code.inputValue(), 'wasdc');
     assert.deepEqual(await page.evaluate(() => window.startupCameraPosition), beforeTyping);
   } finally {
     await page.close();

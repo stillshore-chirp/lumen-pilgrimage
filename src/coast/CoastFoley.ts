@@ -1,4 +1,4 @@
-import { EYE_HEIGHT, type CoastMovement } from './CoastControls';
+import { groundEyeHeight, type CoastMovement } from './CoastControls';
 import { coastBedrock, coastRandom, coastTrailDistance, groundHeight, groundSlope, type CoastPoint } from './terrain';
 
 type Contact = 'sand' | 'gravel' | 'leaves' | 'wade' | 'stroke' | 'bubbles' | 'splash';
@@ -101,14 +101,14 @@ export class CoastFoley {
 
     const swimming = movement === 'swim' || movement === 'dive';
     const floor = groundHeight(position.x, position.z);
-    if (!swimming && Math.abs(position.y - EYE_HEIGHT - floor) > 0.16) {
+    if (!swimming && Math.abs(position.y - groundEyeHeight(movement) - floor) > 0.16) {
       this.traveled = 0;
       return;
     }
     const distance = movement === 'dive' ? Math.hypot(horizontal, dy * 0.6) : horizontal;
     if (distance < 0.016) return;
     this.traveled += distance;
-    const strideSeconds = movement === 'walk' ? 0.31 : movement === 'wade' ? 0.41 : 0.57;
+    const strideSeconds = swimming ? 0.57 : movement === 'wade' ? 0.41 : 0.31;
     const stride = Math.max(swimming ? 1.18 : 0.82, distance / elapsedDelta * strideSeconds);
     if (this.traveled < stride) return;
     this.traveled %= stride;

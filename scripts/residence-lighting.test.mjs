@@ -15,7 +15,7 @@ const { createResidenceFurniture } = await import('../src/coast/world/residence/
 const { createResidenceLighting } = await import('../src/coast/world/residence/residenceLighting.ts');
 const { createResidenceCurtains } = await import('../src/coast/world/residence/residenceCurtains.ts');
 const { createResidenceLightSpill } = await import('../src/coast/world/residence/residenceLightSpill.ts');
-const { roomSources, residenceFieldOrigin, residenceFieldExtent } =
+const { fabricLamps, roomSources, residenceFieldOrigin, residenceFieldExtent } =
   await import('../src/coast/world/residence/residenceLightField.ts');
 hooks.deregister();
 
@@ -106,8 +106,18 @@ test('private fixtures have unique controls and a pendant can be switched indepe
   lighting.setTimeOfDay('night');
   assert.ok(byRoom('LD').filter(control => control.kind === 'toggle').every(control => control.get()));
   assert.ok(westSpot.visible && eastSpot.visible);
-  assert.equal(lighting.nearby(new Vector3(11.6, 1.65, -4.78)).sectionId, 'lighting-LD');
-  assert.equal(lighting.nearby(new Vector3(10.9, 1.65, -4.78)), null);
+  const wall = new Vector3(11.6, 1.65, -4.78);
+  const switchOff = lighting.nearby(wall);
+  assert.match(switchOff.label, /一括消灯$/);
+  switchOff.invoke();
+  assert.ok(!east.get() && !west.get());
+  assert.ok(get('K', 'K-down').get());
+  const switchOn = lighting.nearby(wall);
+  assert.match(switchOn.label, /一括点灯$/);
+  switchOn.invoke();
+  assert.ok(east.get() && west.get());
+  const otherSide = lighting.nearby(new Vector3(10.9, 1.65, -4.78));
+  assert.match(otherSide.label, /^書斎05の照明/);
 });
 
 test('room curtains use the same target from the menu and the wall, with animated daylight transmission', () => {
@@ -179,5 +189,70 @@ test('a permanent open boundary transmits light, while an adjoining solid wall b
     assert.deepEqual(measure(spill.texture, 16.15, 10.34, .65), [0, 0]);
   } finally {
     spill.texture.dispose();
+  }
+});
+
+
+test('nearby small fixtures use the same individual control, within the room containing the fixture', () => {
+  const study = lighting.sections.find(section => section.id === 'lighting-05');
+  const desk = study.controls.find(control => control.id === '05-desk');
+  const read = study.controls.find(control => control.id === '05-reading');
+  const atDesk = new Vector3(8.60, 1.65, -2.025);
+
+  desk.set(false);
+  read.set(true);
+  const switchOn = lighting.nearby(atDesk);
+  assert.equal(switchOn.label, 'デスクライトを点ける');
+  switchOn.invoke();
+  assert.ok(desk.get() && read.get());
+  assert.equal(lighting.nearby(atDesk).label, 'デスクライトを消す');
+  assert.equal(lighting.nearby(atDesk, new Vector3(-1, 0, 0))?.label, 'デスクライトを消す');
+  assert.notEqual(lighting.nearby(atDesk, new Vector3(1, 0, 0))?.label, 'デスクライトを消す');
+  assert.equal(lighting.nearby(new Vector3(7.24, 1.65, -2.025)), null);
+});
+
+
+test('a room wall switch leaves footlights independent and can still switch a footlight-only corridor', () => {
+  const controls = (room, id) => lighting.sections.find(section => section.id === `lighting-${room}`)
+    .controls.find(control => control.id === id);
+  const galleryWall = new Vector3(11.68, 1.65, -9.54);
+  controls('H0', 'off').invoke();
+  const galleryFoot = controls('H0', 'H0-foot-1');
+  const galleryCove = controls('H0', 'H0-cove');
+  galleryFoot.set(true);
+
+  const switchOn = lighting.nearby(galleryWall);
+  assert.match(switchOn.label, /一括点灯$/);
+  switchOn.invoke();
+  assert.ok(galleryCove.get() && galleryFoot.get());
+  lighting.nearby(galleryWall).invoke();
+  assert.ok(!galleryCove.get() && galleryFoot.get());
+
+  const corridorWall = new Vector3(10.67, 1.65, -6.17);
+  controls('H1', 'off').invoke();
+  const corridorFoot = controls('H1', 'H1-foot-1');
+  assert.equal(corridorFoot.get(), false);
+  lighting.nearby(corridorWall).invoke();
+  assert.equal(corridorFoot.get(), true);
+});
+
+test('the tea lantern and the living-room floor lamp can be switched at their fixtures', () => {
+  const shades = configuredShader(materials.linenShade).residenceFabricLampOn.value;
+  for (const [room, id, label, position] of [
+    ['04', '04-lantern', '行灯', new Vector3(6.20, 1.65, -3.414)],
+    ['LD', 'LD-floor', 'フロアランプ', new Vector3(12.72, 1.65, -1.27)],
+  ]) {
+    const control = lighting.sections.find(section => section.id === `lighting-${room}`)
+      .controls.find(control => control.id === id);
+    const index = fabricLamps.findIndex(lamp => lamp.id === id);
+    control.set(true);
+    const switchOff = lighting.nearby(position);
+    assert.equal(switchOff.label, `${label}を消す`);
+    switchOff.invoke();
+    assert.equal(control.get(), false);
+    assert.equal(shades[index], 0);
+    lighting.nearby(position).invoke();
+    assert.equal(control.get(), true);
+    assert.equal(shades[index], 1);
   }
 });
