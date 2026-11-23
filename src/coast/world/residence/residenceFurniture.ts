@@ -453,6 +453,7 @@ function addBalcony(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStan
 export function createResidenceFurniture(materials: ResidenceMaterials): {
   group: FurnitureModel['group'];
   obstacles: readonly ResidenceRect[];
+  appliances: ReturnType<typeof addServiceFurniture>;
   theater: ReturnType<typeof addResidenceTheater>;
   dispose(): void;
 } {
@@ -475,11 +476,12 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
   loungeChair(model.at(9.54, 1.08, -.435), materials, flax, .741, .763);
   model.footprint(9.06, .57, .959, 1.018);
   addBalcony(model, materials, flax, leaves);
-  addServiceFurniture(model, materials);
+  const appliances = addServiceFurniture(model, materials);
   const theater = addResidenceTheater(model, materials);
   model.group.add(theater.screen);
   model.finish();
-  return { group: model.group, obstacles: model.obstacles, theater, dispose() {
+  return { group: model.group, obstacles: model.obstacles, appliances, theater, dispose() {
+    appliances.dispose();
     theater.screen.geometry.dispose();
     theater.screen.material.dispose();
     model.dispose();

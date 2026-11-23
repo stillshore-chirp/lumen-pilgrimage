@@ -7,6 +7,8 @@ import {
   residenceReceiver, residenceSoundPath, residenceSurfaceAt, residenceTrafficPath,
   type ResidenceDoorOpenness, type ResidenceSurface,
 } from './residenceAcoustics';
+import { createResidenceApplianceAudio } from './residenceApplianceAudio';
+import type { ResidenceApplianceAudioSource } from './residenceAppliances';
 import {
   RESIDENCE_ROOM_RESPONSES, createBreeze, createFootfall, createInteriorDoorSound, createRoomImpulse, createSlider,
   createVehicleSample,
@@ -40,6 +42,7 @@ type Graph = {
   sliderSamples: AudioBuffer[];
   doorSamples: AudioBuffer[][];
   feet: FootVoice[];
+  appliances?: ReturnType<typeof createResidenceApplianceAudio>;
 };
 
 // The existing CC0 loop and its editing history are credited in public/coast-overlook/ATTRIBUTION.md.
@@ -108,10 +111,13 @@ export class ResidenceAudio {
   private previousStep: (Point & { elapsed: number; movement: CoastMovement }) | undefined;
   private traveled = 0;
   private side = 1;
+  private readonly appliancePath = (listener: Point, source: Point) =>
+    residenceSoundPath(listener, source, this.options.doorOpenness);
 
   constructor(private readonly options: {
     readonly balconyDoor: () => number;
     readonly doorOpenness?: ResidenceDoorOpenness;
+    readonly appliances?: readonly ResidenceApplianceAudioSource[];
   }) {}
 
   start(): Promise<void> {
@@ -173,6 +179,7 @@ export class ResidenceAudio {
     this.updateFootfalls(context, graph, position, elapsed, movement, now);
     if (now < this.nextUpdate) return;
     this.nextUpdate = now + LISTENER_PERIOD;
+    graph.appliances?.update(position, this.appliancePath);
     const receiver = residenceReceiver(position, opening, this.options.doorOpenness);
     for (const [index, { road, position: emitter, voice }] of graph.traffic.entries()) {
       const flow = 0.92 + 0.08 * Math.sin(now * (0.17 + 0.014 * index) + 3 * index);
@@ -273,8 +280,10 @@ export class ResidenceAudio {
     this.nextUpdate = 0;
     this.nextPass = now + this.passGap(true);
     this.nextBreeze = now + 24 + this.random() * 18;
+    const appliances = this.options.appliances?.length
+      ? createResidenceApplianceAudio(context, dry, wet, this.options.appliances) : undefined;
     return { master, dry, wet, roomLevels, traffic, reflected, reflectionDelay, vehicles, vehicleSamples, breeze,
-      breezeSample, slider, sliderSamples, doorSamples, feet };
+      breezeSample, slider, sliderSamples, doorSamples, feet, appliances };
   }
 
   private passGap(initial: boolean): number {
@@ -451,6 +460,7 @@ export class ResidenceAudio {
     this.sources.clear();
     this.footfalls.clear();
     this.doorMotions.clear();
+    this.graph?.appliances?.dispose();
     this.graph?.master.disconnect();
     this.graph = undefined;
     this.previousDoor = undefined;

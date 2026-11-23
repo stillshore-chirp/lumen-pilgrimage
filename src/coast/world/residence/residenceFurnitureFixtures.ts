@@ -1,4 +1,5 @@
 import { DoubleSide, type MeshStandardMaterial } from 'three';
+import { ResidenceAppliances, type ApplianceMount } from './residenceAppliances';
 import type { ResidenceMaterials } from './residenceMaterials';
 import { fixtureFinish } from './residenceFixtureFinish';
 import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
@@ -47,7 +48,7 @@ function sinkDrain(piece: FurniturePiece, m: ResidenceMaterials, x: number, y: n
 }
 
 function faucet(piece: FurniturePiece, m: ResidenceMaterials, x: number, base: number,
-  z: number, tall: boolean): void {
+  z: number, tall: boolean): readonly [number, number, number] {
   const rise = tall ? .299 : .134;
   const reach = tall ? .158 : .101;
   piece.vessel(m.brushedSteel, x, base, z, .052, .052, [
@@ -60,6 +61,7 @@ function faucet(piece: FurniturePiece, m: ResidenceMaterials, x: number, base: n
   piece.cylinder(m.darkMetal, x, base + rise * .752, z + reach * 1.09, .010, .011);
   piece.rod(m.brushedSteel, [x + .009, base + .040, z], [x + .034, base + .040, z], .013);
   piece.rod(m.brushedSteel, [x + .034, base + .041, z], [x + .044, base + .087, z - .015], .0038);
+  return [x, base + rise * .752 - .0055, z + reach * 1.09];
 }
 
 function cabinetFront(piece: FurniturePiece, m: ResidenceMaterials, x: number, y: number,
@@ -76,7 +78,7 @@ function cabinetFront(piece: FurniturePiece, m: ResidenceMaterials, x: number, y
   }
 }
 
-function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
+function addKitchen(model: FurnitureModel, m: ResidenceMaterials, appliances: ResidenceAppliances): void {
   model.room('Kitchen');
   const glaze = model.tone(m.ceramic, 0x878d7c);
   const cuttingBoard = model.tone(m.woodEnd, 0xcbb599);
@@ -105,7 +107,8 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
   island.tube(m.ceramic, [[.562, .976, .021], [.587, .975, .021], [.592, .952, .021], [.563, .933, .021]], .005);
   model.footprint(13.85, 7.24, 2.35, .95);
 
-  const counter = model.at(15.145, 9.54);
+  const counterMount = [15.145, 9.54] as const;
+  const counter = model.at(...counterMount);
   counter.box(m.darkMetal, 0, .047, -.029, 4.195, .094, .481);
   counter.box(m.cabinetry, 0, .405, -.014, 4.215, .632, .557);
   const frontWidths = [.61, .67, .67, .99, .63, .36, .30];
@@ -140,7 +143,9 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
   });
   sink(counter, steel, sinkX, .886, sinkZ, .828, .366, .155);
   sinkDrain(counter, m, sinkX + .155, .759, sinkZ, .029);
-  faucet(counter, m, sinkX, .888, -.203, true);
+  const outlet = faucet(counter, m, sinkX, .888, -.203, true);
+  appliances.addWater({ id: 'kitchen-tap', title: 'キッチンの水栓', room: 'K', mount: counterMount,
+    approach: [sinkX, .89, .37] }, outlet, .771);
 
   const cooktop = model.tone(m.darkMetal, 0x202525);
   cooktop.roughness = .28;
@@ -162,7 +167,9 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
   counter.box(m.metal, 1.147, 1.50, -.109, .787, .043, .292, .006);
   counter.box(fixtureFinish(model, m.lamp, 'K-strip-west'), -.540, 1.491, .061, 1.47, .007, .014, .002);
   counter.box(fixtureFinish(model, m.lamp, 'K-strip-east'), 1.07, 1.491, .061, 1.47, .007, .014, .002);
-  counter.slab(cuttingBoard, -1.707, .892, .045, .489, .020, .269, .041);
+  counter.slab(cuttingBoard, .341, .892, .040, .489, .020, .269, .041);
+  appliances.addMicrowave({ id: 'microwave', title: '電子レンジ', room: 'K', mount: [13.478, 9.54],
+    approach: [0, .89, .37] }, model, m);
   counter.vessel(glaze, 1.743, .888, -.122, .132, .132, [
     [0, 0], [.80, 0], [1, .026], [.97, .156], [.98, .171],
     [.88, .172], [.84, .160], [.83, .027], [0, .020],
@@ -173,7 +180,7 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
 }
 
 function vanity(piece: FurniturePiece, m: ResidenceMaterials, towel: MeshStandardMaterial,
-  width: number, depth: number): void {
+  width: number, depth: number): readonly [number, number, number] {
   const bowlWidth = Math.min(.554, width - .09);
   const bowlDepth = Math.min(.295, depth - .12);
   const basinZ = .049;
@@ -189,7 +196,7 @@ function vanity(piece: FurniturePiece, m: ResidenceMaterials, towel: MeshStandar
   });
   sink(piece, m.ceramic, 0, centerY, basinZ, bowlWidth, bowlDepth, .09);
   sinkDrain(piece, m, .09, centerY - .127, basinZ, .022);
-  faucet(piece, m, 0, centerY, -depth * .24, false);
+  const outlet = faucet(piece, m, 0, centerY, -depth * .24, false);
 
   const mirrorWidth = Math.min(width - .037, 1.36);
   const mirrorZ = -depth / 2 + .016;
@@ -221,9 +228,11 @@ function vanity(piece: FurniturePiece, m: ResidenceMaterials, towel: MeshStandar
       ];
     });
   }
+  return outlet;
 }
 
-function bathtub(piece: FurniturePiece, m: ResidenceMaterials, width: number, depth: number): void {
+function bathtub(piece: FurniturePiece, m: ResidenceMaterials,
+  width: number, depth: number): readonly [number, number, number] {
   piece.vessel(m.ceramic, 0, .012, 0, width, depth, [
     [0, 0], [.65, 0], [.78, .029], [.84, .118], [.94, .44], [.985, .533],
     [1, .561], [.988, .578], [.922, .58], [.886, .564], [.85, .431], [.68, .142],
@@ -241,6 +250,7 @@ function bathtub(piece: FurniturePiece, m: ResidenceMaterials, width: number, de
   const valveZ = -depth * .285;
   piece.rod(m.brushedSteel, [valveX, .768, valveZ], [valveX, .768, valveZ + .032], .015);
   piece.rod(m.brushedSteel, [valveX, .768, valveZ + .032], [valveX - .011, .796, valveZ + .039], .004);
+  return [width / 2 - .222, .833, valveZ];
 }
 
 function toilet(piece: FurniturePiece, m: ResidenceMaterials): void {
@@ -258,8 +268,8 @@ function toilet(piece: FurniturePiece, m: ResidenceMaterials): void {
   piece.box(m.ceramic, 0, .444, -.120, .364, .042, .072, .019, .12);
 }
 
-function shower(model: FurnitureModel, m: ResidenceMaterials, west: number, south: number,
-  width: number, depth: number, wallNorth: number): void {
+function shower(model: FurnitureModel, m: ResidenceMaterials, appliances: ResidenceAppliances,
+  room: string, title: string, west: number, south: number, width: number, depth: number, wallNorth: number): void {
   const centerE = west + width / 2;
   const centerN = south + depth / 2;
   const shower = model.at(centerE, centerN);
@@ -290,16 +300,29 @@ function shower(model: FurnitureModel, m: ResidenceMaterials, west: number, sout
     [.085, .770, fixtureZ + .056], [.084, 1.467, fixtureZ + .054],
   ], .005);
   shower.rod(m.metal, [.084, 1.467, fixtureZ + .054], [.084, 1.675, fixtureZ + .115], .016, .018);
+  appliances.addWater({ id: `${room.toLowerCase()}-shower`, title, room, mount: [centerE, centerN],
+    approach: [.14, .962, depth / 2 - .02] }, [-.18, 2.231, fixtureZ + .257], .015, true);
 }
 
-function addBathrooms(model: FurnitureModel, m: ResidenceMaterials): void {
+function addBathrooms(model: FurnitureModel, m: ResidenceMaterials, appliances: ResidenceAppliances): void {
   const towel = model.tone(m.bedding, 0xd3cbb9);
   towel.side = DoubleSide;
   const bathMat = model.tone(m.rug, 0x89897b);
+  const washbasin = (room: string, title: string, mount: ApplianceMount, width: number, depth: number) => {
+    const lamp = fixtureFinish(model, m.lamp, `${room}-vanity`);
+    const outlet = vanity(model.at(...mount), { ...m, lamp }, towel, width, depth);
+    appliances.addWater({ id: `${room.toLowerCase()}-vanity`, title, room, mount,
+      approach: [0, .86, depth / 2 + .04] }, outlet, .751);
+  };
+  const bathFiller = (room: string, title: string, mount: ApplianceMount, width: number, depth: number) => {
+    const outlet = bathtub(model.at(...mount), m, width, depth);
+    appliances.addWater({ id: `${room.toLowerCase()}-tub`, title, room, mount,
+      approach: [width / 2 + .08, .77, -depth * .24] }, outlet, .115);
+  };
 
   model.room('Shared bath');
-  bathtub(model.at(.65, 7.9), m, .86, 1.68);
-  vanity(model.at(1.14, 9.4), { ...m, lamp: fixtureFinish(model, m.lamp, 'BA-vanity') }, towel, 1.74, .60);
+  bathFiller('BA', '浴室Aの浴槽水栓', [.65, 7.9], .86, 1.68);
+  washbasin('BA', '浴室Aの洗面水栓', [1.14, 9.4], 1.74, .60);
   toilet(model.at(2.63, 9.58), m);
   model.at(1.30, 8.311).slab(bathMat, 0, .003, 0, .391, .010, .741, .033);
   model.footprint(.219, 7.06, .862, 1.68);
@@ -307,34 +330,37 @@ function addBathrooms(model: FurnitureModel, m: ResidenceMaterials): void {
   model.footprint(2.415, 9.29, .430, .571);
 
   model.room('Shared shower room');
-  shower(model, m, 3.58, 8.85, 1.31, 1.12, 10.13);
-  vanity(model.at(5.63, 9.46), { ...m, lamp: fixtureFinish(model, m.lamp, 'BB-vanity') }, towel, .72, .56);
+  shower(model, m, appliances, 'BB', '浴室Bのシャワー', 3.58, 8.85, 1.31, 1.12, 10.13);
+  washbasin('BB', '浴室Bの洗面水栓', [5.63, 9.46], .72, .56);
   model.at(4.38, 8.540).slab(bathMat, 0, .003, 0, .701, .010, .412, .033);
   model.footprint(5.27, 9.18, .72, .56);
 
   model.room('Primary bath');
-  bathtub(model.at(13.515, 14.68), m, .83, 1.30);
-  shower(model, m, 13.93, 14.21, .97, 1.10, 15.47);
-  vanity(model.at(13.275, 12.814, eastFacing), { ...m, lamp: fixtureFinish(model, m.lamp, 'MB-vanity') }, towel, 1.53, .55);
+  bathFiller('MB', '主浴室の浴槽水栓', [13.515, 14.68], .83, 1.30);
+  shower(model, m, appliances, 'MB', '主浴室のシャワー', 13.93, 14.21, .97, 1.10, 15.47);
+  washbasin('MB', '主浴室の洗面水栓', [13.275, 12.814, eastFacing], 1.53, .55);
   model.at(14.216, 13.906).slab(bathMat, 0, .003, 0, .710, .010, .401, .033);
   model.footprint(13.10, 14.03, .83, 1.30);
   model.footprint(13.00, 12.049, .55, 1.53);
 
   model.room('Guest WC');
-  vanity(model.at(8.45, 10.96, eastFacing), { ...m, lamp: fixtureFinish(model, m.lamp, 'WC-vanity') }, towel, 1.48, .60);
+  washbasin('WC', '来客用WCの洗面水栓', [8.45, 10.96, eastFacing], 1.48, .60);
   toilet(model.at(9.50, 11.72), m);
   model.footprint(8.15, 10.22, .60, 1.48);
   model.footprint(9.285, 11.431, .43, .570);
 }
 
-function addLaundry(model: FurnitureModel, m: ResidenceMaterials): void {
+function addLaundry(model: FurnitureModel, m: ResidenceMaterials, appliances: ResidenceAppliances): void {
   model.room('Laundry');
   const centerE = 6.699;
-  for (const north of [8.557, 9.224]) {
-    const machine = model.at(centerE, north, eastFacing);
+  const washerLocations = [{ north: 8.557, id: 'washer-front', title: '洗濯機（入口側）' },
+    { north: 9.224, id: 'washer-back', title: '洗濯機（奥側）' }];
+  for (const { north, id, title } of washerLocations) {
+    const mount = [centerE, north, eastFacing] as const;
+    const machine = model.at(...mount);
     machine.box(m.ceramic, 0, .422, -.017, .642, .821, .603, .020);
     machine.box(m.darkMetal, 0, .722, .292, .536, .068, .013, .004);
-    machine.box(m.lamp, -.13, .721, .300, .154, .024, .005, .002);
+    machine.box(m.darkMetal, -.13, .721, .300, .156, .033, .012, .003);
     machine.rod(m.metal, [.175, .722, .291], [.175, .722, .313], .024);
     machine.vessel(m.darkMetal, 0, .378, .292, .356, .356, [
       [0, 0], [1, 0], [1, .011], [.85, .015], [.48, .020], [0, .021],
@@ -342,6 +368,7 @@ function addLaundry(model: FurnitureModel, m: ResidenceMaterials): void {
     machine.vessel(m.metal, 0, .378, .289, .411, .411, [
       [.84, -.001], [1, 0], [1, .016], [.97, .028], [.85, .032], [.79, .025], [.84, -.001],
     ], Math.PI / 2);
+    appliances.addWasher({ id, title, room: 'UT', mount, approach: [0, .72, .38] }, m);
     model.footprint(centerE - .32, north - .323, .641, .646);
   }
   const fittings = model.at(centerE, 9.51, eastFacing);
@@ -384,9 +411,13 @@ function addEntryStorage(model: FurnitureModel, m: ResidenceMaterials): void {
   model.footprint(8.145, 7.59, .54, 1.87);
 }
 
-export function addServiceFurniture(model: FurnitureModel, materials: ResidenceMaterials): void {
-  addKitchen(model, materials);
-  addBathrooms(model, materials);
-  addLaundry(model, materials);
+export function addServiceFurniture(model: FurnitureModel, materials: ResidenceMaterials,
+  now?: () => number): ResidenceAppliances {
+  const appliances = new ResidenceAppliances(now);
+  addKitchen(model, materials, appliances);
+  addBathrooms(model, materials, appliances);
+  addLaundry(model, materials, appliances);
   addEntryStorage(model, materials);
+  model.group.add(appliances.group);
+  return appliances;
 }

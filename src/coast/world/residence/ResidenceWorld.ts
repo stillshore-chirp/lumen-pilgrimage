@@ -48,8 +48,9 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
 
   return {
     id: 'residence', navigation,
-    audio: new ResidenceAudio({ balconyDoor: () => door, doorOpenness: shell.doors.opennessFor }),
-    residenceControls: [...lighting.sections, ...curtains.sections],
+    audio: new ResidenceAudio({ balconyDoor: () => door, doorOpenness: shell.doors.opennessFor,
+      appliances: furniture.appliances.audioSources }),
+    residenceControls: [...lighting.sections, ...curtains.sections, ...furniture.appliances.sections],
     interaction: {
       label(position) {
         const distance = Math.hypot(position.x - doorEast, northDistanceToDoor(position.z));
@@ -70,8 +71,11 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
           return curtain.label;
         }
         const localLights = lighting.nearby(position);
-        invokeNearby = localLights ? () => ({ openSection: localLights.sectionId }) : undefined;
-        return localLights?.label ?? null;
+        const localAppliance = furniture.appliances.nearby(position);
+        const localPanel = localAppliance && (!localLights || localAppliance.distance < localLights.distance)
+          ? localAppliance : localLights;
+        invokeNearby = localPanel ? () => ({ openSection: localPanel.sectionId }) : undefined;
+        return localPanel?.label ?? null;
       },
       invoke() { return invokeNearby?.(); },
     },
@@ -94,6 +98,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         const dt = elapsed - previous;
         const step = dt / DOOR_SLIDE_SECONDS;
         previous = elapsed;
+        furniture.appliances.update(dt);
         if (!opening && door > 0 && occupiesDoorway(camera.position)) opening = true;
         const next = opening ? Math.min(1, door + step) : Math.max(0, door - step);
         const doorMoved = door !== next;

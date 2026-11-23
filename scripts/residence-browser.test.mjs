@@ -33,7 +33,7 @@ after(async () => {
 });
 
 function observeResidence() {
-  const probe = { camera: null, contexts: 0, analyser: null, trafficFilters: new Set(), roomSends: [] };
+  const probe = { camera: null, contexts: 0, analyser: null, trafficFilters: new Set(), roomSends: [], loopStarts: 0 };
   window.residenceProbe = probe;
   const gl = WebGL2RenderingContext.prototype;
   const cameraUniforms = new WeakSet();
@@ -660,5 +660,78 @@ test('captures the designed seated and balcony sightlines', { timeout, skip: !sc
 
   eye = { x: 21.89, y: 1.65, z: -0.42, yaw: 151, pitch: -26 };
   await captureDayNight('residence-southwest-window');
+  assert.deepEqual(errors, []);
+});
+
+test('residence appliances work from the room menu and start localized audio', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await exposeResidenceScene(page);
+  await page.addInitScript(() => {
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      if (this.loop) window.residenceProbe.loopStarts++;
+      return start.apply(this, args);
+    };
+  });
+  await page.goto(`${origin}/?world=residence&place=living-theater&time=night`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate);
+  await page.evaluate(() => window.residenceProbe.relocate({ x: 13.48, z: -8.99, yaw: 0, pitch: 0 }));
+  await button(page, '電子レンジを操作').waitFor();
+  await button(page, '環境音を開始').click();
+  await button(page, '環境音を再開').waitFor();
+  const initialLoops = await page.evaluate(() => window.residenceProbe.loopStarts);
+  await page.keyboard.press('e');
+  const panel = page.getByRole('dialog', { name: '住戸の操作' });
+  const microwave = panel.locator('[data-residence-section="microwave"]');
+  const addSeconds = microwave.getByRole('button', { name: '+10秒', exact: true });
+  const addMinute = microwave.getByRole('button', { name: '+1分', exact: true });
+  const heat = microwave.getByRole('button', { name: '加熱開始・再開', exact: true });
+  const stopHeat = microwave.getByRole('button', { name: '停止', exact: true });
+  await addSeconds.click();
+  await microwave.getByText('00:10', { exact: true }).waitFor();
+  await addMinute.click();
+  await microwave.getByText('01:10', { exact: true }).waitFor();
+  await microwave.getByRole('button', { name: '時間をリセット' }).click();
+  await addSeconds.click();
+  await heat.click();
+  await microwave.getByText('加熱中', { exact: true }).waitFor();
+  await page.waitForFunction(initial => window.residenceProbe.loopStarts > initial, initialLoops);
+  await microwave.getByText(/^00:0[7-9]$/).waitFor();
+  await stopHeat.click();
+  await microwave.getByText('停止中', { exact: true }).waitFor();
+
+  const kitchen = panel.locator('[data-residence-section="kitchen-tap"]');
+  await kitchen.locator('summary').click();
+  const tap = kitchen.getByRole('button', { name: '水栓', exact: true });
+  await tap.click();
+  assert.equal(await tap.getAttribute('aria-pressed'), 'true');
+  await capture(page, 'residence-appliance-menu');
+  await heat.click();
+  await microwave.getByText('加熱完了', { exact: true }).waitFor();
+  assert.equal(await tap.getAttribute('aria-pressed'), 'true');
+  await tap.click();
+  assert.equal(await tap.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.residenceProbe.relocate({ x: 7.44, z: -8.55, yaw: Math.PI / 2, pitch: -.12 }));
+
+  await button(page, '洗濯機（入口側）を操作').click();
+  const washer = panel.locator('[data-residence-section="washer-front"]');
+  const mode = washer.getByRole('combobox', { name: '運転モード' });
+  assert.deepEqual(await mode.locator('option').allTextContents(), ['洗浄', 'すすぎ', '脱水', '乾燥']);
+  for (const selected of ['wash', 'rinse', 'dry', 'spin']) {
+    await mode.selectOption(selected);
+    assert.equal(await mode.inputValue(), selected);
+  }
+  const power = washer.getByRole('button', { name: '運転', exact: true });
+  const loopsBeforeWasher = await page.evaluate(() => window.residenceProbe.loopStarts);
+  await power.click();
+  await washer.getByText(/脱水中/).waitFor();
+  assert.ok(await mode.isDisabled());
+  await page.waitForFunction(initial => window.residenceProbe.loopStarts > initial, loopsBeforeWasher);
+  await power.click();
+  await washer.getByText(/停止中/).waitFor();
+  assert.ok(await mode.isEnabled());
+  await page.keyboard.press('Escape');
+  await panel.waitFor({ state: 'hidden' });
   assert.deepEqual(errors, []);
 });
