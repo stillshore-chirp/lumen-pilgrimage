@@ -8,6 +8,7 @@ const WALKER_RADIUS = 0.24;
 const WALKER_RADIUS_SQUARED = WALKER_RADIUS ** 2;
 
 const floor = RESIDENCE_ROOMS.filter(room => room.id !== 'PS').flatMap(room => room.rectangles);
+const balconyFloor = RESIDENCE_ROOMS.filter(room => room.id === 'BL').flatMap(room => room.rectangles);
 const bounds = {
   minX: Math.min(...floor.map(rect => rect[0])) - 1,
   maxX: Math.max(...floor.map(rect => rect[2])) + 1,
@@ -62,9 +63,12 @@ function overlapsWalker([west, south, east, north]: ResidenceRect, e: number, n:
   return gapEast * gapEast + gapNorth * gapNorth < WALKER_RADIUS_SQUARED;
 }
 
-export function createResidenceNavigation(spawn: CoastPose, furniture: readonly ResidenceRect[],
+export function createResidenceNavigation(spawn: CoastPose, furnitureFootprints: readonly ResidenceRect[],
   balconyOpen: () => boolean): CoastNavigation {
-  const obstacles = [...permanentObstacles, ...furniture];
+  const balconyFurniture = furnitureFootprints.filter(([west, south, east, north]) => balconyFloor.some(
+    rect => contains(rect, west, south) && contains(rect, east, north),
+  ));
+  const obstacles = [...permanentObstacles, ...balconyFurniture];
 
   return {
     bounds, spawn, groundHeight: () => 0,

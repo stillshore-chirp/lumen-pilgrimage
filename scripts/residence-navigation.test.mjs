@@ -103,11 +103,17 @@ test('a connected route links the common lobby, all five bedrooms, water rooms a
   assert.equal(connected(21.94, 12.94), false);
 });
 
-test('the sofa and island retain usable walking clearance and only the sliding door opens onto the balcony', () => {
+test('walking crosses the indoor sofa, dining table and chairs, kitchen island and entry bench', () => {
+  const nav = navigation(false);
+  assertClearRoute(nav, [[19.99, .43], [19.99, 1.85]]);
+  assertClearRoute(nav, [[15.98, 3.3], [15.98, 6.1]]);
+  assertClearRoute(nav, [[13.35, 7.715], [16.7, 7.715]]);
+  assertClearRoute(nav, [[11.65, 14.84], [12.48, 14.84]]);
+});
+
+test('only the sliding door opens onto the balcony and its furniture still blocks walking', () => {
   let doorOpen = false;
   const nav = createResidenceNavigation(spawn, furniture.obstacles, () => doorOpen);
-  assertClearRoute(nav, [[21.89, 2.25], [21.89, 0.43]]);
-  assertClearRoute(nav, [[13.35, 6.89], [16.7, 6.89], [16.7, 8.7], [13.35, 8.7], [13.35, 6.89]]);
   const { e, nFrom, nTo } = RESIDENCE_BALCONY_DOOR;
   const centre = (nFrom + nTo) / 2;
   assert.equal(blocked(nav, e, centre), true);
@@ -116,6 +122,8 @@ test('the sofa and island retain usable walking clearance and only the sliding d
   assert.equal(blocked(nav, e, nFrom - 0.18), true);
   assert.equal(blocked(nav, e, nTo + 0.18), true);
   assert.equal(blocked(nav, e, nFrom + 0.11), true);
+  assert.equal(blocked(nav, 21.36, 15), true);
+  assert.equal(blocked(nav, 21.725, 12.08), true);
 });
 
 test('facade glazing, guards, wall corners and service shafts are solid at every foot height', () => {
@@ -123,7 +131,7 @@ test('facade glazing, guards, wall corners and service shafts are solid at every
   const barriers = [
     [20, 0.1], [22.66, 4], [22.72, 13.5], [22.76, 11.71], [22.76, 15.49],
     [22.79, 11.71], [23, 13.5], [6, 17.64], [13.4, 15.63], [3.65, 3.5],
-    [6.0, 10.8], [13.3, 11.88], [2.5, 13.3], [18, 16], [20.05, 1.0],
+    [6.0, 10.8], [13.3, 11.88], [2.5, 13.3], [18, 16],
   ];
   for (const [e, n] of barriers) {
     for (const foot of [0, 1.18, 3.12]) {

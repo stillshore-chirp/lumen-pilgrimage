@@ -8,6 +8,7 @@ import { createResidenceLighting } from './residenceLighting';
 import { createResidenceMaterials } from './residenceMaterials';
 import { createResidenceNavigation } from './residenceNavigation';
 import { RESIDENCE_BALCONY_DOOR } from './residencePlan';
+import { createResidenceReflections } from './residenceReflections';
 import { createResidenceShell } from './residenceShell';
 
 const DOOR_SLIDE_SECONDS = 0.55;
@@ -31,6 +32,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   scene.add(city.group, shell.group, furniture.group);
   const lighting = createResidenceLighting(scene, materials, furniture.obstacles);
   lighting.attachInterior(shell.group, furniture.group);
+  const reflections = createResidenceReflections(scene, city.group, shell.group, furniture.group, materials);
 
   let door = 0;
   let opening = false;
@@ -55,11 +57,14 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         city.setTimeOfDay(time);
         shell.setTimeOfDay(time);
         lighting.setTimeOfDay(time);
+        reflections.setTimeOfDay(time);
       },
       setQuality(quality) {
         city.setQuality(quality);
         lighting.setQuality(quality);
+        reflections.setQuality(quality);
       },
+      prepareRender: reflections.prepareRender,
       update(elapsed, camera) {
         const step = (elapsed - previous) / DOOR_SLIDE_SECONDS;
         previous = elapsed;
@@ -69,11 +74,13 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
           door = next;
           shell.setBalconyDoor(door);
           lighting.invalidateShadows();
+          reflections.invalidate();
         }
         city.update(elapsed, camera);
         return [];
       },
       dispose() {
+        reflections.dispose();
         lighting.dispose();
         shell.dispose();
         furniture.dispose();

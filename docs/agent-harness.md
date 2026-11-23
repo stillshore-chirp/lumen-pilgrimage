@@ -11,7 +11,7 @@ Codex の運用は、アプリで有効な設定と指示に従います。こ�
 | Node.js の要件、依存の導入、開発サーバーの起動 | [README の起動手順](../README.md#起動と操作) |
 | 画面やキー操作、設定の既定値、散策経路、画面と音の挙動 | [探索ガイド](exploration.md) |
 | 起動と状態の引き継ぎ、入力・地形・描画・音響の実装上の契約 | [設計](architecture.md) |
-| 都心50階の住戸の平面・窓・街区の設計 | [住戸の設計仕様](residence/residence-50f-design.md) · [基本設計PDF](residence/residence-50f-drawings.pdf) |
+| 都心70階の住戸の平面・窓・街区の設計 | [住戸の設計仕様](residence/residence-70f-design.md) · [基本設計PDF](residence/residence-70f-drawings.pdf) |
 | 仮想モニターの共有・配置・音声・WebXR | [探索ガイド](exploration.md#仮想モニター) · [設計](architecture.md#仮想モニターの設計) · [実機確認](verification.md#仮想モニターの実機確認) |
 | 検証コマンド、CI の実行範囲、配布ビルドの確認 | [検証と配布ビルド](verification.md) |
 | 採用素材、加工方法、利用・再配布条件 | [素材の出典](exploration.md#素材の出典) から該当するクレジット |

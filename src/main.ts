@@ -1,4 +1,4 @@
-export {};
+import { RESIDENCE_LABEL } from './coast/world/residence/residenceFloor';
 
 const mount = document.querySelector<HTMLDivElement>('#app');
 if (!mount) {
@@ -7,7 +7,7 @@ if (!mount) {
 
 const options = new URLSearchParams(location.search);
 const world = options.get('world');
-const name = world === 'overlook' ? '丘陵展望台' : world === 'residence' ? '都心の50階住戸' : null;
+const name = world === 'overlook' ? '丘陵展望台' : world === 'residence' ? RESIDENCE_LABEL : null;
 try {
   if (options.get('monitor') === 'sender') {
     const { mountMonitorSender } = await import('./monitor/monitorSender');

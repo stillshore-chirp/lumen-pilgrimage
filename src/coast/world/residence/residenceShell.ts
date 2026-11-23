@@ -9,8 +9,8 @@ type Wall = (typeof RESIDENCE_WALLS)[number];
 type Opening = NonNullable<Wall['openings']>[number];
 type WallLine = Pick<Wall, 'axis' | 'fixed'>;
 
-const SOUTH_GLASS_NORTH = .10;
-const EAST_GLASS_EAST = 22.70;
+export const SOUTH_GLASS_NORTH = .10;
+export const EAST_GLASS_EAST = 22.70;
 const ELEVATOR_CENTERS = [1.70, 4.15, 6.60] as const;
 const GUARD_BASE = .058;
 const UPPER_SLAB_BOTTOM = 3.19;
@@ -42,7 +42,7 @@ function createShellGeometry(root: THREE.Group) {
   }
 
   function box(material: THREE.Material, rect: ResidenceRect, bottom: number, top: number,
-    parent = root, crossfall = 0) {
+    parent = root, crossfall = 0, verticalGrain = false) {
     const [west, south, east, north] = rect;
     if (east - west < .0001 || north - south < .0001 || top - bottom < .0001) return;
     const geometry = new THREE.BoxGeometry(east - west, top - bottom, north - south)
@@ -63,7 +63,8 @@ function createShellGeometry(root: THREE.Group) {
       if (Math.abs(normal.getY(vertex)) > .9) {
         uv.setXY(vertex, x, north);
       } else {
-        uv.setXY(vertex, Math.abs(normal.getX(vertex)) > .9 ? north : x, y);
+        const horizontal = Math.abs(normal.getX(vertex)) > .9 ? north : x;
+        uv.setXY(vertex, verticalGrain ? y : horizontal, verticalGrain ? horizontal : y);
       }
     }
     add(geometry, material, parent);
@@ -81,8 +82,17 @@ function createShellGeometry(root: THREE.Group) {
     add(geometry, material, parent);
   }
 
+  function spindle(material: THREE.Material, parent: THREE.Group, start: THREE.Vector3, end: THREE.Vector3, radius: number) {
+    const direction = end.clone().sub(start);
+    const cylinder = new THREE.CylinderGeometry(radius, radius, direction.length(), 12);
+    const orientation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+    cylinder.applyQuaternion(orientation);
+    cylinder.translate((start.x + end.x) / 2, (start.y + end.y) / 2, (start.z + end.z) / 2);
+    add(cylinder, material, parent);
+  }
+
   return {
-    box, pane,
+    box, pane, spindle,
     finish() {
       for (const [parent, batch] of batches) {
         for (const [material, pieces] of batch) {
@@ -247,17 +257,20 @@ function addOpenDoor(group: THREE.Group, geometry: ShellGeometry, materials: Res
   const width = opening.to - opening.from - leafInset;
   const handle = width - .102;
   const panelHeight = opening.top - .036;
-  geometry.box(materials.cabinetry, [.008, -halfLeaf + .001, width, halfLeaf - .001], .014, panelHeight, blade);
-  geometry.box(materials.trim, [width - .020, -halfLeaf, width, halfLeaf], .020, panelHeight - .007, blade);
+  geometry.box(materials.cabinetry, [.008, -halfLeaf + .001, width, halfLeaf - .001], .014, panelHeight, blade, 0, true);
+  geometry.box(materials.trim, [width - .020, -halfLeaf, width, halfLeaf], .020, panelHeight - .007, blade, 0, true);
   for (const center of [.22, panelHeight - .23]) {
-    geometry.box(materials.metal, [-.013, -.024, .014, .024], center - .031, center + .031, blade);
+    geometry.spindle(materials.metal, blade, new THREE.Vector3(.006, center - .031, 0),
+      new THREE.Vector3(.006, center + .031, 0), .012);
   }
   for (const sign of [-1, 1]) {
-    const near = sign < 0 ? -.052 : .018;
-    const far = sign < 0 ? -.018 : .052;
-    geometry.box(materials.metal, [handle - .015, near, handle + .016, far], .974, 1.005, blade);
-    geometry.box(materials.metal, [handle - .105, sign < 0 ? -.060 : .041,
-      handle + .016, sign < 0 ? -.041 : .060], .979, 1.000, blade);
+    const rose = new THREE.Vector3(handle, .987, halfLeaf * sign);
+    const standOff = new THREE.Vector3(handle, .987, (halfLeaf + .007) * sign);
+    const pivot = new THREE.Vector3(handle, .987, .052 * sign);
+    const tip = new THREE.Vector3(handle - .105, .984, .057 * sign);
+    geometry.spindle(materials.metal, blade, rose, standOff, .027);
+    geometry.spindle(materials.metal, blade, standOff, pivot, .0095);
+    geometry.spindle(materials.metal, blade, pivot, tip, .010);
   }
 }
 
@@ -366,7 +379,7 @@ function addStairDoor(geometry: ShellGeometry, materials: ResidenceMaterials, li
 
 export function createResidenceShell(materials: ResidenceMaterials) {
   const group = new THREE.Group();
-  group.name = '50F walls, floors, glazing and common elevator hall';
+  group.name = 'Residence walls, floors, glazing and common elevator hall';
   const leaf = new THREE.Group();
   leaf.name = 'Primary bedroom balcony sliding panel';
   group.add(leaf);

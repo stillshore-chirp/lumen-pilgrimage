@@ -1,6 +1,7 @@
-import type { MeshStandardMaterial } from 'three';
+import { CatmullRomCurve3, DoubleSide, Vector3, type MeshStandardMaterial } from 'three';
 import type { ResidenceMaterials } from './residenceMaterials';
 import type { ResidenceRect } from './residencePlan';
+import { addWindowDressing, foliage } from './residenceFurnitureDecor';
 import { FurnitureModel, type FurniturePiece } from './residenceFurnitureModel';
 import { addServiceFurniture } from './residenceFurnitureFixtures';
 
@@ -10,26 +11,46 @@ const westFacing = -eastFacing;
 
 function rug(piece: FurniturePiece, body: MeshStandardMaterial, edge: MeshStandardMaterial,
   width: number, depth: number): void {
-  piece.slab(edge, 0, .002, 0, width, .010, depth, .065);
-  piece.slab(body, 0, .012, 0, width - .035, .008, depth - .035, .057);
+  piece.slab(edge, 0, .001, 0, width, .008, depth, .041);
+  piece.slab(body, 0, .009, 0, width - .026, .006, depth - .026, .035);
+  for (const z of [-1, 1]) {
+    piece.box(edge, 0, .015, z * (depth / 2 - .046), width - .097, .001, .006);
+  }
 }
 
 function books(piece: FurniturePiece, cover: MeshStandardMaterial, pages: MeshStandardMaterial,
   x: number, y: number, z: number): void {
-  piece.box(cover, x, y + .013, z, .215, .026, .154, .003);
-  piece.box(pages, x + .001, y + .013, z + .006, .205, .018, .151);
-  piece.box(cover, x + .028, y + .038, z - .017, .158, .024, .104, .002);
-  piece.box(pages, x + .028, y + .038, z - .014, .151, .016, .104);
+  for (const [offsetX, offsetY, offsetZ, width, depth, height] of [
+    [0, 0, 0, .255, .195, .026], [.031, .026, -.020, .192, .141, .016],
+  ]) {
+    const centerX = x + offsetX;
+    const base = y + offsetY;
+    const centerZ = z + offsetZ;
+    for (const face of [base + .001, base + height - .001]) {
+      piece.box(cover, centerX, face, centerZ, width, .003, depth, .001);
+    }
+    piece.box(cover, centerX - width / 2 + .004, base + height / 2, centerZ, .009, height, depth, .003);
+    piece.box(pages, centerX + .003, base + height / 2, centerZ, width - .018, height - .006, depth - .008);
+    for (const line of [-.004, .001, .005]) {
+      piece.box(cover, centerX + .003, base + height / 2 + line, centerZ + depth / 2 - .0039,
+        width - .028, .00055, .0006);
+    }
+  }
 }
 
 function tableLamp(piece: FurniturePiece, m: ResidenceMaterials, base: number, height = .39): void {
-  piece.cylinder(m.darkMetal, 0, base + .012, 0, .083, .024);
-  piece.cylinder(m.metal, 0, base + height * .42, 0, .008, height * .8);
-  piece.vessel(m.fabric, 0, base, 0, .234, .234, [
-    [.96, height * .58], [1, height * .6], [.72, height], [.66, height],
-    [.88, height * .62], [.96, height * .58],
+  const shadeWidth = height > 1 ? .282 : .234;
+  piece.cylinder(m.darkMetal, 0, base + .010, 0, .085, .020, .091);
+  piece.cylinder(m.metal, 0, base + height * .42, 0, height > 1 ? .011 : .007, height * .8);
+  piece.cylinder(m.metal, 0, base + height * .57, 0, .017, .024);
+  piece.vessel(m.linenShade, 0, base, 0, shadeWidth, shadeWidth, [
+    [.962, height * .581], [.989, height * .582], [1, height * .59],
+    [.983, height * .606], [.722, height * .993], [.717, height], [.686, height],
+    [.683, height * .992], [.942, height * .605], [.962, height * .581],
   ]);
-  piece.cylinder(m.lamp, 0, base + height * .62, 0, .093, .006);
+  piece.vessel(m.lamp, 0, base, 0, .092, .092, [[0, height * .738], [.92, height * .741],
+    [1, height * .766], [.86, height * .795], [0, height * .805]]);
+  piece.cylinder(m.linenShade, 0, base + height * .966, 0, shadeWidth * .345, .004);
 }
 
 function chair(piece: FurniturePiece, m: ResidenceMaterials, fabric: MeshStandardMaterial,
@@ -38,13 +59,21 @@ function chair(piece: FurniturePiece, m: ResidenceMaterials, fabric: MeshStandar
   const back = -seatDepth / 2;
   const front = seatDepth / 2;
   piece.box(m.cabinetry, 0, seatY - .037, .004, width - .023, .036, seatDepth - .014, .016);
-  piece.box(fabric, 0, seatY, .009, width - .01, .077, seatDepth - .008, .055);
+  piece.upholstered(fabric, 0, seatY, .009, {
+    width: width - .010, height: .055, depth: seatDepth - .008, radius: .023,
+    crown: [.002, .010, .004], gathers: .002,
+  }, { welt: fabric });
   for (const sign of [-1, 1]) {
     const x = sign * (side - .052);
+    piece.cylinder(m.darkMetal, x + sign * .018, .008, front - .033, .017, .010);
+    piece.cylinder(m.darkMetal, x + sign * .018, .008, back + .01, .017, .010);
     piece.rod(m.cabinetry, [x + sign * .018, .01, front - .033], [x, seatY - .02, front - .055], .017, .025);
     piece.rod(m.cabinetry, [x + sign * .018, .01, back + .01], [x, seatY + .29, back + .026], .017, .027);
   }
-  piece.box(fabric, 0, seatY + .255, back + .029, width - .057, .184, .075, .037, .12);
+  piece.upholstered(fabric, 0, seatY + .255, back + .029, {
+    width: width - .058, height: .176, depth: .057, radius: .022,
+    crown: [.004, .008, .009], gathers: .001,
+  }, { pitch: .12, welt: fabric, vertical: true });
   piece.tube(m.cabinetry, [
     [-side + .026, seatY + .20, back + .034], [-side + .059, seatY + .34, back + .003],
     [0, seatY + .37, back - .006], [side - .059, seatY + .34, back + .003],
@@ -56,100 +85,167 @@ function loungeChair(piece: FurniturePiece, m: ResidenceMaterials, fabric: MeshS
   width: number, depth: number): void {
   const half = width / 2;
   const front = depth / 2;
-  piece.box(m.cabinetry, 0, .275, .015, width - .11, .110, depth - .143, .04);
-  piece.box(fabric, 0, .383, .046, width - .10, .139, depth - .21, .066, -.10);
-  piece.box(fabric, 0, .573, -.23, width - .13, .464, .15, .073, .23);
+  piece.box(m.cabinetry, 0, .288, .015, width - .11, .076, depth - .143, .017);
+  piece.upholstered(fabric, 0, .375, .046, {
+    width: width - .107, height: .112, depth: depth - .178, radius: .047,
+    crown: [.006, .011, .006], gathers: .004, seed: width * 3.2,
+  }, { pitch: -.10, welt: fabric });
+  piece.upholstered(fabric, 0, .603, -front + .10, {
+    width: width - .14, height: .424, depth: .119, radius: .047,
+    crown: [.005, .009, .023], gathers: .005, seed: depth * 2.4,
+  }, { pitch: -.20, welt: fabric, vertical: true });
   for (const sign of [-1, 1]) {
     const x = sign * (half - .062);
-    piece.rod(m.cabinetry, [x, .015, front - .12], [x, .515, front - .115], .025, .032);
-    piece.rod(m.cabinetry, [x, .015, -front + .10], [x, .589, -front + .094], .025, .031);
-    piece.tube(m.cabinetry, [
-      [x, .56, -front + .06], [x, .535, -.19], [x, .531, .03], [x, .535, front - .064],
-    ], .036);
+    piece.rod(m.cabinetry, [x + sign * .021, .008, front - .093], [x, .532, front - .129], .018, .027);
+    piece.rod(m.cabinetry, [x + sign * .016, .008, -front + .069], [x, .577, -front + .117], .017, .027);
+    piece.box(m.cabinetry, x, .554, -.013, .069, .043, depth - .148, .021, -.063);
+    piece.box(m.cabinetry, x, .290, -.014, .038, .050, depth - .218, .010);
+    piece.rod(m.darkMetal, [x + sign * .019, .302, -.191], [x + sign * .022, .302, -.191], .009);
+  }
+}
+
+function sofaThrow(piece: FurniturePiece, cloth: MeshStandardMaterial, trim: MeshStandardMaterial): void {
+  const drape = new CatmullRomCurve3([
+    new Vector3(-.842, .520, .075), new Vector3(-.859, .606, -.128), new Vector3(-.879, .779, -.216),
+    new Vector3(-.906, .795, -.337), new Vector3(-.940, .767, -.463), new Vector3(-.976, .695, -.501),
+    new Vector3(-1.017, .586, -.536), new Vector3(-1.057, .436, -.539),
+  ]);
+  const sample = (u: number, v: number): readonly [number, number, number] => {
+    const p = drape.getPoint(v);
+    const sway = Math.sin(v * 6.8 + u * 3.9) * .010;
+    const fold = Math.sin(u * 11.1 + v * 3.6) * .011 + Math.sin(u * 24 - v * 4.0) * .003;
+    return [p.x + (u - .5) * (.366 + v * .092) + sway,
+      p.y + fold * (1 - v * .72) + (u - .5) * .063 * v ** 6,
+      p.z + fold * (.22 + v * .31) + .007 * v * Math.cos(u * 7.4)];
+  };
+  piece.surface(cloth, .47, .87, 30, 27, sample);
+  for (const u of [.019, .981]) {
+    piece.tube(trim, Array.from({ length: 24 }, (_, i) => sample(u, i / 23)), .0017);
+  }
+  piece.tube(trim, Array.from({ length: 23 }, (_, i) => sample(i / 22, .992)), .0019);
+  for (let i = 0; i < 33; i++) {
+    const [x, y, z] = sample((i + .5) / 33, 1);
+    piece.rod(trim, [x, y, z], [x + Math.sin(i * 4.01) * .004, y - .021 - Math.sin(i * 3.24) * .005, z - .004],
+      .00075, .00047);
   }
 }
 
 function addLiving(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStandardMaterial,
   tobacco: MeshStandardMaterial, olive: MeshStandardMaterial): void {
   model.room('Living room');
-  const sandWeave = model.tone(m.rug, 0xb6a592);
-  const rugEdge = model.tone(m.rug, 0xa69883);
+  const sandWeave = model.tone(m.rug, 0xbab5a2);
+  const rugEdge = model.tone(m.rug, 0xa19881);
   const sofa = model.at(19.99, 1.01);
-  const seam = model.tone(m.fabric, 0xac9781);
-  sofa.box(m.cabinetry, 0, .107, -.01, 2.95, .095, .86, .024);
-  sofa.box(flax, 0, .249, 0, 3.18, .271, 1.02, .095);
+  const seam = model.tone(m.fabric, 0xa99b89);
+  const lining = model.tone(m.fabric, 0xb8ab97);
+  const throwBlanket = model.tone(m.bedding, 0x686d65);
+  throwBlanket.side = DoubleSide;
+  sofa.box(m.cabinetry, 0, .105, -.007, 2.99, .075, .902, .013);
+  sofa.box(flax, 0, .231, 0, 3.172, .219, 1.004, .075);
   for (const side of [-1, 1]) {
-    sofa.box(flax, side * 1.478, .402, 0, .224, .347, .97, .108);
-    sofa.box(m.darkMetal, side * 1.276, .045, .29, .147, .090, .069, .012);
-    sofa.box(m.darkMetal, side * 1.276, .045, -.31, .147, .090, .069, .012);
+    sofa.upholstered(flax, side * 1.471, .398, .013, {
+      width: .225, height: .353, depth: .975, radius: .087,
+      crown: [.010, .011, .009], gathers: .0035, seed: side + 2,
+    }, { welt: seam });
+    sofa.box(m.darkMetal, side * 1.285, .045, .365, .108, .089, .050, .008);
+    sofa.box(m.darkMetal, side * 1.285, .045, -.37, .108, .089, .050, .008);
   }
-  sofa.box(flax, 0, .490, -.402, 2.96, .415, .21, .103);
-  for (const x of [-.951, 0, .951]) {
-    sofa.box(flax, x, .417, .069, .921, .169, .759, .078);
-    sofa.tube(seam, [
-      [x - .419, .421, .433], [x - .36, .429, .451],
-      [x + .36, .429, .451], [x + .419, .421, .433],
-    ], .0026);
-    sofa.box(flax, x, .577, -.298, .916, .316, .186, .089, .17);
+  sofa.upholstered(lining, 0, .486, -.393, {
+    width: 2.934, height: .405, depth: .215, radius: .080,
+    crown: [.008, .011, .007], gathers: .0036, seed: 3.4,
+  }, { welt: seam, vertical: true });
+  for (const [x, z, angle, height, seed] of [
+    [-.916, .054, .015, .139, 1.4], [0, .064, -.011, .138, 3.44], [.916, .072, -.007, .141, 7.9],
+  ]) {
+    sofa.upholstered(flax, x, .412, z, {
+      width: .899, height, depth: .796, radius: .058,
+      crown: [.009, .018, .012], gathers: .0077, seed,
+    }, { yaw: angle, welt: seam });
+    sofa.upholstered(flax, x + angle * .62, .595 + angle * .48, -.296, {
+      width: .900, height: .307, depth: .173, radius: .067,
+      crown: [.007, .021, .018], gathers: .0081, seed: seed + 1.3,
+    }, { pitch: -.216, roll: angle * 2, welt: seam, vertical: true });
   }
-  sofa.box(olive, -1.20, .579, -.234, .395, .331, .121, .058, .34);
-  sofa.box(tobacco, 1.245, .539, -.216, .302, .248, .112, .054, .36);
-  sofa.box(m.bedding, -1.15, .519, -.019, .348, .030, .368, .014);
-  sofa.box(m.bedding, -1.15, .464, .217, .348, .026, .239, .012, .32);
+  sofa.upholstered(olive, -1.22, .598, -.144, {
+    width: .352, height: .343, depth: .116, radius: .052,
+    crown: [.011, .012, .027], gathers: .009, seed: 2.35,
+  }, { pitch: -.371, yaw: .267, roll: -.21, welt: olive, vertical: true });
+  sofa.upholstered(tobacco, 1.155, .587, -.161, {
+    width: .331, height: .297, depth: .113, radius: .048,
+    crown: [.014, .014, .024], gathers: .010, seed: 4.82,
+  }, { pitch: -.301, yaw: -.233, roll: .16, welt: tobacco, vertical: true });
+  sofaThrow(sofa, throwBlanket, throwBlanket);
   model.footprint(18.4, .5, 3.18, 1.02);
   rug(model.at(19.56, 1.40), sandWeave, rugEdge, 4.16, 1.87);
 
   const endTable = model.at(17.97, .90);
-  endTable.cylinder(m.darkMetal, 0, .027, 0, .178, .054);
-  endTable.cylinder(m.metal, 0, .263, 0, .032, .45);
+  endTable.vessel(m.darkMetal, 0, .012, 0, .346, .346, [
+    [0, 0], [.89, 0], [.98, .003], [1, .010], [.982, .022], [.87, .024], [.15, .038], [0, .038],
+  ]);
+  endTable.vessel(m.metal, 0, .042, 0, .107, .107, [
+    [0, 0], [1, 0], [1, .023], [.57, .062], [.48, .398], [.64, .431], [0, .438],
+  ]);
   endTable.slab(m.counterStone, 0, .48, 0, .456, .027, .512, .14);
   tableLamp(endTable, m, .507, .34);
+  endTable.vessel(m.ceramic, -.120, .508, .115, .086, .073, [
+    [0, 0], [.73, 0], [.9, .012], [1, .030], [.91, .031], [.78, .016], [0, .012],
+  ]);
   model.footprint(17.74, .64, .46, .52);
 
-  loungeChair(model.at(13.475, 1.33, northFacing), m, olive, .86, .76);
-  loungeChair(model.at(14.695, 1.385, northFacing), m, tobacco, .74, .74);
+  loungeChair(model.at(13.475, 1.33, northFacing + .09), m, olive, .86, .76);
+  loungeChair(model.at(14.695, 1.385, northFacing - .14), m, tobacco, .74, .74);
   model.footprint(13.02, .94, .91, .78);
   model.footprint(14.31, 1.00, .77, .77);
   rug(model.at(14.07, 2.14), sandWeave, rugEdge, 3.17, 2.66);
   const coffee = model.at(14.075, 2.515);
-  for (const x of [-.74, .74]) {
-    coffee.vessel(m.cabinetry, x, .01, 0, .38, .58, [
-      [0, 0], [.68, 0], [.82, .024], [.91, .104], [.77, .277], [0, .287],
-    ]);
+  for (const [x, z] of [[-.76, -.29], [-.76, .29], [.76, -.29], [.76, .29]]) {
+    coffee.rod(m.cabinetry, [x * 1.07, .014, z * 1.1], [x, .287, z], .025, .046);
+    coffee.cylinder(m.darkMetal, x * 1.07, .013, z * 1.1, .023, .008);
   }
-  coffee.slab(m.cabinetry, 0, .283, 0, 2.366, .037, 1.106, .28);
+  coffee.slab(m.cabinetry, 0, .262, 0, 2.11, .022, .90, .25);
+  coffee.slab(m.cabinetry, 0, .281, 0, 2.366, .039, 1.106, .28);
   coffee.vessel(m.ceramic, -.61, .320, -.115, .30, .235, [
     [0, 0], [.51, 0], [.71, .021], [1, .054], [1, .065], [.93, .071],
     [.88, .059], [.59, .034], [0, .021],
   ]);
   books(coffee, olive, m.bedding, .63, .32, .07);
+  coffee.vessel(m.ceramic, .01, .320, -.24, .082, .082, [
+    [0, 0], [.80, 0], [.90, .009], [.985, .063], [1, .071], [.93, .074],
+    [.86, .066], [.77, .017], [0, .017],
+  ]);
+  coffee.tube(m.ceramic, [[.045, .375, -.24], [.067, .376, -.24], [.074, .356, -.24], [.045, .342, -.24]], .005);
   model.footprint(12.89, 1.96, 2.37, 1.11);
   tableLamp(model.at(12.22, 1.27), m, .001, 1.42);
   model.footprint(12.125, 1.175, .19, .19);
 }
 
 function addDining(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStandardMaterial,
-  olive: MeshStandardMaterial): void {
+  olive: MeshStandardMaterial, leaves: readonly [MeshStandardMaterial, MeshStandardMaterial]): void {
   model.room('Dining room');
   const dining = model.at(16.025, 4.725);
   for (const x of [-.78, .78]) {
     dining.slab(m.cabinetry, x, .007, 0, .246, .034, .66, .12);
     dining.vessel(m.cabinetry, x, .038, 0, .35, .63, [
       [0, 0], [.76, 0], [.92, .037], [1, .12], [.86, .57], [.81, .665], [0, .665],
-    ]);
+    ], 0, true);
   }
   dining.slab(m.cabinetry, 0, .696, 0, 2.56, .025, .88, .22);
   dining.slab(m.cabinetry, 0, .721, 0, 2.746, .04, 1.026, .245);
-  dining.vessel(m.ceramic, .07, .761, -.02, .287, .247, [
+  const earthenware = model.tone(m.ceramic, 0xbdbaa5);
+  dining.vessel(earthenware, .07, .761, -.02, .237, .215, [
     [0, 0], [.68, .003], [.95, .052], [1, .116], [.64, .186], [.51, .211],
     [.47, .211], [.45, .179], [.82, .078], [.68, .023], [0, .022],
   ]);
+  foliage(dining, m.cabinetry, leaves[0], leaves[1], .07, .942, -.02, .351, .112, 1.99);
+  foliage(dining, m.cabinetry, leaves[0], leaves[1], .092, .937, -.019, .244, .093, 4.39);
   model.footprint(14.65, 4.21, 2.75, 1.03);
-  for (const [north, heading] of [[3.94, northFacing], [5.535, 0]]) {
-    for (const x of [15.10, 15.98, 16.86]) {
-      chair(model.at(x, north, heading), m, flax, .535, .445);
-      model.footprint(x - .27, north - .23, .54, .46);
-    }
+  for (const [x, north, heading] of [
+    [15.10, 3.95, northFacing + .056], [15.98, 3.926, northFacing - .010],
+    [16.86, 3.866, northFacing - .091], [15.10, 5.535, -.047],
+    [15.98, 5.548, .041], [16.86, 5.557, -.061],
+  ]) {
+    chair(model.at(x, north, heading), m, flax, .535, .445);
+    model.footprint(x - .27, north - .23, .54, .46);
   }
   const form = model.tone(m.ceramic, 0xb7a895);
   for (const x of [15.36, 16.69]) {
@@ -170,6 +266,10 @@ function addDining(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStand
   }
   console.box(m.darkMetal, 0, .329, .204, .008, .38, .004);
   books(console, olive, m.bedding, .52, .58, 0);
+  console.vessel(earthenware, -.63, .581, -.066, .161, .121, [
+    [0, 0], [.64, 0], [.91, .033], [1, .133], [.91, .206], [.58, .261],
+    [.55, .311], [.49, .313], [.44, .260], [.78, .188], [.87, .109], [.53, .028], [0, .022],
+  ]);
   model.footprint(20.23, 5.725, 1.86, .43);
 }
 
@@ -178,12 +278,14 @@ function wardrobe(piece: FurniturePiece, m: ResidenceMaterials, width: number, d
   const panels = Math.max(2, Math.round(width / .53));
   const pitch = (width - .065) / panels;
   piece.box(m.darkMetal, 0, .039, .005, width - .10, .078, depth - .10);
-  piece.box(m.cabinetry, 0, height / 2 + .026, -.018, width, height - .054, depth - .036, .012);
+  piece.box(m.cabinetry, 0, height / 2 + .026, -.018, width, height - .054, depth - .036, .012, 0, true);
   for (let i = 0; i < panels; i++) {
     const x = (i - (panels - 1) / 2) * pitch;
     piece.box(m.cabinetry, x, height * .5 + .027, depth / 2 - .015, pitch - .006,
-      height - .080, .030, .006);
-    piece.box(m.metal, x + pitch * .33, 1.01, depth / 2 + .013, .018, .192, .020, .005);
+      height - .080, .030, .004, 0, true);
+    const handleX = x + pitch * (i % 2 === 0 ? .34 : -.34);
+    for (const y of [.942, 1.093]) piece.box(m.metal, handleX, y, depth / 2 + .013, .013, .013, .028, .002);
+    piece.box(m.metal, handleX, 1.017, depth / 2 + .029, .011, .176, .008, .003);
   }
 }
 
@@ -219,20 +321,58 @@ function makeBed(model: FurnitureModel, m: ResidenceMaterials, bedroom: Bedroom)
   const centerE = west + width / 2;
   const centerN = south + depth / 2;
   const quilt = model.tone(m.bedding, bedroom.textile);
+  quilt.side = DoubleSide;
   const headboard = model.tone(m.fabric, bedroom.headboard);
   const binding = model.tone(m.bedding, 0xe3d9c4);
+  binding.side = DoubleSide;
   const bed = model.at(centerE, centerN);
   bed.box(m.darkMetal, 0, .078, -.044, width - .19, .137, depth - .23, .028);
   bed.box(m.cabinetry, 0, .212, .006, width - .018, .19, depth - .037, .047);
-  bed.box(headboard, 0, .656, -depth / 2 + .066, width, 1.05, .132, .064);
-  bed.box(m.bedding, 0, .376, .033, width - .045, .177, depth - .20, .07);
-  bed.box(quilt, 0, .473, .250, width - .022, .121, depth - .57, .057);
-  bed.box(quilt, 0, .419, depth / 2 - .053, width - .035, .19, .092, .04);
-  bed.box(binding, 0, .534, -.469, width - .071, .034, .20, .016);
-  for (const x of width >= 1.42 ? [-width * .23, width * .23] : [0]) {
-    bed.box(m.bedding, x, .511, -depth / 2 + .319, width * .432, .129, .321, .063, .105);
+  bed.box(m.cabinetry, 0, .655, -depth / 2 + .065, width, 1.045, .135, .028);
+  bed.upholstered(headboard, 0, .693, -depth / 2 + .124, {
+    width: width - .054, height: .904, depth: .076, radius: .037,
+    crown: [.002, .003, .008], gathers: .002,
+  }, { welt: headboard, vertical: true });
+  bed.upholstered(m.bedding, 0, .376, .033, {
+    width: width - .043, height: .174, depth: depth - .202, radius: .061,
+    crown: [.008, .010, .005],
+  }, { welt: m.bedding });
+  const phase = centerE * 1.7 + centerN;
+  const quiltTop = (u: number, v: number): readonly [number, number, number] => {
+    const side = Math.abs(2 * u - 1);
+    const foot = Math.max(0, (v - .90) / .10);
+    const hang = Math.max(0, (side - .86) / .14);
+    const tuck = Math.min(1, Math.max(hang, foot));
+    const rumple = Math.sin(u * 22.1 + v * 5.7 + phase) * .010 + Math.sin(u * 39.7 - v * 9.1) * .0048;
+    const waves = rumple * (.4 + .65 * Math.sin(v * Math.PI)) + (hang + foot) * rumple * .8;
+    const fold = .017 * Math.exp(-18 * v) + .009 * Math.sin(u * 8.8 + phase) * Math.exp(-5 * v);
+    return [
+      (u - .5) * (width + .073) + v * .019 + .020 * tuck * Math.sin(v * 15.8 + u * 6.1),
+      .502 - .174 * tuck ** 1.73 + waves + fold,
+      -.553 + v * (depth / 2 + .598) + .011 * Math.sin(u * 4.8 + phase) * (1 - v) + .009 * tuck * Math.sin(u * 33.1),
+    ];
+  };
+  bed.surface(quilt, width + .06, depth / 2 + .60, 37, 39, quiltTop);
+  bed.surface(binding, width + .06, .144, 37, 7, (u, v) => {
+    const [x, y, z] = quiltTop(u, v * .092);
+    return [x, y + .0035 + .0065 * (1 - v) ** 2, z - (1 - v) * .021];
+  });
+  for (const u of [0, 1]) {
+    bed.tube(quilt, Array.from({ length: 33 }, (_, i) => quiltTop(u, i / 32)), .0018);
   }
-  bed.box(binding, width * .286, .546, .465, width * .245, .029, .591, .013);
+  bed.tube(quilt, Array.from({ length: 35 }, (_, i) => quiltTop(i / 34, 1)), .0018);
+  for (const x of width >= 1.42 ? [-width * .238, width * .241] : [0]) {
+    bed.upholstered(m.bedding, x, .509 + x * .016, -depth / 2 + .296 + x * .054, {
+      width: width * (width > 1.42 ? .449 : .55), height: .108, depth: .389, radius: .050,
+      crown: [.011, .027, .016], gathers: .008, seed: phase + x * 3,
+    }, { pitch: .105, yaw: x * .20 - .048, welt: binding });
+  }
+  if (width > 1.79) {
+    bed.upholstered(headboard, -.39, .585, -depth / 2 + .514, {
+      width: .368, height: .246, depth: .102, radius: .048,
+      crown: [.008, .010, .026], gathers: .009, seed: 6.7,
+    }, { pitch: -.484, yaw: -.12, roll: .075, welt: headboard, vertical: true });
+  }
   model.footprint(west, south, width, depth);
   const carpet = model.tone(m.rug, bedroom.rug);
   rug(model.at(centerE + .18, centerN - .29), carpet, carpet, width + .70, depth + .50);
@@ -278,7 +418,16 @@ function addBedrooms(model: FurnitureModel, m: ResidenceMaterials, olive: MeshSt
     const nightstandE = west + width + .255;
     const nightstandN = south + depth - .23;
     bedside(model.at(nightstandE, nightstandN), m, .44, .423);
-    tableLamp(model.at(nightstandE, nightstandN + .057), m, .487, .32);
+    const nightstand = model.at(nightstandE, nightstandN + .057);
+    tableLamp(nightstand, m, .487, .32);
+    if (bedroom.name === 'Bedroom 04' || bedroom.name === 'Primary bedroom') {
+      books(nightstand, model.tone(m.fabric, bedroom.headboard), m.bedding, -.012, .486, .123);
+    } else {
+      nightstand.vessel(m.ceramic, .060, .486, .121, .087, .087, [
+        [0, 0], [.74, 0], [.86, .009], [1, .049], [.988, .062],
+        [.91, .066], [.85, .059], [.68, .018], [0, .016],
+      ]);
+    }
     model.footprint(nightstandE - .221, nightstandN - .222, .442, .434);
 
     if (bedroom.name === 'Bedroom 03') {
@@ -309,7 +458,10 @@ function addBedrooms(model: FurnitureModel, m: ResidenceMaterials, olive: MeshSt
       model.footprint(17.325, 14.936, .37, .452);
       const windowSeat = model.at(19.96, 10.66);
       windowSeat.box(m.cabinetry, 0, .315, 0, 1.2, .23, .58, .05);
-      windowSeat.box(flax, 0, .454, 0, 1.144, .08, .53, .039);
+      windowSeat.upholstered(flax, 0, .454, 0, {
+        width: 1.144, height: .078, depth: .53, radius: .035,
+        crown: [.009, .012, .005], gathers: .0036, seed: 5.62,
+      }, { welt: flax });
       for (const x of [-.49, .49]) {
         windowSeat.box(m.darkMetal, x, .103, 0, .027, .205, .45, .01);
       }
@@ -325,18 +477,23 @@ function addBedrooms(model: FurnitureModel, m: ResidenceMaterials, olive: MeshSt
 }
 
 function addBalcony(model: FurnitureModel, m: ResidenceMaterials, flax: MeshStandardMaterial,
-  leaves: MeshStandardMaterial): void {
+  leaves: readonly [MeshStandardMaterial, MeshStandardMaterial]): void {
   model.room('Balcony');
   loungeChair(model.at(21.36, 15.00), m, flax, .645, .62);
   model.footprint(21.02, 14.68, .68, .64);
   const planter = model.at(21.725, 12.08);
-  planter.box(m.counterStone, 0, .162, 0, .85, .32, .44, .07);
-  planter.slab(m.darkMetal, 0, .317, 0, .72, .013, .33, .059);
-  for (const [x, z, height] of [[-.21, -.055, .60], [.01, .048, .69], [.235, -.06, .53]]) {
-    planter.rod(leaves, [x, .325, z], [x + .057, height, z - .02], .0048);
-    planter.oval(leaves, x - .046, height - .09, z + .029, .18, .049, .083, -.39);
-    planter.oval(leaves, x + .105, height - .05, z - .039, .16, .052, .074, .54);
-    planter.oval(leaves, x + .058, height, z - .048, .105, .063, .074, .73);
+  planter.slab(m.counterStone, 0, .009, 0, .805, .046, .399, .086);
+  planter.slab(m.counterStone, 0, .054, 0, .846, .265, .439, .087, {
+    x: 0, z: 0, width: .777, depth: .369,
+  });
+  const soil = model.tone(m.stone, 0x4a4035);
+  planter.slab(soil, 0, .250, 0, .776, .015, .367, .082);
+  for (const [x, z, height, spread, seed] of [
+    [-.235, -.040, .321, .137, 1.6], [-.072, .085, .266, .127, 4.3],
+    [.027, -.030, .409, .162, 3.2], [.173, .041, .328, .135, 5.14],
+    [.279, -.054, .254, .108, .81],
+  ]) {
+    foliage(planter, m.cabinetry, leaves[0], leaves[1], x, .268, z, height, spread, seed);
   }
   model.footprint(21.30, 11.86, .85, .44);
 }
@@ -347,14 +504,20 @@ export function createResidenceFurniture(materials: ResidenceMaterials): {
   dispose(): void;
 } {
   const model = new FurnitureModel();
-  const flax = model.tone(materials.fabric, 0xc9b8a4);
-  const tobacco = model.tone(materials.fabric, 0x9c6d51);
-  const olive = model.tone(materials.fabric, 0x777b64);
+  const flax = model.tone(materials.fabric, 0xd0c3b2);
+  const tobacco = model.tone(materials.fabric, 0xa06d51);
+  const olive = model.tone(materials.fabric, 0x727965);
+  const leaves = [model.tone(materials.ceramic, 0x40534a), model.tone(materials.ceramic, 0x69765b)] as const;
+  for (const material of leaves) {
+    material.side = DoubleSide;
+    material.roughness = .48;
+  }
   addLiving(model, materials, flax, tobacco, olive);
-  addDining(model, materials, flax, olive);
+  addDining(model, materials, flax, olive, leaves);
   addBedrooms(model, materials, olive, tobacco, flax);
-  addBalcony(model, materials, flax, olive);
+  addBalcony(model, materials, flax, leaves);
   addServiceFurniture(model, materials);
+  addWindowDressing(model, materials);
   model.finish();
   return { group: model.group, obstacles: model.obstacles, dispose: () => model.dispose() };
 }

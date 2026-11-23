@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { COAST_SUN_DIRECTION } from '../src/coast/world/coastAtmosphere.ts';
+import { PRIMARY_RAINBOW_ANGLE } from '../src/coast/world/coastSprayRainbow.ts';
 import {
   COAST_BOUNDS, COAST_FALLS, COAST_WALKS, FOREST_STREAM, FOREST_WALKS, SEA_LEVEL, SPAWN,
   coastBedrock, coastPlantingDistance, coastTreadWear, forestStreamLevel, groundHeight, shoreline,
@@ -72,14 +73,38 @@ test('both trails reach a high lookout and the east trail skirts shallow tidal p
 });
 
 test('each waterfall visibly descends from its rock face to the sea', () => {
-  for (const { path, impact } of COAST_FALLS) {
-    assert.ok(path[0].y > 65);
+  assert.equal(COAST_FALLS.length, 6);
+  for (const { id, path, impact } of COAST_FALLS) {
+    assert.ok(path[0].y > (id === 'shore-ledge' ? 9 : 65));
     assert.ok(impact.y < SEA_LEVEL + 1);
     for (const point of path) {
       assert.ok(point.y > groundHeight(point.x, point.z), 'the waterfall clips through terrain');
     }
     assert.ok(groundHeight(impact.x, impact.z) < SEA_LEVEL);
   }
+});
+
+test('the shore walk can see the full primary bow angle range in sunlit impact spray', () => {
+  const ledge = COAST_FALLS.find(fall => fall.id === 'shore-ledge');
+  const trail = COAST_WALKS[1].points.find(point => Math.hypot(point.x - 61.87, point.z - 50.80) < 0.02);
+  assert.ok(ledge && trail);
+  const eyeY = groundHeight(trail.x, trail.z) + 1.65;
+  const angleAt = (height) => {
+    const x = ledge.impact.x + 3 * ledge.direction.x + 2.5 * ledge.direction.z;
+    const z = ledge.impact.z + 3 * ledge.direction.z - 2.5 * ledge.direction.x;
+    const dx = trail.x - x, dy = eyeY - height, dz = trail.z - z;
+    for (let t = 0.08; t < 1; t += 0.08) {
+      assert.ok(groundHeight(x + t * dx, z + t * dz) < height + t * dy, 'terrain hides the spray');
+    }
+    for (let distance = 2; distance <= 430; distance += 2) {
+      const sun = COAST_SUN_DIRECTION;
+      assert.ok(groundHeight(x + sun.x * distance, z + sun.z * distance) < height + sun.y * distance,
+        'the spray is in shadow');
+    }
+    return Math.acos(COAST_SUN_DIRECTION.dot({ x: dx, y: dy, z: dz }) / Math.hypot(dx, dy, dz)) * 180 / Math.PI;
+  };
+  assert.ok(angleAt(5.9) < PRIMARY_RAINBOW_ANGLE.violet);
+  assert.ok(angleAt(7.6) > PRIMARY_RAINBOW_ANGLE.red);
 });
 
 test('both coast circuits now follow low limestone beside the bay before climbing to overlooks', () => {

@@ -3,11 +3,11 @@ import type { CoastBirdCue } from '../../coastBirdCue';
 import { coastRandom, type CoastPoint } from '../../terrain';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import {
-  RESIDENCE_ROADS, STREET_REFLECTION, residenceReceiver, residenceSurfaceAt, residenceTrafficPath,
+  BALCONY_DOOR, RESIDENCE_ROADS, STREET_REFLECTION, residenceReceiver, residenceSurfaceAt, residenceTrafficPath,
   type ResidenceSurface,
 } from './residenceAcoustics';
 import {
-  RESIDENCE_ROOM_RESPONSES, createBreeze, createFootfall, createRoomImpulse, createVehicleSample,
+  RESIDENCE_ROOM_RESPONSES, createBreeze, createFootfall, createRoomImpulse, createSlider, createVehicleSample,
 } from './residenceAudioSamples';
 
 type Point = Readonly<CoastPoint>;
@@ -20,19 +20,21 @@ type PassBy = { from: Point; to: Point; start: number; duration: number; level: 
 type Graph = {
   master: GainNode;
   roomLevels: GainNode[];
-  traffic: { road: Road; voice: TrafficVoice }[];
+  traffic: { road: Road; position: Point; voice: TrafficVoice }[];
   reflected: TrafficVoice;
   reflectionDelay: DelayNode;
-  vehicle: TrafficVoice;
+  vehicles: { voice: TrafficVoice; pass?: PassBy }[];
   vehicleSamples: AudioBuffer[];
   breeze: GainNode;
   breezeSample: AudioBuffer;
+  slider: GainNode;
+  sliderSamples: AudioBuffer[];
   feet: FootVoice[];
 };
 
 // The existing CC0 loop and its editing history are credited in public/coast-overlook/ATTRIBUTION.md.
 const TRAFFIC_FILE = `${import.meta.env?.BASE_URL ?? '/'}coast-overlook/distant-traffic.ogg`;
-const OFFSET_SECONDS = [3.5, 38.3, 78.7] as const;
+const OFFSET_SECONDS = [3.5, 30.1, 53.4, 78.7, 15.8, 96.5] as const;
 const LISTENER_PERIOD = 0.05;
 
 function pointAt(node: PannerNode, point: Point, time: number, glide = 0): void {
@@ -59,7 +61,7 @@ function spatialVoice(context: AudioContext, dry: AudioNode, wet: AudioNode): Tr
   panner.panningModel = 'HRTF';
   panner.rolloffFactor = 0;
   filter.connect(gain).connect(panner).connect(dry);
-  panner.connect(wet);
+  gain.connect(wet);
   return { filter, gain, panner };
 }
 
@@ -85,7 +87,9 @@ export class ResidenceAudio {
   private nextUpdate = 0;
   private nextPass = 0;
   private nextBreeze = 0;
-  private pass: PassBy | undefined;
+  private previousDoor: number | undefined;
+  private doorDirection = 0;
+  private doorSource: AudioBufferSourceNode | undefined;
   private previousStep: (Point & { elapsed: number; movement: CoastMovement }) | undefined;
   private traveled = 0;
   private side = 1;
@@ -127,8 +131,7 @@ export class ResidenceAudio {
     this.nextUpdate = 0;
     if (this.context && this.graph) {
       const now = this.context.currentTime;
-      const previousEnd = this.pass ? this.pass.start + this.pass.duration : now;
-      this.nextPass = Math.max(now, previousEnd) + this.passGap(true);
+      this.nextPass = now + this.passGap(true);
     }
   }
 
@@ -146,26 +149,30 @@ export class ResidenceAudio {
     listener.upX.value = up.x;
     listener.upY.value = up.y;
     listener.upZ.value = up.z;
+    const opening = this.options.balconyDoor();
+    this.updateSlider(context, graph, opening, now);
     this.updateFootfalls(context, graph, position, elapsed, movement, now);
     if (now < this.nextUpdate) return;
     this.nextUpdate = now + LISTENER_PERIOD;
-    const receiver = residenceReceiver(position, this.options.balconyDoor());
-    for (const { road, voice } of graph.traffic) {
-      updateArrival(voice, receiver, road.bed, true, road.activity[this.time], now);
+    const receiver = residenceReceiver(position, opening);
+    for (const [index, { road, position: emitter, voice }] of graph.traffic.entries()) {
+      const flow = 0.92 + 0.08 * Math.sin(now * (0.17 + 0.014 * index) + 3 * index);
+      updateArrival(voice, receiver, emitter, true, road.activity[this.time] * flow * Math.SQRT1_2, now);
     }
     const east = RESIDENCE_ROADS[2];
-    const direct = Math.hypot(position.x - east.bed.x, position.y - east.bed.y, position.z - east.bed.z);
+    const eastEmitter = east.patches[1];
+    const direct = Math.hypot(position.x - eastEmitter.x, position.y - eastEmitter.y, position.z - eastEmitter.z);
     const reflected = Math.hypot(position.x - STREET_REFLECTION.x, position.y - STREET_REFLECTION.y,
       position.z - STREET_REFLECTION.z);
     graph.reflectionDelay.delayTime.setTargetAtTime(Math.max(0.004, (reflected - direct) / 343), now, 0.15);
-    updateArrival(graph.reflected, receiver, STREET_REFLECTION, false, east.activity[this.time] * 0.19, now, 1_650);
+    updateArrival(graph.reflected, receiver, STREET_REFLECTION, false, east.activity[this.time] * 0.14, now, 1_450);
     for (const [index, level] of graph.roomLevels.entries()) {
       level.gain.setTargetAtTime(receiver.wet[index] * RESIDENCE_ROOM_RESPONSES[index].send, now, 0.16);
     }
     this.updatePassBy(context, graph, receiver, now);
-    graph.breeze.gain.setTargetAtTime(receiver.exterior ** 2 * 0.19, now, 0.11);
+    graph.breeze.gain.setTargetAtTime(receiver.exterior ** 2 * 0.064, now, 0.11);
     if (receiver.exterior > 0.62 && now >= this.nextBreeze) {
-      this.nextBreeze = now + 20 + 23 * this.random();
+      this.nextBreeze = now + 38 + 34 * this.random();
       this.play(context, graph.breezeSample, graph.breeze, now);
     }
   }
@@ -200,15 +207,16 @@ export class ResidenceAudio {
       room.buffer = createRoomImpulse(context, profile, 713 + 217 * index);
       const level = context.createGain();
       level.gain.value = 0;
-      wet.connect(room).connect(level).connect(dry);
+      wet.connect(level).connect(room).connect(dry);
       return level;
     });
-    const traffic = RESIDENCE_ROADS.map(road => ({ road, voice: spatialVoice(context, dry, wet) }));
+    const traffic = RESIDENCE_ROADS.flatMap(road => road.patches.map(position =>
+      ({ road, position, voice: spatialVoice(context, dry, wet) })));
     const reflected = spatialVoice(context, dry, wet);
     const reflectionDelay = context.createDelay(0.16);
     reflectionDelay.delayTime.value = 0.015;
     reflectionDelay.connect(reflected.filter);
-    const vehicle = spatialVoice(context, dry, wet);
+    const vehicles = Array.from({ length: 2 }, () => ({ voice: spatialVoice(context, dry, wet) }));
     const vehicleSamples = [createVehicleSample(context, 711), createVehicleSample(context, 198)];
     const breeze = context.createGain();
     breeze.gain.value = 0;
@@ -218,6 +226,15 @@ export class ResidenceAudio {
     pointAt(breezePoint, { x: 24.2, y: 1.62, z: -13.48 }, now);
     breeze.connect(breezePoint).connect(dry);
     const breezeSample = createBreeze(context);
+    const slider = context.createGain();
+    slider.gain.value = 0.24;
+    const sliderPoint = context.createPanner();
+    sliderPoint.panningModel = 'HRTF';
+    sliderPoint.refDistance = 0.8;
+    pointAt(sliderPoint, { ...BALCONY_DOOR, y: 0.28 }, now);
+    slider.connect(sliderPoint).connect(dry);
+    sliderPoint.connect(wet);
+    const sliderSamples = [createSlider(context, false), createSlider(context, true)];
     const feet = Array.from({ length: 3 }, (): FootVoice => {
       const panner = context.createPanner();
       panner.panningModel = 'HRTF';
@@ -230,46 +247,74 @@ export class ResidenceAudio {
     });
     for (const [index, { voice }] of traffic.entries()) {
       const source = this.play(context, buffer, voice.filter, now, 1, OFFSET_SECONDS[index] % buffer.duration, true);
-      if (index === 2) source.connect(reflectionDelay);
+      if (index === traffic.length - 1) source.connect(reflectionDelay);
     }
     this.nextUpdate = 0;
     this.nextPass = now + this.passGap(true);
-    this.nextBreeze = now + 15 + this.random() * 11;
-    return { master, roomLevels, traffic, reflected, reflectionDelay, vehicle, vehicleSamples, breeze, breezeSample, feet };
+    this.nextBreeze = now + 24 + this.random() * 18;
+    return { master, roomLevels, traffic, reflected, reflectionDelay, vehicles, vehicleSamples, breeze, breezeSample,
+      slider, sliderSamples, feet };
   }
 
   private passGap(initial: boolean): number {
-    if (this.time === 'day') return initial ? 2.8 + this.random() * 2.4 : 5.8 + this.random() * 5.6;
-    return (initial ? 9.5 : 18.5) + this.random() * 12;
+    if (this.time === 'day') return initial ? 3.6 + this.random() * 2.4 : 6.6 + this.random() * 6.8;
+    return (initial ? 10.5 : 16.5) + this.random() * 17;
   }
 
   private updatePassBy(context: AudioContext, graph: Graph, receiver: Receiver, now: number): void {
-    if (now >= this.nextPass) {
-      const index = Math.floor(this.random() * RESIDENCE_ROADS.length);
+    const available = now >= this.nextPass ? graph.vehicles.find(vehicle => !vehicle.pass) : undefined;
+    if (available) {
+      const index = [0, 2, 1, 0, 2][Math.floor(this.random() * 5)];
       const road = RESIDENCE_ROADS[index];
       const reverse = this.random() < 0.5;
-      const speed = (index === 2 ? 9.5 : 14.5) + 3.5 * this.random();
-      const duration = Math.hypot(road.from.x - road.to.x, road.from.z - road.to.z) / speed;
+      const speed = (index === 2 ? 9.3 : 12.5) + 4.8 * this.random();
+      const roadLength = Math.hypot(road.from.x - road.to.x, road.from.z - road.to.z);
+      const distance = Math.min(roadLength, 175 + this.random() * 70);
+      const duration = distance / speed;
+      const startOffset = (roadLength - distance) * this.random() / roadLength;
+      const roadPoint = (fraction: number) => ({ x: road.from.x + (road.to.x - road.from.x) * fraction,
+        y: road.from.y, z: road.from.z + (road.to.z - road.from.z) * fraction });
+      const from = roadPoint(startOffset);
+      const to = roadPoint(startOffset + distance / roadLength);
       const heavy = this.random() < (this.time === 'day' ? 0.20 : 0.35);
       const buffer = graph.vehicleSamples[Number(heavy)];
-      this.pass = { from: reverse ? road.to : road.from, to: reverse ? road.from : road.to,
-        start: now, duration, level: heavy ? 0.83 : 0.68 };
-      this.nextPass = now + duration + this.passGap(false);
-      this.play(context, buffer, graph.vehicle.filter, now, buffer.duration / duration);
+      available.pass = { from: reverse ? to : from, to: reverse ? from : to, start: now, duration,
+        level: heavy ? 0.50 : 0.40 };
+      this.nextPass = now + this.passGap(false);
+      this.play(context, buffer, available.voice.filter, now, buffer.duration / duration);
     }
-    const pass = this.pass;
-    if (!pass) return;
-    const phase = (now - pass.start) / pass.duration;
-    if (phase >= 1) {
-      this.pass = undefined;
-      return;
+    for (const vehicle of graph.vehicles) {
+      const { pass, voice } = vehicle;
+      if (!pass) continue;
+      const phase = (now - pass.start) / pass.duration;
+      if (phase >= 1) {
+        vehicle.pass = undefined;
+        voice.gain.gain.setTargetAtTime(0, now, 0.10);
+        continue;
+      }
+      const position = {
+        x: pass.from.x + (pass.to.x - pass.from.x) * phase,
+        y: pass.from.y,
+        z: pass.from.z + (pass.to.z - pass.from.z) * phase,
+      };
+      updateArrival(voice, receiver, position, false, pass.level, now);
     }
-    const position = {
-      x: pass.from.x + (pass.to.x - pass.from.x) * phase,
-      y: pass.from.y,
-      z: pass.from.z + (pass.to.z - pass.from.z) * phase,
-    };
-    updateArrival(graph.vehicle, receiver, position, false, pass.level, now);
+  }
+
+  private updateSlider(context: AudioContext, graph: Graph, openness: number, now: number): void {
+    const delta = openness - (this.previousDoor ?? openness);
+    this.previousDoor = openness;
+    if (Math.abs(delta) < 0.001) return;
+    const direction = Math.sign(delta);
+    if (direction === this.doorDirection) return;
+    this.doorDirection = direction;
+    this.doorSource?.stop(now);
+    const remaining = direction > 0 ? 1 - openness : openness;
+    const sample = graph.sliderSamples[Number(direction < 0)];
+    const offset = (1 - remaining) * sample.duration;
+    const source = this.play(context, sample, graph.slider, now, sample.duration / 0.55, offset,
+      false, () => { if (this.doorSource === source) this.doorSource = undefined; });
+    this.doorSource = source;
   }
 
   private updateFootfalls(context: AudioContext, graph: Graph, position: Point, elapsed: number,
@@ -306,7 +351,7 @@ export class ResidenceAudio {
       this.footfalls.set(surface, samples);
     }
     pointAt(foot.panner, impact, now);
-    foot.gain.gain.setValueAtTime(0.50 + this.random() * 0.12, now);
+    foot.gain.gain.setValueAtTime(0.36 + this.random() * 0.11, now);
     const sample = samples[Math.floor(this.random() * samples.length)];
     this.play(context, sample, foot.gain, now, 0.93 + this.random() * 0.17, 0, false, () => { foot.busy = false; });
     foot.busy = true;
@@ -339,7 +384,9 @@ export class ResidenceAudio {
     this.footfalls.clear();
     this.graph?.master.disconnect();
     this.graph = undefined;
-    this.pass = undefined;
+    this.previousDoor = undefined;
+    this.doorDirection = 0;
+    this.doorSource = undefined;
     this.previousStep = undefined;
     this.traveled = 0;
     const context = this.context;

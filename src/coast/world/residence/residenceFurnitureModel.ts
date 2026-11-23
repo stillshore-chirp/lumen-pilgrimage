@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { furnitureSurface, upholsteryShape, type Upholstery } from './residenceFurnitureCloth';
 import type { ResidenceRect } from './residencePlan';
 
 type Point = readonly [x: number, y: number, z: number];
@@ -14,7 +15,7 @@ export class FurnitureModel {
   private space = this.group;
 
   constructor() {
-    this.group.name = '50F furniture and fixtures';
+    this.group.name = '70F furniture and fixtures';
   }
 
   room(name: string): void {
@@ -103,7 +104,7 @@ export class FurniturePiece {
   }
 
   box(material: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number,
-    radius = 0, pitch = 0): void {
+    radius = 0, pitch = 0, turnGrain = false): void {
     const geometry = radius === 0
       ? new THREE.BoxGeometry(w, h, d)
       : new RoundedBoxGeometry(w, h, d, radius >= .026 ? 2 : 1, radius);
@@ -112,10 +113,38 @@ export class FurniturePiece {
     const verticesPerFace = uv.count / 6;
     for (let i = 0; i < uv.count; i++) {
       const [u, v] = dimensions[Math.floor(i / verticesPerFace)];
-      uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
+      const x = uv.getX(i) * u;
+      const y = uv.getY(i) * v;
+      uv.setXY(i, turnGrain ? y : x, turnGrain ? x : y);
     }
     if (pitch) geometry.rotateX(pitch);
     this.place(geometry, material, x, y, z);
+  }
+
+  upholstered(material: THREE.Material, x: number, y: number, z: number, shape: Upholstery,
+    options: { pitch?: number; yaw?: number; roll?: number; welt?: THREE.Material; vertical?: boolean } = {}): void {
+    const { pitch = 0, yaw = 0, roll = 0, welt, vertical = false } = options;
+    const { geometry, map } = upholsteryShape(shape);
+    const rotation = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(pitch, yaw, roll));
+    geometry.applyMatrix4(rotation);
+    this.place(geometry, material, x, y, z);
+    if (welt) {
+      const samples = [-1, -.98, -.93, -.85, -.75, -.57, -.29, 0, .29, .57, .75, .85, .93, .98];
+      const outline = [
+        ...samples.map(s => [s, -1]), ...samples.map(s => [1, s]),
+        ...samples.map(s => [-s, 1]), ...samples.map(s => [-1, -s]),
+      ];
+      const stitches: Point[] = outline.map(([u, v]) => {
+        const point = (vertical ? map(u, v, .12, .0026) : map(u, .19, v, .0026)).applyMatrix4(rotation);
+        return [x + point.x, y + point.y, z + point.z];
+      });
+      this.tube(welt, stitches, .0019, true);
+    }
+  }
+
+  surface(material: THREE.Material, width: number, length: number, columns: number, rows: number,
+    sample: (u: number, v: number) => Point): void {
+    this.place(furnitureSurface(width, length, columns, rows, sample), material, 0, 0, 0);
   }
 
   cylinder(material: THREE.Material, x: number, y: number, z: number, radius: number,
@@ -138,15 +167,33 @@ export class FurniturePiece {
 
   tube(material: THREE.Material, points: readonly Point[], radius: number, closed = false): void {
     const curve = new THREE.CatmullRomCurve3(points.map((point) => new THREE.Vector3(...point)), closed);
-    const geometry = new THREE.TubeGeometry(curve, Math.max(points.length * 3, 12), radius, 6, closed);
+    const geometry = new THREE.TubeGeometry(curve, Math.max(points.length * 2, 12), radius, radius > .006 ? 10 : 6,
+      closed);
+    const uv = geometry.getAttribute('uv');
+    const length = curve.getLength();
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, uv.getX(i) * length, uv.getY(i) * Math.PI * radius * 2);
+    }
     this.place(geometry, material, 0, 0, 0);
   }
 
   // A turned profile can become an oval with independent width and depth.
   vessel(material: THREE.Material, x: number, y: number, z: number, width: number, depth: number,
-    profile: readonly (readonly [radius: number, height: number])[], pitch = 0): void {
+    profile: readonly (readonly [radius: number, height: number])[], pitch = 0, turnGrain = false): void {
     const geometry = new THREE.LatheGeometry(profile.map(([r, h]) => new THREE.Vector2(r, h)), 40);
     geometry.scale(width / 2, 1, depth / 2);
+    const uv = geometry.getAttribute('uv');
+    const circumference = Math.PI * (width + depth) / 2;
+    let distance = 0;
+    const profileDistances = profile.map(([r, h], i) => {
+      if (i > 0) distance += Math.hypot((r - profile[i - 1][0]) * (width + depth) / 4, h - profile[i - 1][1]);
+      return distance;
+    });
+    for (let i = 0; i < uv.count; i++) {
+      const horizontal = uv.getX(i) * circumference;
+      const vertical = profileDistances[i % profile.length];
+      uv.setXY(i, turnGrain ? vertical : horizontal, turnGrain ? horizontal : vertical);
+    }
     if (pitch) geometry.rotateX(pitch);
     this.place(geometry, material, x, y, z);
   }
@@ -178,6 +225,16 @@ export class FurniturePiece {
       curveSegments: 6,
     });
     geometry.rotateX(-Math.PI / 2);
+    const position = geometry.getAttribute('position');
+    const normal = geometry.getAttribute('normal');
+    const uv = geometry.getAttribute('uv');
+    for (let index = 0; index < uv.count; index++) {
+      const x = position.getX(index) + w / 2;
+      const z = position.getZ(index) + d / 2;
+      const y = position.getY(index);
+      const top = Math.abs(normal.getY(index)) > .52;
+      uv.setXY(index, top || Math.abs(normal.getX(index)) < .64 ? x : z, top ? z : y);
+    }
     this.place(geometry, material, x, y + .002, z);
   }
 

@@ -3,6 +3,7 @@ import { coastRandom, coastWaterLevel, groundHeight, type CoastWaterfall } from 
 import type { CoastAtmosphere } from './coastAtmosphere';
 import { coastNoise } from './coastNoise';
 import { createCascadeGeometry, type CascadeImpact } from './coastCascadeGeometry';
+import { coastSprayRainbow } from './coastSprayRainbow';
 
 function currentMaterial(time: THREE.IUniform<number>, atmosphere: CoastAtmosphere): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -248,15 +249,17 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, atmosphe
   const material = new THREE.ShaderMaterial({
     defines: mist ? { BILLOW: 1 } : {},
     uniforms: {
+      ...(mist ? THREE.UniformsUtils.clone(THREE.UniformsLib.lights) : {}),
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       uTime: time,
       uSun: atmosphere.sun,
       uLight: atmosphere.surfaceLight,
       uNight: atmosphere.night,
+      uSubmersion: atmosphere.submersion,
       uBillow: { value: mist ? billowTexture() : null },
       uSpray: { value: new THREE.Color(mist ? 0xe8f6f4 : 0xf3fef8) },
     },
-    transparent: true, fog: true, depthWrite: false,
+    transparent: true, fog: true, depthWrite: false, lights: mist,
     vertexShader: /* glsl */`
       uniform float uTime;
       attribute vec3 aOrigin, aMotion;
@@ -265,6 +268,9 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, atmosphe
       varying float vAlpha;
       varying vec2 vSprite;
       varying vec3 vPoint;
+      #ifdef BILLOW
+        #include <shadowmap_pars_vertex>
+      #endif
       #include <fog_pars_vertex>
       void main() {
         float age = fract(uTime / aPlume.x + aPlume.y);
@@ -290,6 +296,8 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, atmosphe
           vec2 corner = (vec2(axis.y, -axis.x) * position.x * aAspect.x + axis * position.y) * size;
           mvPosition.xy += corner;
           vPoint = p + transpose(mat3(viewMatrix)) * vec3(corner, 0.0);
+          vec4 worldPosition = vec4(vPoint, 1.0);
+          #include <shadowmap_vertex>
         #else
           mvPosition.xy += (vec2(axis.y, -axis.x) * position.x + axis * position.y * aAspect.x) * size;
           vAlpha *= 1.0 - smoothstep(76.0, 310.0, -mvPosition.z);
@@ -301,22 +309,29 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, atmosphe
     `,
     fragmentShader: /* glsl */`
       uniform vec3 uSun, uLight, uSpray;
-      uniform float uNight;
+      uniform float uNight, uSubmersion;
       uniform sampler2D uBillow;
       varying float vAlpha;
       varying vec2 vSprite;
       varying vec3 vPoint;
+      #ifdef BILLOW
+        #include <common>
+        #include <packing>
+        #include <lights_pars_begin>
+        #include <shadowmap_pars_fragment>
+        #include <shadowmask_pars_fragment>
+        ${coastSprayRainbow}
+      #endif
       #include <fog_pars_fragment>
       void main() {
         vec3 light = uSpray;
         #ifdef BILLOW
           float density = texture2D(uBillow, vSprite).r;
-          // The same spray shows an arc only when seen near the antisolar angle.
-          float scatter = dot(normalize(vPoint - cameraPosition), -uSun);
-          float band = clamp((scatter - 0.731) / 0.061, 0.0, 1.0);
-          vec3 spectrum = clamp(1.5 - abs(4.15 * band - vec3(0.30, 1.84, 3.31)), 0.0, 1.0);
-          float rainbow = sin(band * 3.14159265) * smoothstep(0.02, 0.39, density);
-          light = mix(light, 0.27 + spectrum * 0.81, rainbow * 0.65 * (1.0 - uNight));
+          vec4 bow = primaryRainbow(normalize(vPoint - cameraPosition), uSun);
+          float scattering = bow.a * smoothstep(0.02, 0.37, density) * (1.0 - uNight) * (1.0 - uSubmersion);
+          if (scattering > 0.0) {
+            light = mix(light, vec3(0.13) + 1.01 * bow.rgb, 0.89 * scattering * sunlitSpray());
+          }
         #else
           float density = 1.0 - smoothstep(0.10, 0.96, length((vSprite - 0.5) * 2.0));
         #endif
@@ -330,6 +345,7 @@ function sprayMesh(inputs: SprayInputs[], time: THREE.IUniform<number>, atmosphe
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = mist ? 'Drifting waterfall spray and spectral scattering' : 'Ballistic cascade droplets';
   mesh.frustumCulled = false;
+  mesh.receiveShadow = mist;
   mesh.renderOrder = mist ? 4 : 3;
   return mesh;
 }
@@ -347,7 +363,7 @@ export function createWaterfalls(
   for (const [index, fall] of falls.entries()) {
     const { geometry, impacts } = createCascadeGeometry(fall, index);
     const water = new THREE.Mesh(geometry, current);
-    water.name = 'Feeder runs and falling currents';
+    water.name = `Feeder and falling current: ${fall.id}`;
     water.renderOrder = 1;
     group.add(water);
     for (const impact of impacts) {

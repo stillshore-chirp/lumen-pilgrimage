@@ -4,7 +4,7 @@
 
 ## 起動と状態遷移
 
-- [main.ts](../src/main.ts) が `#app` を取得し、[CoastApp](../src/coast/CoastApp.ts) で入り江と山道を起動する。`?world=overlook` は丘陵展望台、`?world=residence` は都心の50階住戸を遅延読み込みする。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)
+- [main.ts](../src/main.ts) が `#app` を取得し、[CoastApp](../src/coast/CoastApp.ts) で入り江と山道を起動する。`?world=overlook` は丘陵展望台、`?world=residence` は都心の70階住戸を遅延読み込みする。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)
 - `CoastApp` はレンダラー、カメラ、UI、フレームループ、操作を接続する。ファストトラベルでは各ワールドの着地点と到着時の向きを使う。選択した移動先と時間帯は URL の `world`、`place`、`time` に反映される。同一ワールド内では位置と入力状態をリセットして移動し、ワールドを移ると移動先と時間帯を渡してページを読み込み直す。 [CoastTravelPanel](../src/coast/CoastTravelPanel.ts) · [移動先の定義](../src/coast/coastDestinations.ts)
 
 ## 仮想モニターの設計
@@ -20,7 +20,7 @@
 - [CoastWorld](../src/coast/CoastWorld.ts) と [CoastControls](../src/coast/CoastControls.ts) は、[地形、散策路、沢の水位](../src/coast/terrain.ts) を共有する。道の縦断勾配を滑らかにつなぎ、周囲の地面に応じて横断勾配を付ける。西の岩棚、東の潮棚、林内の分岐と沢は、地形と [岩・シダの配置](../src/coast/world/coastLandmarks.ts) を合わせて組む。素材は [景観素材のクレジット](../public/coast-materials/ATTRIBUTION.md) を参照。
 - 地上の登坂判定に引っかかったときは横方向の移動を試す。急な下りとジャンプは重力で接地させる。遊泳と潜水は海・沢・湖の水位を参照し、潜水時に水底への進入を止める。水底が浅くなると浮上し、岸で接地する。水中の視界は深さで減衰し、水面の裏側と水底に届く光を描く。
 - 密林の高所から峠、湖の周回路、稜線へつながる。[朱の参道](../src/coast/world/coastInariTrail.ts) は湖の周回路から分かれ、地形の二つの歩行路に沿って石段と鳥居を置く。山の鞍部と樹冠の高さを調整し、南東から楼門や前庭、石段の入口に日が入る。小社からの下り道は稜線への道に合流する。路肩の地形、ベンチと屋外休憩所の座標、視界を空ける範囲を地形定義に持つ。[休憩所](../src/coast/world/coastRestAreas.ts) は地形に合わせて木製ベンチと低い石の縁を置く。
-- [2階展望デッキ](../src/coast/world/overlook/overlookUpperDeck.ts) は東側の階段と踊り場をパビリオンの屋外デッキにつなぐ。階段の滑らかな歩行面と各踊り場の高さを共有し、手すりの位置で歩行を止める。ファストトラベルで選んだ着地点にも同じ高さを適用する。1階はテラスの縁、建物、ベンチ、望遠鏡に沿って歩行を制限する。夜は石の縁と段鼻の灯りが足元を照らす。
+- [2階展望デッキ](../src/coast/world/overlook/overlookUpperDeck.ts) は東側の階段と踊り場をパビリオンの屋外デッキにつなぐ。階段の滑らかな歩行面と各踊り場の高さを共有し、手すりの位置で歩行を止める。ファストトラベルで選んだ着地点にも同じ高さを適用する。1階はテラスの縁、建物、望遠鏡に沿って歩行を制限する。夜は石の縁と段鼻の灯りが足元を照らす。各ワールドのベンチは通り抜けられる。
 
 ## 景観と描画
 
@@ -29,18 +29,19 @@
 - [入り江の星空](../src/coast/world/coastMilkyWay.ts) は天の川の星の密集と暗黒帯を手続き生成する。空の方角に固定して星と銀河の帯を描き、地平線近くと月の周囲では弱める。軽量と高品質で同じ星の配置を使う。[天の川の暗黒帯の解説](https://science.nasa.gov/solar-system/skywatching/night-sky-network/augusts-night-sky-notes-the-great-rift/)
 - 起動時は「軽量」。[照明](../src/coast/world/coastLighting.ts) は広域の影と林の間接光を共有する。高品質では視点近くを追従する影、地表の凹凸、近くの植生の詳細と内部解像度を追加する。軽量の広域影は視点が別の場所へ移るまで再利用する。
 - [海面](../src/coast/world/coastOcean.ts) は海底の深さを使い、浅瀬で波が盛り上がる位置と崩れた泡を計算する。[波の周期](../src/coast/world/coastSwell.ts) を [CoastAudio](../src/coast/CoastAudio.ts) と共有し、砕波音の位置と強さを寄せ引きに合わせる。
+- 入江の滝は岩に沿った流路と着水地点を地形から求める。飛沫の虹は観察者から水滴へ向かう方向を対日点から測り、外側の赤約42°から内側の紫約40°の帯を描く。日が当たる飛沫だけに出て、地形が太陽を遮る箇所は抑える。 [滝の描画](../src/coast/world/coastWaterfall.ts) · [飛沫の虹](../src/coast/world/coastSprayRainbow.ts) · [WMOの主虹](https://cloudatlas.wmo.int/en/primary-rainbow.html)
 
-## 都心の50階住戸
+## 都心の70階住戸
 
-- 図面の P1 を基準に、東を `x`、北を `-z`、50階の仕上げ床を `y=0` とし、単位をメートルにそろえる。平面の部屋、壁、開口、手すりを描画と歩行判定で共有する。家具の外形にも歩行判定を持つ。主寝室の引戸は開き量を描画と音響に渡し、人が敷居を通れる幅まで開いてから通行できる。 [設計図 PDF](residence/residence-50f-drawings.pdf) · [平面](../src/coast/world/residence/residencePlan.ts) · [歩行判定](../src/coast/world/residence/residenceNavigation.ts)
-- 街路面は `y=-176`。大通りの軸、交差点、両脇の高層塔を住戸の窓からの眺望断面と照合し、その外側に展望台と共有する都市を接続する。昼夜で建物の窓明かりと車の灯火を切り替える。ガラスの下枠と外周床は視線断面に合わせ、着座・立位のどちらでも路面が見える。 [基本設計](residence/residence-50f-design.md#街区と視線) · [都市の描画](../src/coast/world/residence/residenceCity.ts) · [住戸の躯体](../src/coast/world/residence/residenceShell.ts)
-- 室内はオーク、石、タイル、布の模様と反射を実寸で設定する。昼は窓方位に合わせた日射と室内の間接光、夜は照明器具と天井・壁の間接光を使う。軽量と高品質で間取りと光源の位置を共有し、影の解像度と描画密度を変える。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [内装材](../src/coast/world/residence/residenceMaterials.ts)
-- 録音した交通音を南と東の街路に配置する。高さと距離で減衰させ、窓ガラスと引戸の開き量で透過する音を変える。室内、敷居、屋外で反射と足音を変え、頭部伝達関数で方向を表現する。録音は展望台と同じライセンス済み素材を使う。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [録音の出典と再配布条件](../public/coast-overlook/ATTRIBUTION.md)
+- 図面の P1 を基準に、東を `x`、北を `-z`、70階の仕上げ床を `y=0` とし、単位をメートルにそろえる。部屋、壁、開口、手すりを描画と歩行判定で共有する。室内家具の外形は間接光の遮蔽に使い、歩行では通り抜けられる。主寝室の引戸は開き量を描画と音響に渡し、人が敷居を通れる幅まで開いてから通行できる。 [設計図 PDF](residence/residence-70f-drawings.pdf) · [平面](../src/coast/world/residence/residencePlan.ts) · [歩行判定](../src/coast/world/residence/residenceNavigation.ts)
+- 街路面は `y=-246`。南窓から大通り沿いの屋上と約277 m南の交差点を見下ろす。南北幹線を住戸の塔の東に通し、横断街路と沿道への出入りを担う街路をつなぐ。車道・歩道・走行経路と敷地は同じ道路網から決める。幹線を街区の外へ延ばし、車道とその先の見通しに建物や基壇が重ならないことを描画形状で確認する。夜は走行中の車両の灯りが舗装を照らす。 [基本設計](residence/residence-70f-design.md#街区と視線) · [高さ](../src/coast/world/residence/residenceFloor.ts) · [都市の描画](../src/coast/world/residence/residenceCity.ts)
+- 室内はオークや漆喰、織物の実寸の色・凹凸・粗さを使う。窓側の日射と方向のある間接光、壁や家具の接地陰影、夜の間接照明を組み合わせる。デスクトップでは視点に応じて窓と鏡の反射を描き、表示位置と描画設定に応じて反射の計算範囲や解像度を調整する。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [反射](../src/coast/world/residence/residenceReflections.ts) · [内装材の出典](../public/residence-materials/ATTRIBUTION.md)
+- 録音した交通音を南と東の街路に分散する。床の高さ、建物の外皮と間仕切り、引戸の開き量で伝わる音の強さと帯域を変える。室内の反射は部屋の寸法に合わせ、動く交通音は頭部伝達関数で定位させる。足音は床材に従い、引戸の開閉にも短い作動音を付ける。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
 
 ## 音響
 
 - 音響は明示操作で開始する。[海岸の発音点](../src/coast/coastShore.ts) は海につながる浅瀬と陸の境界から求め、波が打つ方向へ動かす。再生中の発音点はクロスフェードで入れ替える。[伝播の計算](../src/coast/coastAcoustics.ts) は岩壁による遮蔽と短い反射、開口を経由する到達音を扱う。[足音と水音](../src/coast/CoastFoley.ts) は移動・潜水と地表の材質から選ぶ。カメラが潜ると、水中にいる深さに応じてミックスの高域を下げる。
-- [丘陵展望台の音響](../src/coast/world/overlook/overlookAudio.ts) は幹線の高さを含む中心線を分割し、各区間の距離と丘による遮蔽で音の強さと高域の減衰を求める。道路ごとに合成した音を頭部伝達関数（HRTF）で定位させる。昼は低木に鳥声、夜は虫の声を配置し、時間帯の切替時に音量をなじませる。[録音の出典と伝搬の資料](../public/coast-overlook/ATTRIBUTION.md)
+- [丘陵展望台の音響](../src/coast/world/overlook/overlookAudio.ts) は幹線の高さを含む中心線を分割し、各区間の距離と丘による遮蔽で音の強さと高域の減衰を求める。道路ごとに合成した音を頭部伝達関数（HRTF）で定位させる。昼は低木に鳥声、夜はデッキ前方の草地と斜面に虫の声を間隔をずらして配置する。虫の音も高低差と地形の遮蔽を反映する。 [録音の出典と伝搬の資料](../public/coast-overlook/ATTRIBUTION.md)
 - `CoastApp` は描画と音響に同じ時間帯を渡す。自然景観では昼の鳥声と夜の虫声をなじませ、丘陵展望台と住戸の夜は交通の発音量を下げる。静穏な昼と弱い夜間逆転層を想定し、伝搬経路の曲がり方を地形遮蔽に反映する。遠方の低域を補正し、近くの波や落水、潜水時の処理は各音源の位置と水深に従う。[大気による吸収と屈折の資料](https://www.fhwa.dot.gov/ENVIRonment/noise/noise_barriers/design_construction/design/design03.cfm)
 - [落水](../src/coast/world/coastWaterfall.ts) は水の加速と岩に沿った流れを描く。泡と霧の起点は海・湖ごとの水位に合わせ、音響は描画と同じ着水点を参照する。
 - [鳥](../src/coast/world/coastBirdLife.ts) が種類・個体・鳴いた位置を音響へ渡す。表示距離の外にいる鳥や、林と尾根に置いた止まり場からも、[鳥種ごとの減衰距離](../src/coast/coastBirdCue.ts)に応じて声を届ける。音響は録音を選び、飛行中は再生中の音源を動かす。距離による到達時間と地形による遮蔽を適用する。 [録音のクレジット](../public/coast-audio/ATTRIBUTION.md)

@@ -1,32 +1,64 @@
-import type { MeshStandardMaterial } from 'three';
+import { DoubleSide, type MeshStandardMaterial } from 'three';
 import type { ResidenceMaterials } from './residenceMaterials';
 import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
 
 const eastFacing = Math.PI / 2;
 
 function sink(piece: FurniturePiece, finish: MeshStandardMaterial, x: number, y: number,
-  z: number, width: number, depth: number): void {
-  piece.slab(finish, x, y - .007, z, width + .012, .011, depth + .012, .082, {
-    x: 0, z: 0, width: width - .036, depth: depth - .036,
+  z: number, width: number, depth: number, drain: number): void {
+  // Top flange, rolled edge, bowl sides and sloped bottom are one continuous surface.
+  const sections = [
+    [.012, .012, .002], [.008, .008, .006], [-.008, -.008, .008], [-.027, -.024, .004],
+    [-.037, -.034, -.003], [-.045, -.041, -.017], [-.058, -.057, -.045],
+    [-.077, -.077, -.078], [-.091, -.087, -.101], [-.110, -.109, -.117],
+    [-.141, -.138, -.122],
+  ];
+  piece.surface(finish, 2 * (width + depth), .147, 36, sections.length + 1, (u, v) => {
+    const section = Math.round(v * (sections.length + 1));
+    const step = Math.round(u * 36) % 36;
+    const quadrant = Math.floor(step / 9);
+    const angle = (quadrant + (step % 9) / 8) * Math.PI / 2;
+    if (section >= sections.length) {
+      const radius = section === sections.length ? .031 : .003;
+      return [x + drain + radius * Math.cos(angle), y - .129, z + radius * Math.sin(angle)];
+    }
+    const [growX, growZ, h] = sections[section];
+    const halfX = (width + growX) / 2;
+    const halfZ = (depth + growZ) / 2;
+    const fillet = Math.min(.085, halfZ * .9, halfX * .9);
+    const center = (quadrant + .5) * Math.PI / 2;
+    return [
+      x + Math.sign(Math.cos(center)) * (halfX - fillet) + fillet * Math.cos(angle), y + h,
+      z + Math.sign(Math.sin(center)) * (halfZ - fillet) + fillet * Math.sin(angle),
+    ];
   });
-  piece.box(finish, x, y - .137, z, width - .003, .024, depth - .003, .01);
-  for (const side of [-1, 1]) {
-    piece.box(finish, x + side * (width / 2 - .014), y - .068, z, .028, .134, depth - .045, .01);
-    piece.box(finish, x, y - .068, z + side * (depth / 2 - .014), width - .025, .134, .028, .01);
+}
+
+function sinkDrain(piece: FurniturePiece, m: ResidenceMaterials, x: number, y: number,
+  z: number, radius: number): void {
+  piece.cylinder(m.brushedSteel, x, y, z, radius, .004);
+  for (let i = 0; i < 7; i++) {
+    const angle = i * Math.PI * 2 / 7;
+    piece.cylinder(m.darkMetal, x + Math.cos(angle) * radius * .62, y + .0023,
+      z + Math.sin(angle) * radius * .62, radius * .105, .001);
   }
+  piece.cylinder(m.darkMetal, x, y + .0023, z, radius * .13, .001);
 }
 
 function faucet(piece: FurniturePiece, m: ResidenceMaterials, x: number, base: number,
   z: number, tall: boolean): void {
   const rise = tall ? .299 : .134;
   const reach = tall ? .158 : .101;
-  piece.cylinder(m.metal, x, base + .014, z, .025, .028);
-  piece.tube(m.metal, [
+  piece.vessel(m.brushedSteel, x, base, z, .052, .052, [
+    [0, 0], [.87, 0], [1, .003], [1, .012], [.92, .017], [.69, .019], [.54, .034], [0, .036],
+  ]);
+  piece.tube(m.brushedSteel, [
     [x, base + .013, z], [x, base + rise * .72, z], [x, base + rise, z + reach * .39],
     [x, base + rise * .93, z + reach], [x, base + rise * .76, z + reach * 1.09],
   ], .009);
   piece.cylinder(m.darkMetal, x, base + rise * .752, z + reach * 1.09, .010, .011);
-  piece.rod(m.metal, [x + .024, base + .027, z], [x + .044, base + .090, z], .0035);
+  piece.rod(m.brushedSteel, [x + .009, base + .040, z], [x + .034, base + .040, z], .013);
+  piece.rod(m.brushedSteel, [x + .034, base + .041, z], [x + .044, base + .087, z - .015], .0038);
 }
 
 function cabinetFront(piece: FurniturePiece, m: ResidenceMaterials, x: number, y: number,
@@ -35,7 +67,8 @@ function cabinetFront(piece: FurniturePiece, m: ResidenceMaterials, x: number, y
   const pitch = height / tiers;
   for (let row = 0; row < tiers; row++) {
     const center = y + (row - (tiers - 1) / 2) * pitch;
-    piece.box(m.cabinetry, x, center, z, width - .007, pitch - .007, .021, .004);
+    piece.box(m.darkMetal, x, center, z - facing * .013, width + .001, pitch + .001, .008, .001);
+    piece.box(m.cabinetry, x, center, z, width - .007, pitch - .007, .021, .003, 0, !drawers);
     piece.box(m.darkMetal, x + (drawers ? 0 : width * .28),
       center + pitch * (drawers ? .34 : .40), z + facing * .012,
       Math.min(width * .42, .202), .011, .009, .002);
@@ -44,6 +77,9 @@ function cabinetFront(piece: FurniturePiece, m: ResidenceMaterials, x: number, y
 
 function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
   model.room('Kitchen');
+  const glaze = model.tone(m.ceramic, 0x878d7c);
+  const cuttingBoard = model.tone(m.woodEnd, 0xcbb599);
+  const steel = m.brushedSteel;
   const island = model.at(15.025, 7.715);
   island.box(m.darkMetal, 0, .044, 0, 2.03, .088, .66, .017);
   island.box(m.cabinetry, 0, .444, -.040, 2.23, .728, .775, .018);
@@ -52,11 +88,20 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
     island.box(m.cabinetry, index * .065, .439, .356, .047, .716, .037, .015);
   }
   island.slab(m.counterStone, 0, .808, 0, 2.346, .078, .946, .068);
-  island.vessel(m.ceramic, -.665, .887, .095, .259, .206, [
+  island.vessel(glaze, -.665, .887, .095, .301, .247, [
     [0, 0], [.71, 0], [.95, .019], [1, .045], [.98, .102], [.90, .105],
     [.88, .085], [.75, .022], [0, .018],
   ]);
-  island.box(m.cabinetry, .583, .906, -.031, .303, .037, .202, .016);
+  const citrus = model.tone(m.ceramic, 0xc9873e);
+  for (const [x, y, z, width, depth] of [
+    [-.693, .958, .069, .062, .067], [-.615, .947, .113, .072, .069], [-.672, .969, .142, .059, .058],
+  ]) island.oval(citrus, x, y, z, width, .058, depth, .43);
+  island.slab(cuttingBoard, .583, .891, -.011, .354, .019, .257, .038);
+  island.vessel(m.ceramic, .524, .911, .021, .082, .082, [
+    [0, 0], [.78, 0], [.85, .012], [1, .070], [.99, .083], [.92, .089], [.87, .082],
+    [.75, .022], [0, .019],
+  ]);
+  island.tube(m.ceramic, [[.562, .976, .021], [.587, .975, .021], [.592, .952, .021], [.563, .933, .021]], .005);
   model.footprint(13.85, 7.24, 2.35, .95);
 
   const counter = model.at(15.145, 9.54);
@@ -67,9 +112,15 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
   for (const [i, width] of frontWidths.entries()) {
     const center = left + width / 2;
     if (i === 4) {
-      counter.box(m.metal, center, .447, .288, width - .016, .720, .029, .011);
-      counter.box(m.darkMetal, center, .432, .300, width - .073, .471, .015, .006);
-      counter.box(m.metal, center, .659, .300, width - .11, .019, .019, .008);
+      const ovenGlass = model.tone(m.darkMetal, 0x2b3435);
+      ovenGlass.roughness = .16;
+      counter.box(steel, center, .447, .285, width - .025, .720, .030, .011);
+      counter.box(m.darkMetal, center, .435, .302, width - .052, .489, .018, .008);
+      counter.box(ovenGlass, center, .426, .312, width - .096, .404, .006, .008);
+      for (const x of [-.21, .21]) {
+        counter.rod(steel, [center + x, .653, .310], [center + x, .653, .343], .009);
+      }
+      counter.rod(steel, [center - .249, .653, .344], [center + .249, .653, .344], .010);
       for (const x of [-.16, .16]) {
         counter.rod(m.darkMetal, [center + x, .754, .299], [center + x, .754, .309], .019);
       }
@@ -86,13 +137,13 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
   counter.slab(m.counterStone, 0, .805, 0, 4.226, .083, .616, .014, {
     x: sinkX, z: sinkZ, width: .828, depth: .366,
   });
-  sink(counter, m.metal, sinkX, .884, sinkZ, .826, .364);
-  counter.cylinder(m.darkMetal, sinkX + .155, .762, sinkZ, .031, .006);
+  sink(counter, steel, sinkX, .886, sinkZ, .828, .366, .155);
+  sinkDrain(counter, m, sinkX + .155, .759, sinkZ, .029);
   faucet(counter, m, sinkX, .888, -.203, true);
 
   const cooktop = model.tone(m.darkMetal, 0x202525);
   cooktop.roughness = .28;
-  const burner = model.tone(m.metal, 0x595953);
+  const burner = model.tone(m.metal, 0x77746e);
   counter.box(cooktop, 1.145, .895, .02, .768, .016, .397, .009);
   for (const [x, z, radius] of [[.954, -.077, .087], [1.323, -.09, .075], [.994, .119, .07], [1.315, .092, .081]]) {
     counter.vessel(burner, x, .903, z, radius * 2, radius * 2, [
@@ -100,18 +151,27 @@ function addKitchen(model: FurnitureModel, m: ResidenceMaterials): void {
     ]);
   }
 
-  counter.box(m.stone, 0, 1.197, -.302, 4.23, .618, .033, .007);
+  counter.box(m.counterStone, 0, 1.197, -.302, 4.23, .618, .030, .003);
   counter.box(m.cabinetry, 0, 1.98, -.174, 4.18, .96, .287, .009);
   for (let i = 0; i < 7; i++) {
-    counter.box(m.cabinetry, (i - 3) * .597, 1.989, -.02, .59, .927, .023, .004);
+    const x = (i - 3) * .597;
+    counter.box(m.darkMetal, x, 1.987, -.030, .598, .932, .020, .001);
+    counter.box(m.cabinetry, x, 1.989, -.02, .59, .924, .023, .003, 0, true);
   }
   counter.box(m.metal, 1.147, 1.50, -.109, .787, .043, .292, .006);
   counter.box(m.lamp, -.540, 1.491, .061, 1.47, .007, .014, .002);
   counter.box(m.lamp, 1.07, 1.491, .061, 1.47, .007, .014, .002);
+  counter.slab(cuttingBoard, -1.707, .892, .045, .489, .020, .269, .041);
+  counter.vessel(glaze, 1.743, .888, -.122, .132, .132, [
+    [0, 0], [.80, 0], [1, .026], [.97, .156], [.98, .171],
+    [.88, .172], [.84, .160], [.83, .027], [0, .020],
+  ]);
+  counter.rod(m.cabinetry, [1.724, .918, -.12], [1.683, 1.157, -.158], .0078, .012);
+  counter.rod(steel, [1.75, .927, -.095], [1.789, 1.157, -.073], .0044, .008);
   model.footprint(13.03, 9.23, 4.23, .62);
 }
 
-function vanity(piece: FurniturePiece, m: ResidenceMaterials, mirror: MeshStandardMaterial,
+function vanity(piece: FurniturePiece, m: ResidenceMaterials, towel: MeshStandardMaterial,
   width: number, depth: number): void {
   const bowlWidth = Math.min(.554, width - .09);
   const bowlDepth = Math.min(.295, depth - .12);
@@ -126,15 +186,40 @@ function vanity(piece: FurniturePiece, m: ResidenceMaterials, mirror: MeshStanda
   piece.slab(m.counterStone, 0, .779, 0, width - .004, .083, depth - .004, .037, {
     x: 0, z: basinZ, width: bowlWidth, depth: bowlDepth,
   });
-  sink(piece, m.ceramic, 0, centerY, basinZ, bowlWidth - .002, bowlDepth - .002);
-  piece.cylinder(m.metal, .09, centerY - .124, basinZ, .022, .003);
+  sink(piece, m.ceramic, 0, centerY, basinZ, bowlWidth, bowlDepth, .09);
+  sinkDrain(piece, m, .09, centerY - .127, basinZ, .022);
   faucet(piece, m, 0, centerY, -depth * .24, false);
 
   const mirrorWidth = Math.min(width - .037, 1.36);
   const mirrorZ = -depth / 2 + .016;
-  piece.box(m.metal, 0, 1.459, mirrorZ + .004, mirrorWidth, .867, .030, .014);
-  piece.box(mirror, 0, 1.458, mirrorZ + .022, mirrorWidth - .031, .835, .011, .005);
-  piece.box(m.lamp, 0, 1.938, mirrorZ + .047, mirrorWidth - .1, .014, .033, .005);
+  piece.box(m.brushedSteel, 0, 1.459, mirrorZ + .004, mirrorWidth, .867, .030, .014);
+  piece.box(m.clearMirror, 0, 1.459, mirrorZ + .018, mirrorWidth - .017, .850, .008, .006);
+  piece.box(m.brushedSteel, 0, 1.928, mirrorZ + .037, mirrorWidth - .099, .025, .066, .005);
+  piece.box(m.lamp, 0, 1.914, mirrorZ + .047, mirrorWidth - .132, .004, .041, .002);
+
+  const bottleX = width / 2 - .074;
+  piece.vessel(m.ceramic, bottleX, centerY, -.140, .073, .073, [
+    [0, 0], [.82, 0], [1, .010], [.982, .110], [.74, .119], [.54, .119], [.50, .131], [0, .131],
+  ]);
+  piece.cylinder(m.brushedSteel, bottleX, centerY + .134, -.140, .016, .011);
+  piece.cylinder(m.brushedSteel, bottleX, centerY + .151, -.140, .007, .021);
+  piece.box(m.brushedSteel, bottleX, centerY + .161, -.126, .020, .007, .046, .003);
+  if (width > 1.3) {
+    const towelX = -width / 2 + .193;
+    piece.vessel(m.ceramic, towelX - .042, centerY, -.104, .077, .077, [
+      [0, 0], [.74, 0], [.86, .010], [1, .076], [.97, .079], [.90, .076], [.76, .012], [0, .010],
+    ]);
+    piece.surface(towel, .232, .271, 23, 19, (u, v) => {
+      const fold = Math.sin(u * 15.2 + v * 2.4) * .006;
+      const over = Math.max(0, (v - .66) / .34);
+      const top = Math.min(1, v / .66);
+      return [
+        towelX + (u - .5) * (.224 - over * .017) + .010 * v,
+        centerY + .009 - over ** 1.73 * .110 + fold * (.20 + over),
+        .151 + (depth / 2 - .136) * top + over * (.008 + fold),
+      ];
+    });
+  }
 }
 
 function bathtub(piece: FurniturePiece, m: ResidenceMaterials, width: number, depth: number): void {
@@ -143,13 +228,18 @@ function bathtub(piece: FurniturePiece, m: ResidenceMaterials, width: number, de
     [1, .561], [.988, .578], [.922, .58], [.886, .564], [.85, .431], [.68, .142],
     [.57, .097], [0, .096],
   ]);
-  piece.cylinder(m.metal, 0, .112, .24, .028, .005);
-  piece.cylinder(m.metal, width / 2 - .020, .427, -depth * .285, .013, .83);
-  piece.cylinder(m.metal, width / 2 - .020, .016, -depth * .285, .032, .03);
-  piece.tube(m.metal, [
+  sinkDrain(piece, m, 0, .112, .24, .028);
+  piece.rod(m.brushedSteel, [0, .451, -depth * .42], [0, .451, -depth * .454], .021, .019);
+  piece.cylinder(m.brushedSteel, width / 2 - .020, .427, -depth * .285, .013, .83);
+  piece.cylinder(m.brushedSteel, width / 2 - .020, .016, -depth * .285, .032, .03);
+  piece.tube(m.brushedSteel, [
     [width / 2 - .020, .816, -depth * .285], [width / 2 - .041, .871, -depth * .285],
     [width / 2 - .151, .893, -depth * .285], [width / 2 - .222, .846, -depth * .285],
   ], .012);
+  const valveX = width / 2 - .027;
+  const valveZ = -depth * .285;
+  piece.rod(m.brushedSteel, [valveX, .768, valveZ], [valveX, .768, valveZ + .032], .015);
+  piece.rod(m.brushedSteel, [valveX, .768, valveZ + .032], [valveX - .011, .796, valveZ + .039], .004);
 }
 
 function toilet(piece: FurniturePiece, m: ResidenceMaterials): void {
@@ -163,6 +253,8 @@ function toilet(piece: FurniturePiece, m: ResidenceMaterials): void {
   piece.vessel(m.ceramic, 0, .416, .056, .422, .458, [
     [.79, 0], [.98, 0], [1, .008], [.98, .020], [.75, .021], [.735, .012], [.79, 0],
   ]);
+  piece.rod(m.brushedSteel, [-.145, .430, -.143], [.145, .430, -.143], .011);
+  piece.box(m.ceramic, 0, .444, -.120, .364, .042, .072, .019, .12);
 }
 
 function shower(model: FurnitureModel, m: ResidenceMaterials, west: number, south: number,
@@ -200,32 +292,35 @@ function shower(model: FurnitureModel, m: ResidenceMaterials, west: number, sout
 }
 
 function addBathrooms(model: FurnitureModel, m: ResidenceMaterials): void {
-  const mirror = model.tone(m.metal, 0xa6aaa3);
-  mirror.metalness = .27;
-  mirror.roughness = .14;
+  const towel = model.tone(m.bedding, 0xd3cbb9);
+  towel.side = DoubleSide;
+  const bathMat = model.tone(m.rug, 0x89897b);
 
   model.room('Shared bath');
   bathtub(model.at(.65, 7.9), m, .86, 1.68);
-  vanity(model.at(1.14, 9.4), m, mirror, 1.74, .60);
+  vanity(model.at(1.14, 9.4), m, towel, 1.74, .60);
   toilet(model.at(2.63, 9.58), m);
+  model.at(1.30, 8.311).slab(bathMat, 0, .003, 0, .391, .010, .741, .033);
   model.footprint(.219, 7.06, .862, 1.68);
   model.footprint(.27, 9.1, 1.74, .60);
   model.footprint(2.415, 9.29, .430, .571);
 
   model.room('Shared shower room');
   shower(model, m, 3.58, 8.85, 1.31, 1.12, 10.13);
-  vanity(model.at(5.63, 9.46), m, mirror, .72, .56);
+  vanity(model.at(5.63, 9.46), m, towel, .72, .56);
+  model.at(4.38, 8.540).slab(bathMat, 0, .003, 0, .701, .010, .412, .033);
   model.footprint(5.27, 9.18, .72, .56);
 
   model.room('Primary bath');
   bathtub(model.at(13.515, 14.68), m, .83, 1.30);
   shower(model, m, 13.93, 14.21, .97, 1.10, 15.47);
-  vanity(model.at(13.275, 12.814, eastFacing), m, mirror, 1.53, .55);
+  vanity(model.at(13.275, 12.814, eastFacing), m, towel, 1.53, .55);
+  model.at(14.216, 13.906).slab(bathMat, 0, .003, 0, .710, .010, .401, .033);
   model.footprint(13.10, 14.03, .83, 1.30);
   model.footprint(13.00, 12.049, .55, 1.53);
 
   model.room('Guest WC');
-  vanity(model.at(8.45, 10.96, eastFacing), m, mirror, 1.48, .60);
+  vanity(model.at(8.45, 10.96, eastFacing), m, towel, 1.48, .60);
   toilet(model.at(9.50, 11.72), m);
   model.footprint(8.15, 10.22, .60, 1.48);
   model.footprint(9.285, 11.431, .43, .570);

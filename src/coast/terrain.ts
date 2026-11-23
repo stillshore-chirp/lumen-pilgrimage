@@ -738,13 +738,16 @@ export function groundSlope(x: number, z: number, span = 1.35): number {
 }
 
 export type CoastWaterfall = {
+  id: 'east-headland' | 'west-headland' | 'offshore-ridge' | 'upland-lake' | 'west-wall' | 'east-outer-cliff'
+    | 'shore-ledge';
   path: CoastPoint[];
   width: number;
   direction: { x: number; z: number };
   impact: CoastPoint;
 };
 
-function traceWaterfall(x: number, z: number, angle: number, width: number, level = SEA_LEVEL): CoastWaterfall {
+function traceWaterfall(id: CoastWaterfall['id'], x: number, z: number, angle: number, width: number,
+  level = SEA_LEVEL): CoastWaterfall {
   const direction = { x: Math.cos(angle), z: Math.sin(angle) };
   // Start above the crown and march towards the bay until each elevation
   // clears the face, including the two edges of the sheet.
@@ -767,16 +770,19 @@ function traceWaterfall(x: number, z: number, angle: number, width: number, leve
     }
     path.push({ x: px + direction.x * 0.7, y, z: pz + direction.z * 0.7 });
   }
-  return { path, width, direction, impact: path[path.length - 1] };
+  return { id, path, width, direction, impact: path[path.length - 1] };
 }
 
 export const COAST_FALLS = [
-  traceWaterfall(150, -186, 2.13, 8.6),
-  traceWaterfall(-127, -192, 0.57, 7.7),
-  traceWaterfall(-48, -383, 0.92, 5.5),
+  traceWaterfall('east-headland', 150, -186, 2.13, 8.6),
+  traceWaterfall('west-headland', -127, -192, 0.57, 7.7),
+  traceWaterfall('offshore-ridge', -48, -383, 0.92, 5.5),
+  traceWaterfall('west-wall', -111, -108, -0.40, 6.2),
+  traceWaterfall('east-outer-cliff', 102, -277, 2.48, 8.2),
+  traceWaterfall('shore-ledge', 57, 51, 3.33, 3.75),
 ];
 
-export const UPLAND_FALL = traceWaterfall(247, 774, Math.PI - 0.18, 5.4, UPLAND_LAKE.level);
+export const UPLAND_FALL = traceWaterfall('upland-lake', 247, 774, Math.PI - 0.18, 5.4, UPLAND_LAKE.level);
 
 const overlookViews = COAST_WALKS.map(({ overlook }) => {
   const dx = overlook.towardX - overlook.x;

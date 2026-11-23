@@ -12,10 +12,9 @@ const wallLamps = [
   { x: DECK_SIDE, z: -19.4, yaw: -Math.PI / 2 },
 ];
 
-export const OVERLOOK_DECK_OBSTACLES = [
-  ...benchLocations.map(([x, z]) => ({ minX: x - 1.85, maxX: x + 1.85, minZ: z - 0.52, maxZ: z + 0.62 })),
-  ...viewerLocations.map(([x, z]) => ({ minX: x - 0.46, maxX: x + 0.46, minZ: z - 0.46, maxZ: z + 0.46 })),
-] as const;
+export const OVERLOOK_DECK_OBSTACLES = viewerLocations.map(([x, z]) => ({
+  minX: x - 0.46, maxX: x + 0.46, minZ: z - 0.46, maxZ: z + 0.46,
+}));
 
 type SlabField = { minX: number; maxX: number; minZ: number; maxZ: number; seamX: number; seamZ: number; color: number };
 
