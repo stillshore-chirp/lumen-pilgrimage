@@ -269,7 +269,7 @@ export class CoastApp {
   private invokeInteraction(): boolean {
     if (!this.interaction || !this.interactionLabel()) return false;
     const action = this.interaction.invoke();
-    if (action) this.residencePanel?.open(action.openSection);
+    if (action) this.residencePanel?.open(action.openSection, this.renderer.domElement);
     return true;
   }
 

@@ -104,6 +104,23 @@ function button(page, name) {
   return page.getByRole('button', { name, exact: true });
 }
 
+function residenceDialog(page, name) {
+  return page.getByRole('dialog', { name, exact: true });
+}
+
+async function selectResidenceDevice(page, category, name) {
+  const directory = residenceDialog(page, '住戸の遠隔操作');
+  await button(directory, category).click();
+  await button(directory, name).click();
+  return residenceDialog(page, name);
+}
+
+async function openResidenceDevice(page, category, name) {
+  await button(page, 'メニュー').click();
+  await button(residenceDialog(page, 'メニュー'), '住戸の遠隔操作').click();
+  return selectResidenceDevice(page, category, name);
+}
+
 async function travel(page, label, world, place, time) {
   await button(page, 'ファストトラベル').click();
   const dialog = page.getByRole('dialog', { name: 'ファストトラベル' });
@@ -417,7 +434,6 @@ test('tea room shoji and curtain independently control the window through local 
   const curtainGroup = page.locator('[data-residence-section="curtains-04"]');
   const shoji = curtainGroup.getByRole('button', { name: '障子', exact: true });
   const curtain = curtainGroup.getByRole('button', { name: 'カーテン', exact: true });
-  const menu = button(page, '住戸の操作');
   const close = button(page, '茶室の障子を閉める');
   const reopen = button(page, '茶室の障子を開ける');
   const landscape = '.coast-ui { visibility: hidden; }';
@@ -449,9 +465,7 @@ test('tea room shoji and curtain independently control the window through local 
   const openCurtainLight = await paperLight();
   assert.ok(openCurtainLight > .25);
 
-  await menu.click();
-  await page.getByRole('dialog').getByRole('button', { name: 'カーテン', exact: true }).click();
-  await curtainGroup.locator('summary').click();
+  await openResidenceDevice(page, 'カーテン', '茶室04');
   await curtainGroup.getByRole('button', { name: '障子', exact: true, pressed: false }).waitFor();
   assert.equal(await curtain.getAttribute('aria-pressed'), 'true');
   await curtain.click();
@@ -465,7 +479,7 @@ test('tea room shoji and curtain independently control the window through local 
     return light > 0 && light < .12;
   });
   await capture(page, 'residence-tea-shoji-curtain-closed-day', landscape);
-  await menu.click();
+  await openResidenceDevice(page, 'カーテン', '茶室04');
   await shoji.click();
   assert.equal(await curtain.getAttribute('aria-pressed'), 'false');
   await page.keyboard.press('Escape');
@@ -542,54 +556,77 @@ test('tea room fusuma moves, stops passage when closed, and leaves the window cu
   assert.deepEqual(errors, []);
 });
 
-test('residence menu keeps fixture, zone and wall curtain controls in sync', { timeout }, async t => {
+test('the residence menu opens individual controls and keeps remote and wall controls in sync', { timeout }, async t => {
   const { page, errors } = await openResidence(t);
-  const trigger = button(page, '住戸の操作');
-  const dialog = page.getByRole('dialog', { name: '住戸の操作' });
-  const livingLights = dialog.locator('[data-residence-section="lighting-LD"]');
-  const west = livingLights.getByRole('button', { name: 'ペンダント灯（西）', exact: true });
-  const east = livingLights.getByRole('button', { name: 'ペンダント灯（東）', exact: true });
+  const trigger = button(page, 'メニュー');
+  const menu = residenceDialog(page, 'メニュー');
+  const remote = button(menu, '住戸の遠隔操作');
+  const directory = residenceDialog(page, '住戸の遠隔操作');
+  const livingChoice = button(directory, 'リビング・ダイニング');
+  const livingLights = residenceDialog(page, 'リビング・ダイニング');
+  const west = button(livingLights, 'ペンダント灯（西）');
+  const east = button(livingLights, 'ペンダント灯（東）');
   const atStart = await camera(page);
-  await trigger.focus();
-  await page.keyboard.press('Enter');
-  await dialog.waitFor();
+  await trigger.press('Enter');
+  await menu.waitFor();
   await hold(page, 'd', () => moreMovementFrames(page));
   assert.deepEqual(await camera(page), atStart, 'A modal must suspend scene movement');
-  await livingLights.locator('summary').click();
+  await page.keyboard.press('Tab');
+  assert.ok(await button(menu, '閉じる').evaluate(node => node === document.activeElement));
+  await page.keyboard.press('Tab');
+  assert.ok(await remote.evaluate(node => node === document.activeElement));
+  await page.keyboard.press('Enter');
+  assert.equal(await directory.locator('[data-residence-section]').count(), 0);
+  await capture(page, 'residence-remote-directory');
+  await livingChoice.press('Enter');
+  assert.equal(await livingLights.locator('[data-residence-section]').count(), 1);
   assert.equal(await west.getAttribute('aria-pressed'), 'true');
   assert.equal(await east.getAttribute('aria-pressed'), 'true');
   await west.click();
   assert.equal(await west.getAttribute('aria-pressed'), 'false');
   assert.equal(await east.getAttribute('aria-pressed'), 'true');
-  await livingLights.getByRole('button', { name: '一括消灯', exact: true }).click();
+  await button(livingLights, '一括消灯').click();
   assert.equal(await east.getAttribute('aria-pressed'), 'false');
-  await livingLights.getByRole('button', { name: '一括点灯', exact: true }).click();
+  await button(livingLights, '一括点灯').click();
   assert.equal(await west.getAttribute('aria-pressed'), 'true');
   await west.click();
+  await capture(page, 'residence-remote-lighting');
+  await button(livingLights, '設備一覧へ戻る').press('Enter');
+  assert.ok(await livingChoice.evaluate(node => node === document.activeElement));
+  await button(directory, 'メニューへ戻る').press('Enter');
+  assert.ok(await remote.evaluate(node => node === document.activeElement));
   await page.keyboard.press('Escape');
-  await dialog.waitFor({ state: 'hidden' });
-  assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
+  await menu.waitFor({ state: 'hidden' });
+  assert.ok(await trigger.evaluate(node => node === document.activeElement));
   await button(page, '昼').click();
   await button(page, '高品質').click();
-  await trigger.click();
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
   assert.equal(await west.getAttribute('aria-pressed'), 'false');
   assert.equal(await east.getAttribute('aria-pressed'), 'true');
 
-  await dialog.getByRole('button', { name: 'カーテン', exact: true }).click();
-  const curtains = dialog.locator('[data-residence-section="curtains-LD"]');
-  await curtains.locator('summary').click();
-  const drape = curtains.getByRole('button', { name: 'カーテン', exact: true });
+  await button(livingLights, '設備一覧へ戻る').click();
+  const curtains = await selectResidenceDevice(page, 'カーテン', 'リビング');
+  const drape = button(curtains, 'カーテン');
   await drape.click();
   assert.equal(await drape.getAttribute('aria-pressed'), 'false');
   await page.keyboard.press('Escape');
   await button(page, '軽量').click();
   await hold(page, 'd', () => page.waitForFunction(() => window.residenceProbe.camera.x < 18.06));
   await button(page, 'リビングのカーテンを開ける').click();
-  await trigger.click();
-  assert.equal(await drape.getAttribute('aria-pressed'), 'true');
-  await capture(page, 'residence-control-menu');
+
   await page.setViewportSize({ width: 375, height: 710 });
-  assert.ok(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  await trigger.click();
+  assert.ok(await menu.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  await remote.click();
+  assert.ok(await directory.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  await selectResidenceDevice(page, 'カーテン', 'リビング');
+  assert.ok(await curtains.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  assert.equal(await drape.getAttribute('aria-pressed'), 'true');
+  await capture(page, 'residence-remote-curtains-mobile');
+  await button(curtains, '設備一覧へ戻る').click();
+  await selectResidenceDevice(page, '照明', 'リビング・ダイニング');
+  assert.ok(await livingLights.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  await capture(page, 'residence-remote-lighting-mobile');
   assert.deepEqual(errors, []);
 });
 
@@ -599,8 +636,6 @@ test('an open gallery doorway softly lights the living floor with its own fixtur
   await page.goto(`${origin}/?world=residence&time=night`, { waitUntil: 'commit' });
   await page.waitForFunction(() => window.residenceProbe.relocate);
 
-  const menu = button(page, '住戸の操作');
-  const dialog = page.getByRole('dialog', { name: '住戸の操作' });
   const canvas = page.locator('canvas').first();
   const view = { x: 11.94, z: -4.85, yaw: 0, pitch: -.46 };
   const reachDoor = { ...view, z: -5.70 };
@@ -617,12 +652,11 @@ test('an open gallery doorway softly lights the living floor with its own fixtur
     return door && Math.abs(door.position.x - x) < .005;
   }, x);
 
-  await menu.click();
-  for (const id of ['LD', 'K']) {
-    const section = dialog.locator(`[data-residence-section="lighting-${id}"]`);
-    await section.locator('summary').click();
-    await section.getByRole('button', { name: '一括消灯', exact: true }).click();
-  }
+  const living = await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  await button(living, '一括消灯').click();
+  await button(living, '設備一覧へ戻る').click();
+  const kitchen = await selectResidenceDevice(page, '照明', 'キッチン');
+  await button(kitchen, '一括消灯').click();
   await page.keyboard.press('Escape');
 
   await move(view);
@@ -666,10 +700,7 @@ test('theater mode sets RGB illumination and restores the normal living-room lig
   });
   await page.goto(`${origin}/?world=residence&place=living-theater&time=night`, { waitUntil: 'commit' });
   await page.waitForFunction(() => window.theaterLight.on === false);
-  const trigger = button(page, '住戸の操作');
-  const dialog = page.getByRole('dialog', { name: '住戸の操作' });
-  const living = dialog.locator('[data-residence-section="lighting-LD"]');
-  const kitchen = dialog.locator('[data-residence-section="lighting-K"]');
+  const living = await openResidenceDevice(page, '照明', 'リビング・ダイニング');
   const toggle = living.getByRole('button', { name: 'シアター照明', exact: true });
   const tint = living.getByLabel('シアター照明の色', { exact: true });
   const west = living.getByRole('button', { name: 'ペンダント灯（西）', exact: true });
@@ -677,9 +708,6 @@ test('theater mode sets RGB illumination and restores the normal living-room lig
   const allOff = living.getByRole('button', { name: '一括消灯', exact: true });
   const landscape = '.coast-ui { visibility: hidden; }';
 
-  await trigger.focus();
-  await trigger.press('Enter');
-  await living.locator('summary').press('Enter');
   await west.click();
   assert.equal(await west.getAttribute('aria-pressed'), 'false');
   assert.equal(await east.getAttribute('aria-pressed'), 'true');
@@ -688,17 +716,18 @@ test('theater mode sets RGB illumination and restores the normal living-room lig
   assert.equal(await west.isDisabled(), true);
   assert.equal(await east.isDisabled(), true);
   assert.equal(await east.getAttribute('aria-pressed'), 'false');
-  await kitchen.locator('summary').click();
+  assert.equal(await tint.inputValue(), '#ffb875');
+  await button(living, '設備一覧へ戻る').click();
+  const kitchen = await selectResidenceDevice(page, '照明', 'キッチン');
   const kitchenLight = kitchen.getByRole('button', { pressed: true }).first();
   await kitchenLight.waitFor();
   assert.equal(await kitchenLight.isEnabled(), true);
-  assert.equal(await tint.inputValue(), '#ffb875');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.theaterLight.on && window.theaterLight.tint[0] > window.theaterLight.tint[2]);
   await button(page, '高品質').click();
   await capture(page, 'residence-theater-rgb-warm', landscape);
 
-  await trigger.click();
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
   await tint.fill('#70bdff');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.theaterLight.on && window.theaterLight.tint[2] > window.theaterLight.tint[0]);
@@ -707,7 +736,7 @@ test('theater mode sets RGB illumination and restores the normal living-room lig
   await button(page, '昼').click();
   await page.waitForFunction(() => window.theaterLight.on);
   await button(page, '夜').click();
-  await trigger.click();
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
   assert.equal(await tint.inputValue(), '#70bdff');
   await toggle.click();
   assert.equal(await west.isEnabled(), true);
@@ -872,7 +901,7 @@ test('captures the designed seated and balcony sightlines', { timeout, skip: !sc
   assert.deepEqual(errors, []);
 });
 
-test('residence appliances work from the room menu and start localized audio', { timeout }, async t => {
+test('nearby appliances open individual controls and start localized audio', { timeout }, async t => {
   const { page, errors } = await createPage(t);
   await exposeResidenceScene(page);
   await page.addInitScript(() => {
@@ -898,9 +927,18 @@ test('residence appliances work from the room menu and start localized audio', {
   await button(page, '環境音を開始').click();
   await button(page, '環境音を再開').waitFor();
   const initialLoops = await page.evaluate(() => window.residenceProbe.loopStarts);
+  const atStart = await camera(page);
   await page.keyboard.press('e');
-  const panel = page.getByRole('dialog', { name: '住戸の操作' });
-  const microwave = panel.locator('[data-residence-section="microwave"]');
+  const microwave = residenceDialog(page, '電子レンジ');
+  await microwave.waitFor();
+  assert.equal(await microwave.locator('[data-residence-section]').count(), 1);
+  assert.equal(await button(microwave, '設備一覧へ戻る').count(), 0);
+  assert.equal(await microwave.getByRole('combobox').count(), 0);
+  await page.keyboard.press('t');
+  assert.equal(await residenceDialog(page, 'ファストトラベル').count(), 0);
+  await hold(page, 'd', () => moreMovementFrames(page));
+  assert.deepEqual(await camera(page), atStart);
+  await capture(page, 'residence-local-microwave');
   const addSeconds = microwave.getByRole('button', { name: '+10秒', exact: true });
   const addMinute = microwave.getByRole('button', { name: '+1分', exact: true });
   const heat = microwave.getByRole('button', { name: '加熱開始・再開', exact: true });
@@ -919,16 +957,22 @@ test('residence appliances work from the room menu and start localized audio', {
   await microwave.getByText('停止中', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.residenceProbe.completionStarts), 0);
 
-  const kitchen = panel.locator('[data-residence-section="kitchen-tap"]');
-  await kitchen.locator('summary').click();
-  const tap = kitchen.getByRole('button', { name: '水栓', exact: true });
+  await button(microwave, '閉じる').click();
+  await page.waitForFunction(() => document.activeElement?.matches('.coast-view'));
+  await hold(page, 'd', () => page.waitForFunction(x => Math.abs(window.residenceProbe.camera.x - x) > .08, atStart.x));
+
+  const kitchen = await openResidenceDevice(page, '家電・水栓', 'キッチンの水栓');
+  const tap = button(kitchen, '水栓');
   await tap.click();
   assert.equal(await tap.getAttribute('aria-pressed'), 'true');
-  await capture(page, 'residence-appliance-menu');
-  assert.equal(await page.evaluate(() => window.residenceProbe.completionStarts), 0);
+  await button(kitchen, '設備一覧へ戻る').click();
+  await selectResidenceDevice(page, '家電・水栓', '電子レンジ');
+  await microwave.getByText('停止中', { exact: true }).waitFor();
   await heat.click();
   await microwave.getByText('加熱完了', { exact: true }).waitFor();
   await page.waitForFunction(() => window.residenceProbe.completionStarts === 1);
+  await button(microwave, '設備一覧へ戻る').click();
+  await selectResidenceDevice(page, '家電・水栓', 'キッチンの水栓');
   assert.equal(await tap.getAttribute('aria-pressed'), 'true');
   await tap.click();
   assert.equal(await tap.getAttribute('aria-pressed'), 'false');
@@ -936,7 +980,9 @@ test('residence appliances work from the room menu and start localized audio', {
   await page.evaluate(() => window.residenceProbe.relocate({ x: 7.44, z: -8.55, yaw: Math.PI / 2, pitch: -.12 }));
 
   await button(page, '洗濯機（入口側）を操作').click();
-  const washer = panel.locator('[data-residence-section="washer-front"]');
+  const washer = residenceDialog(page, '洗濯機（入口側）');
+  assert.equal(await button(washer, '設備一覧へ戻る').count(), 0);
+  assert.equal(await button(washer, '加熱開始・再開').count(), 0);
   const mode = washer.getByRole('combobox', { name: '運転モード' });
   assert.deepEqual(await mode.locator('option').allTextContents(), ['洗浄', 'すすぎ', '脱水', '乾燥']);
   for (const selected of ['wash', 'rinse', 'dry', 'spin']) {
@@ -954,7 +1000,7 @@ test('residence appliances work from the room menu and start localized audio', {
   assert.ok(await mode.isEnabled());
   assert.equal(await page.evaluate(() => window.residenceProbe.completionStarts), 1);
   await page.keyboard.press('Escape');
-  await panel.waitFor({ state: 'hidden' });
+  await washer.waitFor({ state: 'hidden' });
   assert.deepEqual(errors, []);
 });
 
