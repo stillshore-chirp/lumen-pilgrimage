@@ -8,6 +8,7 @@ import { preview } from 'vite';
 const screenshots = process.env.RESIDENCE_SCREENSHOTS;
 const viewport = screenshots ? { width: 1280, height: 800 } : { width: 960, height: 600 };
 const timeout = 90_000;
+const residenceHeading = '都心の70階住戸';
 let server;
 let browser;
 let origin;
@@ -92,7 +93,7 @@ async function openResidence(t, place = '') {
   const address = new URL('/?world=residence', origin);
   if (place) address.searchParams.set('place', place);
   await page.goto(address.href, { waitUntil: 'commit' });
-  await page.getByRole('heading', { name: '都心の50階住戸', exact: true }).waitFor();
+  await page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor();
   await page.waitForFunction(() => document.hasFocus() && window.residenceProbe.camera);
   return { page, errors };
 }
@@ -122,6 +123,20 @@ async function hold(page, key, whileHeld) {
 
 function camera(page) {
   return page.evaluate(() => window.residenceProbe.camera);
+}
+
+async function moreMovementFrames(page) {
+  await page.evaluate(async () => {
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    let previous = await nextFrame();
+    let elapsed = 0;
+    // The scene caps per-frame integration on slow renderers.
+    while (elapsed < 420) {
+      const now = await nextFrame();
+      elapsed += Math.min(now - previous, 50);
+      previous = now;
+    }
+  });
 }
 
 async function capture(page, name, style) {
@@ -154,7 +169,14 @@ test('the residence accepts startup walking and preserves its views across time,
   assert.equal(await page.evaluate(() => document.activeElement === document.body
     && document.pointerLockElement === null && window.residenceProbe.contexts === 0), true);
 
-  for (const key of ['w', 'a', 's', 'd']) {
+  const spawn = await camera(page);
+  assert.ok(Math.hypot(spawn.x - 21.89, spawn.z + 1.12) < 0.22);
+  await hold(page, 'd', () => page.waitForFunction(() => {
+    const { x, y, z } = window.residenceProbe.camera;
+    return x < 18.3 && Math.abs(z + 1.12) < 0.22 && Math.abs(y - 1.65) < 0.12;
+  }));
+
+  for (const key of ['w', 'a', 's']) {
     const start = await camera(page);
     await hold(page, key, () => page.waitForFunction(({ x, z }) => {
       const current = window.residenceProbe.camera;
@@ -167,8 +189,13 @@ test('the residence accepts startup walking and preserves its views across time,
     const { x, z } = window.residenceProbe.camera;
     return Math.hypot(x - 21.89, z + 1.12) < 0.22;
   });
-  await hold(page, 'w', () => page.waitForFunction(() => window.residenceProbe.camera.z > -0.47));
+  await hold(page, 'w', async () => {
+    await page.waitForFunction(() => window.residenceProbe.camera.z > -0.47);
+    await moreMovementFrames(page);
+  });
   const standing = await camera(page);
+  assert.ok(standing.z < -0.35 && Math.abs(standing.y - 1.65) < 0.12,
+    `South facade should stop walking at floor height: ${JSON.stringify(standing)}`);
   const night = await brightness(canvas);
   assert.ok(night.colors > 40, `Night canvas had ${night.colors} sampled colors`);
   await capture(page, 'residence-south-window-night');
@@ -201,7 +228,7 @@ test('the residence accepts startup walking and preserves its views across time,
   await page.getByRole('heading', { name: '丘陵展望台', exact: true }).waitFor();
   assert.equal(await button(page, '昼').getAttribute('aria-pressed'), 'true');
   await travel(page, '住戸の玄関', 'residence', 'foyer', 'day');
-  await page.getByRole('heading', { name: '都心の50階住戸', exact: true }).waitFor();
+  await page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor();
   await page.waitForFunction(() => {
     const pose = window.residenceProbe.camera;
     return pose && Math.hypot(pose.x - 11.8, pose.z + 14.17) < 0.22;
@@ -217,7 +244,7 @@ test('the residence accepts startup walking and preserves its views across time,
   await page.getByRole('heading', { name: '自然景観探索', exact: true }).waitFor();
   await button(page, '夜').click();
   await travel(page, 'リビング南窓', 'residence', 'living-window', 'night');
-  await page.getByRole('heading', { name: '都心の50階住戸', exact: true }).waitFor();
+  await page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor();
   assert.equal(await button(page, '夜').getAttribute('aria-pressed'), 'true');
   assert.deepEqual(errors, []);
 });
@@ -243,23 +270,9 @@ test('the primary bedroom slider gates balcony access and the glass rail stops w
     await page.waitForFunction(limit => window.residenceProbe.camera.x > limit, x);
   }
 
-  async function moreFrames() {
-    await page.evaluate(async () => {
-      const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
-      let previous = await nextFrame();
-      let elapsed = 0;
-      // The scene caps per-frame integration on slow renderers.
-      while (elapsed < 420) {
-        const now = await nextFrame();
-        elapsed += Math.min(now - previous, 50);
-        previous = now;
-      }
-    });
-  }
-
   await hold(page, 'w', async () => {
     await walkEastTo(20.19);
-    await moreFrames();
+    await moreMovementFrames(page);
   });
   const sill = await camera(page);
   assert.ok(sill.x < 20.7, `Walked through the closed slider at E=${sill.x}`);
@@ -279,7 +292,7 @@ test('the primary bedroom slider gates balcony access and the glass rail stops w
 
   await hold(page, 'w', async () => {
     await walkEastTo(22.35);
-    await moreFrames();
+    await moreMovementFrames(page);
   });
   const rail = await camera(page);
   assert.ok(rail.x < 22.8 && Math.abs(rail.y - balcony.y) < 0.1,
@@ -301,13 +314,13 @@ test('captures the designed seated and balcony sightlines', { timeout, skip: !sc
   await page.route('**/assets/CoastApp-*.js', async route => {
     const response = await route.fetch();
     const source = await response.text();
-    const render = 'this.renderer.render(this.world.scene,';
-    assert.ok(source.includes(render), 'The capture hook requires the exploration render call');
+    const prepare = 'this.world.prepareRender?.(';
+    assert.ok(source.includes(prepare), 'The capture hook requires the exploration render preparation');
     // Draw the built scene from fixed review points on this screenshot page only.
     const { x, y, z, yaw, pitch } = eye;
     const pose = `this.camera.position.set(${x},${y},${z}),`
       + `this.camera.rotation.set(${pitch}*Math.PI/180,${yaw}*Math.PI/180,0),`;
-    await route.fulfill({ response, body: source.replace(render, pose + render) });
+    await route.fulfill({ response, body: source.replace(prepare, pose + prepare) });
   });
 
   async function loadView(place) {
@@ -318,22 +331,29 @@ test('captures the designed seated and balcony sightlines', { timeout, skip: !sc
     }, eye);
   }
 
-  await loadView('living-window');
-  await button(page, '高品質').click();
-  await capture(page, 'residence-south-window-seated-night', landscape);
-  await button(page, '昼').click();
-  await capture(page, 'residence-south-window-seated-day', landscape);
+  async function captureDayNight(name, place = 'living-window') {
+    await loadView(place);
+    await button(page, '高品質').click();
+    await capture(page, `${name}-night`, landscape);
+    await button(page, '昼').click();
+    await capture(page, `${name}-day`, landscape);
+  }
+
+  await captureDayNight('residence-south-window-seated');
+
+  eye = { ...eye, pitch: -24 };
+  await captureDayNight('residence-south-window-seated-down');
 
   eye = { x: 17.25, y: 1.65, z: -3.55, yaw: -141, pitch: -6 };
-  await loadView('living-window');
-  await button(page, '高品質').click();
-  await capture(page, 'residence-living-room-night', landscape);
-  await button(page, '昼').click();
-  await capture(page, 'residence-living-room-day', landscape);
+  await captureDayNight('residence-living-room');
 
   eye = { x: 21.94, y: 1.63, z: -12.94, yaw: -96, pitch: -38 };
-  await loadView('primary-bedroom');
-  await button(page, '高品質').click();
-  await capture(page, 'residence-balcony-street-night', landscape);
+  await captureDayNight('residence-balcony-street', 'primary-bedroom');
+
+  eye = { x: 21.94, y: 1.63, z: -12.94, yaw: -72, pitch: -38 };
+  await captureDayNight('residence-balcony-northeast', 'primary-bedroom');
+
+  eye = { x: 21.89, y: 1.65, z: -0.42, yaw: 151, pitch: -26 };
+  await captureDayNight('residence-southwest-window');
   assert.deepEqual(errors, []);
 });

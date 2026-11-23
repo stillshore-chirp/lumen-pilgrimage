@@ -1,290 +1,273 @@
 import * as THREE from 'three';
 import { seededDetail } from '../overlook/overlookModel';
-import { createDistrictMaterial, createDistrictShadows, createStreetGlowMaterial } from './residenceCityMaterials';
 import {
-  RESIDENCE_AVENUE, RESIDENCE_CITY_AREAS, RESIDENCE_CITY_BUILDINGS, RESIDENCE_CROSS_STREETS,
-  RESIDENCE_EAST_LANES, RESIDENCE_EAST_LINKS, RESIDENCE_EAST_RETURN, RESIDENCE_SIDE_STREET,
-  RESIDENCE_STREET_LEVEL, type CityRect,
+  createDistrictMaterial, createDistrictShadows, createDistrictSurfaceTexture, createStreetGlowMaterial, DISTRICT_SURFACE,
+} from './residenceCityMaterials';
+import {
+  RESIDENCE_DISTRICT_ROADS, RESIDENCE_STREET_LEVEL, type CityRect, type DistrictBuilding, type DistrictRoad,
 } from './residenceCityPlan';
+import { shapeDistrictBuildings, type DistrictFacade, type DistrictSolid } from './residenceDistrictBuildings';
+import type { DistrictYard } from './residenceDistrictGround';
 
-type Solid = { x: number; y: number; z: number; w: number; h: number; d: number; color: number };
-type Facade = Solid & { bay: number; floor: number; kind: number; seed: number };
-
-function batch<T extends Solid>(name: string, geometry: THREE.BufferGeometry, material: THREE.Material, items: readonly T[]) {
+function batch(name: string, geometry: THREE.BufferGeometry, material: THREE.Material, items: readonly DistrictSolid[]) {
   const mesh = new THREE.InstancedMesh(geometry, material, items.length);
   mesh.name = name;
   const matrix = new THREE.Matrix4();
   const color = new THREE.Color();
-  for (const [index, { x, y, z, w, h, d, color: tint }] of items.entries()) {
-    matrix.makeScale(w, h, d).setPosition(x, y, z);
+  const angles = new THREE.Euler();
+  const scale = new THREE.Vector3();
+  for (const [index, { x, y, z, w, h, d, color: tint, yaw = 0, tilt = 0 }] of items.entries()) {
+    matrix.makeRotationFromEuler(angles.set(tilt, yaw, 0)).scale(scale.set(w, h, d)).setPosition(x, y, z);
     mesh.setMatrixAt(index, matrix);
     mesh.setColorAt(index, color.set(tint));
   }
   return mesh;
 }
 
-const plain = 3;
-const asphalt = 0x525759;
-const pavement = 0xc1b7a6;
-const warmWhite = 0xe0d9c4;
-const yellow = 0xe2b768;
+const asphalt = 0x555758;
+const pavement = 0xb5aa97;
+const warmWhite = 0xd8d0b8;
+const yellow = 0xd5a85a;
 const ground = RESIDENCE_STREET_LEVEL;
+const { vegetation, pavingStone } = DISTRICT_SURFACE;
 
-function layRoads(boxes: Solid[], paint: Solid[], trees: Solid[], lamps: Solid[], glow: Solid[]): void {
-  function slab(to: Solid[], rect: CityRect, top: number, color: number, h = 0.12): void {
-    const { minX, maxX, minZ, maxZ } = rect;
-    to.push({ x: (minX + maxX) * 0.5, z: (minZ + maxZ) * 0.5, w: maxX - minX, d: maxZ - minZ, y: ground + top - h / 2, h, color });
-  }
-
-  for (const [i, area] of RESIDENCE_CITY_AREAS.entries()) slab(boxes, area, -0.15, i === 2 ? 0x8f8980 : 0x8b877d, 0.22);
-  function road(rect: CityRect, alongZ: boolean, sidewalk: number): void {
-    const insetX = alongZ ? sidewalk : 0;
-    const insetZ = alongZ ? 0 : sidewalk;
-    slab(boxes, {
-      minX: rect.minX + insetX, maxX: rect.maxX - insetX,
-      minZ: rect.minZ + insetZ, maxZ: rect.maxZ - insetZ,
-    }, 0, asphalt);
-    if (alongZ) {
-      slab(boxes, { ...rect, maxX: rect.minX + insetX }, 0.16, pavement);
-      slab(boxes, { ...rect, minX: rect.maxX - insetX }, 0.16, pavement);
-    } else {
-      const sides = rect.minX > RESIDENCE_AVENUE.maxX
-        ? [[rect.minX, rect.maxX]] : [[rect.minX, 4.75], [34.25, rect.maxX]];
-      for (const [minX, maxX] of sides) {
-        slab(boxes, { minX, maxX, minZ: rect.minZ, maxZ: rect.minZ + insetZ }, 0.16, pavement);
-        slab(boxes, { minX, maxX, minZ: rect.maxZ - insetZ, maxZ: rect.maxZ }, 0.16, pavement);
-      }
-    }
-  }
-
-  // In each block the avenue has planted islands. The islands break at cross streets.
-  const sections = RESIDENCE_CROSS_STREETS.slice(1).map((street, i) => [RESIDENCE_CROSS_STREETS[i].maxZ, street.minZ]);
-  road(RESIDENCE_SIDE_STREET, true, 1.5);
-  road(RESIDENCE_EAST_RETURN, false, 1.2);
-  for (const street of RESIDENCE_EAST_LANES) road(street, true, 2.0);
-  for (const street of RESIDENCE_EAST_LINKS) road(street, false, 1.6);
-  slab(boxes, { ...RESIDENCE_EAST_RETURN, minX: 44.5, maxX: 48, minZ: -3.8, maxZ: 2.8 }, 0.17, asphalt);
-  for (const street of RESIDENCE_CROSS_STREETS) road(street, false, 3.4);
-  for (const [minZ, maxZ] of sections) road({ ...RESIDENCE_AVENUE, minZ, maxZ }, true, 3.25);
-  for (const { minZ, maxZ } of RESIDENCE_CROSS_STREETS) {
-    slab(boxes, { minX: 4.75, maxX: 34.25, minZ, maxZ }, 0.012, asphalt);
-  }
-
-  for (const [start, end] of sections) {
-    for (const x of [10, 14, 25, 29]) {
-      for (let z = start + 9; z < end - 9; z += 13) {
-        slab(paint, { minX: x - 0.09, maxX: x + 0.09, minZ: z, maxZ: z + 5.5 }, 0.022, warmWhite, 0.03);
-      }
-    }
-    for (const x of [17.8, 21.2]) {
-      slab(paint, { minX: x - 0.08, maxX: x + 0.08, minZ: start + 6, maxZ: end - 6 }, 0.023, yellow, 0.03);
-    }
-    slab(boxes, { minX: 18.25, maxX: 20.75, minZ: start + 11, maxZ: end - 11 }, 0.47, 0x918a7c);
-    slab(boxes, { minX: 18.47, maxX: 20.53, minZ: start + 12, maxZ: end - 12 }, 0.55, 0x586a49);
-  }
-
-  for (const { minX, maxX, minZ, maxZ } of RESIDENCE_CROSS_STREETS) {
-    const center = (minZ + maxZ) * 0.5;
-    for (const z of [center - 4.1, center, center + 4.1]) {
-      for (let x = minX + 3; x < maxX - 6; x += 13) {
-        if (x > -6 && x < 38) continue;
-        slab(paint, { minX: x, maxX: x + 5, minZ: z - 0.08, maxZ: z + 0.08 }, 0.022,
-          z === center ? yellow : warmWhite, 0.03);
-      }
-    }
-    for (const x of [1.3, 37.7]) {
-      for (let z = minZ + 4.4; z < maxZ - 4.9; z += 1.55) {
-        slab(paint, { minX: x - 1.75, maxX: x + 1.75, minZ: z, maxZ: z + 0.72 }, 0.022, warmWhite, 0.035);
-      }
-    }
-    for (const z of [minZ + 1.4, maxZ - 1.4]) {
-      for (let x = 5.2; x < 33.2; x += 1.62) {
-        slab(paint, { minX: x, maxX: x + 0.70, minZ: z - 1.4, maxZ: z + 1.4 }, 0.025, warmWhite, 0.035);
-      }
-    }
-  }
-
-  const random = seededDetail(1334);
-  function tree(x: number, z: number, size: number): void {
-    const y = ground + 0.14;
-    boxes.push({ x, z, y: y + size * 0.42, w: 0.46, d: 0.46, h: size * 0.84, color: 0x63574b });
-    trees.push({ x, z, y: y + size * 0.86, w: size * 0.71, d: size * 0.65, h: size * 0.78,
-      color: random() > 0.5 ? 0x697850 : 0x52674c });
-    trees.push({ x: x + 0.18 * size, z: z - 0.09 * size, y: y + size * 0.73, w: size * 0.57, d: size * 0.56,
-      h: size * 0.58, color: 0x627449 });
-  }
-
-  for (const [start, end] of sections) {
-    for (let z = start + 19; z < end - 13; z += 15) {
-      tree(3.1, z, 4.9 + random() * 2.1);
-      tree(35.9, z + 4, 4.5 + random() * 2.2);
-    }
-  }
-  for (const z of [4, 39.8, 164.2, 196.8, 266.1, 287.4]) {
-    for (let x = -147; x < 150; x += 15) {
-      if (x < -3 || x > 51) tree(x, z, 4.6 + random() * 1.7);
-    }
-  }
-  for (const z of [-67.2, 5, 43.8, 116.4]) {
-    for (let x = 175; x < 396; x += 14) {
-      if (x < 218 || (x > 240 && x < 311) || x > 334) tree(x, z, 3.9 + random() * 2.2);
-    }
-  }
-  slab(boxes, { minX: -44, maxX: 55, minZ: 725, maxZ: 749 }, 0.16, 0xa69b88);
-  for (const x of [-25, -13, 27, 38]) tree(x, 735 + random() * 5, 7.3);
-
-  function light(x: number, z: number, dx: number, dz: number, color: number): void {
-    const y = ground + 7.5;
-    const metal = 0x69716d;
-    boxes.push({ x, z, y: ground + 3.75, w: 0.22, d: 0.22, h: 7.5, color: metal });
-    boxes.push({ x: x + dx * 0.5, z: z + dz * 0.5, y, w: Math.abs(dx) + 0.22, d: Math.abs(dz) + 0.22, h: 0.15, color: metal });
-    lamps.push({ x: x + dx, z: z + dz, y: y - 0.10, w: 0.78, d: 0.60, h: 0.095, color });
-    glow.push({ x: x + dx * 2, z: z + dz * 2, y: ground + 0.055, w: 19, d: 16, h: 1, color });
-  }
-
-  for (const [start, end] of sections) {
-    for (let z = start + 8; z < end - 4; z += 26) {
-      light(3.8, z, 2.6, 0, 0xffd996);
-      light(35.2, z + 4, -2.6, 0, 0xe2eeff);
-    }
-  }
-  for (const { minX, maxX, minZ, maxZ } of RESIDENCE_CROSS_STREETS) {
-    for (let x = minX + 9; x < maxX - 8; x += 26) {
-      if (x > -8 && x < 45) continue;
-      light(x, minZ + 2.8, 0, 2.0, 0xffc57b);
-      light(x + 5, maxZ - 2.8, 0, -2.0, 0xffd995);
-    }
-  }
-  for (let x = 57; x < 407; x += 26) light(x, 3.15, 0, -1.95, 0xffd996);
-  for (const { minX } of RESIDENCE_EAST_LANES) {
-    for (let z = -94; z < 140; z += 29) light(minX + 1.4, z, 2, 0, 0xffcb83);
-  }
-  for (const [x, z, dz] of [[-1.2, 165.4, 1.7], [40.2, 195.4, -1.7], [-1.2, 266.4, 1.7], [40.2, 286.8, -1.7]]) {
-    boxes.push({ x, z, y: ground + 2.7, w: 0.22, d: 0.22, h: 5.4, color: 0x555d54 });
-    boxes.push({ x, z: z + dz * 0.5, y: ground + 5.2, w: 0.19, d: Math.abs(dz) + 0.18, h: 0.18, color: 0x686e62 });
-    boxes.push({ x, z: z + dz, y: ground + 4.84, w: 0.42, d: 0.42, h: 0.84, color: 0x47493c });
-  }
+function coordinates({ minX, maxX, minZ, maxZ }: CityRect, alongZ: boolean) {
+  return alongZ ? { from: minZ, to: maxZ, left: minX, right: maxX }
+    : { from: minX, to: maxX, left: minZ, right: maxZ };
 }
 
-function shapeBuildings(facades: Facade[], fittings: Solid[], detail: Solid[]): void {
-  const random = seededDetail(6814);
+function laneRect(alongZ: boolean, left: number, right: number, from: number, to: number): CityRect {
+  return alongZ ? { minX: left, maxX: right, minZ: from, maxZ: to }
+    : { minX: from, maxX: to, minZ: left, maxZ: right };
+}
 
-  function body(x: number, z: number, w: number, d: number, low: number, high: number, color: number,
-    kind: number, bay: number, floor: number, seed: number): void {
-    facades.push({ x, z, w, d, y: ground + (low + high) / 2, h: high - low, color, kind, bay, floor, seed });
+function openSegments(road: DistrictRoad, network: readonly DistrictRoad[], lateral: number, space: number): [number, number][] {
+  const { from, to } = coordinates(road.rect, road.alongZ);
+  let pieces: [number, number][] = [[from, to]];
+  for (const other of network) {
+    if (other === road || road.alongZ === other.alongZ) continue;
+    const crossing = coordinates(other.rect, road.alongZ);
+    if (lateral < crossing.left - space || lateral > crossing.right + space) continue;
+    const begin = crossing.from - space, end = crossing.to + space;
+    pieces = pieces.flatMap(([low, high]) => {
+      if (end <= low || begin >= high) return [[low, high]];
+      const next: [number, number][] = [];
+      if (begin > low) next.push([low, begin]);
+      if (end < high) next.push([end, high]);
+      return next;
+    });
+  }
+  return pieces;
+}
+
+function layRoads(
+  roads: DistrictSolid[], medians: DistrictSolid[], boxes: DistrictSolid[], paint: DistrictSolid[], trees: DistrictSolid[], lamps: DistrictSolid[],
+  glow: DistrictSolid[], yards: readonly DistrictYard[],
+): void {
+  function slab(to: DistrictSolid[], rect: CityRect, top: number, color: number, h = 0.12, surface = 0): void {
+    const { minX, maxX, minZ, maxZ } = rect;
+    to.push({ x: (minX + maxX) * 0.5, z: (minZ + maxZ) * 0.5, w: maxX - minX, d: maxZ - minZ,
+      y: ground + top - h / 2, h, color, surface });
   }
 
-  function trim(to: Solid[], x: number, z: number, w: number, d: number, low: number, high: number, color: number): void {
-    to.push({ x, z, w, d, y: ground + (low + high) / 2, h: high - low, color });
+  const network = RESIDENCE_DISTRICT_ROADS;
+  const avenue = network[0];
+  const cross = network.slice(1, 9);
+  for (const yard of yards) {
+    const platform = yard.surface === 'platform';
+    const paving = yard.surface === 'paving';
+    slab(boxes, yard, platform ? 0.159 : -0.092, platform ? 0xa9a08e : paving ? 0x959083 : 0x85827a,
+      0.22, platform || paving ? pavingStone : DISTRICT_SURFACE.asphalt);
   }
+  const random = seededDetail(1334);
 
-  function roof(x: number, z: number, w: number, d: number, height: number, glass: boolean): void {
-    const cap = glass ? 0x88989b : 0xc0b8a7;
-    const lip = height - 1.25;
-    trim(fittings, x, z, w, d, lip - 0.50, lip, 0x807d74);
-    for (const side of [-1, 1]) {
-      trim(fittings, x + side * (w - 0.55) / 2, z, 0.55, d, lip, height, cap);
-      trim(fittings, x, z + side * (d - 0.55) / 2, w - 1.10, 0.55, lip, height, cap);
+  for (const { rect: vertical } of network.filter(road => road.alongZ)) {
+    for (const { rect: horizontal } of network.filter(road => !road.alongZ)) {
+      const minX = Math.max(vertical.minX, horizontal.minX), maxX = Math.min(vertical.maxX, horizontal.maxX);
+      const minZ = Math.max(vertical.minZ, horizontal.minZ), maxZ = Math.min(vertical.maxZ, horizontal.maxZ);
+      if (minX >= maxX || minZ >= maxZ) continue;
+      slab(roads, { minX, maxX, minZ, maxZ }, -0.012, asphalt, 0.169, DISTRICT_SURFACE.asphalt);
     }
-    for (let i = 0; i < 3; i += 1) {
-      const ax = x + w * (i - 1) * 0.21;
-      trim(fittings, ax, z + d * 0.16, w * 0.15, d * 0.16, lip - 0.17, lip + 0.85, 0xaeaead);
-      for (let fin = -2; fin <= 2; fin += 1) {
-        trim(detail, ax, z + d * (0.16 + fin * 0.017), w * 0.132, d * 0.008, lip + 0.84, lip + 0.95, 0x505a58);
+  }
+
+  function tree(x: number, z: number, size: number): void {
+    const y = ground + 0.16;
+    boxes.push({ x, z, y: y + size * 0.44, w: 0.37, d: 0.36, h: size * 0.88, color: 0x746354 });
+    trees.push({ x, z, y: y + size * 0.86, w: size * 0.72, d: size * 0.65, h: size * 0.83,
+      color: random() > 0.5 ? 0x6c7b54 : 0x526b50, surface: vegetation, yaw: random() * Math.PI });
+    if (Math.hypot(x - 30, z * 0.78) > 430) return;
+    trees.push({ x: x + 0.16 * size, z: z - 0.19 * size, y: y + size * 0.73, w: size * 0.56, d: size * 0.58,
+      h: size * 0.54, color: 0x718255, surface: vegetation });
+    trees.push({ x: x - 0.17 * size, z: z + 0.17 * size, y: y + size * 0.81, w: size * 0.44, d: size * 0.52,
+      h: size * 0.52, color: 0x7e8859, surface: vegetation });
+  }
+
+  function lamp(x: number, z: number, dx: number, dz: number, color: number, height: number): void {
+    const y = ground + height;
+    boxes.push({ x, z, y: ground + height * 0.5, w: 0.18, d: 0.18, h: height, color: 0x69726d });
+    boxes.push({ x: x + dx * 0.5, z: z + dz * 0.5, y, w: Math.abs(dx) + 0.19,
+      d: Math.abs(dz) + 0.19, h: 0.16, color: 0x626d66 });
+    lamps.push({ x: x + dx, z: z + dz, y: y - 0.10, w: 0.83, d: 0.64, h: 0.15, color });
+    glow.push({ x: x + dx * 2.05, z: z + dz * 2.05, y: ground + 0.043, w: 17, d: 15, h: 1, color });
+  }
+
+  for (const [index, road] of network.entries()) {
+    const { alongZ, walk } = road;
+    const { left, right } = coordinates(road.rect, alongZ);
+    const center = (left + right) * 0.5;
+    // Trim sidewalk and curb strips against each complete crossing to leave a paved
+    // intersection. The horizontal and vertical road beds then meet at the corner.
+    slab(roads, road.carriageway, 0, asphalt, 0.18, DISTRICT_SURFACE.asphalt);
+    for (const [corner, direction] of [[left, 1], [right, -1]]) {
+      const curb = corner + direction * walk;
+      const walkLeft = Math.min(corner, curb), walkRight = Math.max(corner, curb);
+      for (const [begin, end] of openSegments(road, network, corner + direction * walk * 0.5, 0)) {
+        slab(boxes, laneRect(alongZ, walkLeft, walkRight, begin, end), 0.181, pavement, 0.30, DISTRICT_SURFACE.pavement);
+        slab(boxes, laneRect(alongZ, curb - 0.145, curb + 0.145, begin, end), 0.203, 0xbab3a2, 0.21, pavingStone);
       }
-    }
-    trim(fittings, x - w * 0.17, z - d * 0.18, w * 0.20, d * 0.25, lip, height, 0xb1aba0);
-    trim(detail, x + w * 0.23, z - d * 0.18, w * 0.23, d * 0.045, lip, lip + 0.14, 0xaca388);
-  }
-
-  for (const { minX, maxX, minZ, maxZ, height, form, color } of RESIDENCE_CITY_BUILDINGS) {
-    const x = (minX + maxX) * 0.5, z = (minZ + maxZ) * 0.5;
-    const w = maxX - minX, d = maxZ - minZ;
-    const glass = form === 'glass';
-    const kind = glass ? 1 : form === 'ribbon' ? 2 : 0;
-    const bay = glass ? 2.35 : 2.7 + random() * 0.75, floor = 3.37 + random() * 0.75;
-    const tall = height > 100;
-    const skirt = tall ? (glass ? 9.8 : 13) : 5.2;
-    const seed = random();
-    body(x, z, w, d, 0, skirt, glass ? 0x848f8e : color, tall ? 1 : 2, 3.64, 4.92, seed);
-    trim(fittings, x, z, w, d, skirt - 0.18, skirt + 0.59, 0xa59f90);
-    const shaftW = w - (tall ? 4.9 : 1.75), shaftD = d - (tall ? 5.7 : 1.75);
-    const crown = height - (tall ? (glass ? 12.4 : 8.7) : 1.25);
-    body(x, z, shaftW, shaftD, skirt, crown, color, kind, bay, floor, seed);
-    if (tall) {
-      const upperW = shaftW - (glass ? 1.7 : 5.4), upperD = shaftD - (glass ? 5.8 : 5.0);
-      trim(fittings, x, z, shaftW + 0.34, shaftD + 0.34, crown - 0.36, crown + 0.38, glass ? 0x94a1a4 : 0xc5baaa);
-      body(x, z, upperW, upperD, crown, height - 1.25, color, glass ? 2 : plain, bay, floor, seed + 0.69);
-      roof(x, z, upperW, upperD, height, glass);
-      for (const side of [-1, 1]) {
-        if (kind === 0) {
-          trim(fittings, x, z, shaftW + 0.60, shaftD + 0.60, crown - 23.5, crown - 22.9, color);
-          trim(fittings, x + side * (shaftW / 2 - 0.9), z, 1.36, shaftD + 0.52, skirt, crown, color);
-        } else if (glass) {
-          trim(fittings, x + side * (shaftW / 2 - 1.4), z, 0.8, shaftD + 0.63, skirt, crown, 0x9ca8a9);
-          trim(fittings, x, z + side * (shaftD / 2 - 0.7), shaftW + 0.53, 0.76, skirt, crown, 0x9ca8a9);
+      if (index === 0) {
+        for (const [begin, end] of openSegments(road, network, corner, 0)) {
+          const back = corner - direction * 4.75;
+          slab(boxes, laneRect(alongZ, Math.min(corner, back), Math.max(corner, back), begin, end), 0.156,
+            0x9e9687, 0.28, pavingStone);
         }
       }
-    } else {
-      roof(x, z, shaftW, shaftD, height, glass);
+      for (const [begin, end] of openSegments(road, network, corner, 7.4)) {
+        const step = index === 0 ? 19 : index <= cross.length ? 31 : 43;
+        for (let position = begin + 3.4 + random() * 6; position < end - 1.8; position += step + random() * 3) {
+          const y = corner + direction * 0.95;
+          const x = alongZ ? y : position, z = alongZ ? position : y;
+          const size = (index === 0 ? 4.8 : 3.9) + random() * 2.5;
+          if (walk >= 2 && random() > 0.43 && Math.hypot(x - 40, z * 0.65) < 980) {
+            slab(boxes, { minX: x - 0.94, maxX: x + 0.94, minZ: z - 0.92, maxZ: z + 0.92 },
+              0.219, 0x6c6d51, 0.16, vegetation);
+            tree(x, z, size);
+          }
+          if ((direction > 0 || index < 5) && Math.hypot(x - 40, z * 0.62) < 1380) {
+            const warm = index % 5 === 0 ? 0xffd79f : index % 3 === 0 ? 0xffcd8d : 0xeeefff;
+            lamp(x + (alongZ ? 0 : 4.4), z + (alongZ ? 4.4 : 0), alongZ ? direction * 2.22 : 0,
+              alongZ ? 0 : direction * 2.22, warm, index < 7 ? 7.2 : 5.9);
+          }
+        }
+      }
     }
 
-    // Lower entrance canopies leave the podium roof and adjacent sidewalks readable.
-    const front = minZ + 1.2;
-    trim(fittings, x, front, Math.min(12, w * 0.56), 3.8, 3.6, 3.88, glass ? 0x596d76 : 0x7c7669);
-    for (const px of [-0.25, 0.25]) {
-      trim(detail, x + w * px, front - 1.5, 0.32, 0.32, 0, 3.74, color);
+    const widths = index === 0 ? [center - 9.4, center - 5.5, center + 5.5, center + 9.4]
+      : right - left > 25 ? [center - 4.2, center, center + 4.2] : [center];
+    for (const lateral of widths) {
+      for (const [begin, end] of openSegments(road, network, lateral, index === 0 ? 5 : 3.2)) {
+        for (let position = begin + 2.4; position + 4.7 < end; position += index < 7 ? 12 : 8) {
+          slab(paint, laneRect(alongZ, lateral - 0.086, lateral + 0.086, position, position + (index < 7 ? 5.1 : 3.2)),
+            0.016, lateral === center ? yellow : warmWhite, 0.024);
+        }
+      }
     }
   }
 
-  // The occupied level stays open for the interior shell. Its tower carries on below and above it.
-  body(5.4, -17, 34.8, 34, 0, 15, 0xb5afa7, 0, 3.48, 5, 0.52);
-  body(5.4, -17, 34.8, 34, 15, 175.69, 0x858f8f, 2, 3.48, 3.5, 0.42);
-  body(5.4, -17, 34.8, 34, 179.25, 214.25, 0x858f8f, 2, 3.48, 3.5, 0.32);
-  roof(5.4, -17, 33.5, 32.7, 215.5, false);
+  for (const [begin, end] of openSegments(avenue, network, 19.5, 9)) {
+    if (end - begin < 13) continue;
+    for (const x of [17.75, 21.25]) {
+      slab(paint, laneRect(true, x - 0.097, x + 0.097, begin - 4.4, end + 4.4), 0.018, yellow, 0.026);
+    }
+    slab(medians, laneRect(true, 18.23, 20.77, begin, end), 0.41, 0xb7ae98, 0.60, DISTRICT_SURFACE.pavement);
+    slab(medians, laneRect(true, 18.43, 20.57, begin + 0.4, end - 0.4), 0.48, 0x67764e, 0.18, vegetation);
+    for (let z = begin + 9; z < end - 4; z += 16.2) {
+      const h = 1.4 + random() * 1.6;
+      trees.push({ x: 19.5, z, y: ground + 0.46 + h * 0.46, w: 1.64, d: 2.24, h, color: 0x758654, surface: vegetation });
+    }
+  }
+
+  for (const { rect: { minX, maxX, minZ, maxZ }, walk } of cross) {
+    for (const x of [1.5, 37.5, 154.5]) {
+      if (x > maxX - 4 || x < minX + 4) continue;
+      for (let z = minZ + walk + 0.68; z < maxZ - walk - 0.82; z += 1.44) {
+        slab(paint, { minX: x - 2.25, maxX: x + 2.25, minZ: z, maxZ: z + 0.64 }, 0.021, warmWhite, 0.027);
+      }
+    }
+    for (const side of [-1, 1]) {
+      const z = side > 0 ? maxZ + 2.58 : minZ - 2.58;
+      if (z - 2 < avenue.from || z + 2 > avenue.to) continue;
+      for (let x = 5.2; x < 33.2; x += 1.57) {
+        slab(paint, { minX: x, maxX: x + 0.77, minZ: z - 1.35, maxZ: z + 1.35 }, 0.021, warmWhite, 0.027);
+      }
+      const stop = z + side * 2.45;
+      for (const [left, right] of [[5.0, 17.6], [21.4, 34.0]]) {
+        slab(paint, { minX: left, maxX: right, minZ: stop - 0.24, maxZ: stop + 0.24 }, 0.024, warmWhite, 0.026);
+      }
+      if (maxZ - minZ < 20 || minZ > 750) continue;
+      for (const x of side > 0 ? [7.1, 12.3, 16.3] : [22.9, 27.3, 31.7]) {
+        const middle = z + side * 8.2;
+        slab(paint, { minX: x - 0.125, maxX: x + 0.125, minZ: middle - 1.42, maxZ: middle + 1.42 },
+          0.022, warmWhite, 0.026);
+        for (const yaw of [-0.56, 0.56]) {
+          paint.push({ x: x + Math.sign(yaw) * 0.35, z: middle - side * 1.31, y: ground + 0.011,
+            w: 0.22, h: 0.025, d: 1.32, yaw: yaw * side, color: warmWhite });
+        }
+      }
+    }
+  }
+
 }
 
-export function createResidenceNeighborhood(night: THREE.IUniform<number>) {
+export function createResidenceNeighborhood(night: THREE.IUniform<number>,
+  { buildings, paved }: { buildings: readonly DistrictBuilding[]; paved: readonly DistrictYard[] }) {
   const group = new THREE.Group();
   group.name = 'Residence neighborhood';
-  const facadeMaterial = createDistrictMaterial(night, true);
-  const shade = createDistrictShadows();
-  const material = createDistrictMaterial(night, false, shade);
-  const facades: Facade[] = [];
-  const boxes: Solid[] = [];
-  const markings: Solid[] = [];
-  const trees: Solid[] = [];
-  const lamps: Solid[] = [];
-  const pools: Solid[] = [];
-  const detail: Solid[] = [];
-  layRoads(boxes, markings, trees, lamps, pools);
-  shapeBuildings(facades, boxes, detail);
+  const shade = createDistrictShadows(buildings);
+  const surface = createDistrictSurfaceTexture();
+  const facadeMaterial = createDistrictMaterial(night, { facades: true, surface });
+  const material = createDistrictMaterial(night, { shade, surface, paving: true });
+  const untextured = createDistrictMaterial(night, { shade });
+  const facades: DistrictFacade[] = [];
+  const roads: DistrictSolid[] = [];
+  const medians: DistrictSolid[] = [];
+  const boxes: DistrictSolid[] = [];
+  const markings: DistrictSolid[] = [];
+  const trees: DistrictSolid[] = [];
+  const lamps: DistrictSolid[] = [];
+  const pools: DistrictSolid[] = [];
+  const detail: DistrictSolid[] = [];
+  const machinery: DistrictSolid[] = [];
+  layRoads(roads, medians, boxes, markings, trees, lamps, pools, paved);
+  shapeDistrictBuildings(facades, boxes, detail, trees, machinery, lamps, buildings);
+
+  function surfaceGeometry(geometry: THREE.BufferGeometry, instances: readonly DistrictSolid[]) {
+    geometry.setAttribute('districtSurface', new THREE.InstancedBufferAttribute(new Float32Array(
+      instances.map(({ surface = 0 }) => surface),
+    ), 1));
+    return geometry;
+  }
 
   const box = new THREE.BoxGeometry(1, 1, 1);
   const walls = new THREE.BoxGeometry(1, 1, 1);
   walls.setAttribute('districtFacade', new THREE.InstancedBufferAttribute(new Float32Array(
     facades.flatMap(({ bay, floor, kind, seed }) => [bay, floor, kind, seed]),
   ), 4));
-  const detailMesh = batch('Roof equipment and entrance fittings', box, material, detail);
-  const lampMeshes = batch('Street luminaires', box, new THREE.MeshBasicMaterial(), lamps);
+  const detailMesh = batch('Roof equipment and entrance fittings', box, untextured, detail);
+  const lampMeshes = batch('Street and roof luminaires', box, new THREE.MeshBasicMaterial(), lamps);
   const poolGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
   const poolMesh = batch('Illuminated pavement beneath the lamps', poolGeometry, createStreetGlowMaterial(), pools);
-  const paint = createDistrictMaterial(night, false, shade);
+  const paint = createDistrictMaterial(night, { shade });
   paint.polygonOffset = true;
   paint.polygonOffsetFactor = -1;
   paint.polygonOffsetUnits = -3;
   poolMesh.renderOrder = 1;
   group.add(
-    batch('Original 3D building volumes and storeys', walls, facadeMaterial, facades),
-    batch('Walls, roof structures and paved surfaces', box, material, boxes),
+    batch('Original stone, curtain-wall, ribbon and balcony facades', walls, facadeMaterial, facades),
+    batch('Authored district asphalt lanes and junctions', surfaceGeometry(box.clone(), roads), material, roads),
+    batch('South avenue median islands', surfaceGeometry(box.clone(), medians), material, medians),
+    batch('Roof terraces, curb stones and paving', surfaceGeometry(box.clone(), boxes), material, boxes),
     batch('Lane markings and pedestrian crossings', box, paint, markings),
-    batch('Street tree crowns', new THREE.IcosahedronGeometry(0.5, 1), material, trees),
+    batch('Street trees and rooftop planting', surfaceGeometry(new THREE.IcosahedronGeometry(0.5, 1), trees), material, trees),
+    batch('Roof ventilation housings', new THREE.CylinderGeometry(0.5, 0.5, 1, 12), untextured, machinery),
     detailMesh,
     lampMeshes,
     poolMesh,
   );
   return {
     group,
+    shade,
+    surface,
     setNight(dark: boolean) {
       lampMeshes.visible = poolMesh.visible = dark;
     },
@@ -293,6 +276,7 @@ export function createResidenceNeighborhood(night: THREE.IUniform<number>) {
     },
     dispose() {
       shade.texture.dispose();
+      surface.dispose();
     },
   };
 }

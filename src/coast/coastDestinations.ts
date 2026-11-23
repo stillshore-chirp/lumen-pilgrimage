@@ -1,5 +1,6 @@
 import type { CoastPose } from './CoastControls';
 import { SPAWN } from './terrain';
+import { RESIDENCE_LABEL } from './world/residence/residenceFloor';
 
 export type ExplorationWorldId = 'coast' | 'overlook' | 'residence';
 
@@ -32,7 +33,7 @@ export const EXPLORATION_WORLDS = [
   },
   {
     id: 'residence',
-    label: '都心の50階住戸',
+    label: RESIDENCE_LABEL,
     places: [
       { id: 'living-window', label: 'リビング南窓', x: 21.89, z: -1.12, yaw: Math.PI - 0.014, pitch: -0.29 },
       { id: 'foyer', label: '住戸の玄関', x: 11.80, z: -14.17, yaw: Math.PI, pitch: -0.01 },

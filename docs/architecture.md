@@ -4,7 +4,7 @@
 
 ## 起動と状態遷移
 
-- [main.ts](../src/main.ts) が `#app` を取得し、[CoastApp](../src/coast/CoastApp.ts) で入り江と山道を起動する。`?world=overlook` は丘陵展望台、`?world=residence` は都心の50階住戸を遅延読み込みする。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)
+- [main.ts](../src/main.ts) が `#app` を取得し、[CoastApp](../src/coast/CoastApp.ts) で入り江と山道を起動する。`?world=overlook` は丘陵展望台、`?world=residence` は都心の70階住戸を遅延読み込みする。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)
 - `CoastApp` はレンダラー、カメラ、UI、フレームループ、操作を接続する。ファストトラベルでは各ワールドの着地点と到着時の向きを使う。選択した移動先と時間帯は URL の `world`、`place`、`time` に反映される。同一ワールド内では位置と入力状態をリセットして移動し、ワールドを移ると移動先と時間帯を渡してページを読み込み直す。 [CoastTravelPanel](../src/coast/CoastTravelPanel.ts) · [移動先の定義](../src/coast/coastDestinations.ts)
 
 ## 仮想モニターの設計
@@ -31,12 +31,12 @@
 - [海面](../src/coast/world/coastOcean.ts) は海底の深さを使い、浅瀬で波が盛り上がる位置と崩れた泡を計算する。[波の周期](../src/coast/world/coastSwell.ts) を [CoastAudio](../src/coast/CoastAudio.ts) と共有し、砕波音の位置と強さを寄せ引きに合わせる。
 - 入江の滝は岩に沿った流路と着水地点を地形から求める。飛沫の虹は観察者から水滴へ向かう方向を対日点から測り、外側の赤約42°から内側の紫約40°の帯を描く。日が当たる飛沫だけに出て、地形が太陽を遮る箇所は抑える。 [滝の描画](../src/coast/world/coastWaterfall.ts) · [飛沫の虹](../src/coast/world/coastSprayRainbow.ts) · [WMOの主虹](https://cloudatlas.wmo.int/en/primary-rainbow.html)
 
-## 都心の50階住戸
+## 都心の70階住戸
 
-- 図面の P1 を基準に、東を `x`、北を `-z`、50階の仕上げ床を `y=0` とし、単位をメートルにそろえる。部屋、壁、開口、手すりを描画と歩行判定で共有する。室内家具の外形は間接光の遮蔽に使い、歩行では通り抜けられる。主寝室の引戸は開き量を描画と音響に渡し、人が敷居を通れる幅まで開いてから通行できる。 [設計図 PDF](residence/residence-50f-drawings.pdf) · [平面](../src/coast/world/residence/residencePlan.ts) · [歩行判定](../src/coast/world/residence/residenceNavigation.ts)
-- 街路面は `y=-176`。大通りの軸、交差点、両脇の高層塔を住戸の窓からの眺望断面と照合し、その外側に展望台と共有する都市を接続する。昼夜で建物の窓明かりと車の灯火を切り替える。ガラスの下枠と外周床は視線断面に合わせ、着座・立位のどちらでも路面が見える。 [基本設計](residence/residence-50f-design.md#街区と視線) · [都市の描画](../src/coast/world/residence/residenceCity.ts) · [住戸の躯体](../src/coast/world/residence/residenceShell.ts)
+- 図面の P1 を基準に、東を `x`、北を `-z`、70階の仕上げ床を `y=0` とし、単位をメートルにそろえる。部屋、壁、開口、手すりを描画と歩行判定で共有する。室内家具の外形は間接光の遮蔽に使い、歩行では通り抜けられる。主寝室の引戸は開き量を描画と音響に渡し、人が敷居を通れる幅まで開いてから通行できる。 [設計図 PDF](residence/residence-70f-drawings.pdf) · [平面](../src/coast/world/residence/residencePlan.ts) · [歩行判定](../src/coast/world/residence/residenceNavigation.ts)
+- 街路面は `y=-246`。南窓から大通り沿いの屋上と約277 m先の交差点を見下ろす。住戸の近景と中景では、同じ道路網から車道・歩道・走行経路と敷地を決める。各通りを交差点で結び、街区の外側で展望台と共有する都市へつなぐ。配置した車道と、共有都市の基部を含む建物の干渉を実際の描画形状で確認する。夜は走行中の車両の灯りが舗装を照らす。 [基本設計](residence/residence-70f-design.md#街区と視線) · [高さ](../src/coast/world/residence/residenceFloor.ts) · [都市の描画](../src/coast/world/residence/residenceCity.ts)
 - 室内はオークや漆喰、織物の実寸の色・凹凸・粗さを使う。窓側の日射と方向のある間接光、壁や家具の接地陰影、夜の間接照明を組み合わせる。デスクトップでは視点に応じて窓と鏡の反射を描き、表示位置と描画設定に応じて反射の計算範囲や解像度を調整する。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [反射](../src/coast/world/residence/residenceReflections.ts) · [内装材の出典](../public/residence-materials/ATTRIBUTION.md)
-- 録音した交通音を南と東の街路に配置する。高さと距離で減衰させ、窓ガラスと引戸の開き量で透過する音を変える。室内、敷居、屋外で反射と足音を変え、頭部伝達関数で方向を表現する。録音は展望台と同じライセンス済み素材を使う。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [録音の出典と再配布条件](../public/coast-overlook/ATTRIBUTION.md)
+- 録音した交通音を南と東の街路に分散する。床の高さ、建物の外皮と間仕切り、引戸の開き量で伝わる音の強さと帯域を変える。室内の反射は部屋の寸法に合わせ、動く交通音は頭部伝達関数で定位させる。足音は床材に従い、引戸の開閉にも短い作動音を付ける。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
 
 ## 音響
 

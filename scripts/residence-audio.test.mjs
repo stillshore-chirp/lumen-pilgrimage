@@ -11,13 +11,14 @@ const hooks = registerHooks({
 });
 const { BALCONY_DOOR, RESIDENCE_ROADS, residenceReceiver, residenceSurfaceAt, residenceTrafficPath } =
   await import('../src/coast/world/residence/residenceAcoustics.ts');
-const { RESIDENCE_ROOM_RESPONSES, createFootfall, createRoomImpulse } =
+const { RESIDENCE_FLOOR_ABOVE_STREET } = await import('../src/coast/world/residence/residenceFloor.ts');
+const { RESIDENCE_ROOM_RESPONSES, createFootfall, createRoomImpulse, createSlider } =
   await import('../src/coast/world/residence/residenceAudioSamples.ts');
 hooks.deregister();
 
 const ear = (x, north) => ({ x, y: 1.65, z: -north });
-const south = RESIDENCE_ROADS[0].bed;
-const east = RESIDENCE_ROADS[2].bed;
+const south = RESIDENCE_ROADS[0].patches[0];
+const east = RESIDENCE_ROADS[2].patches[1];
 const core = ear(10.95, 13.8);
 const living = ear(20, 0.9);
 const bed = ear(19.4, -BALCONY_DOOR.z);
@@ -30,12 +31,16 @@ test('traffic reaching the open balcony retains height, direction and distance',
   assert.equal(receiver.exterior, 1);
   assert.ok(eastArrival.arrival.x > balcony.x && westArrival.arrival.x < balcony.x);
   assert.ok(eastArrival.arrival.y < balcony.y - 8 && westArrival.arrival.y < balcony.y - 8);
+  assert.equal(-east.y + 0.55, RESIDENCE_FLOOR_ABOVE_STREET);
   const near = residenceTrafficPath(receiver, { ...east, z: -15 }, false);
   const farSource = { ...east, z: -390 };
   const far = residenceTrafficPath(receiver, farSource, false);
   assert.ok(far.cutoff < near.cutoff * 0.55);
   assert.ok(far.gain < near.gain * 0.5);
   assert.ok(residenceTrafficPath(receiver, farSource, true).gain > far.gain * 1.35);
+  const rail = residenceTrafficPath(residenceReceiver(ear(22.48, -BALCONY_DOOR.z), 0), east, true);
+  assert.ok(rail.gain > eastArrival.gain * 1.3 && rail.cutoff > eastArrival.cutoff * 1.3);
+  assert.ok(RESIDENCE_ROADS.every(road => road.patches.length === 2 && road.activity.night < road.activity.day));
 });
 
 test('closed glazing favors low traffic frequencies and the stone core is quieter', () => {
@@ -43,8 +48,8 @@ test('closed glazing favors low traffic frequencies and the stone core is quiete
   const window = residenceTrafficPath(residenceReceiver(living, 0), south, true);
   const closedBed = residenceTrafficPath(residenceReceiver(bed, 0), east, true);
   const inner = residenceTrafficPath(residenceReceiver(core, 0), east, true);
-  assert.ok(window.cutoff < 600 && window.gain > 0.08);
-  assert.ok(closedBed.cutoff < outdoor.cutoff * 0.18 && closedBed.gain < outdoor.gain * 0.18);
+  assert.ok(window.cutoff < 460 && window.gain > 0.02);
+  assert.ok(closedBed.cutoff < outdoor.cutoff * 0.22 && closedBed.gain < outdoor.gain * 0.18);
   assert.ok(inner.gain < closedBed.gain * 0.25);
   assert.ok(window.arrival.z > living.z && window.arrival.y > living.y - 4);
 });
@@ -57,7 +62,7 @@ test('the actual sliding door changes the primary bedroom continuously and stays
     assert.ok(amounts[i].cutoff > amounts[i - 1].cutoff);
   }
   assert.ok(amounts[4].gain > amounts[0].gain * 2.4);
-  assert.ok(amounts[4].cutoff > amounts[0].cutoff * 4);
+  assert.ok(amounts[4].cutoff > amounts[0].cutoff * 3.5);
   const openCore = residenceTrafficPath(residenceReceiver(core, 1), east, true);
   const closedCore = residenceTrafficPath(residenceReceiver(core, 0), east, true);
   assert.deepEqual(openCore, closedCore);
@@ -83,15 +88,21 @@ test('room decay and footfalls follow the floor plan and the audio device rate',
   const contexts = new AudioBuffers();
   assert.deepEqual([living, bed, core, bathroom, balcony].map(residenceSurfaceAt),
     ['oak', 'oak', 'stone', 'tile', 'balcony']);
-  assert.deepEqual(residenceReceiver(living, 0).wet, [1, 0, 0]);
-  assert.deepEqual(residenceReceiver(bed, 0).wet, [0, 1, 0]);
-  assert.deepEqual(residenceReceiver(core, 0).wet, [0, 0, 1]);
-  assert.deepEqual(residenceReceiver(balcony, 0).wet, [0, 0, 0]);
-  const [livingTail, bedroomTail, coreTail] = RESIDENCE_ROOM_RESPONSES.map((profile, index) =>
+  assert.deepEqual(residenceReceiver(living, 0).wet, [1, 0, 0, 0, 0]);
+  assert.deepEqual(residenceReceiver(bed, 0).wet, [0, 1, 0, 0, 0]);
+  assert.deepEqual(residenceReceiver(core, 0).wet, [0, 0, 0, 1, 0]);
+  assert.deepEqual(residenceReceiver(bathroom, 0).wet, [0, 0, 0, 0, 1]);
+  assert.deepEqual(residenceReceiver(balcony, 0).wet, [0, 0, 0, 0, 0]);
+  const [livingTail, bedroomTail, , coreTail, bathTail] = RESIDENCE_ROOM_RESPONSES.map((profile, index) =>
     createRoomImpulse(contexts, profile, index + 1));
   assert.equal(livingTail.sampleRate, contexts.sampleRate);
-  assert.ok(bedroomTail.duration < livingTail.duration && livingTail.duration < coreTail.duration);
+  assert.ok(bedroomTail.duration < livingTail.duration && livingTail.duration < coreTail.duration
+    && coreTail.duration < bathTail.duration);
   assert.notDeepEqual(livingTail.getChannelData(0), livingTail.getChannelData(1));
+  const firstReflection = buffer => buffer.getChannelData(0).findIndex(sample => Math.abs(sample) > 0.04);
+  const livingFirst = firstReflection(livingTail) / contexts.sampleRate;
+  const bedroomFirst = firstReflection(bedroomTail) / contexts.sampleRate;
+  assert.ok(livingFirst > 0.001 && bedroomFirst > livingFirst && bedroomFirst < 0.02);
   const wood = createFootfall(contexts, 'oak', 81);
   const tile = createFootfall(contexts, 'tile', 81);
   assert.equal(tile.sampleRate, 24_000);
@@ -106,4 +117,15 @@ test('room decay and footfalls follow the floor plan and the audio device rate',
     return delta / energy;
   };
   assert.ok(brilliance(tile) > brilliance(wood) * 1.3);
+});
+
+test('slider rolls and settles without starting or ending in a click', () => {
+  const context = new AudioBuffers();
+  const open = createSlider(context, false).getChannelData(0);
+  const close = createSlider(context, true).getChannelData(0);
+  const peak = samples => samples.reduce((level, value) => Math.max(Math.abs(value), level), 0);
+  assert.equal(open[0], 0);
+  assert.ok(Math.abs(close[close.length - 1]) < 1e-6);
+  assert.ok(peak(open.slice(4_000, 9_000)) > 0.015);
+  assert.ok(peak(close.slice(11_520)) > peak(open.slice(11_520)) * 1.4);
 });

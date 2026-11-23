@@ -1,0 +1,3 @@
+export const RESIDENCE_FLOOR = 70;
+export const RESIDENCE_FLOOR_ABOVE_STREET = 3 * 5 + (RESIDENCE_FLOOR - 4) * 3.5;
+export const RESIDENCE_LABEL = `都心の${RESIDENCE_FLOOR}階住戸`;
