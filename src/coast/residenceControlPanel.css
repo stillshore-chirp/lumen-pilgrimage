@@ -6,32 +6,21 @@
   width: min(43rem, calc(100% - 1.5rem));
 }
 
-.residence-control-dialog :is(button, select, summary, input[type="color"]):focus-visible {
+.residence-control-dialog :is(button, select, input[type="color"]):focus-visible {
   outline: 2px solid #e4fff2;
   outline-offset: 2px;
 }
 
-.residence-control-categories,
+.residence-control-directory {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.residence-control-actions,
 .residence-control-items {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-
-.residence-control-group details + details {
-  border-top: 1px solid #bfe2dc40;
-}
-
-.residence-control-group summary {
-  align-content: center;
-  min-height: 44px;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.residence-control-items {
-  padding: 0.375rem 0 0.75rem;
 }
 
 .residence-control-value {

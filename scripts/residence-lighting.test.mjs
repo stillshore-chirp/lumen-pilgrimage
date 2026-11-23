@@ -206,6 +206,8 @@ test('nearby small fixtures use the same individual control, within the room con
   switchOn.invoke();
   assert.ok(desk.get() && read.get());
   assert.equal(lighting.nearby(atDesk).label, 'デスクライトを消す');
+  assert.equal(lighting.nearby(atDesk, new Vector3(-1, 0, 0))?.label, 'デスクライトを消す');
+  assert.notEqual(lighting.nearby(atDesk, new Vector3(1, 0, 0))?.label, 'デスクライトを消す');
   assert.equal(lighting.nearby(new Vector3(7.24, 1.65, -2.025)), null);
 });
 

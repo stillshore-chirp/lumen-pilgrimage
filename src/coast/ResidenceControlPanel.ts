@@ -95,7 +95,7 @@ function createControl(control: ResidenceControl, category: Category, changed: (
 export function createResidenceControlPanel(sections: readonly ResidenceControlSection[], onOpen: () => void) {
   const element = document.createElement('div');
   element.className = 'coast-travel-panel';
-  const trigger = button('住戸の操作');
+  const trigger = button('メニュー');
   trigger.className = 'coast-residence-toggle';
   trigger.setAttribute('aria-haspopup', 'dialog');
   trigger.setAttribute('aria-controls', 'residence-control-dialog');
@@ -111,99 +111,148 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
   header.className = 'coast-travel-heading';
   const heading = document.createElement('h2');
   heading.id = 'residence-control-heading';
-  heading.textContent = trigger.textContent;
+  heading.tabIndex = -1;
+  const actions = document.createElement('div');
+  actions.className = 'residence-control-actions';
+  const back = button('');
+  let goBack: (() => void) | undefined;
+  back.addEventListener('click', () => goBack?.());
   const close = button('閉じる');
-  close.autofocus = true;
   close.addEventListener('click', () => dialog.close());
-  header.append(heading, close);
-  const navigation = document.createElement('div');
-  navigation.className = 'residence-control-categories';
-  navigation.setAttribute('role', 'group');
-  navigation.setAttribute('aria-label', '操作する設備');
-  content.append(header, navigation);
+  actions.append(back, close);
+  header.append(heading, actions);
+  const body = document.createElement('div');
+  content.append(header, body);
   dialog.append(content);
 
-  const groups = sections.map(section => {
-    const element = document.createElement('details');
-    element.dataset.residenceSection = section.id;
-    const title = document.createElement('summary');
-    title.textContent = section.title;
-    const items = section.controls.map(control => {
-      const item = createControl(control, section.category, sync);
-      item.element.dataset.residenceControl = control.id;
-      item.sync();
-      return item;
-    });
-    const controlList = document.createElement('div');
-    controlList.className = 'residence-control-items';
-    controlList.append(...items.map(item => item.element));
-    element.append(title, controlList);
-    element.addEventListener('toggle', sync);
-    return { ...section, element, title, items };
-  });
+  const remoteLabel = '住戸の遠隔操作';
+  const remote = button(remoteLabel);
+  const menu = document.createElement('div');
+  menu.className = 'coast-travel-destinations';
+  menu.append(remote);
+  remote.addEventListener('click', () => showDirectory());
+
+  const directory = document.createElement('div');
+  directory.className = 'residence-control-directory';
+  const navigation = document.createElement('div');
+  navigation.className = 'residence-control-actions';
+  navigation.setAttribute('role', 'group');
+  navigation.setAttribute('aria-label', '設備の種類');
+  const list = document.createElement('section');
+  list.id = 'residence-control-list';
+  directory.append(navigation, list);
 
   const categories = (Object.keys(categoryLabels) as Category[]).flatMap(id => {
-    const members = groups.filter(group => group.category === id);
+    const members = sections.filter(section => section.category === id);
     if (members.length === 0) return [];
-    const toggle = button(categoryLabels[id]);
-    const body = document.createElement('section');
-    body.className = 'residence-control-group';
-    body.id = `residence-controls-${id}`;
-    body.setAttribute('aria-label', categoryLabels[id]);
-    body.append(...members.map(member => member.element));
-    toggle.setAttribute('aria-controls', body.id);
+    const label = categoryLabels[id];
+    const toggle = button(label);
+    toggle.setAttribute('aria-controls', list.id);
     toggle.addEventListener('click', () => selectCategory(id));
     navigation.append(toggle);
-    content.append(body);
-    return [{ id, toggle, body }];
+    const choices = document.createElement('div');
+    choices.className = 'coast-travel-destinations';
+    for (const section of members) {
+      const choice = button(section.title);
+      choice.addEventListener('click', () => showDevice(section, choice));
+      choices.append(choice);
+    }
+    return [{ id, label, toggle, choices }];
   });
-  let selected = categories[0]?.id;
 
-  function sync(): void {
-    if (!dialog.open) return;
-    for (const group of groups) {
-      if (group.category === selected && group.element.open) {
-        for (const item of group.items) item.sync();
+  function selectCategory(id: Category): void {
+    for (const category of categories) {
+      const selected = category.id === id;
+      category.toggle.setAttribute('aria-pressed', String(selected));
+      if (selected) {
+        list.setAttribute('aria-label', category.label);
+        list.replaceChildren(category.choices);
       }
     }
   }
+  if (categories[0]) selectCategory(categories[0].id);
 
-  function selectCategory(id: Category): void {
-    selected = id;
-    for (const category of categories) {
-      category.body.hidden = category.id !== id;
-      category.toggle.setAttribute('aria-pressed', String(category.id === id));
+  let activeItems: ReturnType<typeof createControl>[] = [];
+  function sync(): void {
+    if (dialog.open) {
+      for (const item of activeItems) item.sync();
     }
-    sync();
+  }
+
+  function showView(title: string, view: HTMLElement, backAction?: { label: string; invoke: () => void }): void {
+    heading.textContent = title;
+    goBack = backAction?.invoke;
+    back.hidden = !backAction;
+    back.textContent = backAction?.label ?? '';
+    body.replaceChildren(view);
+    dialog.scrollTop = 0;
+    if (dialog.open) heading.focus();
+  }
+
+  function showMenu(): void {
+    activeItems = [];
+    showView('メニュー', menu);
+  }
+
+  function showDirectory(choice?: HTMLButtonElement): void {
+    activeItems = [];
+    showView(remoteLabel, directory, {
+      label: 'メニューへ戻る',
+      invoke: () => {
+        showMenu();
+        remote.focus();
+      },
+    });
+    choice?.focus();
+  }
+
+  function showDevice(section: ResidenceControlSection, choice?: HTMLButtonElement): void {
+    const items = document.createElement('div');
+    items.className = 'residence-control-items';
+    items.dataset.residenceSection = section.id;
+    activeItems = section.controls.map(control => {
+      const item = createControl(control, section.category, sync);
+      item.element.dataset.residenceControl = control.id;
+      item.sync();
+      items.append(item.element);
+      return item;
+    });
+    showView(section.title, items, choice && {
+      label: '設備一覧へ戻る',
+      invoke: () => showDirectory(choice),
+    });
   }
 
   let lastFocus: HTMLElement | null = null;
-  function open(sectionId?: string): void {
-    const group = groups.find(group => group.id === sectionId);
-    if (!dialog.open) {
-      lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      onOpen();
-      dialog.showModal();
-      trigger.setAttribute('aria-expanded', 'true');
-    }
-    if (group) {
-      selectCategory(group.category);
-      group.element.open = true;
-      group.title.focus({ preventScroll: true });
-      group.element.scrollIntoView({ block: 'nearest' });
-    }
-    sync();
+  function showModal(returnFocus: HTMLElement): void {
+    lastFocus = returnFocus;
+    onOpen();
+    dialog.showModal();
+    trigger.setAttribute('aria-expanded', String(returnFocus === trigger));
+    heading.focus();
   }
 
-  trigger.addEventListener('click', () => open());
+  function open(sectionId: string, returnFocus: HTMLElement): void {
+    const section = sections.find(item => item.id === sectionId);
+    if (!section || dialog.open) return;
+    showDevice(section);
+    showModal(returnFocus);
+  }
+
+  trigger.addEventListener('click', () => {
+    if (dialog.open) return;
+    showMenu();
+    showModal(trigger);
+  });
   dialog.addEventListener('click', event => {
     if (event.target === dialog) dialog.close();
   });
   dialog.addEventListener('close', () => {
+    if (dialog.open) return;
     trigger.setAttribute('aria-expanded', 'false');
-    if (lastFocus?.isConnected) lastFocus.focus({ preventScroll: true });
+    lastFocus?.focus({ preventScroll: true });
+    lastFocus = null;
   });
-  if (selected) selectCategory(selected);
   element.append(trigger, dialog);
   return { element, dialog, open, sync };
 }

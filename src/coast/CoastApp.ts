@@ -39,7 +39,7 @@ type ExplorationAudio = Pick<CoastAudio, 'start' | 'setLevel' | 'update' | 'disp
 };
 
 interface ExplorationInteraction {
-  label(position: Vector3): string | null;
+  label(position: Vector3, facing: Vector3): string | null;
   invoke(): void | { readonly openSection: string };
 }
 
@@ -264,13 +264,13 @@ export class CoastApp {
 
   private interactionLabel(): string | null {
     if (this.travelDialog.open || this.residencePanel?.dialog.open || this.monitor?.blocksSceneInput) return null;
-    return this.interaction?.label(this.camera.position) ?? null;
+    return this.interaction?.label(this.camera.position, this.camera.getWorldDirection(this.forward)) ?? null;
   }
 
   private invokeInteraction(): boolean {
     if (!this.interaction || !this.interactionLabel()) return false;
     const action = this.interaction.invoke();
-    if (action) this.residencePanel?.open(action.openSection);
+    if (action) this.residencePanel?.open(action.openSection, this.renderer.domElement);
     return true;
   }
 

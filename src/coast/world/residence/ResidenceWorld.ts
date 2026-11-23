@@ -66,13 +66,13 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
       appliances: furniture.appliances.audioSources }),
     residenceControls: [...lighting.sections, ...curtainControls, ...furniture.appliances.sections],
     interaction: {
-      label(position) {
+      label(position, facing) {
         const distance = Math.hypot(position.x - doorEast, northDistanceToDoor(position.z));
         const curtain = curtains.nearby(position);
         const roomDoor = shell.doors.nearby(position);
         const windowShoji = shoji.nearby(position);
         const windowSwitch = windowShoji && (!curtain || windowShoji.distance < curtain.distance) ? windowShoji : curtain;
-        const localLights = windowSwitch ? null : lighting.nearby(position);
+        const localLights = windowSwitch ? null : lighting.nearby(position, facing);
         const localSwitch = windowSwitch ?? localLights;
         const canUseDoor = distance <= DOOR_REACH && !(opening && occupiesDoorway(position));
         if (canUseDoor && (!localSwitch || distance <= localSwitch.distance)) {

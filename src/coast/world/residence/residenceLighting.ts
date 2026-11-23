@@ -348,7 +348,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     source: fixtureById.get(id)!,
   }));
 
-  function nearby(position: THREE.Vector3) {
+  function nearby(position: THREE.Vector3, facing?: THREE.Vector3) {
     const wallSwitch = switches.nearby(position);
     let target = wallSwitch?.distance ?? Infinity;
     let lamp: (typeof localLamps)[number] | undefined;
@@ -356,7 +356,10 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       const { source, room } = candidate;
       if (!inRoom(position, room)) continue;
       const [east, north] = source.span;
-      const distance = Math.hypot(position.x - east, position.z + north);
+      const dx = east - position.x;
+      const dz = -north - position.z;
+      if (facing && dx * facing.x + dz * facing.z < 0) continue;
+      const distance = Math.hypot(dx, dz);
       if (distance <= lampReach && distance < target) {
         lamp = candidate;
         target = distance;
