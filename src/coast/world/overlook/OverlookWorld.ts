@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { OverlookScene } from '../../CoastApp';
+import type { ExplorationScene } from '../../CoastApp';
 import { EXPLORATION_WORLDS } from '../../coastDestinations';
 import type { CoastQuality } from '../../CoastWorld';
 import { createCoastAtmosphere, type CoastTimeOfDay } from '../coastAtmosphere';
@@ -28,7 +28,7 @@ function blocksDeckWalking(x: number, z: number, foot: number): boolean {
   );
 }
 
-export async function loadOverlookScene(): Promise<OverlookScene> {
+export async function loadOverlookScene(): Promise<ExplorationScene> {
   const heightAt = await loadOverlookTerrain();
   const atmosphere = createCoastAtmosphere(DAY_SUN, {
     nightHorizon: 0x1b2330,
@@ -56,6 +56,7 @@ export async function loadOverlookScene(): Promise<OverlookScene> {
   await Promise.all([streets.ready, city.ready]);
 
   return {
+    id: 'overlook',
     audio: new OverlookAudio(traffic.soundCorridors, heightAt),
     navigation: {
       bounds, spawn: EXPLORATION_WORLDS[1].places[0], groundHeight: overlookDeckGround,

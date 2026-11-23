@@ -132,7 +132,8 @@ const towersVertex = /* glsl */`
     vFacade = cityFacade;
     vLightSeed = cityLightSeed;
     vTransmission = cityTransmittance(world);
-    vSkyReflection = pow(1.0 - clamp(dot(normalize(cameraPosition - world), normal), 0.0, 1.0), 2.6);
+    vec3 worldNormal = normalize(mat3(modelMatrix) * normal);
+    vSkyReflection = pow(1.0 - clamp(dot(normalize(cameraPosition - world), worldNormal), 0.0, 1.0), 2.6);
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
   }
 `;
@@ -220,7 +221,7 @@ const blocksVertex = /* glsl */`
   ${cityAir}
   void main() {
     vec3 p = position * cityScale;
-    vec3 world = cityCenter + vec3(
+    vec3 cityPosition = cityCenter + vec3(
       p.x * cityHeading.x + p.z * cityHeading.y,
       p.y,
       p.z * cityHeading.x - p.x * cityHeading.y
@@ -237,6 +238,7 @@ const blocksVertex = /* glsl */`
     float across = abs(localNormal.x) > 0.5 ? p.z : p.x;
     vBlockFace = vec4(across * cityWindowScale + cityVariant * 81.0, p.y * 0.254,
       cityWindowScale * (1.0 - roof), cityEveningUse);
+    vec3 world = (modelMatrix * vec4(cityPosition, 1.0)).xyz;
     vBlockTransmission = cityTransmittance(world);
     gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
   }

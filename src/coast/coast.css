@@ -196,6 +196,23 @@
   transform: translate(-50%, -50%);
 }
 
+.coast-interact {
+  position: absolute;
+  inset: calc(50% + 30px) auto auto 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  min-height: 44px;
+  border: 1px solid #bfe2dc65;
+  border-radius: 9px;
+  padding: 6px 13px;
+  color: #f6fbf7;
+  background: #102728f2;
+  font: inherit;
+  font-size: clamp(1rem, 2.7vw, 1.25rem);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
 .coast-locked .coast-reticle {
   display: block;
 }

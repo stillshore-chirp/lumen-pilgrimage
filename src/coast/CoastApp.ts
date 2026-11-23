@@ -34,10 +34,17 @@ type ExplorationAudio = Pick<CoastAudio, 'start' | 'setLevel' | 'update' | 'disp
   setTimeOfDay?(time: CoastTimeOfDay): void;
 };
 
-export interface OverlookScene {
+interface ExplorationInteraction {
+  label(position: Vector3): string | null;
+  invoke(): void;
+}
+
+export interface ExplorationScene {
+  readonly id: Exclude<ExplorationWorldId, 'coast'>;
   readonly world: ExplorationWorld;
   readonly navigation: CoastNavigation;
   readonly audio: ExplorationAudio;
+  readonly interaction?: ExplorationInteraction;
 }
 
 export class CoastApp {
@@ -52,6 +59,8 @@ export class CoastApp {
   private readonly travel: ReturnType<typeof createCoastTravelPanel>;
   private readonly travelDialog: HTMLDialogElement;
   private readonly resize: ResizeObserver;
+  private readonly interaction?: ExplorationInteraction;
+  private readonly interactionButton?: HTMLButtonElement;
   private monitor?: MonitorView;
   private time: CoastTimeOfDay;
   private quality: CoastQuality = 'light';
@@ -59,14 +68,18 @@ export class CoastApp {
   private elapsed = 0;
   private disposed = false;
 
-  constructor(private readonly mount: HTMLElement, overlook?: OverlookScene) {
+  constructor(private readonly mount: HTMLElement, loaded?: ExplorationScene) {
     const path = new URLSearchParams(location.search);
-    const description = EXPLORATION_WORLDS[overlook ? 1 : 0];
-    this.worldId = description.id;
-    this.world = overlook?.world ?? new CoastWorld();
-    this.audio = overlook?.audio ?? new CoastAudio();
-    this.camera = overlook ? new PerspectiveCamera(54, 1, 0.20, 43500) : new PerspectiveCamera(60, 1, 0.12, 2500);
-    this.time = path.get('time') === 'night' ? 'night' : 'day';
+    this.worldId = loaded?.id ?? 'coast';
+    const description = EXPLORATION_WORLDS.find(({ id }) => id === this.worldId)!;
+    const overlook = this.worldId === 'overlook';
+    const residence = this.worldId === 'residence';
+    this.world = loaded?.world ?? new CoastWorld();
+    this.audio = loaded?.audio ?? new CoastAudio();
+    this.interaction = loaded?.interaction;
+    this.camera = overlook ? new PerspectiveCamera(54, 1, 0.20, 43500)
+      : new PerspectiveCamera(60, 1, residence ? 0.08 : 0.12, residence ? 43500 : 2500);
+    this.time = path.get('time') === 'night' || (residence && !path.has('time')) ? 'night' : 'day';
     const destination = findDestination(this.worldId, path.get('place'));
     this.world.setTimeOfDay(this.time);
     this.audio.setTimeOfDay?.(this.time);
@@ -78,7 +91,8 @@ export class CoastApp {
     const canvas = this.renderer.domElement;
     canvas.className = 'coast-view';
     canvas.tabIndex = 0;
-    canvas.setAttribute('aria-label', overlook ? '丘陵の展望デッキの探索画面' : '海岸、森、湖と山の探索画面');
+    canvas.setAttribute('aria-label', residence ? `${description.label}の探索画面`
+      : overlook ? '丘陵の展望デッキの探索画面' : '海岸、森、湖と山の探索画面');
 
     const ui = document.createElement('div');
     ui.className = 'coast-ui';
@@ -102,16 +116,16 @@ export class CoastApp {
             <p class="coast-guide-description"></p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
-            <p>地上で <kbd>Space</kbd> ジャンプ</p>
+            <p class="coast-jump-guide">地上で <kbd>Space</kbd> ジャンプ</p>
             <p class="coast-water-guide">泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
             <p><kbd>T</kbd> ファストトラベル</p>
-            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
+            <p class="coast-flight-guide"><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
-              <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
+              <p class="coast-flight-guide"><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
               <p class="coast-water-guide">泳いでいるとき <kbd>B</kbd> 潜る <kbd>A</kbd> 浮上</p>
-              <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
+              <p class="coast-flight-guide">飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
             </details>
           </details>
           <p class="coast-lock-message" role="status" hidden></p>
@@ -137,20 +151,26 @@ export class CoastApp {
         </section>
       </div>
     `;
-    ui.querySelector('h1')!.textContent = overlook ? description.label : '自然景観探索';
-    ui.querySelector('.coast-guide-description')!.textContent = overlook
+    ui.querySelector('h1')!.textContent = loaded ? description.label : '自然景観探索';
+    ui.querySelector('.coast-guide-description')!.textContent = residence
+      ? '南の大窓から都心を見下ろせます。主寝室のバルコニーに近づくと、Eキーで引戸を開閉できます。'
+      : overlook
       ? '南のデッキから盆地の市街地を見渡せます。東側の階段から2階展望デッキへ上がれます。'
       : '海に向かって左は岩浜、右は潮だまり。浜を背にすると森の入口に休憩所があり、道は湖と稜線へ続きます。';
-    if (overlook) {
+    if (loaded) {
       ui.querySelectorAll('.coast-water-guide').forEach(node => node.remove());
       ui.querySelector('.coast-light')!.setAttribute('title', '広域の影と軽い描画');
       ui.querySelector('.coast-high')!.setAttribute('title', '近くの影と細かな描画');
+    }
+    if (residence) {
+      ui.querySelectorAll('.coast-jump-guide, .coast-flight-guide').forEach(node => node.remove());
     }
     this.mount.append(canvas, ui);
 
     const mode = ui.querySelector<HTMLElement>('.coast-mode')!;
     const lock = ui.querySelector<HTMLButtonElement>('.coast-lock')!;
     const flight = ui.querySelector<HTMLButtonElement>('.coast-flight')!;
+    flight.hidden = loaded?.navigation.flightEnabled === false;
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
     this.controls = new CoastControls(this.camera, canvas, {
       diveObstacleHeight: (x, z) => this.world.diveObstacleHeight?.(x, z),
@@ -166,7 +186,7 @@ export class CoastApp {
         lockMessage.hidden = false;
         lockMessage.textContent = '視点操作を開始できませんでした。もう一度ボタンを押してください。';
       },
-    }, overlook?.navigation);
+    }, loaded?.navigation);
     if (destination) this.controls.relocate(destination);
     const lockView = () => {
       if (!this.monitor?.blocksSceneInput) this.controls.requestLock();
@@ -192,7 +212,18 @@ export class CoastApp {
     const actions = ui.querySelector('.coast-header-actions')!;
     actions.prepend(this.travel.element);
     this.bindMonitor(actions);
-    window.addEventListener('keydown', this.onTravelKey);
+    if (this.interaction) {
+      this.interactionButton = document.createElement('button');
+      this.interactionButton.type = 'button';
+      this.interactionButton.className = 'coast-interact';
+      this.interactionButton.hidden = true;
+      this.interactionButton.setAttribute('aria-keyshortcuts', 'E');
+      this.interactionButton.addEventListener('click', () => {
+        if (this.invokeInteraction()) canvas.focus({ preventScroll: true });
+      });
+      ui.append(this.interactionButton);
+    }
+    window.addEventListener('keydown', this.onSceneKey);
 
     this.bindQuality(ui);
     this.bindFieldOfView(ui);
@@ -204,13 +235,29 @@ export class CoastApp {
     window.addEventListener('pagehide', this.onPageHide);
   }
 
-  private readonly onTravelKey = (event: KeyboardEvent): void => {
-    if (event.code !== 'KeyT' || event.repeat || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+  private readonly onSceneKey = (event: KeyboardEvent): void => {
+    if ((event.code !== 'KeyT' && event.code !== 'KeyE') || event.repeat
+      || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
     if (this.travelDialog.open || (event.target instanceof Element
       && event.target.closest('input, textarea, select, [contenteditable]'))) return;
-    event.preventDefault();
-    this.travel.open();
+    if (event.code === 'KeyT') {
+      event.preventDefault();
+      this.travel.open();
+    } else if (this.invokeInteraction()) {
+      event.preventDefault();
+    }
   };
+
+  private interactionLabel(): string | null {
+    if (this.travelDialog.open || this.monitor?.blocksSceneInput) return null;
+    return this.interaction?.label(this.camera.position) ?? null;
+  }
+
+  private invokeInteraction(): boolean {
+    if (!this.interaction || !this.interactionLabel()) return false;
+    this.interaction.invoke();
+    return true;
+  }
 
   private goTo(worldId: string, placeId: string): void {
     const place = findDestination(worldId, placeId);
@@ -369,6 +416,11 @@ export class CoastApp {
     if (!this.travelDialog.open && !this.monitor?.blocksSceneInput) this.controls.update(dt);
     const viewer = this.monitor?.update(frame) ?? this.camera;
     const birdCues = this.world.update(this.elapsed, viewer);
+    if (this.interactionButton) {
+      const label = this.interactionLabel();
+      this.interactionButton.hidden = !label;
+      if (label && label !== this.interactionButton.textContent) this.interactionButton.textContent = label;
+    }
     viewer.getWorldDirection(this.forward);
     this.up.copy(viewer.up).applyQuaternion(viewer.quaternion);
     this.audio.update(viewer.position, this.forward, this.up, this.elapsed, this.controls.currentMovement, birdCues);
@@ -382,7 +434,7 @@ export class CoastApp {
     }
     this.disposed = true;
     window.removeEventListener('pagehide', this.onPageHide);
-    window.removeEventListener('keydown', this.onTravelKey);
+    window.removeEventListener('keydown', this.onSceneKey);
     this.renderer.setAnimationLoop(null);
     this.resize.disconnect();
     this.monitor?.dispose();
