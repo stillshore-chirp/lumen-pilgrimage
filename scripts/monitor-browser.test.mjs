@@ -167,6 +167,66 @@ function observeAudio() {
   };
 }
 
+function installSimulatedXR() {
+  const fixture = { requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0 };
+  window.xrFixture = fixture;
+  const raf = window.requestAnimationFrame.bind(window);
+  const cancelRaf = window.cancelAnimationFrame.bind(window);
+  let presenting = false;
+  let inXRFrame = false;
+
+  const drawElements = WebGL2RenderingContext.prototype.drawElements;
+  WebGL2RenderingContext.prototype.drawElements = function (...args) {
+    if (inXRFrame) ++fixture.xrDraws;
+    else if (presenting) ++fixture.strayDraws;
+    else ++fixture.desktopDraws;
+    return drawElements.apply(this, args);
+  };
+  WebGL2RenderingContext.prototype.makeXRCompatible = async () => {};
+  Object.defineProperty(window, 'XRWebGLBinding', { value: undefined, configurable: true });
+  window.XRWebGLLayer = class {
+    framebuffer = null;
+    framebufferWidth = 640;
+    framebufferHeight = 480;
+    getViewport() { return { x: 0, y: 0, width: this.framebufferWidth, height: this.framebufferHeight }; }
+  };
+
+  const transform = { matrix: new DOMMatrix().translate(0, 1.65, 0).toFloat32Array() };
+  const projectionMatrix = new Float32Array([
+    1.3, 0, 0, 0, 0, 1.73, 0, 0, 0, 0, -1.001, -1, 0, 0, -.2, 0,
+  ]);
+  const viewingPose = { transform, views: [{ eye: 'left', transform, projectionMatrix }] };
+  class Session extends EventTarget {
+    inputSources = [];
+    visibilityState = 'visible';
+    async requestReferenceSpace() { return {}; }
+    updateRenderState() {}
+    requestAnimationFrame(callback) {
+      return raf(time => {
+        presenting = inXRFrame = true;
+        try {
+          callback(time, { session: this, getViewerPose: () => viewingPose });
+        } finally {
+          inXRFrame = false;
+        }
+      });
+    }
+    cancelAnimationFrame(id) { cancelRaf(id); }
+    async end() {
+      ++fixture.ends;
+      presenting = false;
+      this.dispatchEvent(new Event('end'));
+    }
+  }
+  const xr = new EventTarget();
+  xr.isSessionSupported = async () => true;
+  xr.requestSession = async () => {
+    ++fixture.requests;
+    return new Session();
+  };
+  Object.defineProperty(navigator, 'xr', { value: xr });
+}
+
 async function newPage() {
   const page = await browser.newPage({ viewport });
   page.setDefaultTimeout(12_000);
@@ -426,6 +486,7 @@ test('separate tabs pair with approval, render native WebRTC media and control a
 test('residence and cinema transfer one live WebRTC stream to a floating monitor in each destination', { timeout }, async () => {
   const sender = await newPage();
   const viewer = await newPage();
+  viewer.setDefaultTimeout(25_000);
   const errors = [];
   viewer.on('pageerror', () => errors.push('viewer'));
   try {
@@ -434,6 +495,7 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
       sender.addInitScript(observePeers),
       viewer.addInitScript(observePeers),
       viewer.addInitScript(observeAudio),
+      viewer.addInitScript(installSimulatedXR),
     ]);
     await sender.goto(new URL('?monitor=sender', url).href);
     await viewer.goto(new URL('?world=residence&place=living-theater&time=day', url).href);
@@ -524,6 +586,8 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     async function waitForArrival(world, place) {
       await viewer.waitForURL(address => address.searchParams.get('world') === world
         && address.searchParams.get('place') === place && address.searchParams.get('time') === 'day');
+      const title = { cinema: '映画館シアター（大）', coast: '自然景観探索', residence: '都心の70階住戸' };
+      await viewer.getByRole('heading', { name: title[world], exact: true }).waitFor();
       await viewer.waitForFunction(() => document.activeElement === document.querySelector('.coast-view'));
       assert.equal(await viewer.locator('.coast-view').count(), 1);
       await button(viewer, '仮想モニター').click();
@@ -578,6 +642,20 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     assert.equal(await mode.inputValue(), 'stereo');
     await assertPlaybackContinues(beforeTravel);
 
+    const cinemaUrl = viewer.url();
+    await viewer.route(terrain, route => route.fulfill({ contentType: 'application/octet-stream', body: 'invalid terrain' }),
+      { times: 1 });
+    await viewer.evaluate(() => history.back());
+    await viewer.locator('.coast-travel-status').filter({ hasText: '読み込めませんでした' }).waitFor();
+    await viewer.waitForURL(cinemaUrl);
+    await viewer.evaluate(() => history.back());
+    await waitForArrival('residence', 'living-theater');
+    assert.equal(viewer.url(), beforeFailure, 'a failed Back preserves the destination for retry');
+    assert.equal(await target.inputValue(), 'floating');
+    await viewer.evaluate(() => history.forward());
+    await waitForArrival('cinema', 'center');
+    assert.equal(viewer.url(), cinemaUrl);
+
     // Assign the transferred stream to the cinema screen and leave with that room's audio path active.
     await target.selectOption('television');
     await mode.selectOption('cinema');
@@ -602,6 +680,23 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     await waitForArrival('coast', 'inlet');
     await assertPlaybackContinues(beforeTravel);
 
+    await button(viewer, 'VRで見る').click();
+    await viewer.waitForFunction(() => window.xrFixture.xrDraws > 10);
+    beforeTravel = await video.evaluate(element => element.currentTime);
+    await travelTo('中段中央（R09）', 'cinema', 'center');
+    const firstXRDraws = await viewer.evaluate(() => window.xrFixture.xrDraws);
+    await viewer.waitForFunction(before => window.xrFixture.xrDraws > before + 10, firstXRDraws);
+    assert.deepEqual(await viewer.evaluate(() => {
+      const { requests, ends, strayDraws } = window.xrFixture;
+      return { requests, ends, strayDraws };
+    }), { requests: 1, ends: 0, strayDraws: 0 });
+    assert.equal(await target.inputValue(), 'floating');
+    const oldDesktopDraws = await viewer.evaluate(() => window.xrFixture.desktopDraws);
+    await button(viewer, 'VRを終了').click();
+    await viewer.waitForFunction(before => window.xrFixture.ends === 1 && window.xrFixture.desktopDraws > before,
+      oldDesktopDraws);
+    await assertPlaybackContinues(beforeTravel);
+
     await button(sender, '共有を停止').click();
     await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
     await viewer.waitForFunction(() => window.sharedMonitor.peer.connectionState === 'closed'
@@ -609,7 +704,7 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
       && window.monitorSound.read().some(context => context.hasStream && context.state === 'closed'));
 
     await viewer.evaluate(() => history.back());
-    await waitForArrival('cinema', 'center');
+    await waitForArrival('coast', 'inlet');
     assert.equal(await video.evaluate(element => element.srcObject), null);
     assert.deepEqual(errors, []);
   } finally {

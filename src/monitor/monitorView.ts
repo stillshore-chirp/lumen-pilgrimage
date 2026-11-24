@@ -229,7 +229,8 @@ export class MonitorView {
     if (floating) {
       if (this.audioMode.value !== 'stereo' && this.audioMode.value !== 'spatial') {
         this.audioMode.value = 'stereo';
-        this.audio.setMode('stereo');
+        // The former room's audio branch is removed immediately below.
+        this.audio.setMode('stereo', 0);
       }
     } else if (cinema) {
       this.displayTarget.value = screenOption.value;

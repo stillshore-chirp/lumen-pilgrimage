@@ -73,6 +73,12 @@ export async function loadExplorationScene(worldId: ExplorationWorldId): Promise
   }
 }
 
+function readHistoryIndex(state: unknown): number {
+  if (state && typeof state === 'object' && 'coastWorldIndex' in state
+    && typeof state.coastWorldIndex === 'number') return state.coastWorldIndex;
+  return 0;
+}
+
 export class CoastApp {
   private readonly world: ExplorationWorld;
   private readonly worldId: ExplorationWorldId;
@@ -103,12 +109,14 @@ export class CoastApp {
   private elapsed = 0;
   private disposed = false;
   private travelRequest = 0;
+  private restoringHistory = false;
 
   constructor(
     private readonly mount: HTMLElement,
     loaded: ExplorationScene,
     private currentUrl = new URL(location.href),
     private readonly renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }),
+    private currentHistoryIndex = readHistoryIndex(history.state),
   ) {
     this.worldId = loaded.id;
     const initialRoute = readInitialExplorationState(this.worldId, currentUrl.search);
@@ -319,8 +327,17 @@ export class CoastApp {
     window.addEventListener('keydown', this.onSceneKey, listeners);
     window.addEventListener('popstate', this.onPopState, listeners);
     window.addEventListener('pagehide', this.onPageHide, listeners);
-    this.renderer.setAnimationLoop(this.render);
+    window.addEventListener('pageshow', this.onPageShow, listeners);
+    this.renderer.xr.addEventListener('sessionend', this.onXRSessionEnd);
+    // Replacing the renderer loop during XR would also start the desktop animation loop.
+    if (this.renderer.xr.isPresenting) this.renderer.xr.setAnimationLoop(this.render);
+    else this.renderer.setAnimationLoop(this.render);
   }
+
+  private readonly onXRSessionEnd = (): void => {
+    this.resizeViewport();
+    this.renderer.setAnimationLoop(this.render);
+  };
 
   private readonly onSceneKey = (event: KeyboardEvent): void => {
     if ((event.code !== 'KeyT' && event.code !== 'KeyE') || event.repeat
@@ -361,7 +378,7 @@ export class CoastApp {
     });
     if (decision.kind === 'invalid') return;
     if (decision.kind === 'navigate') {
-      if (this.monitor?.hasActiveConnection) void this.changeWorld(decision.url, false);
+      if (this.monitor?.hasActiveConnection) void this.changeWorld(decision.url);
       else {
         ++this.travelRequest;
         location.assign(decision.url);
@@ -386,14 +403,19 @@ export class CoastApp {
 
   private readonly onPopState = (): void => {
     const url = new URL(location.href);
+    const index = readHistoryIndex(history.state);
+    const returning = this.restoringHistory && index === this.currentHistoryIndex && url.href === this.currentUrl.href;
+    this.restoringHistory = false;
+    if (returning) return;
     const { worldId } = parseStartupRoute(url.search);
     if (worldId !== this.worldId) {
-      void this.changeWorld(url, true);
+      void this.changeWorld(url, index);
       return;
     }
     ++this.travelRequest;
     this.seatTransition?.cancel();
     this.showTravelStatus('');
+    this.currentHistoryIndex = index;
     if (url.href === this.currentUrl.href) return;
     const { placeId, time } = readInitialExplorationState(worldId, url.search);
     const description = EXPLORATION_WORLDS.find(({ id }) => id === worldId)!;
@@ -406,7 +428,7 @@ export class CoastApp {
     this.currentUrl = url;
   };
 
-  private async changeWorld(url: URL, fromHistory: boolean): Promise<void> {
+  private async changeWorld(url: URL, historyIndex?: number): Promise<void> {
     const request = ++this.travelRequest;
     const { worldId } = parseStartupRoute(url.search);
     const label = EXPLORATION_WORLDS.find(({ id }) => id === worldId)!.label;
@@ -417,6 +439,7 @@ export class CoastApp {
     this.showTravelStatus(`${label}を読み込んでいます。`);
     let loaded: ExplorationScene | undefined;
     let next: CoastApp;
+    let targetHistoryIndex: number;
     try {
       loaded = await loadExplorationScene(worldId);
       if (request !== this.travelRequest || this.disposed) {
@@ -424,17 +447,22 @@ export class CoastApp {
         loaded.world.dispose();
         return;
       }
-      next = new CoastApp(this.mount, loaded, url, this.renderer);
+      targetHistoryIndex = historyIndex ?? readHistoryIndex(history.state) + 1;
+      next = new CoastApp(this.mount, loaded, url, this.renderer, targetHistoryIndex);
     } catch {
       loaded?.audio.dispose();
       loaded?.world.dispose();
       if (request === this.travelRequest && !this.disposed) {
-        if (location.href !== this.currentUrl.href) this.replaceUrl(this.currentUrl);
-        this.showTravelStatus(`${label}を読み込めませんでした。ファストトラベルからもう一度選んでください。`);
+        if (historyIndex !== undefined && historyIndex !== this.currentHistoryIndex) {
+          // Return to the displayed world's entry and leave the failed entry available to retry.
+          this.restoringHistory = true;
+          history.go(this.currentHistoryIndex - historyIndex);
+        }
+        this.showTravelStatus(`${label}を読み込めませんでした。もう一度移動を試してください。`);
       }
       return;
     }
-    if (!fromHistory) history.pushState(null, '', url);
+    if (historyIndex === undefined) history.pushState({ coastWorldIndex: targetHistoryIndex }, '', url);
     next.start(this);
   }
 
@@ -444,7 +472,13 @@ export class CoastApp {
   }
 
   private replaceUrl(url: URL): void {
-    history.replaceState(history.state, '', url);
+    const cursor = readHistoryIndex(history.state);
+    if (cursor === this.currentHistoryIndex) history.replaceState(history.state, '', url);
+    else {
+      // A new in-world action can supersede an outstanding Back/Forward load.
+      this.currentHistoryIndex = cursor + 1;
+      history.pushState({ coastWorldIndex: this.currentHistoryIndex }, '', url);
+    }
     this.currentUrl = url;
   }
 
@@ -684,10 +718,13 @@ export class CoastApp {
     this.renderer.render(this.world.scene, view);
   };
 
+  private readonly onPageShow = (event: PageTransitionEvent): void => {
+    if (event.persisted && location.href !== this.currentUrl.href) this.onPopState();
+  };
+
   private readonly onPageHide = (event: PageTransitionEvent): void => {
     ++this.travelRequest;
     if (event.persisted) {
-      if (location.href !== this.currentUrl.href) this.replaceUrl(this.currentUrl);
       this.showTravelStatus('');
       this.monitor?.release();
       return;
@@ -701,6 +738,7 @@ export class CoastApp {
   private disposeWorld(): void {
     this.disposed = true;
     this.events.abort();
+    this.renderer.xr.removeEventListener('sessionend', this.onXRSessionEnd);
     this.audioControls.dispose();
     this.seatTransition?.dispose();
     this.resize.disconnect();
