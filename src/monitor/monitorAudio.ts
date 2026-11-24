@@ -91,12 +91,10 @@ export class MonitorAudio {
   private stream: MediaStream | null = null;
   private track: MediaStreamTrack | null = null;
   private graph: MonitorGraph | null = null;
-  private unavailable = false;
   private streamUnavailable = false;
   private disposed = false;
   private volume = 0.75;
   private masterVolume = 1;
-  private muted = false;
   private enabled = true;
   private mode: MonitorAudioMode = 'stereo';
   private theaterSpeakers: readonly Object3D[] | null = null;
@@ -109,7 +107,7 @@ export class MonitorAudio {
   private readonly up = new Vector3();
 
   getStatus(): MonitorAudioStatus {
-    if (this.disposed || this.unavailable || typeof AudioContext !== 'function') return 'unavailable';
+    if (this.disposed || typeof AudioContext !== 'function') return 'unavailable';
     if (this.streamUnavailable) return 'stream-unavailable';
     if (!this.context) return 'idle';
     return this.context.state === 'running' ? 'ready' : 'gesture-required';
@@ -156,13 +154,12 @@ export class MonitorAudio {
     }
   }
 
-  // Invoke directly in the viewer's user gesture, before asynchronous pairing.
+  // Invoke directly in the viewer's user gesture.
   start(): Promise<boolean> {
     if (this.disposed || typeof AudioContext !== 'function') return Promise.resolve(false);
     let context: AudioContext;
     try {
       context = this.context ??= new AudioContext({ latencyHint: 'interactive' });
-      this.unavailable = false;
       this.syncTrack();
       if (context.state === 'running') return Promise.resolve(true);
       if (this.starting) return this.starting;
@@ -179,7 +176,6 @@ export class MonitorAudio {
       });
       return this.starting;
     } catch {
-      this.unavailable = true;
       return Promise.resolve(false);
     }
   }
@@ -205,11 +201,6 @@ export class MonitorAudio {
   setMasterVolume(multiplier: number): void {
     if (!Number.isFinite(multiplier)) return;
     this.masterVolume = MathUtils.clamp(multiplier, 0, 3);
-    this.updateLevel();
-  }
-
-  setMuted(muted: boolean): void {
-    this.muted = muted;
     this.updateLevel();
   }
 
@@ -368,7 +359,7 @@ export class MonitorAudio {
 
   private updateLevel(): void {
     if (!this.graph || !this.context) return;
-    const level = this.enabled && !this.muted ? this.volume * this.masterVolume * MAX_GAIN : 0;
+    const level = this.enabled ? this.volume * this.masterVolume * MAX_GAIN : 0;
     this.graph.master.fadeTo(level, this.context.currentTime, LEVEL_FADE_SECONDS);
   }
 
