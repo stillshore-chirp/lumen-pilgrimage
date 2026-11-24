@@ -267,15 +267,15 @@ export class CoastApp {
     const vrStatus = vr.querySelector('p')!;
     vrButton.addEventListener('click', () => void this.xr.session.toggle(), { signal: this.events.signal });
     this.bindXRStatus = () => this.xr.session.observe(status => {
-      renderImmersiveStatus(vrButton, vrStatus, status, 'VRを開始', 'VRを終了');
-      vrStatus.hidden = status.state === 'available' || status.state === 'presenting'
-        || (status.state === 'unavailable' && window.isSecureContext);
+      const unavailable = status.state === 'unavailable' && window.isSecureContext;
+      renderImmersiveStatus(vrButton, vrStatus, status, unavailable ? 'VR非対応' : 'VRを開始', 'VRを終了');
+      vrButton.title = unavailable ? status.message : '';
+      vrStatus.hidden = status.state === 'available' || status.state === 'presenting' || unavailable;
     });
     this.travelStatus.className = 'coast-panel coast-travel-status';
     this.travelStatus.setAttribute('role', 'status');
     this.travelStatus.hidden = true;
     this.travel.element.append(this.travelStatus);
-    this.monitorBinding = this.bindMonitor(actions);
     this.audioControls = bindCoastSoundControls(
       ui.querySelector<HTMLElement>('.coast-settings')!, this.worldId, this.audio,
       master => this.monitor?.setMasterVolume(master),
@@ -294,6 +294,7 @@ export class CoastApp {
       });
       actions.append(this.residencePanel.element);
     }
+    this.monitorBinding = this.bindMonitor(actions);
     if (this.interaction) {
       this.interactionButton = document.createElement('button');
       this.interactionButton.type = 'button';
@@ -459,8 +460,11 @@ export class CoastApp {
           label: () => cinema.samplePlaying ? '試映を停止' : '試映を再生',
           enabled: () => cinema.canStartSample || cinema.samplePlaying,
           invoke: () => {
-            if (!cinema.samplePlaying) void this.audioControls.startForPreview();
             cinema.toggleSample();
+            if (cinema.samplePlaying) {
+              void this.audioControls.startForPreview();
+              this.xr.closeMenu();
+            }
           },
         },
         { label: '設定に戻る', invoke: () => this.openXRSettings() },

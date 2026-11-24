@@ -28,6 +28,8 @@ export class CoastXR {
   private readonly localPosition = new Vector3();
   private readonly rotation = new Euler(0, 0, 0, 'YXZ');
   private readonly horizontal = new Vector3();
+  private readonly headOffset = new Vector3();
+  private readonly navigationView = { yaw: 0, headOffset: this.headOffset };
   private readonly bodyOrigin = new Vector3();
   private readonly input = new ImmersiveControls();
   private menu?: ImmersiveMenu;
@@ -120,7 +122,9 @@ export class CoastXR {
     else {
       if (input.snap) this.snap(input.snap);
       this.rotation.setFromQuaternion(this.pose.quaternion, 'YXZ');
-      binding.controls.updateXR(dt, input, this.rotation.y);
+      this.navigationView.yaw = this.rotation.y;
+      this.headOffset.subVectors(this.pose.position, binding.camera.position);
+      binding.controls.updateXR(dt, input, this.navigationView);
       this.syncRig(binding);
       this.updateViewer();
     }
@@ -167,7 +171,7 @@ export class CoastXR {
   private readonly onSelect = ({ inputSource, frame }: XRInputSourceEvent): void => {
     const { active, binding, reference } = this;
     if (!active || !reference || !binding || !this.tracked || binding.blocking() || active.visibilityState !== 'visible'
-      || frame.session !== active || inputSource.handedness !== 'right' || inputSource.targetRayMode !== 'tracked-pointer'
+      || frame.session !== active || inputSource.hand || inputSource.handedness !== 'right' || inputSource.targetRayMode !== 'tracked-pointer'
       || inputSource.gamepad?.mapping !== 'xr-standard' || !frame.getPose(inputSource.targetRaySpace, reference)) return;
     if (this.menu?.open) this.menu.handle(0, true);
     else binding.interact(this.pose);

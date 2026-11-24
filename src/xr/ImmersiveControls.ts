@@ -71,7 +71,7 @@ export class ImmersiveControls {
     let right: Pad | undefined;
     for (const source of frame.session.inputSources) {
       const gamepad = source.gamepad;
-      if (source.targetRayMode !== 'tracked-pointer' || gamepad?.mapping !== 'xr-standard'
+      if (source.hand || source.targetRayMode !== 'tracked-pointer' || gamepad?.mapping !== 'xr-standard'
         || source.handedness === 'none' || !frame.getPose(source.targetRaySpace, reference)) continue;
       const pad: Pad = { source, gamepad, touch: source.profiles.some(profile => TOUCH_PROFILES.has(profile)) };
       if (source.handedness === 'left') left = pad;

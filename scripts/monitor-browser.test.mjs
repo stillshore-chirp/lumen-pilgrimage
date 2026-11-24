@@ -1118,6 +1118,26 @@ test('a browser without screen capture presents an unsupported state', { timeout
   }
 });
 
+test('a secure browser without immersive support labels VR as unavailable and keeps desktop controls', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await page.addInitScript(() => {
+      const xr = new EventTarget();
+      xr.isSessionSupported = async () => false;
+      Object.defineProperty(navigator, 'xr', { value: xr });
+    });
+    await page.goto(url.href);
+    const vr = button(page, 'VR非対応');
+    await vr.waitFor();
+    assert.equal(await vr.isDisabled(), true);
+    assert.match(await vr.getAttribute('title'), /没入型VRを利用できません/);
+    await button(page, 'マウス操作を開始').click();
+    await page.waitForFunction(() => document.pointerLockElement?.classList.contains('coast-view'));
+  } finally {
+    await page.close();
+  }
+});
+
 test('Quest exploration enters without a monitor and keeps one stereo XR session through controller travel', { timeout }, async () => {
   const page = await newPage();
   page.setDefaultTimeout(25_000);
@@ -1215,6 +1235,18 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await page.waitForURL(address => address.searchParams.get('place') === 'primary-bedroom'
       && address.searchParams.get('time') === 'night');
     await page.waitForFunction(() => window.xrFixture.hint?.includes('バルコニーの引戸を開ける'));
+    const bedroom = await pose();
+    await change({ head: { x: -.17 } });
+    const leaning = await pose();
+    assert.ok(Math.abs(leaning.x - bedroom.x - .38) < .015, 'physical head lean still moves the rendered viewpoint');
+    await change({ side: 'left', axes: [0, -1], frames: 14 });
+    const againstDoor = await pose();
+    assert.ok(againstDoor.x <= leaning.x + .03, 'stick movement cannot push a leaning viewer into the closed door');
+    await change({ side: 'left', axes: [0, 1] });
+    await page.waitForFunction(x => (window.xrFixture.eyePoses[0].x + window.xrFixture.eyePoses[320].x) / 2 < x - .16, leaning.x);
+    await change({ side: 'left', axes: [0, 0] });
+    await page.waitForFunction(() => window.xrFixture.hint?.includes('バルコニーの引戸を開ける'));
+
     await choose();
     await page.waitForFunction(() => window.xrFixture.hint?.includes('バルコニーの引戸を閉める'));
 
