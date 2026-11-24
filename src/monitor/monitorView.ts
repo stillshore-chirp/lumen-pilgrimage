@@ -57,6 +57,8 @@ export class MonitorView {
   private editing = false;
   private pendingXRSummon = false;
   private theater: MonitorTheater | null = null;
+  private audioPlayback: 'off' | 'on' | 'retry' = 'off';
+  private audioStart: Promise<boolean> | null = null;
 
   constructor(
     private binding: MonitorViewBinding,
@@ -109,7 +111,8 @@ export class MonitorView {
           <label class="monitor-view-volume">モニター音量
             <input data-monitor-volume type="range" min="0" max="100" step="1" value="75">
           </label>
-          <button type="button" data-monitor-mute aria-pressed="false">モニター音をミュート</button>
+          <button type="button" data-monitor-sound aria-label="モニター音声" aria-describedby="monitor-audio-status"
+            aria-pressed="false" disabled>モニター音声 オフ</button>
         </div>
         <label class="monitor-view-mode">モニターの音響
           <select data-monitor-sound-mode>
@@ -120,8 +123,7 @@ export class MonitorView {
             <option value="cinema" hidden disabled>映画館の空間音響</option>
           </select>
         </label>
-        <button type="button" data-monitor-sound>モニター音を有効にする</button>
-        <p role="status" data-monitor-audio-status></p>
+        <p id="monitor-audio-status" role="status" data-monitor-audio-status></p>
       </div>
       <div class="monitor-view-section">
         <button type="button" data-monitor-xr disabled>VRで見る</button>
@@ -174,7 +176,7 @@ export class MonitorView {
       onState: state => this.setConnectionState(state),
       onStream: stream => this.setStream(stream),
     });
-    this.bindPanel(query('volume'), query('mute'));
+    this.bindPanel(query('volume'));
     this.bindPointer();
     this.setConnectionState(this.state);
     this.setOpen(true);
@@ -199,6 +201,28 @@ export class MonitorView {
 
   setMasterVolume(multiplier: number): void {
     this.audio.setMasterVolume(multiplier);
+  }
+
+  async toggleAudio(): Promise<void> {
+    if (this.audioButton.disabled) return;
+    if (this.audioStart || (this.audioPlayback === 'on' && this.audio.getStatus() === 'ready')) {
+      this.audioStart = null;
+      this.audioPlayback = 'off';
+    } else {
+      this.audioPlayback = 'off';
+      this.syncSharedAudio();
+      // Starting or resuming the context must happen directly in the user's action.
+      const start = this.audio.start();
+      this.audioStart = start;
+      this.updateAudioStatus();
+      const ready = await start;
+      if (this.audioStart !== start) return;
+      this.audioStart = null;
+      this.audioPlayback = ready && this.audio.getStatus() === 'ready' ? 'on' : 'retry';
+      this.updateAudioModes();
+    }
+    this.syncSharedAudio();
+    this.updateAudioStatus();
   }
 
   closePanel(): void {
@@ -406,8 +430,12 @@ export class MonitorView {
     this.verification.hidden = !state.verification;
     this.verification.textContent = state.verification ?? '';
     this.verification.setAttribute('aria-label', '配信元と照合する確認番号');
+    if (state.phase === 'ended' || state.phase === 'failed') {
+      this.audioPlayback = 'off';
+      this.audioStart = null;
+      this.audio.stop();
+    }
     this.syncSharedAudio();
-    if (state.phase === 'ended' || state.phase === 'failed') this.audio.stop();
     this.updateAudioModes();
     this.updateAudioStatus();
   }
@@ -417,7 +445,8 @@ export class MonitorView {
     const cinema = this.theater?.cinema;
     const usesCinema = !this.screen.isFloating || this.audioMode.value === 'cinema';
     const videoPlaying = this.screen.isVisible && this.screen.projectedTexture !== null;
-    this.audio.setEnabled(available && output !== 'pc' && (!cinema || !usesCinema || (!cinema.paused() && videoPlaying)));
+    this.audio.setEnabled(this.audioPlayback === 'on' && available && output !== 'pc'
+      && (!cinema || !usesCinema || (!cinema.paused() && videoPlaying)));
   }
 
   private setStream(stream: MediaStream | null): void {
@@ -444,22 +473,33 @@ export class MonitorView {
   private updateAudioStatus(): void {
     const audioStatus = this.audio.getStatus();
     const { phase, audio } = this.state;
+    const canPlay = phase === 'connected' && audio.available && audio.output !== 'pc' && audioStatus !== 'unavailable';
+    const on = this.audioPlayback === 'on' && audioStatus === 'ready';
     let message = '';
-    if (audioStatus === 'unavailable' || audioStatus === 'stream-unavailable') {
-      message = 'この視聴ブラウザで共有音声を再生できません。';
-    } else if (phase === 'connected') {
+    if (phase === 'connected') {
       if (!audio.available) message = '配信元から共有音声が取得されていません。';
       else if (audio.pcPlaybackSuppressed) message = '共有音声は停止中です。PC側の再生は配信元で共有対象を選び直すと再開します。';
-      else if (audio.output === 'pc') message = '配信元で「PC側のみ」が選ばれています。';
-      else if (audioStatus !== 'ready') message = '視聴側でも聞くには、モニター音を有効にしてください。';
-      else if (audio.output === 'viewer') message = '配信元で「VR側のみ」が選ばれています。';
-      else if (this.audioMode.value === 'surround') message = 'ステレオ音源は左右のフロントスピーカーから再生します。';
+      else if (audio.output === 'pc') message = '配信元で「PC側のみ」が選ばれているため、視聴側の音声は停止中です。';
+      else if (audioStatus === 'unavailable') message = 'この視聴ブラウザで共有音声を再生できません。';
+      else if (this.audioStart) message = '共有音声を開始しています。もう一度押すと取り消せます。';
+      else if (this.audioPlayback === 'retry' || (this.audioPlayback === 'on' && !on)) {
+        message = '共有音声を再生できません。「モニター音声」を押して再試行してください。';
+      } else if (audio.output === 'viewer') message = '配信元で「VR側のみ」が選ばれています。';
+      else if (on && this.audioMode.value === 'surround') message = 'ステレオ音源は左右のフロントスピーカーから再生します。';
     }
     if (this.audioStatus.textContent !== message) this.audioStatus.textContent = message;
-    this.audioButton.disabled = audioStatus === 'ready' || audioStatus === 'unavailable';
+    const pressed = String(canPlay && (on || this.audioStart !== null));
+    if (this.audioButton.getAttribute('aria-pressed') !== pressed) this.audioButton.setAttribute('aria-pressed', pressed);
+    let buttonState = on ? 'オン' : 'オフ';
+    if (this.audioStart) buttonState = '開始待ち';
+    if (phase === 'connected' && !canPlay) buttonState = '停止中';
+    const label = `モニター音声 ${buttonState}`;
+    if (this.audioButton.textContent !== label) this.audioButton.textContent = label;
+    const disabled = !canPlay;
+    if (this.audioButton.disabled !== disabled) this.audioButton.disabled = disabled;
   }
 
-  private bindPanel(volume: HTMLInputElement, mute: HTMLButtonElement): void {
+  private bindPanel(volume: HTMLInputElement): void {
     const { signal } = this.events;
     const listen = { signal };
     this.displayTarget.addEventListener('change', () => this.updateDisplayTarget(true), listen);
@@ -491,21 +531,11 @@ export class MonitorView {
       if (this.video.srcObject instanceof MediaStream) void this.playVideo(this.video.srcObject);
     }, listen);
     volume.addEventListener('input', () => this.audio.setVolume(volume.valueAsNumber / 100), listen);
-    mute.addEventListener('click', () => {
-      const muted = mute.getAttribute('aria-pressed') !== 'true';
-      mute.setAttribute('aria-pressed', String(muted));
-      this.audio.setMuted(muted);
-    }, listen);
     this.audioMode.addEventListener('change', () => {
       this.audio.setMode(this.audioMode.value as MonitorAudioMode);
       this.syncSharedAudio();
     }, listen);
-    this.audioButton.addEventListener('click', async () => {
-      this.audioButton.disabled = true;
-      await this.audio.start();
-      this.updateAudioModes();
-      this.updateAudioStatus();
-    }, listen);
+    this.audioButton.addEventListener('click', () => void this.toggleAudio(), listen);
     this.xrButton.addEventListener('click', () => void this.xr.toggleSession(), listen);
     this.panel.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
