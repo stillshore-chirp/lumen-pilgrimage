@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import type { CoastMovement } from '../../CoastControls';
 import { coastRandom } from '../../terrain';
-import { createFootfall, createInteriorDoorSound } from '../residence/residenceAudioSamples';
+import { createFootfall } from '../residence/residenceAudioSamples';
 import { CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_TREADS, cinemaGroundHeight } from './cinemaLayout';
 import { CINEMA_SPEAKERS, createCinemaTail } from './cinemaAcoustics';
 
@@ -26,7 +26,6 @@ interface CinemaAmbienceGraph {
   master: GainNode;
   reverb: ConvolverNode;
   foot: Record<'wool' | 'stone', readonly AudioBuffer[]>;
-  door: { opening: AudioBuffer; closing: AudioBuffer };
   cue: AudioBuffer;
 }
 
@@ -161,11 +160,6 @@ export class CinemaAmbience {
     this.stepIndex += 1;
   }
 
-  playDoor(position: Vector3, closing = false): void {
-    if (!this.graph) return;
-    this.playAt(this.graph.door[closing ? 'closing' : 'opening'], position, 0.62, 0.15);
-  }
-
   playDemoCue(kind: CinemaDemoCue): void {
     if (!this.graph || !this.context) return;
     this.fadePreviewVoice(this.context.currentTime);
@@ -215,7 +209,6 @@ export class CinemaAmbience {
         wool: [601, 731, 947].map(seed => createFootfall(context, 'wool', seed)),
         stone: [461, 317, 199].map(seed => createFootfall(context, 'stone', seed)),
       },
-      door: { opening: createInteriorDoorSound(context, false, false), closing: createInteriorDoorSound(context, false, true) },
       cue: cueTone(context),
     };
     this.setLevel(this.level, this.muted);

@@ -1,6 +1,6 @@
 import {
-  BufferGeometry, CanvasTexture, DoubleSide, Float32BufferAttribute, InstancedMesh, MathUtils, Mesh,
-  MeshBasicMaterial, Object3D, SRGBColorSpace, Vector3, type Group, type Material,
+  BufferGeometry, CanvasTexture, DoubleSide, Float32BufferAttribute, Mesh,
+  MeshBasicMaterial, Object3D, SRGBColorSpace, Vector3, type Group,
 } from 'three';
 import { cinemaBoxes, type CinemaBox, type CinemaFinishes } from './cinemaFinishes';
 import {
@@ -166,6 +166,12 @@ export function createCinemaExits(group: Group, finish: CinemaFinishes) {
   const safety: CinemaBox[] = [];
   const steel: CinemaBox[] = [];
   const side = CINEMA_DOOR_WIDTH * 0.5;
+
+  function closedParts(parts: readonly CinemaBox[]): CinemaBox[] {
+    return CINEMA_EXITS.flatMap(exit => [-1, 1].flatMap(sign => parts.map(([x, y, z, width, height, depth]) =>
+      doorBox(exit, [sign * (side - x), y, z - 0.046, width, height, depth]))));
+  }
+
   for (const exit of CINEMA_EXITS) {
     for (const x of [-side - 0.070, side + 0.070]) {
       aperture.push(doorBox(exit, [x, CINEMA_DOOR_HEIGHT * 0.5, 0.055, 0.14, CINEMA_DOOR_HEIGHT, 0.27]));
@@ -196,60 +202,16 @@ export function createCinemaExits(group: Group, finish: CinemaFinishes) {
   cinemaBoxes(group, 'Light-trap vestibules', finish.box, finish.matte, vestibules);
   cinemaBoxes(group, 'Recessed fire safety cabinets and alarm buttons', finish.box, finish.safetyRed, safety);
   cinemaBoxes(group, 'Fire cabinet metalwork', finish.box, finish.steel, steel);
-  createCinemaSigns(group);
-
-  const leafMatrix = new Object3D();
-  const partMatrix = new Object3D();
-  const leaves = CINEMA_EXITS.flatMap((exit) => [-1, 1].map((sign) => ({ exit, sign, amount: 0 })));
-  const moving: Array<{ mesh: InstancedMesh; parts: readonly CinemaBox[] }> = [];
-
-  function movingPart(name: string, material: Material, parts: readonly CinemaBox[]) {
-    const mesh = new InstancedMesh(finish.box, material, leaves.length * parts.length);
-    mesh.name = name;
-    // Door angles are dynamic. These batches are small and always inside the auditorium.
-    mesh.frustumCulled = false;
-    moving.push({ mesh, parts });
-    group.add(mesh);
-  }
-
-  movingPart('Swing-out acoustic door leaves', finish.bulkhead, [
-    [0.45, 1.211, 0, 0.884, 2.406, 0.082],
-  ]);
-  movingPart('Door inset and hardware backplates', finish.darkSteel, [
+  cinemaBoxes(group, 'Sealed acoustic door leaves', finish.box, finish.bulkhead,
+    closedParts([[0.45, 1.211, 0, 0.884, 2.406, 0.082]]));
+  cinemaBoxes(group, 'Door inset and hardware backplates', finish.box, finish.darkSteel, closedParts([
     [0.45, 1.471, 0.047, 0.768, 1.55, 0.023],
     [0.45, 1.025, 0.081, 0.79, 0.109, 0.048],
-  ]);
-  movingPart('Steel panic bars and strike plates', finish.steel, [
+  ]));
+  cinemaBoxes(group, 'Steel panic bars and strike plates', finish.box, finish.steel, closedParts([
     [0.45, 1.025, 0.112, 0.67, 0.041, 0.040],
     [0.21, 0.185, 0.044, 0.231, 0.208, 0.009],
     [0.80, 0.185, 0.044, 0.094, 0.208, 0.009],
-  ]);
-
-  function updateLeaf(index: number): void {
-    const { exit, sign, amount } = leaves[index];
-    const [x, y, z] = doorBox(exit, [sign * side, 0, -0.046, 1, 1, 1]);
-    leafMatrix.position.set(x, y, z);
-    leafMatrix.rotation.y = doorYaw(exit) - sign * amount * 1.66;
-    leafMatrix.updateMatrix();
-
-    for (const { mesh, parts } of moving) {
-      parts.forEach(([dx, dy, dz, width, height, depth], part) => {
-        partMatrix.position.set(-sign * dx, dy, dz);
-        partMatrix.scale.set(width, height, depth);
-        partMatrix.updateMatrix();
-        partMatrix.matrix.premultiply(leafMatrix.matrix);
-        mesh.setMatrixAt(index * parts.length + part, partMatrix.matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-    }
-  }
-
-  leaves.forEach((_, index) => updateLeaf(index));
-  return (id: string, amount: number): void => {
-    leaves.forEach((leaf, index) => {
-      if (leaf.exit.id !== id) return;
-      leaf.amount = MathUtils.clamp(amount, 0, 1);
-      updateLeaf(index);
-    });
-  };
+  ]));
+  createCinemaSigns(group);
 }
