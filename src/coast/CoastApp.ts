@@ -83,6 +83,7 @@ function readHistoryIndex(state: unknown): number {
 export class CoastApp {
   private readonly world: ExplorationWorld;
   private readonly worldId: ExplorationWorldId;
+  private readonly pcVR: boolean;
   private readonly audio: ExplorationAudio;
   private readonly audioControls: ReturnType<typeof bindCoastSoundControls>;
   private readonly syncLightingControl: () => void;
@@ -113,7 +114,7 @@ export class CoastApp {
   private monitor?: MonitorView;
   private readonly seatTransition?: ReturnType<typeof createCinemaSeatTransition>;
   private time: CoastTimeOfDay;
-  private quality: CoastQuality = 'light';
+  private quality: CoastQuality;
   private lastFrame = 0;
   private elapsed = 0;
   private disposed = false;
@@ -127,8 +128,11 @@ export class CoastApp {
     private readonly renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }),
     private currentHistoryIndex = readHistoryIndex(history.state),
     xr?: CoastXR,
+    pcQuality?: CoastQuality,
   ) {
     this.worldId = loaded.id;
+    this.pcVR = currentUrl.searchParams.get('vr') === 'pc';
+    this.quality = this.pcVR ? pcQuality ?? 'high' : 'light';
     this.xr = xr ?? new CoastXR(this.renderer.xr);
     this.cinemaControls = loaded.cinemaControls;
     this.residenceControls = loaded.residenceControls ?? [];
@@ -195,8 +199,8 @@ export class CoastApp {
           </div>
           <div class="coast-row" role="group" aria-label="描画品質">
             <span class="coast-label">描画</span>
-            <button type="button" class="coast-light" aria-pressed="true" title="広域の影と軽い植生描画">軽量</button>
-            <button type="button" class="coast-high" aria-pressed="false" title="細かな木漏れ日、地表の凹凸と手前の下草">高品質</button>
+            <button type="button" class="coast-light" aria-pressed="${this.quality === 'light'}" title="広域の影と軽い植生描画">軽量</button>
+            <button type="button" class="coast-high" aria-pressed="${this.quality === 'high'}" title="細かな木漏れ日、地表の凹凸と手前の下草">高品質</button>
           </div>
           <div class="coast-view-settings coast-setting-row">
             <label class="coast-label" for="coast-fov">視野角</label>
@@ -270,12 +274,32 @@ export class CoastApp {
     actions.append(vr);
     const vrButton = vr.querySelector('button')!;
     const vrStatus = vr.querySelector('p')!;
-    vrButton.addEventListener('click', () => void this.xr.session.toggle(), { signal: this.events.signal });
+    if (this.pcVR) {
+      vrStatus.className = 'coast-pcvr-status';
+      ui.querySelector('.coast-guide')!.append(vrStatus);
+    }
+    let recheck = false;
+    vrButton.addEventListener('click', () => {
+      if (recheck) void this.xr.session.checkSupport();
+      else void this.xr.session.toggle();
+    }, { signal: this.events.signal });
     this.bindXRStatus = () => this.xr.session.observe(status => {
       const unavailable = status.state === 'unavailable' && window.isSecureContext;
+      recheck = this.pcVR && unavailable && Boolean(navigator.xr);
       renderImmersiveStatus(vrButton, vrStatus, status, unavailable ? 'VR非対応' : 'VRを開始', 'VRを終了');
-      vrButton.title = unavailable ? status.message : '';
-      vrStatus.hidden = status.state === 'available' || status.state === 'presenting' || unavailable;
+      vrButton.title = unavailable && !this.pcVR ? status.message : '';
+      vrStatus.hidden = status.state === 'presenting' || (!this.pcVR && (status.state === 'available' || unavailable));
+      if (recheck) {
+        vrButton.disabled = false;
+        vrButton.textContent = 'VRの接続を再確認';
+        vrStatus.textContent = 'Meta Horizon Link で Quest を接続し、OpenXR ランタイムを確認してから再確認してください。';
+      } else if (this.pcVR && status.state === 'available') {
+        vrStatus.textContent = 'Quest を Meta Horizon Link で接続したら、Windows の Chrome でこのページの「VRを開始」を押してください。';
+      } else if (this.pcVR && status.state === 'error') {
+        vrStatus.textContent = `${status.message} Windows の Meta Horizon Link で Quest を接続し、OpenXR ランタイムを確認してください。`;
+      } else if (this.pcVR && unavailable) {
+        vrStatus.textContent = `${status.message} Windows の Chrome でページを開いてください。`;
+      }
     });
     this.travelStatus.className = 'coast-panel coast-travel-status';
     this.travelStatus.setAttribute('role', 'status');
@@ -537,8 +561,9 @@ export class CoastApp {
     });
     if (decision.kind === 'invalid') return;
     if (decision.kind === 'navigate') {
-      if (this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection) void this.changeWorld(decision.url);
-      else {
+      if (this.pcVR || this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection) {
+        void this.changeWorld(decision.url);
+      } else {
         ++this.travelRequest;
         location.assign(decision.url);
       }
@@ -609,7 +634,8 @@ export class CoastApp {
         return;
       }
       targetHistoryIndex = historyIndex ?? readHistoryIndex(history.state) + 1;
-      next = new CoastApp(this.mount, loaded, url, this.renderer, targetHistoryIndex, this.xr);
+      next = new CoastApp(this.mount, loaded, url, this.renderer, targetHistoryIndex, this.xr,
+        this.pcVR ? this.quality : undefined);
     } catch {
       loaded?.audio.dispose();
       loaded?.world.dispose();

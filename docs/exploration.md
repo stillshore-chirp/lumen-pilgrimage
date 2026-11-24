@@ -28,6 +28,8 @@ Vite が表示したローカル URL を MacBook の Chrome で開くと、砂�
 
 Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、右上の「VRを開始」を押します。4つのワールドのどこからでも開始できます。通常のページに戻るには、VR内の「VRを終了」またはヘッドセットのシステムメニューを使います。 [HTTPS の配信手順](verification.md#別端末とvr)
 
+Windows PCで描画し、Quest 3の頭部追跡とTouch Plusで操作する場合は、[Windows PCVRの手順](verification.md#windows-pcvr)を使います。
+
 | 操作 | Touch Plus |
 | --- | --- |
 | 移動、視点 | 左スティックで頭の向きを基準に移動。頭を動かして見回します。 |

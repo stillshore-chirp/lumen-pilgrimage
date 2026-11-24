@@ -84,6 +84,25 @@ npm run test:coast:browser
 
 住戸の音を実機で確認するには、ヘッドホンで主寝室に入り、環境音をオンにして戸を閉めたまま聞きます。次に `E` で開けてバルコニーへ進み、南と東で音の方向が変わることを確認します。夜に切り替え、交通の間隔と室内外の音量差も聞き比べます。
 
+### Windows PCVR
+
+WindowsのChromeが両眼の映像を描画し、Meta Horizon LinkがQuest 3への映像転送と頭部・Touch Plusの追跡を受け持ちます。Linkの対応GPUにはGeForce RTX 3080 Tiを含むRTX 30シリーズが掲載されています。 [MetaのWindows PC要件](https://www.meta.com/help/quest/140991407990979/) · [NVIDIAのRTX 30シリーズ一覧](https://www.nvidia.com/en-us/geforce/graphics-cards/30-series/)
+
+1. WindowsにMeta Horizon LinkのPCアプリを入れ、アプリの「設定」→「一般」→「OpenXRランタイム」で「Meta Horizon Linkをアクティブに設定」を選びます。 [MetaのOpenXR設定と接続テスト](https://developers.meta.com/vr/documentation/unreal/unreal-link/?locale=ja_JP)
+2. 初回は5 Gbps対応のUSB 3.2ケーブルで接続します。Quest 3のクイック設定で「Link」を選び、接続したPCを選んで起動します。無線の場合は同じ「Link」で「Air Linkを使用」を有効にし、PCとペアリングして起動します。 [MetaのLinkとAir Linkの設定](https://www.meta.com/help/quest/509273027107091/)
+3. Windowsでリポジトリを開き、初回は `npm ci` を実行します。`npm run pcvr` は毎回ビルドし、同じPCから接続できる `127.0.0.1:4173` で起動します。既定のブラウザーが別の場合は、WindowsのChromeで [http://127.0.0.1:4173/?vr=pc](http://127.0.0.1:4173/?vr=pc) を開きます。ループバックのHTTPはChromeで安全なコンテキストとして扱われます。WindowsのOpenXRは既定で有効で、この手順にADBやChromeの試験用フラグは不要です。 [Secure Contextsのループバック規定](https://www.w3.org/TR/secure-contexts/#is-origin-trustworthy) · [ChromiumのOpenXR対応](https://chromium.googlesource.com/chromium/src/+/HEAD/device/vr/README.md)
+4. ページの描画品質は「高品質」から始まります。「VRを開始」を押し、Quest 3で左右眼の表示、頭を横に動かしたときの視差、Touch Plusの移動・旋回・メニューを確認します。VRを終了し、PCの通常画面とマウス操作に戻ることも確認します。
+
+HTTPSで配布したPCVR対応ビルドを使う場合は、WindowsのChromeで信頼済みのURLに `?vr=pc` を付けて開きます。すでにクエリがあるURLには `&vr=pc` を追加します。Quest 3では同じ手順でLinkを起動します。
+
+VR中にXのファストトラベルでワールドを移動し、ヘッドセットの表示と頭部追跡が続くことを確かめます。環境音をオンにし、音源に対して頭を回したとき、音の方向がQuest 3のスピーカーまたはヘッドホンで変わることも確認します。
+
+「VRを開始」が使えないときは、Quest 3でLinkが起動していることを確認し、「VRの接続を再確認」を押します。OpenXRランタイムを切り替えた後も検出しない場合は、Linkを起動した状態でChromeを完全に終了して開き直します。ChromiumのWindows実装はOpenXRインスタンスを再利用します。 [ChromiumのWindowsランタイム実装](https://chromium.googlesource.com/chromium/src/+/HEAD/device/vr/openxr/windows/openxr_platform_helper_windows.cc)
+
+WindowsのChromeで `chrome://gpu` を開き、Graphics Feature StatusのWebGLが `Hardware accelerated` で、`GL_RENDERER` がRTX 3080 Tiを示すことを確認します。ここで確認するのはChromeの描画アダプターです。 [ChromeのGPU確認](https://developer.chrome.com/blog/supercharge-web-ai-testing)
+
+有線の接続状態はLink PCアプリの「デバイス」→接続したQuest 3→「USBテスト」→「接続をテストする」で確認できます。実機記録には接続方式、ChromeとLinkの版、両眼・追跡・Touch・音声の結果を残します。Macのブラウザー試験で使うWebXRは模擬セッションです。WindowsとQuest 3を組み合わせた実機確認は未実施です。 [MetaのLink接続テスト](https://developers.meta.com/vr/documentation/unreal/unreal-link/?locale=ja_JP)
+
 ## 仮想モニターの実機確認
 
 映画館を実機で確認する場合は、`?world=cinema` で起動して中段、前方、後方の席を順に選びます。タブを共有し、画面の白いフレームと同期するクリック音を再生します。ステレオ出力と映画館の空間音響で、同じ機材を使って追加遅延を比較します。VRでは首を振って幕と音源の方向が一致するかを確認し、暗転時の段鼻や出口の視認性と、明暗の切り替え時のちらつきを個別に記録します。実機の耳元音圧と表示輝度は較正した機器で確認します。

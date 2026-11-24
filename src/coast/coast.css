@@ -531,3 +531,8 @@
   padding: 8px 10px;
   font-size: .9rem;
 }
+
+.coast-pcvr-status {
+  max-inline-size: 25rem;
+  font-size: .95rem;
+}

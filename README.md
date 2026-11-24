@@ -21,6 +21,8 @@ Vite が表示したローカル URL を Chrome で開くと、入り江の砂�
 
 Meta Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、「VRを開始」を押すと、Touch Plus で4つのワールドを探索できます。 [Quest 3 の接続と操作](docs/exploration.md#meta-quest-3-で探索する)
 
+Windows PCで描画してQuest 3で遊ぶ場合は、Meta Horizon Linkで接続し、Windows側で `npm run pcvr` を実行します。WindowsのChromeで [PCVR用ページ](http://127.0.0.1:4173/?vr=pc) を開き、「VRを開始」を押します。 [Windows PCVRの準備と確認](docs/verification.md#windows-pcvr)
+
 ## 文書案内
 
 | 知りたいこと | 読む文書 |

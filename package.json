@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "pcvr": "npm run build && vite preview --host 127.0.0.1 --port 4173 --strictPort --open \"/?vr=pc\"",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "check": "npm run build && npm run validate:harness && npm run test:coast && npm run test:monitor && npm run test:residence && npm run test:cinema",
