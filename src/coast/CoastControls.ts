@@ -130,6 +130,12 @@ export class CoastControls {
     return this.posture === 'crouch' ? this.crouchEyeHeight : EYE_HEIGHT;
   }
 
+  get isGrounded(): boolean {
+    const { x, y, z } = this.camera.position;
+    return !this.flying && this.divePhase === null && this.verticalVelocity <= 0
+      && y - this.eyeHeight <= this.supportHeight(x, z) + FOOT_CLEARANCE;
+  }
+
   relocate(pose: CoastPose): void {
     if (this.disposed) return;
     this.clearInput();
@@ -428,8 +434,7 @@ export class CoastControls {
     const position = this.camera.position;
     const foot = position.y - this.eyeHeight;
     const depth = this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z);
-    const onSupport = this.verticalVelocity <= 0
-      && foot <= this.supportHeight(position.x, position.z) + FOOT_CLEARANCE;
+    const onSupport = this.isGrounded;
     if (this.crouchQueued && onSupport && depth <= WADE_DEPTH) {
       this.setPosture(this.posture === 'walk' ? 'crouch' : 'walk');
     }

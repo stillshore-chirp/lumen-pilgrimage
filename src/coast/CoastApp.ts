@@ -37,7 +37,9 @@ interface ExplorationWorld {
   dispose(): void;
 }
 
-type ExplorationAudio = Pick<CoastAudio, 'start' | 'isOn' | 'setLevel' | 'update' | 'dispose'> & {
+type ExplorationAudio = Pick<CoastAudio, 'start' | 'isOn' | 'setLevel' | 'dispose'> & {
+  update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement: CoastMovement,
+    birdCues: readonly CoastBirdCue[], grounded: boolean): void;
   setTimeOfDay?(time: CoastTimeOfDay): void;
 };
 
@@ -555,7 +557,7 @@ export class CoastApp {
     this.up.copy(viewer.up).applyQuaternion(viewer.quaternion);
     const movement = this.controls.currentMovement;
     this.audio.update(viewer.position, this.forward, this.up, this.elapsed,
-      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues);
+      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues, this.controls.isGrounded);
     const view = this.monitor?.renderCamera ?? this.camera;
     this.world.prepareRender?.(this.renderer, view);
     this.renderer.render(this.world.scene, view);

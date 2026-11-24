@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import type { CoastMovement } from '../../CoastControls';
+import type { CoastBirdCue } from '../../coastBirdCue';
 import { coastRandom } from '../../terrain';
 import { createFootfall } from '../residence/residenceAudioSamples';
 import {
@@ -136,7 +137,8 @@ export class CinemaAmbience {
     if (this.context && this.graph) this.graph.master.gain.setTargetAtTime(muted ? 0 : this.level, this.context.currentTime, 0.035);
   }
 
-  update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement?: CoastMovement): void {
+  update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement?: CoastMovement,
+    _birdCues?: readonly CoastBirdCue[], grounded = true): void {
     this.listener.copy(position);
     const context = this.context;
     if (!context || !this.graph || context.state !== 'running') return;
@@ -151,8 +153,9 @@ export class CinemaAmbience {
     listener.upY.value = up.y;
     listener.upZ.value = up.z;
     const previous = this.lastStepFrame;
-    this.lastStepFrame = { position: position.clone(), elapsed };
-    if (!previous || (movement !== 'walk' && movement !== 'crouch')
+    const walking = grounded && (movement === 'walk' || movement === 'crouch');
+    this.lastStepFrame = walking ? { position: position.clone(), elapsed } : undefined;
+    if (!previous || !walking
       || elapsed <= previous.elapsed || elapsed - previous.elapsed > 0.26) {
       this.stepTravel = 0;
       return;

@@ -207,19 +207,41 @@ test('Space jumps once per press, lands, and works again after releasing', () =>
   const controls = createControls(browser, camera);
   try {
     const startY = camera.position.y;
+    assert.equal(controls.isGrounded, true);
     browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
     let apex = startY;
     for (let frame = 0; frame < 120; frame += 1) {
       browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space', repeat: true });
       controls.update(1 / 60);
       apex = Math.max(apex, camera.position.y);
+      if (camera.position.y > startY + 0.08) assert.equal(controls.isGrounded, false);
       if (frame > 55) assert.ok(Math.abs(camera.position.y - startY) < 1e-6, 'held Space triggered another jump');
     }
+    assert.equal(controls.isGrounded, true);
     assert.ok(apex - startY > 1.0 && apex - startY < 1.5, `jump height: ${apex - startY}`);
     browser.window.dispatch('keyup', { code: 'Space' });
     browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
     controls.update(1 / 60);
     assert.ok(camera.position.y > startY + 0.08);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('ending flight aloft reports ground contact only after reaching the floor', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  try {
+    controls.toggleFlight();
+    assert.equal(controls.isGrounded, false);
+    camera.position.y += 2;
+    controls.toggleFlight();
+    assert.equal(controls.currentMovement, 'walk');
+    assert.equal(controls.isGrounded, false);
+    for (let i = 0; i < 40; i += 1) controls.update(1 / 60);
+    assert.equal(controls.isGrounded, true);
   } finally {
     controls.dispose();
     browser.cleanup();
