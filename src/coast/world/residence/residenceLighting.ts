@@ -474,9 +474,9 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
         vec3 daytime = vec3(1.0, 0.93, 0.81) * (2.7 * probe.r * floorBounce)
           + vec3(0.77, 0.88, 1.0) * (3.1 * skyAmount);
         float warmBounce = 2.18 * probe.g;
-        vec3 evening = vec3(1.0, 0.77, 0.53) * warmBounce * (0.82 + 0.18 * abs(roomNormal.y))
-          + vec3(1.0, 0.79, 0.58) * (1.54 * probe.b)
-          + vec3(0.40, 0.57, 1.0) * (0.63 * skyAmount + 0.10 * probe.r);
+        vec3 evening = vec3(1.0, 0.88, 0.72) * warmBounce * (0.82 + 0.18 * abs(roomNormal.y))
+          + vec3(1.0, 0.85, 0.67) * (1.54 * probe.b)
+          + vec3(0.51, 0.68, 1.0) * (0.79 * skyAmount + 0.12 * probe.r);
         // Near-surface occlusion is inserted here for high quality.
         vec3 roomIrradiance = mix(daytime, evening, residenceNight) * probe.a;
         vec2 spillLight = texture(residenceSpillVolume, fieldUV).rg;

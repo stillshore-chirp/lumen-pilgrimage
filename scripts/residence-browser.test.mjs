@@ -184,13 +184,16 @@ async function brightness(canvas, area = [0, 0, 1, 1]) {
       height * source.height, 0, 0, sample.width, sample.height);
     const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
     const colors = new Set();
-    let total = 0;
+    const channels = [0, 0, 0];
     for (let i = 0; i < pixels.length; i += 4) {
       const [r, g, b] = [pixels[i], pixels[i + 1], pixels[i + 2]];
-      total += (r + g + b) / 3;
+      channels[0] += r;
+      channels[1] += g;
+      channels[2] += b;
       colors.add((r << 16) | (g << 8) | b);
     }
-    resolve({ mean: total / (pixels.length / 4), colors: colors.size });
+    const rgb = channels.map(channel => channel / (pixels.length / 4));
+    resolve({ mean: (rgb[0] + rgb[1] + rgb[2]) / 3, colors: colors.size, rgb });
   })), area);
 }
 
@@ -278,6 +281,44 @@ test('the residence accepts startup walking and preserves its views across time,
   await travel(page, 'リビング南窓', 'residence', 'living-window', 'night');
   await page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor();
   assert.equal(await button(page, '夜').getAttribute('aria-pressed'), 'true');
+  assert.deepEqual(errors, []);
+});
+
+test('the night residence preserves oak grain, speaker contours and the unlit screen color', { timeout }, async t => {
+  const { page, errors } = await createPage(t);
+  await exposeResidenceScene(page);
+  await page.goto(`${origin}/?world=residence&place=living-theater&time=night`, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.residenceProbe.relocate && window.residenceProbe.scene?.children.length > 0);
+  await button(page, '高品質').click();
+  const canvas = page.locator('canvas.coast-view');
+  const relocate = async (x, z, yaw, pitch) => {
+    await page.evaluate(pose => window.residenceProbe.relocate(pose), { x, z, yaw, pitch });
+    await page.waitForFunction(({ x, z }) => {
+      const pose = window.residenceProbe.camera;
+      return pose && Math.hypot(pose.x - x, pose.z - z) < .02;
+    }, { x, z });
+  };
+  await relocate(21.25, -2.37, .41, -.15);
+  const floorArea = [385 / 768, 358 / 480, 125 / 768, 38 / 480];
+  const oakAtNight = await brightness(canvas, floorArea);
+  const [red, green, blue] = oakAtNight.rgb;
+  assert.ok(red > green && green > blue && blue >= 29, `Warm oak with distinct blue-channel detail: ${JSON.stringify(oakAtNight)}`);
+  assert.ok(oakAtNight.colors > 35, 'the wood retains visible texture');
+  await button(page, '昼').click();
+  const oakByDay = await brightness(canvas, floorArea);
+  assert.ok(oakByDay.mean > oakAtNight.mean + 15, 'day and night keep visibly different floor lighting');
+  await button(page, '夜').click();
+
+  await relocate(21.25, -4.21, -.28, -.23);
+  const cone = await brightness(canvas, [412 / 768, 177 / 480, 35 / 768, 24 / 480]);
+  const casing = await brightness(canvas, [406 / 768, 151 / 480, 41 / 768, 13 / 480]);
+  const screen = await brightness(canvas, [80 / 768, 78 / 480, 169 / 768, 144 / 480]);
+  const buildings = await brightness(canvas, [552 / 768, 226 / 480, 204 / 768, 152 / 480]);
+  assert.ok(cone.mean > casing.mean + 14 && cone.mean < 36,
+    `The speaker cone is visible while its enclosure stays dark: ${JSON.stringify({ cone, casing })}`);
+  assert.ok(screen.rgb.every((channel, index) => Math.abs(channel - [17, 23, 27][index]) <= 1),
+    `The screen keeps its fixed sRGB color: ${JSON.stringify(screen.rgb)}`);
+  assert.ok(buildings.mean > 29 && buildings.colors > 40, 'facades and window lights are visible through the east window');
   assert.deepEqual(errors, []);
 });
 

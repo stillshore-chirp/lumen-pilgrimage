@@ -323,6 +323,8 @@ export function createDistrictMaterial(night: Night, { facades, surface, shade, 
           + sun * daylight * vec3(1.02, 0.84, 0.66));
         vec3 night = vColor * (vec3(0.051, 0.063, 0.082) + roof * 0.026) + vec3(0.0014, 0.0020, 0.0031);
         #ifdef DISTRICT_FACADES
+          // Lift reflected night sky on opaque building surfaces before adding the window fixtures.
+          night += vColor * vec3(0.024, 0.032, 0.042);
           if (roof < 0.1) applyFacade(day, night, normal, incident, sun * daylight);
         #endif
         #ifdef DISTRICT_MAP
