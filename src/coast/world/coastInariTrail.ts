@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { INARI_COURT, INARI_INNER_COURT, INARI_WALKS, coastRandom, groundHeight, type CoastPoint } from '../terrain';
 import { createInariArchitecture, type InariGatePlacement, type InariPlacement } from './coastInariModels';
 import { createInariGrove } from './coastInariGrove';
@@ -118,7 +119,47 @@ function stonework(texture: THREE.Texture, normal: THREE.Texture, worship: Inari
   return group;
 }
 
-export function createInariTrail(wood: THREE.Texture): THREE.Group {
+function createLanternLight(placements: readonly InariPlacement[]): THREE.Group {
+  const light = new THREE.Group();
+  light.name = 'Stone lantern flames and pools of light';
+  const flames = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.080, 0.113, 0.22, 8).translate(0, 1.057, 0),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffb667).multiplyScalar(2.2) }),
+    placements.length,
+  );
+  const transform = new THREE.Matrix4();
+  const patches = placements.map(({ x, y, z }, index) => {
+    flames.setMatrixAt(index, transform.makeTranslation(x, y, z));
+    const patch = new THREE.PlaneGeometry(4.8, 4.8, 12, 12).rotateX(-Math.PI / 2).translate(x, 0, z);
+    const positions = patch.getAttribute('position');
+    for (let i = 0; i < positions.count; i += 1) {
+      positions.setY(i, groundHeight(positions.getX(i), positions.getZ(i)) + 0.088);
+    }
+    return patch;
+  });
+  const size = 32;
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const distance = Math.hypot((x + 0.5) * 2 / size - 1, (y + 0.5) * 2 / size - 1);
+      const fade = Math.round(255 * Math.max(0, 1 - distance) ** 2);
+      pixels.set([fade, fade, fade, 255], (y * size + x) * 4);
+    }
+  }
+  const falloff = new THREE.DataTexture(pixels, size, size);
+  falloff.magFilter = falloff.minFilter = THREE.LinearFilter;
+  falloff.needsUpdate = true;
+  const pools = new THREE.Mesh(mergeGeometries(patches), new THREE.MeshBasicMaterial({
+    color: 0xffb561, alphaMap: falloff, opacity: 0.42,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  for (const patch of patches) patch.dispose();
+  light.add(flames, pools);
+  light.visible = false;
+  return light;
+}
+
+export function createInariTrail(wood: THREE.Texture) {
   const granite = loadCoastTexture('trail-granite.webp', true);
   const graniteNormal = loadCoastTexture('trail-granite-normal.webp', true);
   graniteNormal.colorSpace = THREE.NoColorSpace;
@@ -135,6 +176,13 @@ export function createInariTrail(wood: THREE.Texture): THREE.Group {
   const pair = [west, east].map((lane): InariGatePlacement => ({
     ...atZ(lane.points, 952.7), scale: 1.12, style: 'path',
   }));
+  const lanterns = [
+    across(main, -4.0, -1.9), across(main, 4.0, -1.9),
+    across(gate, -4.9, -3.0), across(gate, 4.9, -3.0),
+    placement(211.5, 925.3, 0.23), placement(224.1, 924.6, -0.63),
+    placement(249.6, 1036.7, 0.24), placement(257.9, 1036.6, -0.26),
+  ];
+  const lanternLight = createLanternLight(lanterns);
   const group = new THREE.Group();
   group.name = 'Vermilion trail';
   group.add(
@@ -147,13 +195,9 @@ export function createInariTrail(wood: THREE.Texture): THREE.Group {
         { ...worship, kind: 'worship' },
         { ...shrine, kind: 'small' },
       ],
-      lanterns: [
-        across(main, -4.0, -1.9), across(main, 4.0, -1.9),
-        across(gate, -4.9, -3.0), across(gate, 4.9, -3.0),
-        placement(211.5, 925.3, 0.23), placement(224.1, 924.6, -0.63),
-        placement(249.6, 1036.7, 0.24), placement(257.9, 1036.6, -0.26),
-      ],
+      lanterns,
     }, granite, graniteNormal),
+    lanternLight,
   );
-  return group;
+  return { group, setLanterns(on: boolean) { lanternLight.visible = on; } };
 }

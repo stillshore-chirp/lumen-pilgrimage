@@ -65,6 +65,8 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
     },
     world: {
       scene,
+      get artificialLightingMode() { return deck.artificialLightingMode; },
+      setArtificialLightingMode: deck.setArtificialLightingMode,
       setQuality(quality: CoastQuality) {
         high.value = Number(quality === 'high');
         deck.setQuality(high.value === 1);
@@ -77,7 +79,7 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
         sky.setTimeOfDay(time);
         lighting.setTimeOfDay(time);
         city.setTimeOfDay(time);
-        deck.setTimeOfDay(time);
+        deck.applyLamps();
         traffic.setTimeOfDay(time);
         airTraffic.setTimeOfDay(time);
       },

@@ -48,7 +48,7 @@ flowchart LR
 - [視聴パネル](../src/monitor/monitorView.ts) を初めて開くと、一枚の [映像面](../src/monitor/monitorObject.ts) を景観に追加できる。映像面の位置・向き・大きさはワールド座標に保持する。映像の縦横比に合わせて同じ平面を描き、映像を失ったらそこに状態を表示する。配置編集時はFPSのマウスロックを解除し、ドラッグを映像面に渡す。
 - 住戸のテレビは同じ映像テクスチャを壁の固定画面に描く。表示先と音の出力方式は別に選べる。5.1ch出力では、受信したチャンネルを音声の数に応じて割り当て、住戸内のスピーカーの位置から頭部伝達関数で定位させる。 [テレビとスピーカーの配置](../src/coast/world/residence/residenceTheater.ts) · [ITU-R BS.775-4](https://www.itu.int/rec/R-REC-BS.775-4-202212-I/en) · [Web Audioのチャンネル順序](https://www.w3.org/TR/webaudio/#ChannelOrdering)
 - [モニターのVR入力](../src/monitor/monitorXR.ts) は探索と同じXR rigを使う。コントローラーのグリップと手の関節座標によるピンチを扱う。追跡を失うと掴みを解除し、その時点の姿勢に固定する。 [W3C WebXR Hand Input](https://www.w3.org/TR/webxr-hand-input-1/)
-- [モニター音声](../src/monitor/monitorAudio.ts) は受信音声専用のWeb Audioコンテキストを持つ。音量とミュートを滑らかに変更し、頭部固定ステレオとHRTFによる定位・距離減衰・指向性を切り替える。映像要素はミュートし、Web Audioに再生を集約する。描画品質は自然環境音・共有音声の処理に影響しない。
+- [モニター音声](../src/monitor/monitorAudio.ts) は受信音声専用のWeb Audioコンテキストを持つ。音量と受信音声のオン・オフを滑らかに変更し、頭部固定ステレオとHRTFによる定位・距離減衰・指向性を切り替える。映像要素はミュートし、Web Audioに再生を集約する。描画品質は自然環境音・共有音声の処理に影響しない。
 
 ## 地形と移動
 
@@ -85,6 +85,7 @@ flowchart LR
 - 幕面を `z=0`、客席方向を正とする。室内40 × 57 × 22 m、幕の幅30 m、高さ16.875 m、中心高9.8 m。段床・座席・扉と、照明の受光面・音響の経路は配置データを共有する。588席のうち8席が同伴席で、車いすスペース8か所を含む収容人数は596。座席の背は歩行を止め、縦通路では各列の段を歩行用の支持面でつなぐ。車いす席の前後では、前列の頭上に幕の下端が見えるよう段数を増やし、横通路から扉までは同じ高さを通す。 [平面と断面 PDF](cinema/cinema-floor-plan.pdf) · [配置](../src/coast/world/cinema/cinemaLayout.ts) · [歩行判定](../src/coast/world/cinema/cinemaNavigation.ts)
 - 受信した映像を元の縦横比のまま幕に投影し、幕を色が場所ごとに変わる拡散面として扱う。幕の各区画から床・壁・天井・座席へ届く光は、受光点の距離と向きから求める。座席の前面と上端は別に計算し、壁のリブと手すりには面の向きに応じた弱い反射を加える。軽量は16×7区画と受光面ごとに4×5点で毎秒最大15回、高品質は32×14区画と7×9点で最大30回更新し、座席の遮蔽と幕への位置別の戻り光も計算する。 [照明](../src/coast/world/cinema/cinemaLighting.ts) · [光の伝達](../src/coast/world/cinema/cinemaLightTransport.ts) · [面光源の放射計算](https://pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Working_with_Radiometric_Integrals)
 - 入場時は壁上部の間接灯を起点に壁面を照らし、暗転中は段鼻・壁下の足元灯と出口誘導灯が点灯する。非常点検では映写を停止し、扉上の灯具から出入口と通路を白く照らす。露出は固定し、明るさの履歴は入退場時の照明切替に使う。技術設計PDFの光の分布図と受光点数は初版の記録で、現行の設定は実装に記載する。 [灯具の位置](../src/coast/world/cinema/cinemaFixtureLighting.ts) · [光と音の技術設計 PDF・第3–4ページ](cinema/cinema-light-sound-design.pdf) · [実館の迷光とコントラストの研究](https://journal.smpte.org/periodicals/SMPTE%20Motion%20Imaging%20Journal/125/4/17/)
+- 上映の暗転後、共有映像を隠して試映も停止すると、幕から場内へ届く光は途切れる。段鼻と壁下の灯具は遮光された足元の範囲を照らし、出口表示は発光を続ける。天井や離れた客席の照明は、点灯中の場内灯と再生中の映像から求める。幕面に残る迷光は安全照明を残す映像測定環境を参考にした設計上の近似値とする。 [室内と幕の描画](../src/coast/world/cinema/cinemaLightShaders.ts) · [DCI 試験計画 §7.1](https://ctp.dcimovies.com/5a469c66c7393136f99eb06c7039e10cfea457e3/ctp.html)
 - 共有音から直接音、幕の透過、鏡像法の反射、帯域別の後期残響を合成する。直接音には座席までの距離に応じたゲインを使い、反射に経路差の遅れを加える。高品質は頭部伝達関数と最大12本、軽量は等電力パンと最大4本の初期反射を使う。足音、空調、試聴の音声は共有音と独立する。 [音響](../src/coast/world/cinema/cinemaPlayback.ts) · [光と音の技術設計 PDF](cinema/cinema-light-sound-design.pdf)
 - 清掃・非常点検では現行の投影と共有音の出力を一時停止する。出口扉・表示灯は閉じた館内景観として保ち、館外への移動はファストトラベルで行う。実施設計に必要な屋外避難・廊下以降の設備は、基本設計PDFに建物側の条件として記録した。
 - 同じシアター内で座席を変えると、デスクトップとWebXRで全画面を短時間暗くして着地点を変える。WebXRは座位と頭の向きを追跡し、スクリーンの投影を停止した状態で入っても停止を維持する。 [座席移動](../src/coast/world/cinema/cinemaSeatTransition.ts)
@@ -94,6 +95,7 @@ flowchart LR
 - 音響は明示操作で開始する。[海岸の発音点](../src/coast/coastShore.ts) は海につながる浅瀬と陸の境界から求め、波が打つ方向へ動かす。再生中の発音点はクロスフェードで入れ替える。[伝播の計算](../src/coast/coastAcoustics.ts) は岩壁による遮蔽と短い反射、開口を経由する到達音を扱う。[足音と水音](../src/coast/CoastFoley.ts) は移動・潜水と地表の材質から選ぶ。カメラが潜ると、水中にいる深さに応じてミックスの高域を下げる。
 - [住戸と映画館の足音](../src/coast/world/residence/residenceAudioSamples.ts) は、靴底が沈む低い接地音と、体重が前へ移るときの短い擦れを帯域の異なるノイズから合成する。石やタイルは擦れの輪郭が残り、木床は落ち着いた音、絨毯はさらにこもった音になる。映画館では足元の位置から絨毯と段鼻を判定し、一歩ごとに移動距離と0.48秒以上の間隔を取る。 [映画館の発音処理](../src/coast/world/cinema/cinemaAmbience.ts)
 - [丘陵展望台の音響](../src/coast/world/overlook/overlookAudio.ts) は幹線の高さを含む中心線を分割し、各区間の距離と丘による遮蔽で音の強さと高域の減衰を求める。道路ごとに合成した音を頭部伝達関数（HRTF）で定位させる。昼は低木に鳥声、夜はデッキ前方の草地と斜面に虫の声を間隔をずらして配置する。虫の音も高低差と地形の遮蔽を反映する。 [録音の出典と伝搬の資料](../public/coast-overlook/ATTRIBUTION.md)
+- 丘陵展望台の足音は、描画と共用する[舗装区画](../src/coast/world/overlook/overlookDeck.ts)と[階段・上階の接地形状](../src/coast/world/overlook/overlookUpperDeck.ts)からデッキ、階段、外周の石畳を判定し、足元の左右に交互に定位させる。探索の歩行音にはナビゲーションの座標と接地状態を渡し、聴取位置と向きには描画時の視点を使う。 [フレーム処理](../src/coast/CoastApp.ts)
 - `CoastApp` は描画と音響に同じ時間帯を渡す。自然景観では昼の鳥声と夜の虫声をなじませ、丘陵展望台と住戸の夜は交通の発音量を下げる。静穏な昼と弱い夜間逆転層を想定し、伝搬経路の曲がり方を地形遮蔽に反映する。遠方の低域を補正し、近くの波や落水、潜水時の処理は各音源の位置と水深に従う。[大気による吸収と屈折の資料](https://www.fhwa.dot.gov/ENVIRonment/noise/noise_barriers/design_construction/design/design03.cfm)
 - [落水](../src/coast/world/coastWaterfall.ts) は水の加速と岩に沿った流れを描く。泡と霧の起点は海・湖ごとの水位に合わせ、音響は描画と同じ着水点を参照する。
 - [鳥](../src/coast/world/coastBirdLife.ts) が種類・個体・鳴いた位置を音響へ渡す。表示距離の外にいる鳥や、林と尾根に置いた止まり場からも、[鳥種ごとの減衰距離](../src/coast/coastBirdCue.ts)に応じて声を届ける。音響は録音を選び、飛行中は再生中の音源を動かす。距離による到達時間と地形による遮蔽を適用する。 [録音のクレジット](../public/coast-audio/ATTRIBUTION.md)

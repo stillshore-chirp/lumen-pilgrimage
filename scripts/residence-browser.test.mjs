@@ -699,6 +699,143 @@ test('the residence menu opens individual controls and keeps remote and wall con
   assert.deepEqual(errors, []);
 });
 
+test('world lighting changes every room and restores the residence light settings', { timeout }, async t => {
+  const { page, errors } = await openResidence(t, 'living-theater');
+  const lights = page.getByRole('group', { name: 'ワールド照明' });
+  const on = button(lights, '一括点灯');
+  const off = button(lights, '一括消灯');
+  const automatic = button(lights, '既定');
+  const canvas = page.locator('canvas.coast-view');
+  const landscape = '.coast-ui { visibility: hidden; }';
+  const room = await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  const west = button(room, 'ペンダント灯（西）');
+  const east = button(room, 'ペンダント灯（東）');
+  const theater = button(room, 'シアター照明');
+  await west.click();
+  await page.keyboard.press('Escape');
+  await on.click();
+  const lit = await brightness(canvas, [.20, .18, .60, .67]);
+  await capture(page, 'residence-world-light-on', landscape);
+  await off.click();
+  const dark = await brightness(canvas, [.20, .18, .60, .67]);
+  await capture(page, 'residence-world-light-off', landscape);
+  assert.ok(lit.mean - dark.mean > 6, `Living room light: ${dark.mean} → ${lit.mean}`);
+  t.diagnostic(`Living room light ${dark.mean.toFixed(1)} → ${lit.mean.toFixed(1)}`);
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  for (const fixture of [west, east, theater]) assert.equal(await fixture.getAttribute('aria-pressed'), 'false');
+  await east.click();
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await lights.locator('button[aria-pressed="true"]').waitFor({ state: 'hidden' });
+
+  await button(page, '昼').click();
+  const study = await openResidenceDevice(page, '照明', '書斎05');
+  assert.equal(await button(study, 'デスクライト').getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await on.click();
+  await openResidenceDevice(page, '照明', '書斎05');
+  assert.equal(await button(study, 'デスクライト').getAttribute('aria-pressed'), 'true');
+  await page.keyboard.press('Escape');
+
+  await button(page, '夜').click();
+  await automatic.click();
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  assert.equal(await theater.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 375, height: 710 });
+  await off.click();
+  assert.equal(await off.getAttribute('aria-pressed'), 'true');
+  assert.ok(await lights.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  await capture(page, 'residence-world-light-mobile');
+  assert.deepEqual(errors, []);
+});
+
+test('the residence remote directory keeps its bounds when changing equipment categories', { timeout }, async t => {
+  const { page, errors } = await openResidence(t);
+  const directory = residenceDialog(page, '住戸の遠隔操作');
+  const categoryNames = ['照明', 'カーテン', '家電・水栓'];
+  const tab = name => button(directory, name);
+  const choices = name => directory.getByRole('region', { name, exact: true });
+  const listViewport = name => choices(name).locator('.residence-control-list-viewport:not([inert])');
+  await button(page, 'メニュー').click();
+  await button(residenceDialog(page, 'メニュー'), '住戸の遠隔操作').click();
+
+  let bounds;
+  const shortViewport = { width: 320, height: 300 };
+  for (const size of [{ width: 960, height: 600 }, { width: 375, height: 710 }, shortViewport]) {
+    await page.setViewportSize(size);
+    const categoryBounds = [];
+    const listGaps = [];
+    for (const [index, name] of categoryNames.entries()) {
+      await tab(name).click();
+      assert.equal(await tab(name).getAttribute('aria-pressed'), 'true');
+      assert.equal(await directory.getByRole('button', { pressed: true }).count(), 1);
+      assert.equal(await directory.getByRole('region').count(), 1, 'Only the selected equipment list is exposed');
+      const list = choices(name);
+      const bottom = element => element.getBoundingClientRect().bottom;
+      listGaps.push(await list.evaluate(bottom) - await list.getByRole('button').last().evaluate(bottom));
+      categoryBounds.push(await directory.boundingBox());
+      await capture(page, `residence-remote-${size.width}x${size.height}-${index + 1}`);
+    }
+    [bounds] = categoryBounds;
+    assert.ok(bounds);
+    for (const box of categoryBounds) assert.deepEqual(box, bounds, `Layout moved at ${size.width}×${size.height}`);
+    if (size !== shortViewport) {
+      assert.ok(Math.abs(Math.min(...listGaps)) < 1, 'The tallest list fills the shared space');
+    }
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= size.width);
+    assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= size.height);
+    assert.ok(await directory.evaluate(element => element.scrollWidth <= element.clientWidth));
+    if (screenshots) t.diagnostic(`${size.width}×${size.height}: ${JSON.stringify(bounds)}`);
+  }
+
+  await tab('カーテン').click();
+  assert.ok(await listViewport('カーテン').evaluate(element => {
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop > 0 && element.scrollHeight - element.clientHeight - element.scrollTop <= 1;
+  }));
+  assert.ok(await directory.evaluate(element => element.scrollTop === 0 && element.scrollHeight === element.clientHeight));
+  const shownAtEnd = [choices('カーテン').getByRole('button').last(), ...categoryNames.map(tab), button(directory, '閉じる')];
+  for (const control of shownAtEnd) {
+    assert.ok(await control.evaluate(element => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+    }), 'The last device, category buttons and close button must remain visible at the scroll end');
+  }
+  assert.deepEqual(await directory.boundingBox(), bounds);
+  await capture(page, 'residence-remote-320x300-curtains-end');
+
+  await tab('家電・水栓').click();
+  const appliances = choices('家電・水栓').getByRole('button');
+  const lastAppliance = appliances.last();
+  const applianceName = await lastAppliance.textContent();
+  assert.ok(await lastAppliance.evaluate(element => {
+    const dialog = element.closest('dialog');
+    return element.getBoundingClientRect().bottom > dialog.getBoundingClientRect().bottom;
+  }), 'The short viewport should require scrolling');
+  await appliances.nth(-2).press('Tab');
+  assert.ok(await lastAppliance.evaluate(element => element === document.activeElement));
+  assert.ok(await listViewport('家電・水栓').evaluate(element => element.scrollTop > 0));
+  await page.keyboard.press('Enter');
+  const device = residenceDialog(page, applianceName);
+  assert.equal(await device.locator('[data-residence-section]').count(), 1);
+  await button(device, '設備一覧へ戻る').press('Enter');
+  assert.ok(await lastAppliance.evaluate(element => element === document.activeElement));
+  assert.deepEqual(await directory.boundingBox(), bounds);
+
+  await tab('カーテン').press('Space');
+  await tab('家電・水栓').press('Tab');
+  const firstCurtain = choices('カーテン').getByRole('button').first();
+  assert.ok(await firstCurtain.evaluate(element => element === document.activeElement));
+  await page.keyboard.press('Escape');
+  await directory.waitFor({ state: 'hidden' });
+  assert.ok(await button(page, 'メニュー').evaluate(element => element === document.activeElement));
+  assert.deepEqual(errors, []);
+});
+
 test('the open foyer door lights the gallery floor with its own fixtures off', { timeout }, async t => {
   const { page, errors } = await createPage(t);
   await exposeResidenceScene(page);

@@ -94,7 +94,7 @@ function readJson(request) {
   });
 }
 
-function snapshot(room) {
+function snapshot(room, time) {
   return {
     revision: room.revision,
     phase: room.phase,
@@ -102,6 +102,10 @@ function snapshot(room) {
     offer: room.offer,
     answer: room.answer,
     audio: room.audio,
+    authorization: room.phase === 'approved' ? {
+      approvalRemainingMs: Math.max(0, room.expiresAt - time),
+      activityRemainingMs: Math.max(0, Math.min(room.seen.sender, room.seen.viewer) + PEER_IDLE - time),
+    } : undefined,
   };
 }
 
@@ -178,7 +182,7 @@ export function createVirtualMonitorSignaling({ now = Date.now, pollWait = POLL_
     };
     rooms.set(room.id, room);
     codes.set(code, room);
-    return { sessionId: room.id, token, code: code.match(/.{4}/g).join('-'), snapshot: snapshot(room) };
+    return { sessionId: room.id, token, code: code.match(/.{4}/g).join('-'), snapshot: snapshot(room, time) };
   }
 
   function join(body, time) {
@@ -194,25 +198,45 @@ export function createVirtualMonitorSignaling({ now = Date.now, pollWait = POLL_
     room.seen.viewer = time;
     room.verification = String(randomInt(1_000_000)).padStart(6, '0');
     update(room);
-    return { sessionId: room.id, token, snapshot: snapshot(room) };
+    return { sessionId: room.id, token, snapshot: snapshot(room, time) };
   }
 
-  function waitForUpdate(room, role, revision, response) {
+  function waitForUpdate(room, role, revision, response, time) {
     if (!Number.isSafeInteger(revision) || revision < 0) throw new SignalError(400, 'invalid-revision');
-    if (revision !== room.revision) return snapshot(room);
-    if (room.waiters.has(role)) throw new SignalError(409, 'poll-in-progress');
+    if (revision === room.revision && room.waiters.has(role)) throw new SignalError(409, 'poll-in-progress');
+    room.seen[role] = time;
+    if (revision !== room.revision) return snapshot(room, now());
     return new Promise(resolve => {
       const timer = setTimeout(finish, pollWait);
       function finish() {
         clearTimeout(timer);
         response.off('close', finish);
         room.waiters.delete(role);
-        resolve(snapshot(room));
+        resolve(snapshot(room, now()));
       }
       room.waiters.set(role, finish);
       response.once('close', finish);
       if (response.destroyed) finish();
     });
+  }
+
+  function applyAudio(room, body, time) {
+    const { available, output, pcPlaybackSuppressed } = body.audio ?? {};
+    const { audioSequence } = body;
+    if (typeof available !== 'boolean' || !OUTPUTS.has(output)
+      || (pcPlaybackSuppressed !== undefined && (pcPlaybackSuppressed !== true || !available || output !== 'pc'))) {
+      throw new SignalError(400, 'invalid-audio');
+    }
+    if (audioSequence !== undefined && (!Number.isSafeInteger(audioSequence) || audioSequence < 1)) {
+      throw new SignalError(400, 'invalid-audio-sequence');
+    }
+    if (room.audioSequence !== undefined && (audioSequence === undefined || audioSequence <= room.audioSequence)) return;
+    room.seen.sender = time;
+    if (audioSequence !== undefined) room.audioSequence = audioSequence;
+    if (room.audio.available === available && room.audio.output === output
+      && room.audio.pcPlaybackSuppressed === pcPlaybackSuppressed) return;
+    room.audio = pcPlaybackSuppressed ? { available, output, pcPlaybackSuppressed } : { available, output };
+    update(room);
   }
 
   function apply(room, action, body, time) {
@@ -231,15 +255,6 @@ export function createVirtualMonitorSignaling({ now = Date.now, pollWait = POLL_
       room.verification = undefined;
       room.expiresAt = time + SESSION_TTL;
       room.seen.viewer = time;
-    } else if (action === 'audio') {
-      const { available, output, pcPlaybackSuppressed } = body.audio ?? {};
-      if (typeof available !== 'boolean' || !OUTPUTS.has(output)
-        || (pcPlaybackSuppressed !== undefined && (pcPlaybackSuppressed !== true || !available || output !== 'pc'))) {
-        throw new SignalError(400, 'invalid-audio');
-      }
-      if (room.audio.available === available && room.audio.output === output
-        && room.audio.pcPlaybackSuppressed === pcPlaybackSuppressed) return;
-      room.audio = pcPlaybackSuppressed ? { available, output, pcPlaybackSuppressed } : { available, output };
     } else {
       if (room.phase !== 'approved' || room[action] || (action === 'answer' && !room.offer)) {
         throw new SignalError(409, 'invalid-phase');
@@ -279,13 +294,17 @@ export function createVirtualMonitorSignaling({ now = Date.now, pollWait = POLL_
             || (['approve', 'offer', 'audio'].includes(action) && role !== 'sender')) {
           throw new SignalError(403, 'role-denied');
         }
-        room.seen[role] = time;
+        if (action === 'audio') {
+          applyAudio(room, body, time);
+          return reply(response, 200, { snapshot: snapshot(room, now()) });
+        }
         if (action === 'poll') {
-          const current = await waitForUpdate(room, role, body.revision, response);
+          const current = await waitForUpdate(room, role, body.revision, response, time);
           return reply(response, 200, { snapshot: current });
         }
+        room.seen[role] = time;
         apply(room, action, body, time);
-        return reply(response, 200, { snapshot: snapshot(room) });
+        return reply(response, 200, { snapshot: snapshot(room, now()) });
       } finally {
         inFlight--;
       }

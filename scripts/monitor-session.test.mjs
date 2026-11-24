@@ -84,6 +84,12 @@ function installTransport(t) {
 
 function installSignaling(t, initial = {}) {
   let snapshot = { revision: 1, phase: 'waiting', audio: { available: false, output: 'both' }, ...initial };
+  function currentSnapshot() {
+    return snapshot.phase === 'approved'
+      ? { authorization: { approvalRemainingMs: 8 * 60 * 60_000, activityRemainingMs: 90_000 }, ...snapshot }
+      : snapshot;
+  }
+
   const pending = new Set();
   const calls = [];
   const overrides = {};
@@ -100,12 +106,15 @@ function installSignaling(t, initial = {}) {
     const action = url.split('/').pop();
     const payload = JSON.parse(options.body);
     calls.push({ action, payload, options });
-    if (overrides[action]) await overrides[action](payload);
+    if (overrides[action]) {
+      const result = await overrides[action](payload);
+      if (result) return result;
+    }
     switch (action) {
       case 'create':
-        return Response.json({ sessionId: 'session', token: 'sender-token', code: 'AAAA-BBBB-CCCC', snapshot });
+        return Response.json({ sessionId: 'session', token: 'sender-token', code: 'AAAA-BBBB-CCCC', snapshot: currentSnapshot() });
       case 'join':
-        return Response.json({ sessionId: payload.code, token: 'viewer-token', snapshot });
+        return Response.json({ sessionId: payload.code, token: 'viewer-token', snapshot: currentSnapshot() });
       case 'audio': publish({ audio: payload.audio }); break;
       case 'approve': publish({ phase: payload.accept ? 'approved' : 'closed' }); break;
       case 'offer': publish({ offer: payload.description }); break;
@@ -129,7 +138,7 @@ function installSignaling(t, initial = {}) {
         }
         break;
     }
-    return Response.json({ snapshot });
+    return Response.json({ snapshot: currentSnapshot() });
   });
   return { calls, overrides, publish };
 }
@@ -274,4 +283,206 @@ test('late pairing responses are closed without publishing stale state', async (
   assert.equal(calls.at(-1).payload.sessionId, 'AAAABBBBCCCC');
   assert.equal(calls.at(-1).options.headers.Authorization, 'Bearer viewer-token');
   assert.equal(peers.length, 0);
+});
+
+for (const { name, terminalStatus, delays, phase } of [
+  {
+    name: 'session expiry ends playback after repeated transient poll failures',
+    terminalStatus: 404, delays: [1_000, 2_000, 4_000, 8_000, 8_000], phase: 'ended',
+  },
+  { name: 'authorization failure ends playback immediately', terminalStatus: 403, delays: [], phase: 'failed' },
+  { name: 'explicit disconnect cancels the scheduled poll retry', terminalStatus: 503, delays: [1_000], phase: 'ended' },
+]) {
+  test(name, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const peers = installTransport(t);
+    const { calls, overrides, publish } = installSignaling(t, { phase: 'approved', offer: { type: 'offer', sdp: 'v=0' } });
+    const states = [];
+    const streams = [];
+    const receiver = new MonitorReceiver({ onState: state => states.push(state), onStream: stream => streams.push(stream) });
+    t.after(() => receiver.disconnect());
+
+    await receiver.connect('AAAA-BBBB-CCCC');
+    await until(() => peers[0]?.iceGatheringState === 'gathering', 'receiver did not start ICE gathering');
+    const [peer] = peers;
+    peer.finishIce();
+    const video = new Track('video');
+    peer.receive(video);
+    peer.setConnectionState('connected');
+    await until(() => calls.filter(call => call.action === 'poll').length >= 2, 'receiver did not start polling');
+    const [stream] = streams;
+
+    const revisions = [];
+    overrides.poll = ({ revision }) => {
+      revisions.push(revision);
+      return new Response(null, { status: revisions.length <= delays.length ? 503 : terminalStatus });
+    };
+    publish({ audio: { available: true, output: 'viewer' } });
+    await until(() => revisions.length === 1, 'receiver did not poll after update');
+
+    for (const [index, delay] of delays.entries()) {
+      assert.equal(states.at(-1).phase, 'connected');
+      assert.deepEqual(peers, [peer]);
+      assert.deepEqual(streams, [stream]);
+      assert.equal(video.readyState, 'live');
+      t.mock.timers.tick(delay - 1);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(revisions.length, index + 1, 'receiver should wait before polling again');
+      t.mock.timers.tick(1);
+      await until(() => revisions.length === index + 2, 'receiver did not retry the poll');
+    }
+
+    if (terminalStatus === 503) {
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(states.at(-1).phase, 'connected');
+      receiver.disconnect();
+    }
+    await until(() => states.at(-1).phase === phase, 'receiver did not end playback');
+    t.mock.timers.tick(16_000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(revisions.length, delays.length + 1, 'no retry remains after teardown');
+    assert.equal(new Set(revisions).size, 1, 'retrying a poll uses the last received revision');
+    assert.equal(peer.connectionState, 'closed');
+    assert.equal(video.readyState, 'ended');
+    assert.deepEqual(streams, [stream, null]);
+    assert.equal(calls.filter(call => call.action === 'close').length, terminalStatus === 404 ? 0 : 1);
+  });
+}
+
+for (const { terminal, expectedPhase, closes } of [
+  { terminal: 'stop', expectedPhase: 'ended', closes: 1 },
+  { terminal: 404, expectedPhase: 'ended', closes: 0 },
+  { terminal: 403, expectedPhase: 'failed', closes: 1 },
+]) {
+  test(`audio-setting retries end at ${terminal}`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const peers = installTransport(t);
+    const { calls, overrides, publish } = installSignaling(t);
+    const states = [];
+    const sender = new MonitorSender({ onState: state => states.push(state) });
+    t.after(() => sender.stop());
+    const video = new Track('video');
+    const audio = new Track('audio');
+    await sender.start(new Stream([video, audio]), { available: true, output: 'both' });
+    publish({ phase: 'approved' });
+    await until(() => peers[0]?.iceGatheringState === 'gathering', 'sender did not start ICE gathering');
+    const [peer] = peers;
+    peer.finishIce();
+    await until(() => calls.some(call => call.action === 'offer'), 'sender did not offer');
+    publish({ answer: { type: 'answer', sdp: 'v=0' } });
+    await until(() => peer.remoteDescription?.type === 'answer', 'sender did not apply the answer');
+    peer.setConnectionState('connected');
+
+    const outputs = [];
+    const sequences = [];
+    overrides.audio = ({ audio, audioSequence }) => {
+      outputs.push(audio.output);
+      sequences.push(audioSequence);
+      const status = terminal === 403 || (terminal === 404 && outputs.length > 1) ? terminal : 503;
+      return new Response(null, { status });
+    };
+    const first = sender.updateAudio({ available: true, output: 'pc' });
+    assert.equal(audio.enabled, false);
+    await until(() => outputs.length === 1, 'sender did not send the audio setting');
+
+    if (terminal === 403) {
+      await first;
+    } else {
+      assert.equal(states.at(-1).audioPending, true);
+      assert.equal(peer.connectionState, 'connected');
+      assert.equal(video.readyState, 'live');
+      const newer = sender.updateAudio({ available: true, output: 'both' });
+      assert.equal(audio.enabled, true);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(outputs, ['pc'], 'the new setting waits for the serialized retry');
+      if (terminal === 'stop') sender.stop();
+      else t.mock.timers.tick(1_000);
+      await Promise.all([first, newer]);
+    }
+
+    assert.equal(states.at(-1).phase, expectedPhase);
+    assert.equal(states.at(-1).audioPending, undefined);
+    assert.equal(peer.connectionState, 'closed');
+    assert.equal(video.readyState, 'ended');
+    assert.equal(audio.readyState, 'ended');
+    t.mock.timers.tick(16_000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(outputs, terminal === 404 ? ['pc', 'both'] : ['pc']);
+    assert.ok(sequences.every(sequence => Number.isSafeInteger(sequence) && sequence > 0));
+    if (terminal === 404) assert.equal(sequences[1], sequences[0] + 1);
+    assert.equal(calls.filter(call => call.action === 'close').length, closes);
+  });
+}
+
+for (const { limit, approvalRemainingMs, expiresAt } of [
+  { limit: 'peer activity', approvalRemainingMs: 8 * 60 * 60_000, expiresAt: 91_000 },
+  { limit: 'original approval', approvalRemainingMs: 5_000, expiresAt: 5_000 },
+]) {
+  test(`an isolated live receiver releases media at the ${limit} deadline`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+    t.mock.method(performance, 'now', () => Date.now());
+    const peers = installTransport(t);
+    const { calls, overrides, publish } = installSignaling(t, {
+      phase: 'approved', offer: { type: 'offer', sdp: 'v=0' },
+      authorization: { approvalRemainingMs, activityRemainingMs: 90_000 },
+    });
+    const states = [];
+    const streams = [];
+    const receiver = new MonitorReceiver({ onState: state => states.push(state), onStream: stream => streams.push(stream) });
+    t.after(() => receiver.disconnect());
+
+    await receiver.connect('AAAA-BBBB-CCCC');
+    await until(() => peers[0]?.iceGatheringState === 'gathering', 'receiver did not start ICE gathering');
+    const [peer] = peers;
+    peer.finishIce();
+    const video = new Track('video');
+    peer.receive(video);
+    peer.setConnectionState('connected');
+    await until(() => calls.filter(call => call.action === 'poll').length >= 2, 'receiver did not start polling');
+    const [stream] = streams;
+
+    let failed = false;
+    overrides.poll = () => {
+      failed = true;
+      return new Response(null, { status: 503 });
+    };
+    publish({});
+    await until(() => failed, 'receiver did not encounter the signal failure');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(states.at(-1).phase, 'connected');
+    assert.equal(video.readyState, 'live');
+
+    // A successful retry refreshes activity; a new response cannot extend the original approval.
+    delete overrides.poll;
+    publish({ authorization: { approvalRemainingMs: 8 * 60 * 60_000, activityRemainingMs: 90_000 },
+      audio: { available: true, output: 'viewer' } });
+    t.mock.timers.tick(1_000);
+    await until(() => states.at(-1).audio.output === 'viewer', 'receiver did not recover on the same peer');
+    assert.deepEqual(peers, [peer]);
+    assert.deepEqual(streams, [stream]);
+
+    t.mock.timers.tick(expiresAt - 1_001);
+    assert.equal(states.at(-1).phase, 'connected');
+    assert.equal(video.readyState, 'live');
+    t.mock.timers.tick(1);
+    assert.equal(states.at(-1).phase, 'ended');
+    assert.equal(peer.connectionState, 'closed');
+    assert.equal(video.readyState, 'ended');
+    assert.deepEqual(streams, [stream, null]);
+    assert.equal(calls.filter(call => call.action === 'close').length, 1);
+  });
+}
+
+test('a receiver requires expiration information before accepting approved media', async t => {
+  const peers = installTransport(t);
+  const { publish } = installSignaling(t, { phase: 'pending' });
+  const states = [];
+  const receiver = new MonitorReceiver({ onState: state => states.push(state), onStream: () => {} });
+  t.after(() => receiver.disconnect());
+
+  await receiver.connect('AAAA-BBBB-CCCC');
+  publish({ phase: 'approved', authorization: undefined, offer: { type: 'offer', sdp: 'v=0' } });
+  await until(() => states.at(-1).phase === 'failed', 'receiver did not reject an approval without expiration');
+  assert.match(states.at(-1).detail, /有効期限/);
+  assert.deepEqual(peers, []);
 });

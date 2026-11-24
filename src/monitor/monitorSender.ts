@@ -77,7 +77,6 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
   let generation = 0;
   let choosing = false;
   let deciding = false;
-  let changingAudio = false;
 
   const sender = new MonitorSender({
     onState(next) {
@@ -87,7 +86,6 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
         generation += 1;
         capture.stop();
         choosing = false;
-        changingAudio = false;
       }
       state = next;
       render();
@@ -102,7 +100,8 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     if (choosing) currentStatus = 'ブラウザのダイアログで画面、ウィンドウ、またはタブを選んでください。';
     if (active) {
       const detail = state?.phase === 'connected' ? '視聴先と接続しています。' : state?.detail || '接続を準備しています。';
-      currentStatus = `共有中。${detail}`;
+      const pending = state?.audioPending ? '音声の設定を視聴先に反映中です。' : '';
+      currentStatus = `共有中。${detail}${pending}`;
     }
     const text = unsupported || message || currentStatus;
     if (status.textContent !== text) status.textContent = text;
@@ -110,14 +109,14 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     share.textContent = stoppable ? '共有を停止' : '画面共有を開始';
     share.disabled = !!unsupported;
     restart.hidden = !active;
-    restart.disabled = deciding || changingAudio;
-    output.disabled = !!unsupported || choosing || changingAudio;
+    restart.disabled = deciding;
+    output.disabled = !!unsupported || choosing;
     output.value = active && hasAudio && !audioReselection ? state?.audio.output ?? preferredOutput : preferredOutput;
     let explanation = '';
     if (active) {
       explanation = hasAudio ? audioExplanation : capture.selectAudio(preferredOutput).explanation;
       if (hasAudio && capture.sharesFullDisplay && state?.audio.output !== 'pc') {
-        const preventFeedback = '同じPCで視聴する場合は、音の回り込みを防ぐため、視聴側のモニター音をミュートしてください。';
+        const preventFeedback = '同じPCで視聴する場合は、音の回り込みを防ぐため、視聴側の「モニター音声」をオフにしてください。';
         explanation = explanation ? `${explanation} ${preventFeedback}` : preventFeedback;
       }
     }
@@ -137,7 +136,6 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     capture.stop();
     choosing = false;
     deciding = false;
-    changingAudio = false;
     audioExplanation = '';
     audioReselection = false;
     sender.stop();
@@ -190,7 +188,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     void sender.decide(accepted);
   }
 
-  async function changeAudio() {
+  function changeAudio() {
     preferredOutput = output.value as MonitorOutput;
     if (!capture.active) return;
     const selection = capture.selectAudio(preferredOutput, state?.audio.output);
@@ -201,13 +199,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
       render();
       return;
     }
-    const attempt = generation;
-    changingAudio = true;
-    render();
-    await sender.updateAudio(selection.audio);
-    if (attempt !== generation) return;
-    changingAudio = false;
-    render();
+    void sender.updateAudio(selection.audio);
   }
 
   function dispose() {
@@ -224,7 +216,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
   restart.addEventListener('click', () => { void start(); }, listeners);
   approve.addEventListener('click', () => { decide(true); }, listeners);
   reject.addEventListener('click', () => { decide(false); }, listeners);
-  output.addEventListener('change', () => { void changeAudio(); }, listeners);
+  output.addEventListener('change', changeAudio, listeners);
   window.addEventListener('pagehide', stop, listeners);
   render();
   return dispose;

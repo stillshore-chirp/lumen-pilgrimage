@@ -224,7 +224,7 @@ test('the final peak ceiling preserves normal sample levels and retains output h
   assert.ok(curve.every((sample, index) => Math.abs(sample) < 0.97 && (index === 0 || sample >= curve[index - 1])));
 });
 
-test('walking and diving contacts follow separate mix controls in direct sound and reflections', () => {
+function createFoleyFixture() {
   const param = () => ({
     value: 1,
     setValueAtTime(value) { this.value = value; },
@@ -247,14 +247,23 @@ test('walking and diving contacts follow separate mix controls in direct sound a
   const direct = mockAudioNode();
   const reflected = mockAudioNode();
   const foley = new CoastFoley(context, direct, reflected);
-  const walk = (x, elapsed) => {
+  return { context, sources, direct, reflected, foley };
+}
+
+test('walking and diving contacts follow separate mix controls in direct sound and reflections', () => {
+  const { sources, direct, reflected, foley } = createFoleyFixture();
+  const walk = (x, elapsed, grounded) => {
     const z = SPAWN.z;
     const y = groundHeight(x, z) + groundEyeHeight('walk');
-    foley.update({ x, y, z }, SEA_LEVEL, 'walk', elapsed, elapsed);
+    foley.update({ x, y, z }, SEA_LEVEL, 'walk', elapsed, elapsed, grounded);
   };
-  walk(SPAWN.x, 0);
-  walk(SPAWN.x + 0.5, 0.16);
-  walk(SPAWN.x + 1, 0.32);
+  walk(SPAWN.x, 0, false);
+  walk(SPAWN.x + 0.5, 0.16, false);
+  walk(SPAWN.x + 1, 0.32, false);
+  assert.equal(sources.length, 0, 'navigation can report airborne even at the normal eye height');
+  walk(SPAWN.x + 1, 0.48, true);
+  walk(SPAWN.x + 1.5, 0.64, true);
+  walk(SPAWN.x + 2, 0.8, true);
   assert.equal(sources.length, 1);
   const dryContact = sources[0].connections[0];
   const nominalStep = dryContact.gain.value;
@@ -264,14 +273,14 @@ test('walking and diving contacts follow separate mix controls in direct sound a
   const footstepsOnly = { ...DEFAULT_EXPLORATION_MIX, environmentOn: false };
   foley.setMix(footstepsOnly);
   assert.equal(dryContact.gain.value, nominalStep);
-  const dive = { x: SPAWN.x + 1, y: groundHeight(SPAWN.x + 1, SPAWN.z) + 0.2, z: SPAWN.z };
-  foley.update(dive, SEA_LEVEL, 'dive', 0.48, 0.48);
+  const dive = { x: SPAWN.x + 2, y: groundHeight(SPAWN.x + 2, SPAWN.z) + 0.2, z: SPAWN.z };
+  foley.update(dive, SEA_LEVEL, 'dive', 0.96, 0.96);
   assert.equal(sources.length, 1, 'disabled water channel suppresses the dive bubbles');
 
   foley.setMix({ ...DEFAULT_EXPLORATION_MIX, footstepsOn: false });
   assert.equal(dryContact.gain.value, 0);
-  walk(dive.x, 0.64);
-  foley.update(dive, SEA_LEVEL, 'dive', 0.8, 0.8);
+  walk(dive.x, 1.12);
+  foley.update(dive, SEA_LEVEL, 'dive', 1.28, 1.28);
   assert.equal(sources.length, 2);
   const wetContact = sources[1].connections[0];
   const nominalSplash = wetContact.gain.value;
@@ -280,5 +289,34 @@ test('walking and diving contacts follow separate mix controls in direct sound a
   foley.setMix({ ...DEFAULT_EXPLORATION_MIX, levels: { ...DEFAULT_EXPLORATION_MIX.levels, water: 0.25 } });
   assert.equal(wetContact.gain.value, nominalSplash * 0.25);
   assert.equal(dryContact.gain.value, nominalStep);
+  foley.dispose();
+});
+
+test('wading follows grounded navigation while the listener can move independently', () => {
+  const { context, sources, foley } = createFoleyFixture();
+  foley.setMix({ ...DEFAULT_EXPLORATION_MIX, footstepsOn: false });
+  const x = SPAWN.x, z = 64;
+  const point = x => ({ x, y: groundHeight(x, z) + groundEyeHeight('wade'), z });
+  const start = point(x);
+  assert.ok(SEA_LEVEL - groundHeight(x, z) > 0.08 && SEA_LEVEL - groundHeight(x, z) < 1.02);
+  const frame = (head, navigation, grounded) => {
+    context.currentTime += 0.16;
+    foley.update(head, SEA_LEVEL, 'wade', context.currentTime, context.currentTime, grounded, navigation);
+  };
+
+  for (let i = 0; i <= 4; i++) frame(point(x + i * 0.32), start, true);
+  assert.equal(sources.length, 0, 'head movement while standing in shallow water creates no contact');
+
+  for (let i = 0; i <= 4; i++) frame(start, point(x + i * 0.32), false);
+  assert.equal(sources.length, 0, 'airborne movement in shallow water creates no step');
+
+  for (let i = 0; i <= 4; i++) frame(start, point(x + i * 0.32), true);
+  assert.equal(sources.length, 1, 'the navigation step is audible with only the water category on');
+  assert.equal(sources[0].buffer.duration, 0.31);
+  const contact = sources[0].connections[0];
+  assert.ok(contact.gain.value > 0);
+  assert.equal(contact.connections[0].positionY.value, SEA_LEVEL + 0.16);
+  foley.setMix({ ...DEFAULT_EXPLORATION_MIX, environmentOn: false });
+  assert.equal(contact.gain.value, 0);
   foley.dispose();
 });

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { WorldLightingMode } from '../../WorldLightingControl';
 import { createOverlookDeckContacts, PARAPET_CAP } from './overlookDeckDetail';
 import { OverlookModel, overlookFinishes, seededDetail, type OverlookFinishes } from './overlookModel';
 import { addOverlookPavilion } from './overlookPavilion';
@@ -19,12 +20,21 @@ export const OVERLOOK_DECK_OBSTACLES = viewerLocations.map(([x, z]) => ({
 
 type SlabField = { minX: number; maxX: number; minZ: number; maxZ: number; seamX: number; seamZ: number; color: number };
 
+const mainDeckPaving: SlabField = {
+  minX: -32.95, maxX: 32.95, minZ: -22.56, maxZ: 8.38, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0,
+};
+
+export function isMainDeckPaving(x: number, z: number): boolean {
+  const { minX, maxX, minZ, maxZ } = mainDeckPaving;
+  return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
+}
+
 const slabFields: SlabField[] = [
   { minX: -34.52, maxX: 34.52, minZ: -23.53, maxZ: -22.74, seamX: 1.38, seamZ: 0.79, color: 0xbab3a1 },
   { minX: -34.52, maxX: 34.52, minZ: -22.74, maxZ: -22.56, seamX: 1.38, seamZ: 0.18, color: 0x888b8a },
   { minX: -34.52, maxX: -32.95, minZ: -22.56, maxZ: 31.03, seamX: 1.57, seamZ: 1.23, color: 0xbab3a1 },
   { minX: 32.95, maxX: 34.52, minZ: -22.56, maxZ: 31.03, seamX: 1.57, seamZ: 1.23, color: 0xbab3a1 },
-  { minX: -32.95, maxX: 32.95, minZ: -22.56, maxZ: 8.38, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0 },
+  mainDeckPaving,
   { minX: -32.95, maxX: -24.00, minZ: 8.38, maxZ: 31.03, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0 },
   { minX: 24.00, maxX: 32.95, minZ: 8.38, maxZ: 31.03, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0 },
 ];
@@ -370,18 +380,27 @@ export function createOverlookDeck(high: THREE.IUniform<number>, nightAmount: TH
   addOverlookPavilion(model, finish);
   const upperPools = addOverlookUpperDeck(model, finish, contacts.add);
   const { lamps, wallLight } = addLampPools(group, model, finish, upperPools);
-  const contactTexture = contacts.apply(finish, wallLamps, OVERLOOK_UPPER_DECK_HEIGHT, high, nightAmount);
+  const deckLights = { value: 0 };
+  const contactTexture = contacts.apply(finish, wallLamps, OVERLOOK_UPPER_DECK_HEIGHT, high, nightAmount, deckLights);
   model.finish(group);
-  lamps.visible = false;
+  let lightingMode: WorldLightingMode = 'auto';
+  function applyLamps(): void {
+    const on = lightingMode === 'auto' ? nightAmount.value === 1 : lightingMode === 'on';
+    deckLights.value = Number(on);
+    finish.frosted.emissiveIntensity = on ? 0.80 : lightingMode === 'auto' ? 0.04 : 0;
+    finish.window.emissiveIntensity = on ? 0.36 : 0;
+    lamps.visible = on;
+  }
+  applyLamps();
   return {
     group,
-    setQuality(highQuality: boolean) { wallLight.visible = !highQuality; },
-    setTimeOfDay(time: 'day' | 'night') {
-      const night = time === 'night';
-      finish.frosted.emissiveIntensity = night ? 0.80 : 0.04;
-      finish.window.emissiveIntensity = night ? 0.36 : 0;
-      lamps.visible = night;
+    get artificialLightingMode() { return lightingMode; },
+    setArtificialLightingMode(mode: WorldLightingMode) {
+      lightingMode = mode;
+      applyLamps();
     },
+    setQuality(highQuality: boolean) { wallLight.visible = !highQuality; },
+    applyLamps,
     dispose() { contactTexture.dispose(); },
   };
 }

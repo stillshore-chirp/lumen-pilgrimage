@@ -225,7 +225,7 @@ test('attaches late shared audio to one private graph and frees it on replacemen
   assert.equal(await audio.start(), false);
 });
 
-test('level, mute and output routing ramp independently of the complementary mode fade', async t => {
+test('level and playback enablement ramp independently of the complementary mode fade', async t => {
   const { audio, contexts } = setup(t);
   audio.setStream(new MockStream([new MockTrack('audio')]));
   await audio.start();
@@ -238,15 +238,12 @@ test('level, mute and output routing ramp independently of the complementary mod
   audio.setVolume(0.8);
   near(master.events.at(-1)[1], 1.2);
   context.currentTime += 0.04;
-  audio.setMuted(true);
+  audio.setEnabled(false);
   near(master.events.at(-2)[1], (0.5625 + 1.2) / 2);
   assert.equal(master.events.at(-1)[1], 0);
   audio.setVolume(2);
   assert.equal(master.events.at(-1)[1], 0);
 
-  audio.setEnabled(false);
-  audio.setMuted(false);
-  assert.equal(master.events.at(-1)[1], 0);
   audio.setEnabled(true);
   assert.equal(master.events.at(-1)[1], 1.5);
   audio.setMasterVolume(1);
@@ -280,13 +277,9 @@ test('master multiplier is clamped, composes with local volume and survives late
   near(master.events.at(-1)[1], 0.9);
   audio.setEnabled(false);
   assert.equal(master.events.at(-1)[1], 0);
-  audio.setEnabled(true);
-  near(master.events.at(-1)[1], 0.9);
-  audio.setMuted(true);
-  assert.equal(master.events.at(-1)[1], 0);
   audio.setMasterVolume(0.5);
   assert.equal(master.events.at(-1)[1], 0);
-  audio.setMuted(false);
+  audio.setEnabled(true);
   near(master.events.at(-1)[1], 0.15);
   audio.setMasterVolume(Number.POSITIVE_INFINITY);
   near(master.events.at(-1)[1], 0.15);

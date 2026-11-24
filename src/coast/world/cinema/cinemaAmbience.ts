@@ -152,7 +152,7 @@ export class CinemaAmbience {
   }
 
   update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement?: CoastMovement,
-    _birdCues?: readonly CoastBirdCue[], grounded = true): void {
+    _birdCues?: readonly CoastBirdCue[], grounded = true, navigationPosition = position): void {
     this.listener.copy(position);
     const context = this.context;
     if (!context || !this.graph || context.state !== 'running') return;
@@ -168,13 +168,14 @@ export class CinemaAmbience {
     listener.upZ.value = up.z;
     const previous = this.lastStepFrame;
     const walking = grounded && (movement === 'walk' || movement === 'crouch');
-    this.lastStepFrame = walking ? { position: position.clone(), elapsed } : undefined;
+    this.lastStepFrame = walking ? { position: navigationPosition.clone(), elapsed } : undefined;
     if (!previous || !walking
       || elapsed <= previous.elapsed || elapsed - previous.elapsed > 0.26) {
       this.stepTravel = 0;
       return;
     }
-    const distance = Math.hypot(position.x - previous.position.x, position.z - previous.position.z);
+    const { x, z } = navigationPosition;
+    const distance = Math.hypot(x - previous.position.x, z - previous.position.z);
     if (distance > 1.4) { this.stepTravel = 0; return; }
     if (distance < 0.001) return;
     this.stepTravel += distance;
@@ -183,7 +184,7 @@ export class CinemaAmbience {
     this.stepTravel = 0;
     this.lastFootfall = elapsed;
     const offset = this.stepIndex % 2 ? -0.14 : 0.14;
-    const foot = new Vector3(position.x - forward.z * offset, 0, position.z + forward.x * offset);
+    const foot = new Vector3(x - forward.z * offset, 0, z + forward.x * offset);
     foot.y = cinemaGroundHeight(foot.x, foot.z) + 0.05;
     const samples = this.graph.foot[stepSurface(foot)];
     this.playAt('footsteps', samples[this.stepIndex % samples.length], foot, movement === 'crouch' ? 0.34 : 0.55, 0.11);
