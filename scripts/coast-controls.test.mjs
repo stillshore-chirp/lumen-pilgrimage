@@ -77,13 +77,13 @@ function createBrowser(gamepads = []) {
   };
 }
 
-function createControls(browser, camera, callbacks = {}) {
+function createControls(browser, camera, callbacks = {}, navigation) {
   return new CoastControls(camera, browser.canvas, {
     onMovementChange: callbacks.onMovementChange ?? (() => {}),
     onLockChange: callbacks.onLockChange ?? (() => {}),
     onLockError: callbacks.onLockError ?? (() => {}),
     diveObstacleHeight: callbacks.diveObstacleHeight
-  });
+  }, navigation);
 }
 
 test('walking passes through each coastal rest bench at ground level', () => {
@@ -220,6 +220,63 @@ test('Space jumps once per press, lands, and works again after releasing', () =>
     browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
     controls.update(1 / 60);
     assert.ok(camera.position.y > startY + 0.08);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('indoor jumps settle after hitting the ceiling and flying respects lower adjacent ceilings', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera, {}, {
+    bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+    spawn: { x: 0, z: 0, yaw: 0, pitch: 0 },
+    groundHeight: () => 0,
+    flightCeiling: 3,
+    ceilingHeight: (_x, z) => z < -.7 ? 2.2 : 3,
+  });
+  try {
+    const key = (type, code) => browser.window.dispatch(type, { code, target: browser.canvas });
+    const advance = frames => {
+      for (let frame = 0; frame < frames; frame++) controls.update(0.05);
+    };
+
+    key('keydown', 'Space');
+    let apex = camera.position.y;
+    for (let frame = 0; frame < 24; frame++) {
+      advance(1);
+      apex = Math.max(apex, camera.position.y);
+    }
+    assert.equal(apex, 2.75);
+    assert.equal(camera.position.y, 1.65);
+    key('keyup', 'Space');
+
+    key('keydown', 'KeyF');
+    key('keydown', 'Space');
+    advance(4);
+    assert.equal(controls.currentMovement, 'flight');
+    assert.equal(camera.position.y, 2.75);
+    key('keyup', 'Space');
+    key('keydown', 'KeyW');
+    key('keydown', 'ShiftLeft');
+    advance(2);
+    assert.ok(camera.position.z >= -.7);
+    key('keyup', 'KeyW');
+    key('keyup', 'ShiftLeft');
+
+    key('keydown', 'KeyC');
+    advance(5);
+    assert.equal(camera.position.y, .25);
+    key('keyup', 'KeyC');
+    key('keydown', 'KeyW');
+    advance(2);
+    assert.ok(camera.position.z < -1);
+    key('keyup', 'KeyW');
+    key('keyup', 'KeyF');
+    key('keydown', 'KeyF');
+    assert.equal(controls.currentMovement, 'walk');
+    assert.equal(camera.position.y, 1.65);
   } finally {
     controls.dispose();
     browser.cleanup();

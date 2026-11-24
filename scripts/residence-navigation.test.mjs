@@ -83,12 +83,22 @@ test('dwelling follows the drawing dimensions and all travel poses have continuo
     .filter(opening => opening.kind === 'door').every(opening => opening.to - opening.from >= 0.9));
 
   const nav = navigation(false);
-  assert.equal(nav.flightEnabled, false);
-  assert.equal(nav.jumpEnabled, false);
   for (const pose of EXPLORATION_WORLDS.find(world => world.id === 'residence').places) {
     assert.equal(nav.groundHeight(pose.x, pose.z), 0, pose.id);
     assert.equal(nav.blocksWalking(pose.x, pose.z, 0), false, pose.id);
   }
+});
+
+test('the finished ceilings, recessed balcony soffit and door lintels bound aerial movement', () => {
+  const nav = navigation(true);
+  assert.equal(nav.ceilingHeight(20, -1.5), 3);
+  assert.equal(nav.ceilingHeight(1.7, -8.4), 2.55);
+  assert.equal(nav.ceilingHeight(21.7, -13.58), 3.19);
+  assert.equal(nav.ceilingHeight(20.7, -13.58), 2.73);
+  assert.equal(nav.ceilingHeight(6.49, -5.12), 2.2);
+  assert.equal(blocked(nav, 20.7, 13.58), false);
+  assert.equal(blocked(navigation(false), 20.7, 13.58), true);
+  assert.equal(blocked(nav, 22.79, 13.58), true);
 });
 
 test('the living-room television has twice the 65-inch screen width and height', () => {
