@@ -11,14 +11,16 @@ export const CINEMA_SCREENING_SPILL = 0.010;
 export type CinemaLightingQuality = 'light' | 'high';
 
 export const cinemaLightQuality = {
-  light: { columns: 16, rows: 7, probeColumns: 2, probeRows: 2, updatesPerSecond: 15 },
+  light: { columns: 16, rows: 7, probeColumns: 4, probeRows: 5, updatesPerSecond: 15 },
   high: { columns: 32, rows: 14, probeColumns: 7, probeRows: 9, updatesPerSecond: 30 },
 } as const;
 
-export const CINEMA_LIGHT_PAGES = 8;
-export const CINEMA_LIGHT_META = 7;
-export const CINEMA_LIGHT_BOUNCE = 6;
-export const CINEMA_LIGHT_DEPTH = CINEMA_BOUNDS.maxZ - 1;
+export const CINEMA_LIGHT_PAGES = 9;
+export const CINEMA_LIGHT_META = 8;
+export const CINEMA_LIGHT_BOUNCE = 7;
+export const CINEMA_LIGHT_CROWN = 6;
+export const CINEMA_LIGHT_NEAR = 0.35;
+export const CINEMA_LIGHT_DEPTH = CINEMA_BOUNDS.maxZ - CINEMA_LIGHT_NEAR;
 
 type Point = readonly [x: number, y: number, z: number];
 type Patch = { point: Point; normal: Point; area: number; reflectance: number };
@@ -81,14 +83,17 @@ function receiverPatch(page: number, column: number, row: number, columns: numbe
   const u = (column + 0.5) / columns;
   const v = (row + 0.5) / rows;
   const x = (u - 0.5) * 39.6;
-  const zAt = (fraction: number) => 1 + CINEMA_LIGHT_DEPTH * fraction * fraction;
+  const zAt = (fraction: number) => CINEMA_LIGHT_NEAR + CINEMA_LIGHT_DEPTH * fraction * fraction;
   const z = zAt(v);
   const zSpan = zAt((row + 1) / rows) - zAt(row / rows);
   const floorY = cinemaGroundHeight(x, z);
   const horizontalArea = 39.6 * zSpan / columns;
+  const seatArea = z >= CINEMA_ROWS[0].z - 1 && z <= CINEMA_ROWS[CINEMA_ROWS.length - 1].z + 1 ? horizontalArea : 0;
   switch (page) {
     case 0: return { point: [x, floorY + 0.015, z], normal: [0, 1, 0], area: horizontalArea, reflectance: 0.10 };
-    case 1: return { point: [x, floorY + 0.64, z], normal: [0, 0.48, -0.877], area: horizontalArea * 0.36, reflectance: 0.06 };
+    case 1: return {
+      point: [x, floorY + 0.64, z], normal: [0, 0, -1], area: seatArea * 0.36, reflectance: 0.06,
+    };
     case 2:
     case 3: {
       const sign = page === 2 ? -1 : 1;
@@ -99,6 +104,9 @@ function receiverPatch(page: number, column: number, row: number, columns: numbe
       };
     }
     case 4: return { point: [x, 21.94, z], normal: [0, -1, 0], area: horizontalArea, reflectance: 0.065 };
+    case CINEMA_LIGHT_CROWN: return {
+      point: [x, floorY + 1.02, z], normal: [0, 1, 0], area: seatArea * 0.08, reflectance: 0.06,
+    };
     default: return {
       point: [x, v * CINEMA_ROOM_HEIGHT, 53.86], normal: [0, 0, -1],
       area: 39.6 * CINEMA_ROOM_HEIGHT / (columns * rows), reflectance: 0.09,

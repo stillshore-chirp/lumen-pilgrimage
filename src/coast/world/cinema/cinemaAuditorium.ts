@@ -1,5 +1,6 @@
 import { Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshStandardMaterial, type BufferGeometry, type Material, type Texture } from 'three';
 import { cinemaBoxes, cinemaFinishes, type CinemaBox, type CinemaFinishes } from './cinemaFinishes';
+import { CINEMA_COVE_LENS_X, CINEMA_COVE_LENS_Y, CINEMA_EXIT_LAMPS, CINEMA_WALL_FOOTLIGHTS, CINEMA_WALL_LENS_X } from './cinemaFixtureLighting';
 import { createCinemaExits } from './cinemaFixtures';
 import { createCinemaFloor } from './cinemaFloor';
 import {
@@ -79,14 +80,12 @@ function addWalls(group: Group, finish: CinemaFinishes): void {
       bronze.push([sign * 19.55, bottom + 0.043, z, 0.045, 0.023, 2.84]);
     }
 
-    for (let z = 6.5; z < 50; z += 4.15) {
-      if (sideDoors.some((exit) => Math.abs(z - exit.z) < 1.27)) continue;
-      const y = cinemaGroundHeight(0, z);
+    for (const { z, y } of CINEMA_WALL_FOOTLIGHTS) {
       houseHoods.push(
         [sign * 19.81, y + 0.31, z, 0.080, 0.152, 0.350],
         [sign * 19.75, y + 0.327, z, 0.042, 0.060, 0.336],
       );
-      wallLights.push([sign * 19.760, y + 0.262, z, 0.018, 0.020, 0.270]);
+      wallLights.push([sign * CINEMA_WALL_LENS_X, y + 0.262, z, 0.018, 0.020, 0.270]);
     }
   }
 
@@ -193,7 +192,7 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
         [side * 19.52, 18.77, z, 0.62, 0.28, 11.21],
       );
       housings.push([side * 19.14, 18.862, z, 0.135, 0.055, 11.12]);
-      cove.push([side * 19.113, 18.829, z, 0.044, 0.017, 10.96]);
+      cove.push([side * CINEMA_COVE_LENS_X, CINEMA_COVE_LENS_Y, z, 0.044, 0.017, 10.96]);
     }
   }
 
@@ -204,11 +203,9 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
       service.push([sign * 10.90, 21.352, z, 0.255, 0.017, 0.255]);
     }
   }
-  for (const exit of CINEMA_EXITS) {
-    const x = exit.side === 'rear' ? exit.x : exit.x * 0.97;
-    const z = exit.side === 'rear' ? exit.z - 0.59 : exit.z;
-    housings.push([x, exit.y + 2.96, z, 0.37, 0.088, 0.19]);
-    emergency.push([x, exit.y + 2.909, z, 0.21, 0.014, 0.12]);
+  for (const { x, y, z } of CINEMA_EXIT_LAMPS) {
+    housings.push([x, y + 0.051, z, 0.37, 0.088, 0.19]);
+    emergency.push([x, y, z, 0.21, 0.014, 0.12]);
   }
 
   cinemaBoxes(group, 'Four ceiling smoke baffles', finish.box, finish.protection, baffles);

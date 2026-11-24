@@ -51,6 +51,15 @@ function installSyntheticCapture() {
       const context = canvas.getContext('2d');
       let frame = 0;
       const draw = () => {
+        if (fixture.cinemaFrame) {
+          const left = fixture.cinemaFrame === 'warm-left';
+          const dark = fixture.cinemaFrame === 'black';
+          context.fillStyle = dark ? '#000' : left ? '#e9ad73' : '#344d77';
+          context.fillRect(0, 0, canvas.width / 2, canvas.height);
+          context.fillStyle = dark ? '#000' : left ? '#344d77' : '#e9ad73';
+          context.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+          return;
+        }
         context.fillStyle = '#ff00d8';
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.fillStyle = '#00e68c';
@@ -505,6 +514,63 @@ test('the residence plays one WebRTC stream on the television and switches the a
   }
 });
 
+function observeCinemaArrivalLamp() {
+  const gl = WebGL2RenderingContext.prototype;
+  const locate = gl.getUniformLocation;
+  const setVector = gl.uniform3f;
+  const lampLocations = new WeakSet();
+  gl.getUniformLocation = function (program, name) {
+    const location = locate.call(this, program, name);
+    if (location && name === 'cinemaLamps') lampLocations.add(location);
+    return location;
+  };
+  gl.uniform3f = function (location, arrival, service, emergency) {
+    if (lampLocations.has(location)) window.cinemaArrivalLamp = arrival;
+    setVector.call(this, location, arrival, service, emergency);
+  };
+}
+
+async function sampleCinemaCarpet(sender, viewer, frame) {
+  await sender.evaluate(value => { window.captureFixture.cinemaFrame = value; }, frame);
+  await viewer.waitForFunction(({ selector, frame }) => {
+    const video = document.querySelector(selector);
+    const canvas = document.createElement('canvas');
+    canvas.width = 2;
+    canvas.height = 1;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(video, 0, 0, 2, 1);
+    const colors = context.getImageData(0, 0, 2, 1).data;
+    const red = [colors[0], colors[4]];
+    if (frame === 'black') return red.every(value => value < 8);
+    const warm = frame === 'warm-left' ? 0 : 1;
+    return red[warm] > 175 && red[1 - warm] < 100;
+  }, { selector: videoSelector, frame });
+  // Wait past one 15 Hz light sample and its 33 ms interpolation window.
+  await viewer.waitForTimeout(140);
+  const screenshot = await viewer.screenshot({ style: '.coast-ui { visibility: hidden !important }' });
+  return viewer.evaluate(async encoded => {
+    const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    // The two carpet patches are between the bottom of the screen and the first seat row.
+    return [-1, 1].map(side => {
+      const x = Math.round(canvas.width / 2 + canvas.height * (0.22 * side - 0.04));
+      const y = Math.round(canvas.height * 0.771);
+      const { data } = context.getImageData(x, y, Math.round(canvas.height * 0.08), Math.round(canvas.height * 0.026));
+      const rgb = [0, 0, 0];
+      for (let index = 0; index < data.length; index += 4) {
+        for (let channel = 0; channel < rgb.length; channel++) rgb[channel] += data[index + channel];
+      }
+      return rgb.map(sum => sum / (data.length / 4));
+    });
+  }, screenshot.toString('base64'));
+}
+
 test('cinema projects one native WebRTC stream and pauses its own output during an emergency check', { timeout }, async () => {
   const sender = await newPage();
   const viewer = await newPage();
@@ -517,9 +583,14 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
       sender.addInitScript(observePeers),
       viewer.addInitScript(observePeers),
       viewer.addInitScript(observeAudio),
+      viewer.addInitScript(observeCinemaArrivalLamp),
     ]);
     await sender.goto(new URL('?monitor=sender', url).href);
     await viewer.goto(new URL('?world=cinema', url).href);
+    await button(viewer, '上映設定').click();
+    const panel = viewer.getByRole('dialog', { name: '上映設定' });
+    await button(panel, '上映').click();
+    await button(panel, '閉じる').click();
     await button(viewer, '仮想モニター').click();
     const target = viewer.getByRole('combobox', { name: '表示先' });
     const mode = viewer.getByRole('combobox', { name: 'モニターの音響' });
@@ -547,8 +618,18 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
     });
     await mode.selectOption('cinema');
 
+    await viewer.waitForFunction(() => window.cinemaArrivalLamp === 0);
+    const warmLeft = await sampleCinemaCarpet(sender, viewer, 'warm-left');
+    const warmRight = await sampleCinemaCarpet(sender, viewer, 'warm-right');
+    const black = await sampleCinemaCarpet(sender, viewer, 'black');
+    for (const side of [0, 1]) {
+      const warm = side === 0 ? warmLeft[side] : warmRight[side];
+      const cool = side === 0 ? warmRight[side] : warmLeft[side];
+      assert.ok(warm[0] - warm[2] > cool[0] - cool[2] + 4, 'the reflected warm color moves across the carpet');
+      assert.ok(black[side][0] + 6 < warm[0] && black[side][0] < 4, 'a black frame removes that reflected color');
+    }
+    await sender.evaluate(() => { window.captureFixture.cinemaFrame = null; });
     await button(viewer, '上映設定').click();
-    const panel = viewer.getByRole('dialog', { name: '上映設定' });
     await button(panel, '非常点検').click();
     await button(panel, '閉じる').click();
     await viewer.waitForFunction(silent);
