@@ -50,7 +50,7 @@ Vite が表示した URL を Chrome で開きます。入り江から始まり�
 
 ## 通常の変更手順
 
-1. [`package.json`](../package.json) と近い実装・テストを確認し、変更する契約を[文書の責務と更新基準](documentation-structure.md)で特定します。
+1. [コーディング規約](coding-standards.md)、[`package.json`](../package.json)、対象に近い実装・テストを確認し、変更する契約を[文書の責務と更新基準](documentation-structure.md)で特定します。
 2. 変更と同じ責務の試験を更新します。入力、移動、地形、描画、音響、ワールド切替では [AGENTS.md の検証条件](../AGENTS.md#検証)も確認してください。
 3. 受け入れ条件に応じて `npm run check` と対象ブラウザー試験を選びます。詳細な実行条件は[検証ガイド](verification.md)を使い、同じ長時間試験を重複させません。
 4. 文書・リンクを変えた場合は `npm run validate:harness` を実行します。静的検査が示すのはリンクや記載された npm スクリプトの整合性です。動作や実機の証明には使いません。

@@ -36,6 +36,7 @@ Vite が表示したローカル URL を Chrome で開くと、入り江の砂�
 | 作業 | 読む文書 |
 | --- | --- |
 | 開発環境を用意して作業を再開する | [開発環境と起動](docs/development.md) |
+| コードを変更・レビューする | [コーディング規約](docs/coding-standards.md) |
 | ワールドの構成、到着地点、移動と昼夜の引き継ぎを変更する | [ワールド案内](docs/worlds.md) · [実装設計](docs/architecture.md) |
 | 仮想モニターの共有、接続、音声、対応環境を変更する | [仮想モニター仕様](docs/monitor.md) · [検証手順](docs/verification.md#仮想モニターの実機確認) |
 | 素材を追加・加工し、出典や再現手順を記録する | [素材ガイド](docs/assets.md) · [素材の出典](docs/exploration.md#素材の出典) |
