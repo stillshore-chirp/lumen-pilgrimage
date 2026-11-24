@@ -16,6 +16,25 @@
   gap: 0.75rem;
 }
 
+.residence-control-directory .residence-control-actions > button[aria-pressed] {
+  font-weight: 600;
+}
+
+.residence-control-lists {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+/* Every category contributes its natural height to the same grid row. */
+.residence-control-lists > * {
+  grid-area: 1 / 1;
+}
+
+.residence-control-lists > [inert] {
+  visibility: hidden;
+}
+
 .residence-control-actions,
 .residence-control-items {
   display: flex;

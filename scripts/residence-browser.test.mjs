@@ -699,6 +699,68 @@ test('the residence menu opens individual controls and keeps remote and wall con
   assert.deepEqual(errors, []);
 });
 
+test('the residence remote directory keeps its bounds when changing equipment categories', { timeout }, async t => {
+  const { page, errors } = await openResidence(t);
+  const directory = residenceDialog(page, '住戸の遠隔操作');
+  const categoryNames = ['照明', 'カーテン', '家電・水栓'];
+  const tab = name => button(directory, name);
+  const choices = name => directory.getByRole('region', { name, exact: true });
+  await button(page, 'メニュー').click();
+  await button(residenceDialog(page, 'メニュー'), '住戸の遠隔操作').click();
+
+  let bounds;
+  for (const size of [{ width: 960, height: 600 }, { width: 375, height: 710 }, { width: 320, height: 300 }]) {
+    await page.setViewportSize(size);
+    const categoryBounds = [];
+    const listGaps = [];
+    for (const [index, name] of categoryNames.entries()) {
+      await tab(name).click();
+      assert.equal(await tab(name).getAttribute('aria-pressed'), 'true');
+      assert.equal(await directory.getByRole('button', { pressed: true }).count(), 1);
+      assert.equal(await directory.getByRole('region').count(), 1, 'Only the selected equipment list is exposed');
+      const list = choices(name);
+      const bottom = element => element.getBoundingClientRect().bottom;
+      listGaps.push(await list.evaluate(bottom) - await list.getByRole('button').last().evaluate(bottom));
+      categoryBounds.push(await directory.boundingBox());
+      await capture(page, `residence-remote-${size.width}x${size.height}-${index + 1}`);
+    }
+    [bounds] = categoryBounds;
+    assert.ok(bounds);
+    for (const box of categoryBounds) assert.deepEqual(box, bounds, `Layout moved at ${size.width}×${size.height}`);
+    assert.ok(Math.abs(Math.min(...listGaps)) < 1, 'The tallest list fills the shared space');
+    assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= size.width);
+    assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= size.height);
+    assert.ok(await directory.evaluate(element => element.scrollWidth <= element.clientWidth));
+    if (screenshots) t.diagnostic(`${size.width}×${size.height}: ${JSON.stringify(bounds)}`);
+  }
+
+  const appliances = choices('家電・水栓').getByRole('button');
+  const lastAppliance = appliances.last();
+  const applianceName = await lastAppliance.textContent();
+  assert.ok(await lastAppliance.evaluate(element => {
+    const dialog = element.closest('dialog');
+    return element.getBoundingClientRect().bottom > dialog.getBoundingClientRect().bottom;
+  }), 'The short viewport should require scrolling');
+  await appliances.nth(-2).press('Tab');
+  assert.ok(await lastAppliance.evaluate(element => element === document.activeElement));
+  assert.ok(await directory.evaluate(element => element.scrollTop > 0));
+  await page.keyboard.press('Enter');
+  const device = residenceDialog(page, applianceName);
+  assert.equal(await device.locator('[data-residence-section]').count(), 1);
+  await button(device, '設備一覧へ戻る').press('Enter');
+  assert.ok(await lastAppliance.evaluate(element => element === document.activeElement));
+  assert.deepEqual(await directory.boundingBox(), bounds);
+
+  await tab('カーテン').press('Space');
+  await tab('家電・水栓').press('Tab');
+  const firstCurtain = choices('カーテン').getByRole('button').first();
+  assert.ok(await firstCurtain.evaluate(element => element === document.activeElement));
+  await page.keyboard.press('Escape');
+  await directory.waitFor({ state: 'hidden' });
+  assert.ok(await button(page, 'メニュー').evaluate(element => element === document.activeElement));
+  assert.deepEqual(errors, []);
+});
+
 test('the open foyer door lights the gallery floor with its own fixtures off', { timeout }, async t => {
   const { page, errors } = await createPage(t);
   await exposeResidenceScene(page);

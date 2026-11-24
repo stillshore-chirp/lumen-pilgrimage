@@ -140,6 +140,7 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
   navigation.setAttribute('aria-label', '設備の種類');
   const list = document.createElement('section');
   list.id = 'residence-control-list';
+  list.className = 'residence-control-lists';
   directory.append(navigation, list);
 
   const categories = (Object.keys(categoryLabels) as Category[]).flatMap(id => {
@@ -157,6 +158,7 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
       choice.addEventListener('click', () => showDevice(section, choice));
       choices.append(choice);
     }
+    list.append(choices);
     return [{ id, label, toggle, choices }];
   });
 
@@ -164,10 +166,8 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
     for (const category of categories) {
       const selected = category.id === id;
       category.toggle.setAttribute('aria-pressed', String(selected));
-      if (selected) {
-        list.setAttribute('aria-label', category.label);
-        list.replaceChildren(category.choices);
-      }
+      category.choices.inert = !selected;
+      if (selected) list.setAttribute('aria-label', category.label);
     }
   }
   if (categories[0]) selectCategory(categories[0].id);
