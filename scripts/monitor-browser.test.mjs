@@ -126,6 +126,9 @@ function observeAudio() {
   const connect = AudioNode.prototype.connect;
   const contexts = [];
   window.monitorSound = {
+    monitorResume: 'native',
+    heldResumeInUserGesture: false,
+    rejectedResumeInUserGesture: false,
     read() {
       return contexts.map(({ context, analyser, panners, gains, hasStream }) => {
         const data = new Float32Array(analyser.fftSize);
@@ -134,6 +137,7 @@ function observeAudio() {
           hasStream,
           streamSources: context.probe.streamSources,
           state: context.state,
+          time: context.currentTime,
           peak: Math.max(...data.map(Math.abs)),
           stereo: gains.get('stereo')?.gain.value,
           spatial: gains.get('spatial')?.gain.value,
@@ -151,6 +155,27 @@ function observeAudio() {
         context: this, analyser: this.createAnalyser(), gains: new Map(), panners: [], hasStream: false, streamSources: 0,
       };
       contexts.push(this.probe);
+    }
+    get state() {
+      if (this.probe?.hasStream && window.monitorSound.monitorResume !== 'native') return 'suspended';
+      return super.state;
+    }
+    resume() {
+      const mode = this.probe?.hasStream ? window.monitorSound.monitorResume : 'native';
+      if (mode === 'reject') {
+        window.monitorSound.rejectedResumeInUserGesture = navigator.userActivation.isActive;
+        return Promise.reject(new DOMException('', 'NotAllowedError'));
+      }
+      if (mode === 'hold') {
+        window.monitorSound.heldResumeInUserGesture = navigator.userActivation.isActive;
+        return new Promise((resolve, reject) => {
+          window.monitorSound.releaseMonitorResume = () => {
+            window.monitorSound.monitorResume = 'native';
+            return super.resume().then(resolve, reject);
+          };
+        });
+      }
+      return super.resume();
     }
     createMediaStreamSource(stream) {
       this.probe.hasStream = stream.getAudioTracks().length > 0;
@@ -303,6 +328,29 @@ async function waitForVideo(viewer, expectedAudioTracks, [width, height] = [320,
   assert.ok(playback.frames > 1, 'Chrome decoded successive native WebRTC video frames');
 }
 
+async function assertWorldLightingKeepsPlayback(viewer) {
+  const lighting = viewer.getByRole('group', { name: 'ワールド照明' });
+  const video = viewer.locator(videoSelector);
+  await video.evaluate(element => {
+    window.lightingPlayback = { stream: element.srcObject, peer: window.monitorPeers[0] };
+  });
+  for (const label of ['一括点灯', '一括消灯', '既定']) {
+    const before = await video.evaluate(element => element.currentTime);
+    const control = button(lighting, label);
+    await control.click();
+    assert.equal(await control.getAttribute('aria-pressed'), 'true');
+    assert.equal(await video.evaluate(element => {
+      const { stream, peer } = window.lightingPlayback;
+      return element.srcObject === stream && window.monitorPeers.length === 1
+        && window.monitorPeers[0] === peer && peer.connectionState === 'connected';
+    }), true, `the same connection and stream survive ${label}`);
+    await viewer.waitForFunction(({ selector, before }) => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      return document.querySelector(selector).currentTime > before + .1 && audio?.peak > .001;
+    }, { selector: videoSelector, before });
+  }
+}
+
 async function screenPixels(viewer, file) {
   const path = screenshotDirectory && file ? join(screenshotDirectory, `${file}.png`) : undefined;
   // Measure only what the scene renders. Controls can overlap the projected monitor.
@@ -403,11 +451,18 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     await button(viewer, '仮想モニター').click();
     await button(viewer, '環境音をオン').click();
     await button(viewer, '仮想モニター').click();
-    const enableAudio = button(viewer, 'モニター音を有効にする');
-    if (await enableAudio.isEnabled()) await enableAudio.click();
+    const audioToggle = button(viewer, 'モニター音声');
+    const audioGroup = viewer.getByRole('group', { name: 'モニター音声', exact: true });
+    assert.equal(await audioGroup.getByRole('button').count(), 1);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 オフ');
+    assert.equal(await viewer.evaluate(() => window.monitorSound.read().some(context => context.hasStream)), false);
+    await audioToggle.click();
     await waitForMix(viewer, { natural: false, monitor: false });
     await setSliderValue(viewer, '全体音量', 100);
     await waitForMix(viewer, { natural: true, monitor: true });
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 オン');
     // Simulate persisted pageshow to observe the master callback on an existing monitor.
     await viewer.evaluate(() => {
       const key = 'lumen-pilgrimage:sound';
@@ -418,20 +473,24 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     await waitForMix(viewer, { natural: false, monitor: false });
     await setSliderValue(viewer, '全体音量', 100);
     await waitForMix(viewer, { natural: true, monitor: true });
-    const monitorMute = button(viewer, 'モニター音をミュート');
     await button(viewer, '仮想モニター').click();
     await button(viewer, '環境音をオフ').click();
     await waitForMix(viewer, { natural: false, monitor: true });
     await button(viewer, '環境音をオン').click();
     await waitForMix(viewer, { natural: true, monitor: true });
+    const soundDetails = viewer.locator('.coast-sound-details > summary');
+    await soundDetails.click();
     await button(viewer, '歩行音をオフ').click();
     await waitForMix(viewer, { natural: true, monitor: true });
     await button(viewer, '歩行音をオン').click();
+    await soundDetails.click();
     await button(viewer, '仮想モニター').click();
-    await monitorMute.click();
-    assert.equal(await monitorMute.getAttribute('aria-pressed'), 'true');
+    await audioToggle.click();
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
     await waitForMix(viewer, { natural: true, monitor: false });
-    await monitorMute.click();
+    await audioToggle.click();
+    await waitForMix(viewer, { natural: true, monitor: true });
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
 
     const volume = viewer.getByRole('slider', { name: 'モニター音量' });
     await volume.press('Home');
@@ -442,10 +501,21 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     const audioOutput = sender.getByRole('combobox', { name: '音声の出力先' });
     await audioOutput.selectOption('pc');
     await sender.waitForFunction(() => !window.captureFixture.streams[0].getAudioTracks()[0].enabled);
+    const pcOnly = '配信元で「PC側のみ」が選ばれているため、視聴側の音声は停止中です。';
+    await viewer.locator('[data-monitor-audio-status]').filter({ hasText: pcOnly }).waitFor();
+    assert.equal(await audioToggle.isDisabled(), true);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 停止中');
+    const description = await audioToggle.evaluate(button =>
+      document.getElementById(button.getAttribute('aria-describedby')).textContent);
+    assert.equal(description, pcOnly);
     await waitForMix(viewer, { natural: true, monitor: false });
     await audioOutput.selectOption('both');
     await sender.waitForFunction(() => window.captureFixture.streams[0].getAudioTracks()[0].enabled);
     await waitForMix(viewer, { natural: true, monitor: true });
+    assert.equal(await audioToggle.isEnabled(), true);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 オン');
     await audioOutput.selectOption('viewer');
     await sender.locator('[data-monitor-capture-audio]').filter({ hasText: /現在は「両方」/ }).waitFor();
     await waitForMix(viewer, { natural: true, monitor: true });
@@ -521,6 +591,85 @@ test('separate tabs pair with approval, render native WebRTC media and control a
   }
 });
 
+test('the audio toggle cancels and retries a pending start, and begins off after a new pairing', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture),
+      sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers),
+      viewer.addInitScript(observeAudio),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    await viewer.goto(url.href);
+    await button(viewer, '仮想モニター').click();
+    const audioToggle = button(viewer, 'モニター音声');
+    const audioStatus = viewer.locator('[data-monitor-audio-status]');
+    assert.equal(await audioToggle.isDisabled(), true);
+
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    await viewer.evaluate(() => { window.monitorSound.monitorResume = 'hold'; });
+    await audioToggle.click();
+    await audioStatus.filter({ hasText: '共有音声を開始しています。' }).waitFor();
+    assert.equal(await audioToggle.isEnabled(), true);
+    await audioStatus.filter({ hasText: '再試行してください' }).waitFor();
+    assert.equal(await audioToggle.isEnabled(), true);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await viewer.evaluate(() => window.monitorSound.heldResumeInUserGesture), true);
+    await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001);
+
+    await viewer.evaluate(() => { window.monitorSound.monitorResume = 'reject'; });
+    await audioToggle.click();
+    await audioStatus.filter({ hasText: '再試行してください' }).waitFor();
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await viewer.evaluate(() => window.monitorSound.rejectedResumeInUserGesture), true);
+
+    await viewer.evaluate(() => { window.monitorSound.monitorResume = 'hold'; });
+    await audioToggle.click();
+    await audioStatus.filter({ hasText: 'もう一度押すと取り消せます。' }).waitFor();
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 開始待ち');
+    await audioToggle.press('Space');
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 オフ');
+    const resumedAt = await viewer.evaluate(async () => {
+      await window.monitorSound.releaseMonitorResume();
+      return window.monitorSound.read().find(context => context.hasStream).time;
+    });
+    await viewer.waitForFunction(resumedAt => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      return audio.state === 'running' && audio.time > resumedAt + .15;
+    }, resumedAt);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    const latePeak = await viewer.evaluate(() => window.monitorSound.read().find(context => context.hasStream).peak);
+    assert.ok(latePeak < .0001, 'late context resume keeps the cancelled stream silent');
+
+    await audioToggle.click();
+    const audible = () => window.monitorSound.read().some(context => context.hasStream && context.peak > .001 && context.state === 'running');
+    await viewer.waitForFunction(audible);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
+    await button(viewer, '切断').click();
+    await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
+    assert.equal(await audioToggle.isDisabled(), true);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    assert.equal(await audioToggle.isEnabled(), true);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await viewer.evaluate(() => window.monitorSound.read().filter(context => context.hasStream).length), 1);
+    await audioToggle.click();
+    await viewer.waitForFunction(audible);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
+  } finally {
+    await Promise.all([sender.context().close(), viewer.context().close()]);
+  }
+});
+
 test('residence and cinema transfer one live WebRTC stream to a floating monitor in each destination', { timeout }, async () => {
   const sender = await newPage();
   const viewer = await newPage();
@@ -553,8 +702,8 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     const video = viewer.locator(videoSelector);
     await video.evaluate(element => { window.originalMonitorStream = element.srcObject; });
 
-    const enableAudio = button(viewer, 'モニター音を有効にする');
-    if (await enableAudio.isEnabled()) await enableAudio.click();
+    const audioToggle = button(viewer, 'モニター音声');
+    await audioToggle.click();
     await mode.selectOption('television');
     await viewer.waitForFunction(() => {
       const audio = window.monitorSound.read().find(context => context.hasStream);
@@ -575,9 +724,13 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     assert.ok(speakers.slice(0, 4).every(source => source[2] < -6));
     assert.ok(speakers.slice(4).every(source => source[2] > -2));
 
-    await button(viewer, 'モニター音をミュート').click();
+    await button(viewer, '仮想モニター').click();
+    await assertWorldLightingKeepsPlayback(viewer);
+    await button(viewer, '仮想モニター').click();
+
+    await audioToggle.click();
     await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001);
-    await button(viewer, 'モニター音をミュート').click();
+    await audioToggle.click();
     await target.selectOption('floating');
     assert.equal(await button(viewer, '配置を編集').isEnabled(), true);
     assert.equal(await mode.inputValue(), 'surround');
@@ -700,14 +853,14 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     await target.selectOption('television');
     await mode.selectOption('cinema');
     assert.ok((await screenPixels(viewer)).count > 8_000);
-    await button(viewer, 'モニター音をミュート').click();
+    await audioToggle.click();
     beforeTravel = await video.evaluate(element => element.currentTime);
     await travelTo('入り江の浜', 'coast', 'inlet');
     assert.equal(await viewer.locator('[data-monitor-display-target]').isVisible(), false);
     assert.equal(await mode.inputValue(), 'stereo');
-    assert.equal(await button(viewer, 'モニター音をミュート').getAttribute('aria-pressed'), 'true');
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
     await assertPlaybackContinues(beforeTravel, true);
-    await button(viewer, 'モニター音をミュート').click();
+    await audioToggle.click();
     await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak > .001);
     await setSliderValue(viewer, '全体音量', 0);
     await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001);
@@ -757,19 +910,26 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
   }
 });
 
-function observeCinemaArrivalLamp() {
+function observeCinemaLighting() {
   const gl = WebGL2RenderingContext.prototype;
   const locate = gl.getUniformLocation;
   const setVector = gl.uniform3f;
+  const setFloat = gl.uniform1f;
   const lampLocations = new WeakSet();
+  const projectionLocations = new WeakSet();
   gl.getUniformLocation = function (program, name) {
     const location = locate.call(this, program, name);
     if (location && name === 'cinemaLamps') lampLocations.add(location);
+    if (location && name === 'cinemaLive') projectionLocations.add(location);
     return location;
   };
   gl.uniform3f = function (location, arrival, service, emergency) {
     if (lampLocations.has(location)) window.cinemaArrivalLamp = arrival;
     setVector.call(this, location, arrival, service, emergency);
+  };
+  gl.uniform1f = function (location, value) {
+    if (projectionLocations.has(location)) window.cinemaProjectionLive = value;
+    setFloat.call(this, location, value);
   };
 }
 
@@ -790,7 +950,12 @@ async function sampleCinemaCarpet(sender, viewer, frame) {
   }, { selector: videoSelector, frame });
   // Wait past one 15 Hz light sample and its 33 ms interpolation window.
   await viewer.waitForTimeout(140);
-  const screenshot = await viewer.screenshot({ style: '.coast-ui { visibility: hidden !important }' });
+  return measureCinemaCarpet(viewer);
+}
+
+async function measureCinemaCarpet(viewer, file) {
+  const path = screenshotDirectory && file ? join(screenshotDirectory, `${file}.png`) : undefined;
+  const screenshot = await viewer.screenshot({ path, style: '.coast-ui { visibility: hidden !important }' });
   return viewer.evaluate(async encoded => {
     const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
     const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
@@ -826,7 +991,7 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
       sender.addInitScript(observePeers),
       viewer.addInitScript(observePeers),
       viewer.addInitScript(observeAudio),
-      viewer.addInitScript(observeCinemaArrivalLamp),
+      viewer.addInitScript(observeCinemaLighting),
     ]);
     await sender.goto(new URL('?monitor=sender', url).href);
     await viewer.goto(new URL('?world=cinema', url).href);
@@ -851,8 +1016,8 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
 
     const audible = () => window.monitorSound.read().find(context => context.hasStream)?.peak > .001;
     const silent = () => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001;
-    const enable = button(viewer, 'モニター音を有効にする');
-    if (await enable.isEnabled()) await enable.click();
+    const audioToggle = button(viewer, 'モニター音声');
+    await audioToggle.click();
     await viewer.waitForFunction(audible);
     await mode.selectOption('stereo');
     await viewer.waitForFunction(() => {
@@ -864,6 +1029,18 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
     await viewer.waitForFunction(() => window.cinemaArrivalLamp === 0);
     const warmLeft = await sampleCinemaCarpet(sender, viewer, 'warm-left');
     const warmRight = await sampleCinemaCarpet(sender, viewer, 'warm-right');
+
+    await button(viewer, '投影を止める').click();
+    await viewer.waitForFunction(() => window.cinemaProjectionLive === 0);
+    const hidden = await measureCinemaCarpet(viewer, 'cinema-hidden-after-warm-frame');
+    assert.ok(hidden.flat().every(channel => channel < 1), 'hiding the monitor clears the prior reflection');
+    assert.deepEqual(await viewer.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['connected']);
+    await button(viewer, 'スクリーンに映す').click();
+    await viewer.waitForFunction(() => window.cinemaProjectionLive === 1);
+    const resumed = await measureCinemaCarpet(viewer, 'cinema-restored-warm-frame');
+    assert.ok(resumed[1][0] - resumed[1][2] > hidden[1][0] - hidden[1][2] + 4,
+      'showing the same stream restores its reflected color');
+
     const black = await sampleCinemaCarpet(sender, viewer, 'black');
     for (const side of [0, 1]) {
       const warm = side === 0 ? warmLeft[side] : warmRight[side];
@@ -883,6 +1060,7 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
     await button(panel, '閉じる').click();
     await viewer.waitForFunction(audible);
     assert.ok((await screenPixels(viewer)).count > 8_000);
+    await assertWorldLightingKeepsPlayback(viewer);
 
     await button(sender, '共有を停止').click();
     await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
@@ -895,6 +1073,9 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
     assert.ok(silentPicture.count > 2_000);
     assert.ok(Math.abs(silentPicture.width / silentPicture.height - 9 / 16) < .12);
     await viewer.locator('[data-monitor-audio-status]').filter({ hasText: '共有音声が取得されていません' }).waitFor();
+    assert.equal(await audioToggle.isDisabled(), true);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 停止中');
     await button(sender, '共有を停止').click();
     await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
     assert.equal((await screenPixels(viewer)).count, 0);
@@ -991,6 +1172,7 @@ test('switching from a locally suppressed tab to PC only stops sending and repor
     await output.selectOption('pc');
     await sender.waitForFunction(() => !window.captureFixture.streams[0].getAudioTracks()[0].enabled);
     await viewer.locator('[data-monitor-audio-status]').filter({ hasText: /停止中.*選び直す/ }).waitFor();
+    assert.equal(await button(viewer, 'モニター音声').isDisabled(), true);
     await sender.locator('[data-monitor-capture-audio]').filter({ hasText: /PC側の再生を戻すには/ }).waitFor();
     await waitForVideo(viewer, 1);
   } finally {
@@ -1053,8 +1235,7 @@ test('residence lighting, display and page state changes preserve the monitor co
       const [stream] = window.captureFixture.streams;
       window.sharedMonitor = { peer, stream, tracks: stream.getTracks() };
     });
-    const enableAudio = button(viewer, 'モニター音を有効にする');
-    if (await enableAudio.isEnabled()) await enableAudio.click();
+    await button(viewer, 'モニター音声').click();
 
     async function assertPlaybackSince(frames) {
       await viewer.waitForFunction(before =>
@@ -1160,8 +1341,7 @@ test('a transient signaling poll failure leaves one established WebRTC session r
     await requestPairing(sender, viewer);
     await button(sender, '接続を許可').click();
     await waitForVideo(viewer, 1);
-    const enableAudio = button(viewer, 'モニター音を有効にする');
-    if (await enableAudio.isEnabled()) await enableAudio.click();
+    await button(viewer, 'モニター音声').click();
     const video = viewer.locator(videoSelector);
     const beforePoll = await video.evaluate(element => {
       window.originalMonitorStream = element.srcObject;
@@ -1227,8 +1407,7 @@ test('audio routing recovers from a lost acknowledgment and keeps screen sharing
     await requestPairing(sender, viewer);
     await button(sender, '接続を許可').click();
     await waitForVideo(viewer, 1);
-    const enableAudio = button(viewer, 'モニター音を有効にする');
-    if (await enableAudio.isEnabled()) await enableAudio.click();
+    await button(viewer, 'モニター音声').click();
 
     const video = viewer.locator(videoSelector);
     const before = await video.evaluate(element => {

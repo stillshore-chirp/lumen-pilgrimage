@@ -16,6 +16,7 @@ import type { CoastTimeOfDay } from './world/coastAtmosphere';
 import { createCinemaPanel, type CinemaControls } from './world/cinema/CinemaPanel';
 import { createCinemaSeatTransition } from './world/cinema/cinemaSeatTransition';
 import { disposeSceneDrawables } from './disposeSceneDrawables';
+import { bindWorldLightingControl, type WorldLightingControl } from './WorldLightingControl';
 import './coast.css';
 
 const qualitySettings = {
@@ -28,7 +29,7 @@ const movementLabels: Record<CoastMovement, string> = {
   walk: '歩行', crouch: 'しゃがみ', wade: '浅瀬', swim: '遊泳', dive: '潜水', flight: '自由飛行',
 };
 
-interface ExplorationWorld {
+interface ExplorationWorld extends WorldLightingControl {
   readonly scene: Scene;
   readonly theater?: MonitorTheater;
   setQuality(quality: CoastQuality): void;
@@ -41,7 +42,7 @@ interface ExplorationWorld {
 
 type ExplorationAudio = Pick<CoastAudio, 'start' | 'isRunning' | 'setMix' | 'dispose'> & {
   update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement: CoastMovement,
-    birdCues: readonly CoastBirdCue[], grounded: boolean): void;
+    birdCues: readonly CoastBirdCue[], grounded: boolean, navigationPosition: Vector3): void;
   setTimeOfDay?(time: CoastTimeOfDay): void;
 };
 
@@ -81,6 +82,7 @@ export class CoastApp {
   private readonly worldId: ExplorationWorldId;
   private readonly audio: ExplorationAudio;
   private readonly audioControls: ReturnType<typeof bindCoastSoundControls>;
+  private readonly syncLightingControl: () => void;
   private readonly camera: PerspectiveCamera;
   private readonly canvasLabel: string;
   private readonly ui: HTMLElement;
@@ -174,6 +176,9 @@ export class CoastApp {
           <p class="coast-lock-message" role="status" hidden></p>
         </section>
         <section class="coast-panel coast-settings" aria-label="設定">
+          <div class="coast-row coast-world-lighting" role="group" aria-label="ワールド照明">
+            <span class="coast-label">照明</span>
+          </div>
           <div class="coast-row" role="group" aria-label="描画品質">
             <span class="coast-label">描画</span>
             <button type="button" class="coast-light" aria-pressed="true" title="広域の影と軽い植生描画">軽量</button>
@@ -278,6 +283,7 @@ export class CoastApp {
       });
       ui.append(this.interactionButton);
     }
+    this.syncLightingControl = bindWorldLightingControl(ui.querySelector<HTMLElement>('.coast-world-lighting')!, this.world);
     this.bindQuality(ui);
     this.bindFieldOfView(ui);
     this.resize = new ResizeObserver(() => this.resizeViewport());
@@ -603,6 +609,7 @@ export class CoastApp {
     this.seatTransition?.update(dt);
     const viewer = this.monitor?.update(frame) ?? this.camera;
     const birdCues = this.world.update(this.elapsed, viewer);
+    this.syncLightingControl();
     this.residencePanel?.sync();
     if (this.cinemaPanel?.dialog.open) this.cinemaPanel.sync();
     if (this.interactionButton) {
@@ -614,7 +621,8 @@ export class CoastApp {
     this.up.copy(viewer.up).applyQuaternion(viewer.quaternion);
     const movement = this.controls.currentMovement;
     this.audio.update(viewer.position, this.forward, this.up, this.elapsed,
-      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues, this.controls.isGrounded);
+      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues, this.controls.isGrounded,
+      this.camera.position);
     const view = this.monitor?.renderCamera ?? this.camera;
     this.world.prepareRender?.(this.renderer, view);
     this.renderer.render(this.world.scene, view);

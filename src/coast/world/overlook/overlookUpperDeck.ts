@@ -38,6 +38,10 @@ export function isUpperDeck(x: number, z: number): boolean {
   return contains(stairs, x, z) || contains(landing, x, z) || contains(terrace, x, z);
 }
 
+export function isOverlookStairTread(x: number, z: number): boolean {
+  return contains(stairs, x, z) && (z < firstLanding || z > secondFlight);
+}
+
 function stairHeight(z: number): number {
   // Continuous support for walking, ending flush at every modeled landing.
   const lower = THREE.MathUtils.clamp((z - stairStart) / flightRun, 0, 1);

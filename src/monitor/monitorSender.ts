@@ -116,7 +116,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     if (active) {
       explanation = hasAudio ? audioExplanation : capture.selectAudio(preferredOutput).explanation;
       if (hasAudio && capture.sharesFullDisplay && state?.audio.output !== 'pc') {
-        const preventFeedback = '同じPCで視聴する場合は、音の回り込みを防ぐため、視聴側のモニター音をミュートしてください。';
+        const preventFeedback = '同じPCで視聴する場合は、音の回り込みを防ぐため、視聴側の「モニター音声」をオフにしてください。';
         explanation = explanation ? `${explanation} ${preventFeedback}` : preventFeedback;
       }
     }

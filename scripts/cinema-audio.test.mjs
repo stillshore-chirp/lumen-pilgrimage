@@ -339,15 +339,18 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
     };
     const up = new Vector3(0, 1, 0);
     const dt = 0.02;
-    const frame = (x, z, movement, forward, grounded = true) => {
+    const frame = (x, z, movement, forward, grounded = true, cameraX = x) => {
       elapsed += dt;
       const eyeHeight = movement === 'crouch' ? 1.15 : 1.65;
       const y = cinemaGroundHeight(x, z) + eyeHeight + (grounded ? 0 : 1);
-      ambience.update(new Vector3(x, y, z), forward, up, elapsed, movement, [], grounded);
+      ambience.update(new Vector3(cameraX, y + 0.28, z), forward, up, elapsed, movement, [], grounded,
+        new Vector3(x, y, z));
     };
     const dx = cinemaNavigation.walkSpeed * dt;
     const east = new Vector3(1, 0, 0);
-    for (let i = 0; i <= 80; i += 1) frame(-8 + dx * i, 52.4, 'walk', east);
+    for (let i = 0; i <= 30; i += 1) frame(-8, 52.4, 'walk', east, true, -8 + dx * i);
+    const headMotion = steps.splice(0);
+    for (let i = 0; i <= 80; i += 1) frame(-8 + dx * i, 52.4, 'walk', east, true, -8);
     const carpet = steps.splice(0);
     for (let i = 0; i < 30; i += 1) frame(-8 + dx * 80, 52.4, 'walk', east);
     let x = -8 + dx * 80;
@@ -366,8 +369,9 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
     const tread = CINEMA_TREADS.find(tread => tread.row === 10);
     const back = new Vector3(0, 0, 1);
     for (let i = 0; i <= 11; i += 1) frame(stairX, tread.z + dx * (i - 11), 'walk', back);
-    return { carpet, stopped, landed, stair: steps };
+    return { headMotion, carpet, stopped, landed, stair: steps };
   });
+  assert.deepEqual(footfalls.headMotion, []);
   assert.equal(footfalls.carpet.length, 3);
   for (let i = 1; i < footfalls.carpet.length; i += 1) {
     const interval = footfalls.carpet[i].time - footfalls.carpet[i - 1].time;

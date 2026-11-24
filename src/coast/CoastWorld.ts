@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CoastBirdCue } from './coastBirdCue';
+import type { WorldLightingMode } from './WorldLightingControl';
 import {
   COAST_FALLS, COAST_REST_SITES, SEA_LEVEL, UPLAND_FALL, coastPlantingDistance, coastRandom, coastTrailDistance,
   forestStreamDistance, groundHeight, groundSlope, inlandWaterLevel, smoothstep,
@@ -108,6 +109,7 @@ export class CoastWorld {
   private readonly waterFog = new THREE.Color();
   private readonly atmosphere = createCoastAtmosphere(COAST_SUN_DIRECTION);
   private readonly lighting: ReturnType<typeof createCoastLighting>;
+  private readonly inariTrail: ReturnType<typeof createInariTrail>;
   private readonly sky: ReturnType<typeof createCoastSky>;
   private readonly terrain: ReturnType<typeof createCoastTerrain>;
   private readonly vegetation: ReturnType<typeof createCoastVegetation>;
@@ -117,6 +119,7 @@ export class CoastWorld {
   private readonly birds = createCoastBirdLife();
   private quality: CoastQuality | undefined;
   private timeOfDay: CoastTimeOfDay = 'day';
+  private lightingMode: WorldLightingMode = 'auto';
   private disposed = false;
   private diveObstacles: ((x: number, z: number) => number | undefined) | undefined;
 
@@ -133,10 +136,11 @@ export class CoastWorld {
     this.vegetation = createCoastVegetation(this.time, coastPlantingDistance, forestStreamDistance);
     this.lake = createUplandLake(this.time, this.atmosphere);
     const wood = loadCoastTexture('forest-bark.webp', true);
+    this.inariTrail = createInariTrail(wood);
     this.scene.add(this.ocean.mesh, this.lake.mesh, this.vegetation,
       createForestWater(this.time, this.atmosphere.surfaceLight), createCoastSeagrass(this.time),
       createCreekFlowers(), createCoastRestAreas(COAST_REST_SITES, wood, stone), createUplandTrailDetails(this.time, wood),
-      createInariTrail(wood));
+      this.inariTrail.group);
 
     this.waterfalls = createWaterfalls([...COAST_FALLS, UPLAND_FALL], this.time, this.atmosphere);
     this.scene.add(this.waterfalls.group, this.birds.group);
@@ -173,6 +177,18 @@ export class CoastWorld {
     this.atmosphere.setTimeOfDay(time);
     this.sky.setTimeOfDay(time);
     this.lighting.setTimeOfDay(time);
+    this.applyLanterns();
+  }
+
+  get artificialLightingMode(): WorldLightingMode { return this.lightingMode; }
+
+  setArtificialLightingMode(mode: WorldLightingMode): void {
+    this.lightingMode = mode;
+    this.applyLanterns();
+  }
+
+  private applyLanterns(): void {
+    this.inariTrail.setLanterns(this.lightingMode === 'auto' ? this.timeOfDay === 'night' : this.lightingMode === 'on');
   }
 
   update(elapsed: number, camera: THREE.PerspectiveCamera): readonly CoastBirdCue[] {

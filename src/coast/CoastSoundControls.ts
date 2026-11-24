@@ -42,24 +42,23 @@ export function bindCoastSoundControls(
   audio: Pick<CoastAudio, 'start' | 'isRunning' | 'setMix'>,
   onMasterVolume: (volume: number) => void,
 ) {
-  const hasFootsteps = world !== 'overlook';
+  const adjustableSounds = ['footsteps', ...worldSounds[world]] as const;
   panel.insertAdjacentHTML('beforeend', `
     <div class="coast-sound">
       ${volumeRow('coast-volume', '全体音量', 300, '<button type="button" class="coast-audio"></button>')}
-      ${hasFootsteps ? volumeRow('coast-sound-footsteps', soundLabels.footsteps, 100,
-        '<button type="button" class="coast-footsteps-audio"></button>') : ''}
       <details class="coast-sound-details">
         <summary>種類別の音量</summary>
-        ${worldSounds[world].map(kind =>
-          volumeRow(`coast-sound-${kind}`, kind === 'wind' && world === 'cinema' ? '換気音' : soundLabels[kind], 100)
-        ).join('')}
+        ${adjustableSounds.map(kind => volumeRow(
+          `coast-sound-${kind}`, kind === 'wind' && world === 'cinema' ? '換気音' : soundLabels[kind], 100,
+          kind === 'footsteps' ? '<button type="button" class="coast-footsteps-audio"></button>' : '',
+        )).join('')}
       </details>
       <p class="coast-audio-message" role="status"></p>
       <button type="button" class="coast-audio-retry" hidden>音声を再開</button>
     </div>
   `);
   const environment = panel.querySelector<HTMLButtonElement>('.coast-audio')!;
-  const footsteps = panel.querySelector<HTMLButtonElement>('.coast-footsteps-audio');
+  const footsteps = panel.querySelector<HTMLButtonElement>('.coast-footsteps-audio')!;
   const message = panel.querySelector<HTMLElement>('.coast-audio-message')!;
   const retry = panel.querySelector<HTMLButtonElement>('.coast-audio-retry')!;
   const listeners = new AbortController();
@@ -85,7 +84,7 @@ export function bindCoastSoundControls(
   }
 
   function wantsFootsteps(): boolean {
-    return hasFootsteps && (settings.footstepsOn ?? settings.environmentOn === true);
+    return settings.footstepsOn ?? settings.environmentOn === true;
   }
 
   function wantsAudio(): boolean {
@@ -101,7 +100,7 @@ export function bindCoastSoundControls(
     const environmentLabel = settings.environmentOn ? '環境音をオフ' : '環境音をオン';
     const footstepsLabel = wantsFootsteps() ? '歩行音をオフ' : '歩行音をオン';
     if (environment.textContent !== environmentLabel) environment.textContent = environmentLabel;
-    if (footsteps && footsteps.textContent !== footstepsLabel) footsteps.textContent = footstepsLabel;
+    if (footsteps.textContent !== footstepsLabel) footsteps.textContent = footstepsLabel;
     const needsResume = wantsAudio() && !audio.isRunning();
     if (retry.hidden === needsResume) retry.hidden = !needsResume;
     if (!needsResume && message.textContent) {
@@ -183,7 +182,6 @@ export function bindCoastSoundControls(
     applySettings({ ...settings, master });
     onMasterVolume(master);
   });
-  const adjustableSounds = hasFootsteps ? ['footsteps', ...worldSounds[world]] as const : worldSounds[world];
   const showChannels = adjustableSounds.map(kind => ({
     kind,
     show: bindVolume(`coast-sound-${kind}`, settings.levels[kind], gain => {
@@ -218,7 +216,7 @@ export function bindCoastSoundControls(
     applySettings({ ...settings, environmentOn: next, footstepsOn: settings.footstepsOn ?? true });
     if (next) void startAudio(true);
   }, { signal: listeners.signal });
-  footsteps?.addEventListener('click', () => {
+  footsteps.addEventListener('click', () => {
     const next = !wantsFootsteps();
     applySettings({ ...settings, footstepsOn: next });
     if (next) void startAudio(true);
