@@ -456,9 +456,12 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     await waitForMix(viewer, { natural: false, monitor: true });
     await button(viewer, '環境音をオン').click();
     await waitForMix(viewer, { natural: true, monitor: true });
+    const soundDetails = viewer.locator('.coast-sound-details > summary');
+    await soundDetails.click();
     await button(viewer, '歩行音をオフ').click();
     await waitForMix(viewer, { natural: true, monitor: true });
     await button(viewer, '歩行音をオン').click();
+    await soundDetails.click();
     await button(viewer, '仮想モニター').click();
     await audioToggle.click();
     assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');

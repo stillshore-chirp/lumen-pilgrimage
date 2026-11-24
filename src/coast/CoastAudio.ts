@@ -506,7 +506,7 @@ export class CoastAudio {
   }
 
   update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement?: CoastMovement,
-    cues?: readonly CoastBirdCue[],
+    cues?: readonly CoastBirdCue[], grounded?: boolean, navigationPosition = position,
   ): void {
     const context = this.context;
     if (!context) return;
@@ -530,7 +530,9 @@ export class CoastAudio {
     this.airExposure = 1 - immersion;
     this.medium?.input.frequency.setTargetAtTime(19_000 * 0.037 ** immersion, context.currentTime, 0.08);
     this.medium?.level.gain.setTargetAtTime(1 - 0.4 * immersion, context.currentTime, 0.09);
-    if (this.started && movement) this.foley?.update(position, waterLevel, movement, elapsed, context.currentTime);
+    if (this.started && movement) {
+      this.foley?.update(position, waterLevel, movement, elapsed, now, grounded, navigationPosition);
+    }
     this.updatePropagation(position, context.currentTime, elapsed);
   }
 
