@@ -342,3 +342,64 @@ for (const { name, terminalStatus, delays, phase } of [
     assert.equal(calls.filter(call => call.action === 'close').length, terminalStatus === 404 ? 0 : 1);
   });
 }
+
+for (const { terminal, expectedPhase, closes } of [
+  { terminal: 'stop', expectedPhase: 'ended', closes: 1 },
+  { terminal: 404, expectedPhase: 'ended', closes: 0 },
+  { terminal: 403, expectedPhase: 'failed', closes: 1 },
+]) {
+  test(`audio-setting retries end at ${terminal}`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const peers = installTransport(t);
+    const { calls, overrides, publish } = installSignaling(t);
+    const states = [];
+    const sender = new MonitorSender({ onState: state => states.push(state) });
+    t.after(() => sender.stop());
+    const video = new Track('video');
+    const audio = new Track('audio');
+    await sender.start(new Stream([video, audio]), { available: true, output: 'both' });
+    publish({ phase: 'approved' });
+    await until(() => peers[0]?.iceGatheringState === 'gathering', 'sender did not start ICE gathering');
+    const [peer] = peers;
+    peer.finishIce();
+    await until(() => calls.some(call => call.action === 'offer'), 'sender did not offer');
+    publish({ answer: { type: 'answer', sdp: 'v=0' } });
+    await until(() => peer.remoteDescription?.type === 'answer', 'sender did not apply the answer');
+    peer.setConnectionState('connected');
+
+    const outputs = [];
+    overrides.audio = ({ audio }) => {
+      outputs.push(audio.output);
+      const status = terminal === 403 || (terminal === 404 && outputs.length > 1) ? terminal : 503;
+      return new Response(null, { status });
+    };
+    const first = sender.updateAudio({ available: true, output: 'pc' });
+    assert.equal(audio.enabled, false);
+    await until(() => outputs.length === 1, 'sender did not send the audio setting');
+
+    if (terminal === 403) {
+      await first;
+    } else {
+      assert.equal(states.at(-1).audioPending, true);
+      assert.equal(peer.connectionState, 'connected');
+      assert.equal(video.readyState, 'live');
+      const newer = sender.updateAudio({ available: true, output: 'both' });
+      assert.equal(audio.enabled, true);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(outputs, ['pc'], 'the new setting waits for the serialized retry');
+      if (terminal === 'stop') sender.stop();
+      else t.mock.timers.tick(1_000);
+      await Promise.all([first, newer]);
+    }
+
+    assert.equal(states.at(-1).phase, expectedPhase);
+    assert.equal(states.at(-1).audioPending, undefined);
+    assert.equal(peer.connectionState, 'closed');
+    assert.equal(video.readyState, 'ended');
+    assert.equal(audio.readyState, 'ended');
+    t.mock.timers.tick(16_000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(outputs, terminal === 404 ? ['pc', 'both'] : ['pc']);
+    assert.equal(calls.filter(call => call.action === 'close').length, closes);
+  });
+}

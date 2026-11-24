@@ -1206,3 +1206,75 @@ test('a transient signaling poll failure leaves one established WebRTC session r
     await Promise.all([sender.context().close(), viewer.context().close()]);
   }
 });
+
+test('audio routing recovers from a lost acknowledgment and keeps screen sharing stoppable', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  const audioPath = '**/api/virtual-monitor/audio';
+  const applied = Promise.withResolvers();
+  const loseResponse = Promise.withResolvers();
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture),
+      sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers),
+      viewer.addInitScript(observeAudio),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    await viewer.goto(url.href);
+    await button(viewer, '仮想モニター').click();
+    await button(viewer, 'モニターを表示').click();
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    const enableAudio = button(viewer, 'モニター音を有効にする');
+    if (await enableAudio.isEnabled()) await enableAudio.click();
+
+    const video = viewer.locator(videoSelector);
+    const before = await video.evaluate(element => {
+      window.originalMonitorStream = element.srcObject;
+      return element.getVideoPlaybackQuality().totalVideoFrames;
+    });
+    const output = sender.getByRole('combobox', { name: '音声の出力先' });
+    const pending = sender.getByRole('status').filter({ hasText: '音声の設定を視聴先に反映中です。' });
+    const viewerPCOnly = viewer.locator('[data-monitor-audio-status]').filter({ hasText: 'PC側のみ' });
+
+    await sender.route(audioPath, async route => {
+      applied.resolve((await route.fetch()).ok());
+      await loseResponse.promise;
+      await route.abort('failed');
+    }, { times: 1 });
+    await output.selectOption('pc');
+    assert.equal(await applied.promise, true, 'the server accepted PC-only before its response was lost');
+    await pending.waitFor();
+    assert.equal(await sender.evaluate(() => window.captureFixture.streams[0].getAudioTracks()[0].enabled), false);
+    await viewerPCOnly.waitFor();
+    await output.selectOption('both');
+    assert.equal(await sender.evaluate(() => window.captureFixture.streams[0].getAudioTracks()[0].enabled), true);
+
+    loseResponse.resolve();
+    await pending.waitFor({ state: 'hidden' });
+    await viewerPCOnly.waitFor({ state: 'hidden' });
+    assert.deepEqual(await sender.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['connected']);
+    assert.deepEqual(await viewer.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['connected']);
+    assert.ok(await video.evaluate((element, before) => element.srcObject === window.originalMonitorStream
+      && element.srcObject.getTracks().every(track => track.readyState === 'live')
+      && element.getVideoPlaybackQuality().totalVideoFrames > before, before));
+    await viewer.waitForFunction(() => window.monitorSound.read().some(
+      context => context.hasStream && context.state === 'running' && context.peak > .001));
+
+    await sender.route(audioPath, route => route.fulfill({ status: 503 }));
+    const rejected = sender.waitForResponse(response => response.url().endsWith('/virtual-monitor/audio')
+      && response.status() === 503);
+    await output.selectOption('pc');
+    await rejected;
+    await pending.waitFor();
+    await button(sender, '共有を停止').click();
+    await pending.waitFor({ state: 'hidden' });
+    await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
+    await sender.waitForFunction(() => window.captureFixture.streams[0].getTracks().every(track => track.readyState === 'ended'));
+  } finally {
+    loseResponse.resolve();
+    await Promise.all([sender.context().close(), viewer.context().close()]);
+  }
+});

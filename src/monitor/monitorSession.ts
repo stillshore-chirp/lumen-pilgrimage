@@ -11,6 +11,7 @@ export type MonitorConnectionState = {
   code?: string;
   verification?: string;
   audio: MonitorSharedAudio;
+  audioPending?: boolean;
   detail: string;
 };
 
@@ -26,7 +27,8 @@ type Snapshot = {
 type Credentials = { sessionId: string; token: string };
 type SnapshotResult = { snapshot: Snapshot };
 type Enrollment = Credentials & SnapshotResult;
-type Endpoint = 'create' | 'join' | 'poll' | 'approve' | 'offer' | 'answer' | 'audio' | 'close';
+type RetryEndpoint = 'poll' | 'audio';
+type Endpoint = 'create' | 'join' | 'approve' | 'offer' | 'answer' | 'close' | RetryEndpoint;
 
 type Connection = {
   controller: AbortController;
@@ -39,8 +41,8 @@ type Connection = {
 };
 
 const SIGNAL_TIMEOUT = 15_000;
-const INITIAL_POLL_RETRY_DELAY = 1_000;
-const MAX_POLL_RETRY_DELAY = 8_000;
+const INITIAL_SIGNAL_RETRY_DELAY = 1_000;
+const MAX_SIGNAL_RETRY_DELAY = 8_000;
 const ICE_TIMEOUT = 8_000;
 const CONNECTION_TIMEOUT = 30_000;
 const DISCONNECT_GRACE = 5_000;
@@ -57,14 +59,15 @@ class SignalError extends Error {
 
 class MonitorFailure extends Error {}
 
-function canRetryPoll(error: unknown): boolean {
+function canRetrySignal(endpoint: RetryEndpoint, error: unknown): boolean {
   if (error instanceof SignalError) {
-    return [408, 409, 429].includes(error.status) || (error.status >= 500 && error.status <= 599);
+    return error.status === 408 || error.status === 429
+      || (endpoint === 'poll' && error.status === 409) || (error.status >= 500 && error.status <= 599);
   }
   return error instanceof TypeError || (error instanceof DOMException && error.name === 'TimeoutError');
 }
 
-function waitForPollRetry(delay: number, abort: AbortSignal): Promise<void> {
+function waitForSignalRetry(delay: number, abort: AbortSignal): Promise<void> {
   abort.throwIfAborted();
   return new Promise(resolve => {
     const timer = setTimeout(finish, delay);
@@ -182,7 +185,7 @@ abstract class MonitorSession<Active extends Connection> {
     const previous = connection.state;
     if (previous.phase === state.phase && previous.detail === state.detail
       && previous.code === state.code && previous.verification === state.verification
-      && sameAudio(previous.audio, state.audio)) return;
+      && previous.audioPending === state.audioPending && sameAudio(previous.audio, state.audio)) return;
     connection.state = state;
     this.onState(state);
   }
@@ -211,32 +214,34 @@ abstract class MonitorSession<Active extends Connection> {
       while (this.current === connection) {
         await apply(snapshot);
         if (this.current !== connection) return;
-        snapshot = await this.pollSnapshot(connection, snapshot.revision);
+        const response = await this.retrySignal(connection, 'poll', () =>
+          this.request(connection, 'poll', { revision: snapshot.revision }));
+        snapshot = response.snapshot;
       }
     } catch (error) {
-      if (error instanceof SignalError && error.status === 404) {
-        this.finish(connection, 'ended', '接続の有効期限が切れたか、共有が終了しました。', false);
-        return;
-      }
-      this.fail(connection, error);
+      this.failSignaling(connection, error);
     }
   }
 
-  private async pollSnapshot(connection: Active, revision: number): Promise<Snapshot> {
+  protected async retrySignal<Result>(
+    connection: Active,
+    endpoint: RetryEndpoint,
+    perform: () => Promise<Result>,
+  ): Promise<Result> {
     const abort = connection.controller.signal;
-    let delay = INITIAL_POLL_RETRY_DELAY;
+    let delay = INITIAL_SIGNAL_RETRY_DELAY;
     while (true) {
+      abort.throwIfAborted();
       try {
-        const { snapshot } = await this.request(connection, 'poll', { revision });
-        return snapshot;
+        return await perform();
       } catch (error) {
         abort.throwIfAborted();
         // An established peer can keep carrying media during a signaling outage.
-        if (connection.state.phase !== 'connected' || connection.video?.readyState !== 'live' || !canRetryPoll(error)) {
+        if (connection.state.phase !== 'connected' || connection.video?.readyState !== 'live' || !canRetrySignal(endpoint, error)) {
           throw error;
         }
-        await waitForPollRetry(delay, abort);
-        delay = Math.min(delay * 2, MAX_POLL_RETRY_DELAY);
+        await waitForSignalRetry(delay, abort);
+        delay = Math.min(delay * 2, MAX_SIGNAL_RETRY_DELAY);
       }
     }
   }
@@ -292,6 +297,14 @@ abstract class MonitorSession<Active extends Connection> {
     this.finish(connection, 'failed', error instanceof MonitorFailure ? error.message : detail);
   }
 
+  protected failSignaling(connection: Active, error: unknown, detail?: string): void {
+    if (error instanceof SignalError && error.status === 404) {
+      this.finish(connection, 'ended', '接続の有効期限が切れたか、共有が終了しました。', false);
+      return;
+    }
+    this.fail(connection, error, detail);
+  }
+
   protected abstract releaseMedia(connection: Active): void;
 
   private release(connection: Active, notifyServer = true): void {
@@ -308,7 +321,7 @@ abstract class MonitorSession<Active extends Connection> {
 type SenderConnection = Connection & {
   stream: MediaStream;
   audioTrack?: MediaStreamTrack;
-  audioWrite: Promise<void>;
+  audioWrite?: Promise<void>;
   announcedAudio?: MonitorSharedAudio;
   code?: string;
   decision?: boolean;
@@ -325,7 +338,6 @@ export class MonitorSender extends MonitorSession<SenderConnection> {
       stream,
       video: liveTrack(stream.getVideoTracks()),
       audioTrack: liveTrack(stream.getAudioTracks()),
-      audioWrite: Promise.resolve(),
       controller: new AbortController(),
       state: {
         phase: 'waiting',
@@ -386,7 +398,7 @@ export class MonitorSender extends MonitorSession<SenderConnection> {
     try {
       await this.writeAudio(connection);
     } catch (error) {
-      this.fail(connection, error, '音声の設定を接続先へ送れなかったため、画面共有を終了しました。');
+      this.failSignaling(connection, error, '音声の設定を接続先へ送れなかったため、画面共有を終了しました。');
     }
   }
 
@@ -399,14 +411,29 @@ export class MonitorSender extends MonitorSession<SenderConnection> {
   }
 
   private writeAudio(connection: SenderConnection): Promise<void> {
-    // Keep the routing updates in order if an earlier write is still in flight.
-    connection.audioWrite = connection.audioWrite.then(async () => {
-      const audio = connection.state.audio;
-      if (this.current !== connection || sameAudio(connection.announcedAudio, audio)) return;
-      await this.request(connection, 'audio', { audio });
-      connection.announcedAudio = audio;
-    });
-    return connection.audioWrite;
+    if (connection.audioWrite) return connection.audioWrite;
+    if (sameAudio(connection.announcedAudio, connection.state.audio)) return Promise.resolve();
+    const writing = this.flushAudio(connection);
+    connection.audioWrite = writing;
+    this.publish(connection, { ...connection.state, audioPending: true });
+    return writing;
+  }
+
+  private async flushAudio(connection: SenderConnection): Promise<void> {
+    try {
+      while (!sameAudio(connection.announcedAudio, connection.state.audio)) {
+        await this.retrySignal(connection, 'audio', async () => {
+          const { audio } = connection.state;
+          // If the response is lost, the server may already have applied the change.
+          connection.announcedAudio = undefined;
+          await this.request(connection, 'audio', { audio });
+          connection.announcedAudio = audio;
+        });
+      }
+    } finally {
+      connection.audioWrite = undefined;
+    }
+    this.publish(connection, { ...connection.state, audioPending: false });
   }
 
   private async apply(connection: SenderConnection, snapshot: Snapshot): Promise<void> {
@@ -440,7 +467,7 @@ export class MonitorSender extends MonitorSession<SenderConnection> {
       this.publish(connection, { phase: 'connecting', audio, detail: '視聴先に接続しています。' });
       peer = this.createPeer(connection, () => {
         this.clearConnectionTimer(connection);
-        this.publish(connection, { phase: 'connected', audio: connection.state.audio, detail: '画面を共有しています。' });
+        this.publish(connection, { ...connection.state, phase: 'connected', detail: '画面を共有しています。' });
       });
       const options: RTCRtpTransceiverInit = { direction: 'sendonly', streams: [connection.stream] };
       peer.addTransceiver(connection.video, options);
