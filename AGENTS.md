@@ -5,7 +5,7 @@
 ## 開発の入口
 
 - [README.md](README.md) に、起動手順と利用者・開発者向けの文書案内があります。
-- 変更内容に対応する文書を [正本と更新先](docs/agent-harness.md#正本と更新先) で確認し、該当箇所を更新してください。
+- 変更内容に対応する文書は [文書の責務と更新基準](docs/documentation-structure.md) で正本と更新条件を確認し、該当箇所を更新してください。
 - [Issue・PRの記載](docs/agent-harness.md#issueprの記載) と、文書や参照を変えたときの [静的検査](docs/agent-harness.md#更新と検証) はハーネスガイドを参照してください。
 - リポジトリ内に作業計画を残す場合は [作業計画テンプレート](plans/TEMPLATE.md) を使えます。
 

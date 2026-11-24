@@ -16,7 +16,7 @@
     "test:residence:browser": "node --test scripts/residence-browser.test.mjs scripts/residence-light-motion.test.mjs",
     "test:cinema": "node --test scripts/cinema-navigation.test.mjs scripts/cinema-lighting.test.mjs scripts/cinema-audio.test.mjs",
     "test:cinema:browser": "CINEMA_AUDIO_BROWSER=1 node --test scripts/cinema-browser.test.mjs scripts/cinema-audio.test.mjs",
-    "validate:harness": "node scripts/validate-harness.mjs"
+    "validate:harness": "node --test scripts/validate-harness.test.mjs && node scripts/validate-harness.mjs"
   },
   "dependencies": {
     "three": "0.184.0"

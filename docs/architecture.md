@@ -1,6 +1,34 @@
 # Lumen Pilgrimage の設計
 
-探索の実装上の責務と接続をまとめます。利用者向けの操作や設定は [探索ガイド](exploration.md) を参照してください。
+探索の実装上の責務と接続をまとめます。利用者向けの操作や設定は [探索ガイド](exploration.md)、ワールドごとの構成と接続先は [ワールド案内](worlds.md)、開発作業の入口は [README](../README.md#開発者の作業から探す) を参照してください。
+
+## 全体構成とデータの流れ
+
+| 責務 | 主な担当 | 主な受け渡し |
+| --- | --- | --- |
+| 起動とアプリの進行 | [main.ts](../src/main.ts) が URL から起動先を選び、[CoastApp](../src/coast/CoastApp.ts) が描画、カメラ、入力、画面、フレーム更新を接続します。 | URL の `world`・`place`・`time` と利用者の操作を、現在のワールドと移動状態へ反映します。 |
+| ワールド固有の環境 | [CoastWorld](../src/coast/CoastWorld.ts)、[OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts)、[ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)、[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts) が地形や建物、配置、描画と環境音を組み立てます。 | 各ワールドの地形・配置定義を描画、歩行判定、移動先の計算で共有します。詳細は [ワールド案内](worlds.md) とこの文書の各設計節に記録します。 |
+| 移動と共通状態 | [CoastControls の CoastPose / CoastNavigation](../src/coast/CoastControls.ts) が入力、現在の姿勢、接地を扱います。 | 姿勢、ワールドの支持面、時間帯をフレーム更新へ渡し、描画と音響が同じ位置・昼夜に追従します。 |
+| 仮想モニター | [配信ページ](../src/monitor/monitorSender.ts)、[シグナリング](../server/virtual-monitor-signaling.mjs)、[セッション](../src/monitor/monitorSession.ts) が接続とメディアの受け渡しを担います。 | 視聴側は受け取った映像をワールド内の表示先へ渡し、音を専用のモニター音響へ渡します。シグナリングと直接通信の契約は [仮想モニター仕様](monitor.md) を参照してください。 |
+
+```mermaid
+flowchart LR
+  url["URL: world / place / time"] --> main["main.ts"]
+  main -->|通常の探索| app["CoastApp"]
+  main -->|monitor=sender| sender["配信ページ"]
+  assets["静的配布物<br/>dist/ の HTML・JS・public 素材"] --> worlds["4つのワールド<br/>coast / overlook / residence / cinema"]
+  app --> worlds
+  worlds --> scene["各ワールドの描画・環境音"]
+
+  subgraph viteOnly["Vite の開発・プレビューのみ"]
+    signaling["同一オリジンのシグナリング API"]
+  end
+  sender <-->|接続調整| signaling
+  viewer["CoastApp の視聴側"] <-->|接続調整| signaling
+  sender -->|WebRTC 映像・音声| viewer
+  viewer -->|映像| displays["浮遊モニター<br/>住戸のテレビ<br/>映画館の幕"]
+  viewer -->|音声| monitorAudio["モニター音響"]
+```
 
 ## 起動と状態遷移
 
@@ -9,8 +37,10 @@
 
 ## 仮想モニターの設計
 
+ここでは主要な実装接続を示します。遷移・権限・接続期限・対応ブラウザーの詳細は [仮想モニター仕様](monitor.md) を正本として参照してください。
+
 - `?monitor=sender` は [配信ページ](../src/monitor/monitorSender.ts) を起動する。共有ボタンの操作から `getDisplayMedia()` を呼び、ブラウザが選択と許可を管理する。macOSとWindowsは同じ [画面取得](../src/monitor/monitorCapture.ts) とトラック契約を使う。保護コンテンツは共有元の制限に従う。[W3C Screen Capture](https://www.w3.org/TR/screen-capture/) · [ChromiumのmacOSウィンドウ音声対応](https://chromium.googlesource.com/chromium/src/+/c27d9c73c94555e3ec51dcec1317aedd539537fb)
-- [シグナリング](../server/virtual-monitor-signaling.mjs) はViteの開発・プレビューで同一オリジンのPOSTを受ける。発行から2分以内にコードで視聴先1件を予約する。照合番号を確認して配信元が許可すると、役割別の一時トークンとリビジョン番号を使い、接続情報を交換する。許可済みセッションは片側の通信が90秒途絶えるか、開始から8時間で期限切れになる。一時情報はメモリ上に保持し、期限切れ・拒否・終了で破棄する。映像と音声は [WebRTC](../src/monitor/monitorSession.ts) で端末間を直接通り、録画・保存は行わない。サーバーは外部STUN・TURNを使わない。
+- [シグナリング](../server/virtual-monitor-signaling.mjs) はViteの開発・プレビューで同一オリジンのPOSTを受ける。配信元が視聴先を許可してからセッションを接続し、一時情報はプロセス内に保持して接続終了時に破棄する。録画・保存は行わない。接続の役割、期限、メディア経路は [仮想モニター仕様](monitor.md) にまとめています。
 - [視聴パネル](../src/monitor/monitorView.ts) を初めて開くと、一枚の [映像面](../src/monitor/monitorObject.ts) を景観に追加できる。映像面の位置・向き・大きさはワールド座標に保持する。映像の縦横比に合わせて同じ平面を描き、映像を失ったらそこに状態を表示する。配置編集時はFPSのマウスロックを解除し、ドラッグを映像面に渡す。
 - 住戸のテレビは同じ映像テクスチャを壁の固定画面に描く。表示先と音の出力方式は別に選べる。5.1ch出力では、受信したチャンネルを音声の数に応じて割り当て、住戸内のスピーカーの位置から頭部伝達関数で定位させる。 [テレビとスピーカーの配置](../src/coast/world/residence/residenceTheater.ts) · [ITU-R BS.775-4](https://www.itu.int/rec/R-REC-BS.775-4-202212-I/en) · [Web Audioのチャンネル順序](https://www.w3.org/TR/webaudio/#ChannelOrdering)
 - [VR入力](../src/monitor/monitorXR.ts) はWebXRの `local-floor` に接続する。コントローラーの `squeeze` と手の関節座標によるピンチを個別に扱う。追跡を失った場合は掴みを解除し、その時点の姿勢に固定する。デスクトップの視点とFOVはVRセッションから独立している。[W3C WebXR](https://www.w3.org/TR/webxr/) · [WebXR Hand Input](https://www.w3.org/TR/webxr-hand-input-1/)

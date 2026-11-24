@@ -5,16 +5,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = realpathSync(fileURLToPath(new URL('..', import.meta.url)));
 const skillRoot = '.agents/skills';
 const harnessGuide = 'docs/agent-harness.md';
-const currentDocs = [
-  'AGENTS.md',
-  'README.md',
-  harnessGuide,
-  'docs/architecture.md',
-  'docs/exploration.md',
-  'docs/verification.md',
-  'plans/README.md',
-  'plans/TEMPLATE.md'
-];
+const documentationStructure = 'docs/documentation-structure.md';
+const historicalDocs = new Set(['docs/residence/residence-50f-design.md']);
+const preservedDocs = ['plans/README.md', 'plans/TEMPLATE.md'];
 const errors = [];
 
 function repositoryPath(path) {
@@ -30,29 +23,102 @@ function read(path) {
   return readFileSync(repositoryPath(path), 'utf8');
 }
 
+function markdownFiles(directory) {
+  if (!existsSync(resolve(root, directory))) {
+    return [];
+  }
+  const files = [];
+  function visit(current) {
+    for (const entry of readdirSync(repositoryPath(current), { withFileTypes: true })) {
+      const path = `${current}/${entry.name}`;
+      if (entry.isDirectory()) {
+        visit(path);
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        files.push(path);
+      }
+    }
+  }
+  visit(directory);
+  return files.sort();
+}
+
 function anchor(heading) {
-  return heading.toLowerCase().replace(/[^\p{L}\p{N}\p{M}_ -]/gu, '').replaceAll(' ', '-');
+  return heading.toLowerCase()
+    .replace(/[^\p{L}\p{N}\p{M}_ -]/gu, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
+function withoutFencedCode(source) {
+  const lines = source.split(/(\r\n|\n|\r)/);
+  let openFence;
+  for (let index = 0; index < lines.length; index += 2) {
+    const line = lines[index];
+    if (openFence) {
+      lines[index] = ' '.repeat(line.length);
+      const closing = line.match(/^ {0,3}(`+|~+)[ \t]*$/)?.[1];
+      if (closing?.[0] === openFence.character && closing.length >= openFence.length) {
+        openFence = undefined;
+      }
+      continue;
+    }
+
+    const opening = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (!opening || (opening[1][0] === '`' && opening[2].includes('`'))) {
+      continue;
+    }
+    openFence = { character: opening[1][0], length: opening[1].length };
+    lines[index] = ' '.repeat(line.length);
+  }
+  return lines.join('');
+}
+
+function headingAnchors(source) {
+  const anchors = new Set();
+  const counts = new Map();
+  for (const [, heading] of withoutFencedCode(source).matchAll(/^#{1,6}[ \t]+(.+)$/gm)) {
+    const base = anchor(heading);
+    const count = counts.get(base) ?? 0;
+    anchors.add(count === 0 ? base : `${base}-${count}`);
+    counts.set(base, count + 1);
+  }
+  return anchors;
+}
+
+function linkDestination(raw) {
+  const trimmed = raw.trim();
+  const angle = trimmed.match(/^<([^<>]+)>(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?$/);
+  const plain = trimmed.match(/^([^\s<>]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?$/);
+  return angle?.[1] ?? plain?.[1] ?? '';
 }
 
 function checkLinks(doc, source) {
   const targets = new Set();
-  const withoutFences = source.replace(/^```[^\r\n]*\r?\n[\s\S]*?^```[ \t]*$/gm, (fence) => fence.replace(/[^\r\n]/g, ''));
-  for (const [index, line] of withoutFences.split(/\r?\n/).entries()) {
-    for (const [, reference] of line.matchAll(/\[[^\]]*\]\(<?([^\s)>]+)>?(?:\s+"[^"]*")?\)/g)) {
+  for (const [index, line] of withoutFencedCode(source).split(/\r?\n/).entries()) {
+    const starts = /!?\[[^\]\n]*\]\(/g;
+    for (const start of line.matchAll(starts)) {
+      const destinationStart = start.index + start[0].length;
+      const destinationEnd = line.indexOf(')', destinationStart);
+      const description = `${doc}:${index + 1}: invalid repository link`;
+      if (destinationEnd < 0) {
+        errors.push(description);
+        continue;
+      }
+      const reference = linkDestination(line.slice(destinationStart, destinationEnd));
+      if (!reference) {
+        errors.push(description);
+        continue;
+      }
       if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(reference)) {
         continue;
       }
-      const description = `${doc}:${index + 1}: invalid repository link`;
       try {
         const url = new URL(reference, pathToFileURL(resolve(root, doc)));
         const target = repositoryPath(fileURLToPath(url));
         const fragment = decodeURIComponent(url.hash.slice(1));
-        if (fragment && target.endsWith('.md')) {
-          const headings = read(target).matchAll(/^#{1,6}[ \t]+(.+)$/gm);
-          if (![...headings].some(([, title]) => anchor(title) === fragment)) {
-            errors.push(description);
-            continue;
-          }
+        if (fragment && target.endsWith('.md') && !headingAnchors(read(target)).has(fragment)) {
+          errors.push(description);
+          continue;
         }
         targets.add(relative(root, target).split(sep).join('/'));
       } catch {
@@ -77,8 +143,34 @@ function checkSkill(doc, source) {
   }
 }
 
+function reachableDocuments(start, links, currentDocs) {
+  const reachable = new Set([start]);
+  const queue = [start];
+  for (let index = 0; index < queue.length; index += 1) {
+    for (const target of links.get(queue[index]) ?? []) {
+      if (currentDocs.has(target) && !reachable.has(target)) {
+        reachable.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  return reachable;
+}
+
 function run() {
   const { scripts } = JSON.parse(read('package.json'));
+  const discoveredDocs = markdownFiles('docs');
+  const assetCredits = markdownFiles('public').filter((doc) => doc.endsWith('/ATTRIBUTION.md'));
+  const currentDocs = [
+    'AGENTS.md',
+    'README.md',
+    ...discoveredDocs.filter((doc) => !historicalDocs.has(doc)),
+    ...assetCredits
+  ];
+  const supplementaryDocs = [
+    ...discoveredDocs.filter((doc) => historicalDocs.has(doc)),
+    ...preservedDocs
+  ];
   const skills = existsSync(resolve(root, skillRoot))
     ? readdirSync(repositoryPath(skillRoot), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -86,7 +178,7 @@ function run() {
     : [];
 
   const links = new Map();
-  for (const doc of [...currentDocs, ...skills]) {
+  for (const doc of [...currentDocs, ...supplementaryDocs, ...skills]) {
     let source;
     try {
       source = read(doc);
@@ -105,11 +197,21 @@ function run() {
     }
   }
 
-  for (const [doc, targets] of [['AGENTS.md', [harnessGuide]], [harnessGuide, skills]]) {
+  for (const [doc, targets] of [
+    ['AGENTS.md', [harnessGuide, documentationStructure]],
+    [harnessGuide, [documentationStructure, ...skills]]
+  ]) {
     for (const target of targets) {
       if (!links.get(doc)?.has(target)) {
         errors.push(`${doc}: missing link to ${target}`);
       }
+    }
+  }
+
+  const reachableFromReadme = reachableDocuments('README.md', links, new Set(currentDocs));
+  for (const doc of currentDocs) {
+    if (!reachableFromReadme.has(doc)) {
+      errors.push(`README.md: maintained document is not reachable: ${doc}`);
     }
   }
 
@@ -118,7 +220,7 @@ function run() {
     process.exitCode = 1;
     return;
   }
-  console.log(`✓ harness: ${currentDocs.length} current documents and ${skills.length} skills validated`);
+  console.log(`✓ harness: ${currentDocs.length} maintained documents, ${supplementaryDocs.length} historical/plan documents and ${skills.length} skills validated`);
 }
 
 try {
