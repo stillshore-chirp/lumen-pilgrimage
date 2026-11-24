@@ -679,8 +679,11 @@ export class CoastControls {
   private headCanFollow(x: number, y: number, z: number,
     nextX: number, nextY: number, nextZ: number, offset?: Vector3): boolean {
     if (!offset || !this.headBlocked(nextX + offset.x, nextY + offset.y, nextZ + offset.z)) return true;
-    // Physical leaning can already be inside the navigation clearance. Allow a retreat toward the body.
-    const retreating = (nextX - x) * offset.x + (nextZ - z) * offset.z < 0;
+    // During overlap, a retreat on one axis cannot offset advancing into clearance on the other.
+    const xAlongHeadOffset = (nextX - x) * offset.x;
+    const zAlongHeadOffset = (nextZ - z) * offset.z;
+    const retreating = xAlongHeadOffset <= 0 && zAlongHeadOffset <= 0
+      && (xAlongHeadOffset < 0 || zAlongHeadOffset < 0);
     return retreating && this.headBlocked(x + offset.x, y + offset.y, z + offset.z);
   }
 

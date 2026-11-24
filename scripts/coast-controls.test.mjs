@@ -851,3 +851,37 @@ test('walking connects the beach, forest, lake, ridge and both vermilion stairs'
     browser.cleanup();
   }
 });
+
+test('XR walking, flying and diving can retreat from head clearance without diagonal motion advancing into it', async t => {
+  for (const mode of ['walk', 'flight', 'dive']) {
+    await t.test(mode, () => {
+      const browser = createBrowser();
+      const camera = new PerspectiveCamera();
+      const controls = createControls(browser, camera, {}, {
+        bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+        spawn: { x: 0, z: 0, yaw: -Math.PI / 2, pitch: 0 },
+        groundHeight: () => mode === 'dive' ? -3 : 0,
+        waterLevel: () => mode === 'dive' ? 2 : -Infinity,
+        blocksWalking: x => x >= .35,
+        flightCeiling: 10,
+      });
+      try {
+        const view = { yaw: -Math.PI / 2, headOffset: new Vector3(.45, 0, .45) };
+        const motion = { forward: 0, right: 0, vertical: 0, jump: false, dive: false, flight: false };
+        controls.updateXR(.025, { ...motion, flight: mode === 'flight', dive: mode === 'dive' }, view);
+        assert.equal(controls.currentMovement, mode);
+        for (let frame = 0; frame < 15; frame += 1) {
+          controls.updateXR(.025, { ...motion, forward: .6, right: -.8 }, view);
+        }
+        assert.ok(camera.position.x <= .001, 'diagonal input never advances toward the wall on X');
+        for (let frame = 0; frame < 7; frame += 1) {
+          controls.updateXR(.025, { ...motion, forward: -1 }, view);
+        }
+        assert.ok(camera.position.x < -.2, 'movement directly away from the wall is retained');
+      } finally {
+        controls.dispose();
+        browser.cleanup();
+      }
+    });
+  }
+});

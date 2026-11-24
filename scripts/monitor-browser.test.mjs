@@ -1298,3 +1298,34 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await page.close();
   }
 });
+
+test('a diagonal stick input cannot push a leaning Quest viewer into a closed balcony door', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await page.addInitScript(installSimulatedXR);
+    await page.goto(new URL('?world=residence&place=primary-bedroom&time=night', url).href);
+    await button(page, 'VRを開始').click();
+    await page.waitForFunction(() => window.xrFixture.frames > 4 && window.xrFixture.eyePoses[320]);
+    const change = input => page.evaluate(value => window.xrFixture.mutate(value), input);
+    const pose = () => page.evaluate(() => {
+      const { eyePoses } = window.xrFixture;
+      return [(eyePoses[0].x + eyePoses[320].x) / 2, (eyePoses[0].z + eyePoses[320].z) / 2];
+    });
+    const [x, z] = await pose();
+    await change({ head: { x: .45, z: -.45 } });
+    const [leanX, leanZ] = await pose();
+    assert.ok(Math.abs(leanX - x - .45) < .015 && Math.abs(leanZ - z - .45) < .015,
+      'the tracked view follows the diagonal lean at the closed door');
+    await change({ side: 'left', axes: [-.8, -.6], frames: 14 });
+    const [pushedX] = await pose();
+    assert.ok(pushedX <= leanX + .03, 'sliding along a wall cannot cancel an inward component');
+    await change({ side: 'left', axes: [0, 1] });
+    await page.waitForFunction(lean => {
+      const { eyePoses } = window.xrFixture;
+      return (eyePoses[0].x + eyePoses[320].x) / 2 < lean - .15;
+    }, leanX);
+    await change({ side: 'left', axes: [0, 0] });
+  } finally {
+    await page.close();
+  }
+});
