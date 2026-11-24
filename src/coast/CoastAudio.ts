@@ -531,8 +531,7 @@ export class CoastAudio {
     this.medium?.input.frequency.setTargetAtTime(19_000 * 0.037 ** immersion, context.currentTime, 0.08);
     this.medium?.level.gain.setTargetAtTime(1 - 0.4 * immersion, context.currentTime, 0.09);
     if (this.started && movement) {
-      const dry = movement === 'walk' || movement === 'crouch';
-      this.foley?.update(dry ? navigationPosition : position, waterLevel, movement, elapsed, now, grounded);
+      this.foley?.update(position, waterLevel, movement, elapsed, now, grounded, navigationPosition);
     }
     this.updatePropagation(position, context.currentTime, elapsed);
   }

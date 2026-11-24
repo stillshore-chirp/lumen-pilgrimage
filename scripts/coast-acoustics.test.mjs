@@ -224,7 +224,7 @@ test('the final peak ceiling preserves normal sample levels and retains output h
   assert.ok(curve.every((sample, index) => Math.abs(sample) < 0.97 && (index === 0 || sample >= curve[index - 1])));
 });
 
-test('walking and diving contacts follow separate mix controls in direct sound and reflections', () => {
+function createFoleyFixture() {
   const param = () => ({
     value: 1,
     setValueAtTime(value) { this.value = value; },
@@ -247,6 +247,11 @@ test('walking and diving contacts follow separate mix controls in direct sound a
   const direct = mockAudioNode();
   const reflected = mockAudioNode();
   const foley = new CoastFoley(context, direct, reflected);
+  return { context, sources, direct, reflected, foley };
+}
+
+test('walking and diving contacts follow separate mix controls in direct sound and reflections', () => {
+  const { sources, direct, reflected, foley } = createFoleyFixture();
   const walk = (x, elapsed, grounded) => {
     const z = SPAWN.z;
     const y = groundHeight(x, z) + groundEyeHeight('walk');
@@ -284,5 +289,34 @@ test('walking and diving contacts follow separate mix controls in direct sound a
   foley.setMix({ ...DEFAULT_EXPLORATION_MIX, levels: { ...DEFAULT_EXPLORATION_MIX.levels, water: 0.25 } });
   assert.equal(wetContact.gain.value, nominalSplash * 0.25);
   assert.equal(dryContact.gain.value, nominalStep);
+  foley.dispose();
+});
+
+test('wading follows grounded navigation while the listener can move independently', () => {
+  const { context, sources, foley } = createFoleyFixture();
+  foley.setMix({ ...DEFAULT_EXPLORATION_MIX, footstepsOn: false });
+  const x = SPAWN.x, z = 64;
+  const point = x => ({ x, y: groundHeight(x, z) + groundEyeHeight('wade'), z });
+  const start = point(x);
+  assert.ok(SEA_LEVEL - groundHeight(x, z) > 0.08 && SEA_LEVEL - groundHeight(x, z) < 1.02);
+  const frame = (head, navigation, grounded) => {
+    context.currentTime += 0.16;
+    foley.update(head, SEA_LEVEL, 'wade', context.currentTime, context.currentTime, grounded, navigation);
+  };
+
+  for (let i = 0; i <= 4; i++) frame(point(x + i * 0.32), start, true);
+  assert.equal(sources.length, 0, 'head movement while standing in shallow water creates no contact');
+
+  for (let i = 0; i <= 4; i++) frame(start, point(x + i * 0.32), false);
+  assert.equal(sources.length, 0, 'airborne movement in shallow water creates no step');
+
+  for (let i = 0; i <= 4; i++) frame(start, point(x + i * 0.32), true);
+  assert.equal(sources.length, 1, 'the navigation step is audible with only the water category on');
+  assert.equal(sources[0].buffer.duration, 0.31);
+  const contact = sources[0].connections[0];
+  assert.ok(contact.gain.value > 0);
+  assert.equal(contact.connections[0].positionY.value, SEA_LEVEL + 0.16);
+  foley.setMix({ ...DEFAULT_EXPLORATION_MIX, environmentOn: false });
+  assert.equal(contact.gain.value, 0);
   foley.dispose();
 });

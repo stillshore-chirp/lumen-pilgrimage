@@ -112,7 +112,7 @@ function installBrowserProbes({ blockAudioUntilGesture = false, measureFootsteps
       return result;
     };
     AudioBufferSourceNode.prototype.start = function (...args) {
-      // Procedural dry footfalls use short 24 kHz mono buffers. Each checked route stays on dry footing.
+      // Dry footfalls and shallow-water steps use short 24 kHz mono buffers.
       const buffer = this.buffer;
       if (windowSample && !this.loop && buffer?.sampleRate === 24_000
         && buffer.numberOfChannels === 1 && buffer.duration <= 0.35) {
@@ -123,7 +123,8 @@ function installBrowserProbes({ blockAudioUntilGesture = false, measureFootsteps
           slope += (data[i] - data[i - 1]) ** 2;
         }
         windowSample.steps.push({
-          time: this.context.currentTime, rate: this.playbackRate.value, texture: Math.sqrt(slope / energy),
+          time: this.context.currentTime, rate: this.playbackRate.value, duration: buffer.duration,
+          texture: Math.sqrt(slope / energy),
         });
       }
       return start.apply(this, args);
@@ -282,7 +283,7 @@ async function skyBrightness(canvas) {
   })));
 }
 
-test('the coast renders, wades, dives, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
+test('the coast renders, wades, dives, flies, spatializes audio, and resets rendering quality', { timeout }, async t => {
   const page = await newPage();
   const errors = [];
   const recordings = new Set();
@@ -302,7 +303,7 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
       externalRequests.add(target.origin);
     }
   });
-  await page.addInitScript(installBrowserProbes);
+  await page.addInitScript(installBrowserProbes, { measureFootsteps: true });
   try {
     const sceneryAssets = Promise.all([
       'limestone.webp', 'sand.webp', 'cumulus.webp',
@@ -452,6 +453,7 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     await page.keyboard.press('Space');
     await page.waitForFunction(y => window.coastProbe.context.listener.positionY.value > y + 0.45, start.y);
     await page.waitForFunction(y => Math.abs(window.coastProbe.context.listener.positionY.value - y) < 0.03, start.y);
+    await page.evaluate(() => window.coastProbe.beginFootstepWindow());
     await page.keyboard.down('w');
     await page.waitForFunction(({ x, z }) => {
       const listener = window.coastProbe.context.listener;
@@ -459,6 +461,10 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     }, start);
     await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '浅瀬');
     await page.waitForFunction(() => document.querySelector('.coast-mode')?.textContent === '遊泳');
+    const contacts = await page.evaluate(() => window.coastProbe.endFootstepWindow());
+    const wadingSteps = contacts.steps.filter(step => step.duration === 0.31).length;
+    assert.ok(wadingSteps > 0, 'grounded wading plays its shallow-water sample');
+    t.diagnostic(`Shallow-water samples during approach: ${wadingSteps}`);
     const firstWater = await page.evaluate(audioPosition);
     await page.waitForFunction(z => window.coastProbe.context.listener.positionZ.value < z - 8.0, firstWater.z);
     await page.keyboard.up('w');

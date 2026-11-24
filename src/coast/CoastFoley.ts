@@ -1,6 +1,8 @@
 import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } from './explorationSound';
 import { groundEyeHeight, type CoastMovement } from './CoastControls';
-import { coastBedrock, coastRandom, coastTrailDistance, groundHeight, groundSlope, type CoastPoint } from './terrain';
+import {
+  coastBedrock, coastRandom, coastTrailDistance, coastWaterLevel, groundHeight, groundSlope, type CoastPoint,
+} from './terrain';
 
 type Contact = 'sand' | 'gravel' | 'leaves' | 'wade' | 'stroke' | 'bubbles' | 'splash';
 type ContactSound = 'water' | 'footsteps';
@@ -103,8 +105,10 @@ export class CoastFoley {
     }
   }
 
-  update(position: CoastPoint, surface: number, movement: CoastMovement, elapsed: number, now: number,
-    grounded?: boolean): void {
+  update(listener: CoastPoint, listenerSurface: number, movement: CoastMovement, elapsed: number, now: number,
+    grounded?: boolean, navigationPosition = listener): void {
+    const swimming = movement === 'swim' || movement === 'dive';
+    const position = swimming || movement === 'flight' ? listener : navigationPosition;
     const previous = this.previous;
     this.previous = { ...position, movement, elapsed, grounded };
     if (!previous || movement === 'flight') return;
@@ -117,6 +121,8 @@ export class CoastFoley {
       this.traveled = 0;
       return;
     }
+    const surface = movement === 'wade' && position !== listener
+      ? coastWaterLevel(position.x, position.z) : listenerSurface;
     if (movement !== previous.movement) {
       this.traveled = 0;
       if (movement === 'dive') this.play('bubbles', position.x, position.y + 0.24, position.z, now);
@@ -125,10 +131,8 @@ export class CoastFoley {
       }
     }
 
-    const swimming = movement === 'swim' || movement === 'dive';
     const floor = groundHeight(position.x, position.z);
-    const dry = movement === 'walk' || movement === 'crouch';
-    const supported = dry && grounded !== undefined
+    const supported = grounded !== undefined
       ? grounded && previous.grounded !== false
       : Math.abs(position.y - groundEyeHeight(movement) - floor) <= 0.16;
     if (!swimming && !supported) {
