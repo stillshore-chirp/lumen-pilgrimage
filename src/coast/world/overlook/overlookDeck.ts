@@ -20,12 +20,21 @@ export const OVERLOOK_DECK_OBSTACLES = viewerLocations.map(([x, z]) => ({
 
 type SlabField = { minX: number; maxX: number; minZ: number; maxZ: number; seamX: number; seamZ: number; color: number };
 
+const mainDeckPaving: SlabField = {
+  minX: -32.95, maxX: 32.95, minZ: -22.56, maxZ: 8.38, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0,
+};
+
+export function isMainDeckPaving(x: number, z: number): boolean {
+  const { minX, maxX, minZ, maxZ } = mainDeckPaving;
+  return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
+}
+
 const slabFields: SlabField[] = [
   { minX: -34.52, maxX: 34.52, minZ: -23.53, maxZ: -22.74, seamX: 1.38, seamZ: 0.79, color: 0xbab3a1 },
   { minX: -34.52, maxX: 34.52, minZ: -22.74, maxZ: -22.56, seamX: 1.38, seamZ: 0.18, color: 0x888b8a },
   { minX: -34.52, maxX: -32.95, minZ: -22.56, maxZ: 31.03, seamX: 1.57, seamZ: 1.23, color: 0xbab3a1 },
   { minX: 32.95, maxX: 34.52, minZ: -22.56, maxZ: 31.03, seamX: 1.57, seamZ: 1.23, color: 0xbab3a1 },
-  { minX: -32.95, maxX: 32.95, minZ: -22.56, maxZ: 8.38, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0 },
+  mainDeckPaving,
   { minX: -32.95, maxX: -24.00, minZ: 8.38, maxZ: 31.03, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0 },
   { minX: 24.00, maxX: 32.95, minZ: 8.38, maxZ: 31.03, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0 },
 ];

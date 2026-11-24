@@ -122,6 +122,7 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
   actions.append(back, close);
   header.append(heading, actions);
   const body = document.createElement('div');
+  body.className = 'residence-control-body';
   content.append(header, body);
   dialog.append(content);
 
@@ -140,6 +141,7 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
   navigation.setAttribute('aria-label', '設備の種類');
   const list = document.createElement('section');
   list.id = 'residence-control-list';
+  list.className = 'residence-control-lists';
   directory.append(navigation, list);
 
   const categories = (Object.keys(categoryLabels) as Category[]).flatMap(id => {
@@ -150,6 +152,8 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
     toggle.setAttribute('aria-controls', list.id);
     toggle.addEventListener('click', () => selectCategory(id));
     navigation.append(toggle);
+    const viewport = document.createElement('div');
+    viewport.className = 'residence-control-list-viewport';
     const choices = document.createElement('div');
     choices.className = 'coast-travel-destinations';
     for (const section of members) {
@@ -157,17 +161,17 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
       choice.addEventListener('click', () => showDevice(section, choice));
       choices.append(choice);
     }
-    return [{ id, label, toggle, choices }];
+    viewport.append(choices);
+    list.append(viewport);
+    return [{ id, label, toggle, viewport }];
   });
 
   function selectCategory(id: Category): void {
     for (const category of categories) {
       const selected = category.id === id;
       category.toggle.setAttribute('aria-pressed', String(selected));
-      if (selected) {
-        list.setAttribute('aria-label', category.label);
-        list.replaceChildren(category.choices);
-      }
+      category.viewport.inert = !selected;
+      if (selected) list.setAttribute('aria-label', category.label);
     }
   }
   if (categories[0]) selectCategory(categories[0].id);

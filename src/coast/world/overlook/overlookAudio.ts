@@ -1,8 +1,13 @@
 import { MathUtils, type Vector3 } from 'three';
+import type { CoastMovement } from '../../CoastControls';
+import type { CoastBirdCue } from '../../coastBirdCue';
 import { REFRACTION_SHELF_HZ, thermalLowShelfDb, thermalRayLift } from '../../coastAcoustics';
 import { connectExplorationOutput } from '../../explorationOutput';
 import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } from '../../explorationSound';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
+import { createFootfall } from '../residence/residenceAudioSamples';
+import { isMainDeckPaving } from './overlookDeck';
+import { isOverlookStairTread, isUpperDeck, overlookDeckGround } from './overlookUpperDeck';
 
 type SoundPoint = Readonly<{ x: number; y: number; z: number }>;
 type Corridor = { points: readonly SoundPoint[]; weight: number };
@@ -31,8 +36,15 @@ const BIRD_PHRASE_COUNT = 4;
 const TRAFFIC_GAIN = { day: 0.33, night: 0.18 };
 const CRICKET_RECORDING_GAIN = 1.7;
 const NOMINAL_MASTER_GAIN = 0.7;
-const MIX_SOUNDS = ['traffic', 'insects', 'birds'] as const;
+const MIX_SOUNDS = ['traffic', 'insects', 'birds', 'footsteps'] as const;
 type MixSound = typeof MIX_SOUNDS[number];
+const FOOTSTEP_PROFILES = {
+  deck: { material: 'stone', stride: 0.72, interval: 0.40, gain: 0.34, rate: 0.95 },
+  stair: { material: 'stone', stride: 0.59, interval: 0.36, gain: 0.38, rate: 1.13 },
+  path: { material: 'balcony', stride: 0.72, interval: 0.40, gain: 0.32, rate: 0.96 },
+} as const;
+type FootstepSurface = keyof typeof FOOTSTEP_PROFILES;
+type FootstepMaterial = typeof FOOTSTEP_PROFILES[FootstepSurface]['material'];
 // The grass and scrub below the front railing. Each patch has its own slice of the field recording.
 const CRICKET_PATCHES = [
   { x: 7, z: -35, clipStart: 2, firstCall: 0.06, rate: 1.00, gain: 0.96 },
@@ -62,6 +74,11 @@ function spatialPanner(context: AudioContext, point: SoundPoint): PannerNode {
   return panner;
 }
 
+function footstepSurface(x: number, z: number): FootstepSurface {
+  if (isOverlookStairTread(x, z)) return 'stair';
+  return isUpperDeck(x, z) || isMainDeckPaving(x, z) ? 'deck' : 'path';
+}
+
 export class OverlookAudio {
   private readonly roads: { sections: RoadSection[]; weight: number }[];
   private readonly request = new AbortController();
@@ -77,6 +94,11 @@ export class OverlookAudio {
   private birdBus: GainNode | undefined;
   private birdBuffer: AudioBuffer | undefined;
   private readonly birdPerches: PannerNode[] = [];
+  private readonly footstepSamples = new Map<FootstepMaterial, readonly AudioBuffer[]>();
+  private previousStep: { x: number; z: number; elapsed: number } | undefined;
+  private stepTravel = 0;
+  private lastFootstep = -Infinity;
+  private stepIndex = 0;
   private pendingStart: Promise<void> | undefined;
   private mix = DEFAULT_EXPLORATION_MIX;
   private time: CoastTimeOfDay = 'day';
@@ -147,7 +169,8 @@ export class OverlookAudio {
     this.nextBird = now + 5 + 6 * Math.random();
   }
 
-  update(position: Vector3, forward: Vector3, up: Vector3, _elapsed: number): void {
+  update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement: CoastMovement,
+    _birdCues: readonly CoastBirdCue[], grounded: boolean, navigationPosition: Vector3): void {
     const context = this.context;
     if (!context || context.state !== 'running') return;
     const listener = context.listener;
@@ -160,8 +183,9 @@ export class OverlookAudio {
     listener.upX.value = up.x;
     listener.upY.value = up.y;
     listener.upZ.value = up.z;
-    if (!this.master) return;
+    if (!this.mixBuses) return;
     const now = context.currentTime;
+    this.updateFootsteps(context, this.mixBuses.footsteps, navigationPosition, elapsed, movement, grounded);
     if (now >= this.nextPropagation) {
       this.nextPropagation = now + 0.24;
       for (const voice of this.traffic) this.updateTraffic(voice, position, now);
@@ -200,6 +224,7 @@ export class OverlookAudio {
     this.traffic.length = 0;
     this.crickets.length = 0;
     this.birdPerches.length = 0;
+    this.footstepSamples.clear();
   }
 
   private async load(context: AudioContext, file: string): Promise<AudioBuffer> {
@@ -223,6 +248,7 @@ export class OverlookAudio {
       traffic: createMixBus('traffic'),
       insects: createMixBus('insects'),
       birds: createMixBus('birds'),
+      footsteps: createMixBus('footsteps'),
     };
     this.mixBuses = mixBuses;
     const trafficBus = context.createGain();
@@ -289,6 +315,59 @@ export class OverlookAudio {
     source.playbackRate.value = rate;
     source.connect(output);
     source.start(0, offset);
+  }
+
+  private updateFootsteps(
+    context: AudioContext, bus: GainNode, position: SoundPoint, elapsed: number,
+    movement: CoastMovement, grounded: boolean,
+  ): void {
+    const previous = this.previousStep;
+    const walking = grounded && (movement === 'walk' || movement === 'crouch')
+      && explorationSoundGain(this.mix, 'footsteps') > 0;
+    const { x, z } = position;
+    this.previousStep = walking ? { x, z, elapsed } : undefined;
+    if (!previous || !walking || elapsed <= previous.elapsed || elapsed - previous.elapsed > 0.26) {
+      this.stepTravel = 0;
+      return;
+    }
+    const dx = x - previous.x, dz = z - previous.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance < 0.001 || distance > 1.4) {
+      this.stepTravel = 0;
+      return;
+    }
+    const surface = footstepSurface(x, z);
+    const { material, stride, interval, gain, rate } = FOOTSTEP_PROFILES[surface];
+    const crouching = movement === 'crouch';
+    this.stepTravel += distance;
+    if (this.stepTravel < stride * (crouching ? 0.68 : 1) || elapsed - this.lastFootstep < interval) return;
+    this.stepTravel = 0;
+    this.lastFootstep = elapsed;
+
+    const lateral = (this.stepIndex % 2 ? -0.15 : 0.15) / distance;
+    const footX = x - dz * lateral, footZ = z + dx * lateral;
+    const point = { x: footX, y: overlookDeckGround(footX, footZ) + 0.045, z: footZ };
+    const panner = spatialPanner(context, point);
+    panner.refDistance = 1.15;
+    panner.rolloffFactor = 0.72;
+    const level = context.createGain();
+    level.gain.value = gain * (crouching ? 0.64 : 1);
+    let samples = this.footstepSamples.get(material);
+    if (!samples) {
+      samples = [439, 887, 1237, 547, 2027].map(seed => createFootfall(context, material, seed));
+      this.footstepSamples.set(material, samples);
+    }
+    const source = context.createBufferSource();
+    source.buffer = samples[this.stepIndex % samples.length];
+    source.playbackRate.value = rate * (0.96 + 0.08 * Math.random());
+    source.connect(level).connect(panner).connect(bus);
+    source.onended = () => {
+      source.disconnect();
+      level.disconnect();
+      panner.disconnect();
+    };
+    source.start();
+    this.stepIndex += 1;
   }
 
   private updateTraffic(voice: TrafficVoice, listener: SoundPoint, now: number): void {

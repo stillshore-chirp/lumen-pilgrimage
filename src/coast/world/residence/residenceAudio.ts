@@ -115,7 +115,7 @@ export class ResidenceAudio {
   private previousDoor: number | undefined;
   private doorDirection = 0;
   private doorSource: AudioBufferSourceNode | undefined;
-  private previousStep: (Point & { elapsed: number; movement: CoastMovement }) | undefined;
+  private previousStep: (Point & { elapsed: number }) | undefined;
   private traveled = 0;
   private side = 1;
   private readonly appliancePath = (listener: Point, source: Point) =>
@@ -186,7 +186,7 @@ export class ResidenceAudio {
   }
 
   update(position: Point, forward: Point, up: Point, elapsed: number, movement: CoastMovement,
-    _birdCues?: readonly CoastBirdCue[]): void {
+    _birdCues?: readonly CoastBirdCue[], grounded?: boolean, navigationPosition = position): void {
     const { context, graph } = this;
     if (!context || context.state !== 'running' || !graph) return;
     const { listener, currentTime: now } = context;
@@ -202,7 +202,8 @@ export class ResidenceAudio {
     const opening = this.options.balconyDoor();
     this.updateSlider(context, graph, opening, now);
     this.updateInteriorDoors(context, graph, position, now);
-    this.updateFootfalls(context, graph, position, elapsed, movement, now);
+    const supported = grounded ?? Math.abs(navigationPosition.y - groundEyeHeight(movement)) <= 0.18;
+    this.updateFootfalls(context, graph, navigationPosition, elapsed, movement, now, supported);
     if (now < this.nextUpdate) return;
     this.nextUpdate = now + LISTENER_PERIOD;
     graph.appliances?.update(position, this.appliancePath);
@@ -442,13 +443,11 @@ export class ResidenceAudio {
   }
 
   private updateFootfalls(context: AudioContext, graph: Graph, position: Point, elapsed: number,
-    movement: CoastMovement, now: number): void {
+    movement: CoastMovement, now: number, grounded: boolean): void {
     const previous = this.previousStep;
-    this.previousStep = { ...position, elapsed, movement };
-    if (!previous || (movement !== 'walk' && movement !== 'crouch')
-      || (previous.movement !== 'walk' && previous.movement !== 'crouch')
-      || Math.abs(position.y - groundEyeHeight(movement)) > 0.18
-      || Math.abs(previous.y - groundEyeHeight(previous.movement)) > 0.18) {
+    const walking = grounded && (movement === 'walk' || movement === 'crouch');
+    this.previousStep = walking ? { ...position, elapsed } : undefined;
+    if (!previous || !walking) {
       this.traveled = 0;
       return;
     }

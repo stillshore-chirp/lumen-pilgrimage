@@ -42,7 +42,7 @@ interface ExplorationWorld extends WorldLightingControl {
 
 type ExplorationAudio = Pick<CoastAudio, 'start' | 'isRunning' | 'setMix' | 'dispose'> & {
   update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement: CoastMovement,
-    birdCues: readonly CoastBirdCue[], grounded: boolean): void;
+    birdCues: readonly CoastBirdCue[], grounded: boolean, navigationPosition: Vector3): void;
   setTimeOfDay?(time: CoastTimeOfDay): void;
 };
 
@@ -621,7 +621,8 @@ export class CoastApp {
     this.up.copy(viewer.up).applyQuaternion(viewer.quaternion);
     const movement = this.controls.currentMovement;
     this.audio.update(viewer.position, this.forward, this.up, this.elapsed,
-      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues, this.controls.isGrounded);
+      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues, this.controls.isGrounded,
+      this.camera.position);
     const view = this.monitor?.renderCamera ?? this.camera;
     this.world.prepareRender?.(this.renderer, view);
     this.renderer.render(this.world.scene, view);
