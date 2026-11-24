@@ -280,7 +280,7 @@ export function createCinemaAuditorium() {
   addScreenSurround(group, finish);
   addOverhead(group, finish);
   addAuditoriumEquipment(group, finish);
-  const setExitOpen = createCinemaExits(group, finish);
+  createCinemaExits(group, finish);
   chairDetails.visible = false;
 
   return {
@@ -290,7 +290,6 @@ export function createCinemaAuditorium() {
       chairDetails.visible = high;
       finish.setHighDetail(high);
     },
-    setExitOpen,
     dispose() {
       const geometries = new Set<BufferGeometry>();
       const materials = new Set<Material>();
