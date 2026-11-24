@@ -37,13 +37,15 @@ test('cinema reference white, black floor and intra-frame contrast follow projec
   assert.deepEqual(contrasts, [1041, 657, 431, 115]);
 });
 
-test('fixed-height screen preserves 16:9, 1.85 and 2.39 framing and fits wider footage', () => {
-  for (const aspect of [16 / 9, 1.85, 2.39, 3]) {
+test('16:9 screen fits landscape and portrait content without distorting it', () => {
+  for (const aspect of [9 / 16, 1, 4 / 3, 16 / 9, 1.85, 2.39, 3]) {
     const [x, y] = cinemaPictureOpening(aspect);
     assert.ok(x <= 1 && y <= 1);
-    assert.ok(Math.abs(x * 2.39 / y - aspect) < 1e-12);
+    assert.ok(Math.abs(x * (16 / 9) / y - aspect) < 1e-12);
   }
-  assert.deepEqual(cinemaPictureOpening(1.85), [1.85 / 2.39, 1]);
+  assert.deepEqual(cinemaPictureOpening(16 / 9), [1, 1]);
+  assert.deepEqual(cinemaPictureOpening(9 / 16), [81 / 256, 1]);
+  assert.deepEqual(cinemaPictureOpening(2.39), [1, (16 / 9) / 2.39]);
   assert.deepEqual(cinemaPictureOpening(NaN), [1, 1]);
   assert.equal(cinemaProjectionFalloff(0.5, 0.5), 1);
   assert.ok(cinemaProjectionFalloff(0, 0) >= 0.75);
@@ -65,6 +67,17 @@ test('equal APL on opposite sides reverses the room wash at both qualities', () 
     assert.ok(LL > 1.8 * LR && RR > 1.8 * RL, quality);
     assert.ok(Math.abs(LL - RR) < 1e-7 && Math.abs(LR - RL) < 1e-7, quality);
   }
+});
+
+test('raised rear seat receivers still pick up shadows from preceding seat backs', () => {
+  const quality = 'high';
+  const { columns, rows, probeColumns, probeRows } = cinemaLightQuality[quality];
+  const transport = bakeCinemaLightTransport(quality);
+  const rearSeat = probe(transport, quality, 1, probeColumns >> 1, probeRows - 1);
+  const screenColumn = (columns >> 1) - 1;
+  const lower = rearSeat[screenColumn];
+  const upper = rearSeat[(rows - 1) * columns + screenColumn];
+  assert.ok(lower > 0 && lower < upper * 0.12);
 });
 
 test('detailed room return is localized and calibrated at center on the white field', () => {

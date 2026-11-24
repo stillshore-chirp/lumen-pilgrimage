@@ -87,9 +87,9 @@
 
 ### 映画館シアター（大） — `cinema`
 
-[cinemaLayout.ts](../src/coast/world/cinema/cinemaLayout.ts)が幕、20列の客席、段床、通路、車いすスペース、出口、移動先の共通配置データを持ちます。室内寸法は40 × 57 × 22 m、幕幅は30 mです。通常席580席と同伴席8席、車いすスペース8か所で596人分の位置を用意します。[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)が座席・出口の操作、上映、館内照明、空間音響をまとめます。[cinemaNavigation.ts](../src/coast/world/cinema/cinemaNavigation.ts)は座席背面と通路の歩行判定を同じ配置から作ります。映画館内の歩行は3.2 m/sで、飛行・ジャンプを無効にします。
+[cinemaLayout.ts](../src/coast/world/cinema/cinemaLayout.ts)が幕、20列の客席、段床、通路、車いすスペース、出口、移動先の共通配置データを持ちます。室内寸法は40 × 57 × 22 mです。スクリーンは16:9の30 × 16.875 m、中心は前方床から9.8 mです。通常席580席と同伴席8席、車いすスペース8か所で596人分の位置を用意します。[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)が座席・出口の操作、上映、館内照明、空間音響をまとめます。[cinemaNavigation.ts](../src/coast/world/cinema/cinemaNavigation.ts)は座席背面と通路の歩行判定を同じ配置から作ります。映画館内の歩行は3.2 m/sで、飛行・ジャンプを無効にします。
 
-着地点は中段中央、前方中央、後方側席、車いす席です。同一ワールド内の座席移動は[cinemaSeatTransition.ts](../src/coast/world/cinema/cinemaSeatTransition.ts)で画面を覆う遷移をはさみます。現行の寸法・配置は[基本設計PDF](cinema/cinema-floor-plan.pdf)、照明と音響の設計は[設計PDF](cinema/cinema-light-sound-design.pdf)を参照してください。
+着地点は中段中央、前方中央、後方側席、車いす席です。中段中央（R09）の床高は3.25 mで、座位からの幕幅は水平約48°、幕中央への仰角は約9°です。後方側席（R20）の床高は7.39 mで、幕中央への仰角は約1.4°です。横通路の床高は前から0、2.80、5.655、7.39 mです。R08・R15の車いすスペースと左右の扉までは、横通路を通じて同じ高さの床でつながります。同一ワールド内の座席移動は[cinemaSeatTransition.ts](../src/coast/world/cinema/cinemaSeatTransition.ts)で画面を覆う遷移をはさみます。現行の寸法・配置は[基本設計PDF](cinema/cinema-floor-plan.pdf)、照明と音響の設計は[設計PDF](cinema/cinema-light-sound-design.pdf)を参照してください。
 
 座席・段・出口を変える場合は、`cinemaLayout` を配置の単一基準として描画とナビゲーションの両方から使います。[ナビゲーションテスト](../scripts/cinema-navigation.test.mjs)、[照明・音響テスト](../scripts/cinema-lighting.test.mjs)、[映画館ブラウザーテスト](../scripts/cinema-browser.test.mjs)で利用経路を確認します。
 

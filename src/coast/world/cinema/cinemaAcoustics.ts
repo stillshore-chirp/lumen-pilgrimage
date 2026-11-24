@@ -1,6 +1,7 @@
 import { Vector3 } from 'three';
 import {
-  CINEMA_BOUNDS, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN, CINEMA_SEAT_BANKS, CINEMA_TREADS,
+  CINEMA_BOUNDS, CINEMA_DESTINATIONS, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN,
+  CINEMA_SEAT_BANKS, CINEMA_SIDE_SURROUNDS, CINEMA_TREADS,
   cinemaGroundHeight,
 } from './cinemaLayout';
 
@@ -20,19 +21,22 @@ export interface CinemaSpeaker {
   readonly screen: boolean;
 }
 
-const referenceSeat = new Vector3(0.39, CINEMA_ROWS[8].y + 1.15, CINEMA_ROWS[8].z);
+const centerSeat = CINEMA_DESTINATIONS[0];
+const referenceSeat = new Vector3(centerSeat.x,
+  cinemaGroundHeight(centerSeat.x, centerSeat.z) + centerSeat.seatedEyeHeight, centerSeat.z);
 const makeSpeaker = (id: CinemaSpeaker['id'], position: Vector3, screen: boolean): CinemaSpeaker => ({
   id, position, screen, aim: referenceSeat.clone().sub(position).normalize(),
 });
 const screenSpeaker = (id: CinemaSpeaker['id'], x: number) => makeSpeaker(id,
   new Vector3(x, CINEMA_SCREEN.bottom + CINEMA_SCREEN.height * 2 / 3, CINEMA_SCREEN.z - 1.4), true);
 
+const sideSurround = CINEMA_SIDE_SURROUNDS[6];
 // Web Audio speakers order for a verified 5.1 stream.
 export const CINEMA_SPEAKERS = [
   screenSpeaker('L', -13.31), screenSpeaker('R', 13.31), screenSpeaker('C', 0),
   makeSpeaker('LFE', new Vector3(2.25, 2, -1.4), false),
-  makeSpeaker('SL', new Vector3(-19.042, 10.652, 34.667), false),
-  makeSpeaker('SR', new Vector3(19.042, 10.652, 34.667), false),
+  makeSpeaker('SL', new Vector3(-sideSurround.x, sideSurround.y, sideSurround.z), false),
+  makeSpeaker('SR', new Vector3(sideSurround.x, sideSurround.y, sideSurround.z), false),
 ] as const;
 
 export type CinemaQuality = 'light' | 'high';

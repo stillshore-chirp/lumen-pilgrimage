@@ -19,7 +19,6 @@ export const CINEMA_LIGHT_PAGES = 8;
 export const CINEMA_LIGHT_META = 7;
 export const CINEMA_LIGHT_BOUNCE = 6;
 export const CINEMA_LIGHT_DEPTH = CINEMA_BOUNDS.maxZ - 1;
-export const CINEMA_SCREEN_CENTER = CINEMA_SCREEN.bottom + CINEMA_SCREEN.height / 2;
 
 type Point = readonly [x: number, y: number, z: number];
 type Patch = { point: Point; normal: Point; area: number; reflectance: number };
@@ -64,7 +63,7 @@ function transfer(from: Patch, to: Patch): number {
 }
 
 function seatsBlock(source: Point, receiver: Point): boolean {
-  if (receiver[1] > 7 || receiver[2] < CINEMA_ROWS[0].z) return false;
+  if (receiver[2] < CINEMA_ROWS[0].z) return false;
   for (const row of CINEMA_ROWS) {
     const back = row.z + 0.26;
     if (back >= receiver[2] - 0.13) break;

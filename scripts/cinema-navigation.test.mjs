@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { Scene } from 'three';
+import { Box2, Group, Matrix4, Scene, Vector2, Vector3 } from 'three';
 
 const source = new URL('../src/coast/world/cinema/', import.meta.url).href;
 const hooks = registerHooks({
@@ -12,9 +12,12 @@ const hooks = registerHooks({
 });
 const {
   CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_DESTINATIONS, CINEMA_DOOR_WIDTH,
-  CINEMA_EXITS, CINEMA_PLACES, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN, cinemaGroundHeight,
+  CINEMA_EXITS, CINEMA_PLACES, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN, CINEMA_TREADS,
+  CINEMA_WHEELCHAIR_BAY, cinemaGroundHeight,
 } = await import('../src/coast/world/cinema/cinemaLayout.ts');
 const { cinemaNavigation } = await import('../src/coast/world/cinema/cinemaNavigation.ts');
+const { createCinemaFloor } = await import('../src/coast/world/cinema/cinemaFloor.ts');
+const { cinemaFinishes } = await import('../src/coast/world/cinema/cinemaFinishes.ts');
 const { createCinemaSeatTransition } = await import('../src/coast/world/cinema/cinemaSeatTransition.ts');
 hooks.deregister();
 
@@ -37,7 +40,10 @@ test('cinema room follows the drawing and each seat can reach the longitudinal a
   assert.equal(CINEMA_BOUNDS.maxZ - CINEMA_BOUNDS.minZ, 57);
   assert.equal(CINEMA_ROOM_HEIGHT, 22);
   assert.equal(CINEMA_SCREEN.width, 30);
-  assert.equal(CINEMA_SCREEN.bottom, 4.1);
+  assert.equal(CINEMA_SCREEN.height, 16.875);
+  assert.equal(CINEMA_SCREEN.center, 9.8);
+  assert.ok(Math.abs(CINEMA_SCREEN.bottom - 1.3625) < 1e-12);
+  assert.ok(CINEMA_SCREEN.bottom + CINEMA_SCREEN.height < CINEMA_ROOM_HEIGHT);
   assert.equal(CINEMA_ROWS.length, 20);
   assert.equal(CINEMA_PLACES.filter(place => place.kind === 'seat').length, 580);
   assert.equal(CINEMA_PLACES.filter(place => place.kind === 'companion').length, 8);
@@ -70,9 +76,12 @@ test('all main aisles, level wheelchair connections and eight exits remain walka
     assert.equal(cinemaGroundHeight(x, z), exit.y);
   }
   for (const bay of CINEMA_PLACES.filter(place => place.kind === 'wheelchair')) {
-    const z = CINEMA_CROSS_AISLES[bay.row === 8 ? 1 : 2].z;
-    clearRoute(bay, { x: bay.x, z });
-    assert.equal(cinemaGroundHeight(bay.x, z), bay.y);
+    const cross = CINEMA_CROSS_AISLES.find(({ row }) => row === bay.row);
+    const { centerOffsetZ, depth } = CINEMA_WHEELCHAIR_BAY;
+    const back = bay.z + centerOffsetZ + depth / 2;
+    clearRoute({ x: bay.x, z: back }, { x: bay.x, z: cross.z });
+    assert.equal(cinemaGroundHeight(bay.x, cross.z), bay.y);
+    assert.ok(Math.abs(cinemaGroundHeight(bay.x, back) - bay.y) < 1e-8);
   }
 });
 
@@ -85,6 +94,86 @@ test('cinema destinations start on the corresponding deck and face the center of
     assert.ok(Math.abs(place.x - Math.tan(place.yaw) * place.z) < 1e-8);
     const target = y + place.seatedEyeHeight + Math.tan(place.pitch) * Math.hypot(place.x, place.z);
     assert.ok(Math.abs(target - (CINEMA_SCREEN.bottom + CINEMA_SCREEN.height / 2)) < 1e-8);
+  }
+});
+
+test('each deck has walkable risers and flat seat landings', () => {
+  for (let i = 2; i < CINEMA_TREADS.length; i += 1) {
+    assert.ok(CINEMA_TREADS[i].z - CINEMA_TREADS[i - 1].z >= .26 - 1e-8);
+  }
+  for (const row of CINEMA_ROWS.slice(1)) {
+    const previous = CINEMA_ROWS[row.number - 2];
+    const steps = CINEMA_TREADS.filter(tread => tread.row === row.number);
+    assert.equal(steps.length, row.hasWheelchairBays ? 5 : previous.hasWheelchairBays ? 3 : 2);
+    let previousStepY = previous.y;
+    for (const { y, rise } of steps) {
+      assert.ok(rise >= .08 && rise <= .18 + 1e-8);
+      assert.ok(Math.abs(y - previousStepY - rise) < 1e-8);
+      previousStepY = y;
+    }
+    assert.equal(cinemaGroundHeight(0, row.z - .207), row.y);
+    assert.equal(cinemaGroundHeight(0, previous.z + .28), previous.y);
+  }
+});
+
+test('seated views preserve the intended angles and clear preceding rows to the lower edge', () => {
+  const [center, , rear] = CINEMA_DESTINATIONS;
+  const screen = CINEMA_SCREEN;
+  const degrees = radians => radians * 180 / Math.PI;
+  const rightEdge = Math.atan2(screen.width / 2 - center.x, center.z - screen.z);
+  const leftEdge = Math.atan2(-screen.width / 2 - center.x, center.z - screen.z);
+  assert.ok(Math.abs(degrees(rightEdge - leftEdge) - 48) < .5);
+  assert.ok(Math.abs(degrees(center.pitch) - 9) < .35);
+  assert.ok(degrees(rear.pitch) > 0 && degrees(rear.pitch) < 2);
+  const eye = place => cinemaGroundHeight(place.x, place.z) + place.seatedEyeHeight;
+  const fromRearToCenter = Math.atan2(eye(center) - eye(rear), Math.hypot(center.x - rear.x, center.z - rear.z));
+  assert.ok(degrees(fromRearToCenter) > -11 && degrees(fromRearToCenter) < -9);
+
+  for (const row of CINEMA_ROWS.slice(1)) {
+    const seatedEyeHeight = row.hasWheelchairBays ? 1 : 1.15;
+    const sightline = z => screen.bottom
+      + (row.y + seatedEyeHeight - screen.bottom) * (z - screen.z) / (row.z - screen.z);
+    for (const front of CINEMA_ROWS.slice(0, row.number - 1)) {
+      // A full-width head-height plane checks every horizontal ray without relying on side-to-side gaps.
+      const label = `R${row.number} over R${front.number}`;
+      assert.ok(sightline(front.z) - front.y - 1.30 >= .02, label);
+      assert.ok(sightline(front.z + .26) - front.y - 1.10 >= .20, label);
+    }
+    for (const { y, z } of CINEMA_TREADS) {
+      if (z > screen.z && z < row.z) assert.ok(sightline(z) > y);
+    }
+  }
+});
+
+test('the rendered handrails and posts leave the screen clear from every seated position', () => {
+  const floor = new Group();
+  createCinemaFloor(floor, cinemaFinishes());
+  floor.updateMatrixWorld(true);
+  const halfWidth = CINEMA_SCREEN.width / 2;
+  const screen = new Box2(new Vector2(-halfWidth, CINEMA_SCREEN.bottom),
+    new Vector2(halfWidth, CINEMA_SCREEN.bottom + CINEMA_SCREEN.height));
+  const signs = [-0.5, 0.5];
+  const corners = signs.flatMap(x => signs.flatMap(y => signs.map(z => new Vector3(x, y, z))));
+  const fixtures = floor.children.filter(({ name }) => name.startsWith('Handrail'));
+  const posts = fixtures.find(mesh => mesh.isInstancedMesh);
+  const transforms = fixtures.filter(mesh => mesh !== posts).map(mesh => mesh.matrixWorld);
+  for (let i = 0; i < posts.count; i += 1) {
+    const transform = new Matrix4();
+    posts.getMatrixAt(i, transform);
+    transforms.push(transform.premultiply(posts.matrixWorld));
+  }
+  const cornerSets = transforms.map(matrix => corners.map(corner => corner.clone().applyMatrix4(matrix)));
+  for (const place of CINEMA_PLACES) {
+    const eyeY = place.y + (place.kind === 'wheelchair' ? 1 : 1.15);
+    for (const points of cornerSets) {
+      if (points.every(point => point.z >= place.z)) continue;
+      const bounds = new Box2();
+      for (const point of points) {
+        const t = (place.z - CINEMA_SCREEN.z) / (place.z - point.z);
+        bounds.expandByPoint(new Vector2(place.x + (point.x - place.x) * t, eyeY + (point.y - eyeY) * t));
+      }
+      assert.ok(!bounds.intersectsBox(screen), `handrail obscures the screen from R${place.row} x=${place.x}`);
+    }
   }
 });
 

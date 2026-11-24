@@ -2,7 +2,7 @@ import { BufferGeometry, Float32BufferAttribute, Mesh, MeshBasicMaterial, type G
 import { cinemaBoxes, type CinemaBox, type CinemaFinishes } from './cinemaFinishes';
 import {
   CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_PLACES, CINEMA_SEAT_BANKS,
-  CINEMA_TREADS, CINEMA_WHEELCHAIR_BAY, cinemaGroundHeight,
+  CINEMA_TREADS, CINEMA_WHEELCHAIR_BAY,
 } from './cinemaLayout';
 
 type Point = readonly [number, number, number];
@@ -57,7 +57,7 @@ export function createCinemaFloor(group: Group, finish: CinemaFinishes) {
         continue;
       }
       for (let k = 0; k < seatLimits.length - 1; k += 1) {
-        const surface = k % 2 === 0 && rear > 18 ? aisles : carpet;
+        const surface = k % 2 === 0 && rear > CINEMA_CROSS_AISLES[0].z ? aisles : carpet;
         surface.tread(seatLimits[k], seatLimits[k + 1], y, front, rear);
       }
     }
@@ -106,23 +106,29 @@ export function createCinemaFloor(group: Group, finish: CinemaFinishes) {
   // The handrail posts sit outside the route and stop at the edge of the cross aisle.
   const rails: { x: number; y: number; z: number; length: number; slope: number }[] = [];
   for (const cross of CINEMA_CROSS_AISLES.slice(1, 3)) {
-    const endZ = cross.z - cross.width * 0.5 - 0.048;
-    const startZ = endZ - 0.76;
+    const flight = CINEMA_TREADS.filter(tread => tread.row === cross.row);
+    const first = flight[0];
+    const last = flight[flight.length - 1];
+    const startZ = first.z - 0.05;
+    const endZ = last.z + 0.05;
+    const bottom = first.y - first.rise;
+    const top = last.y;
     for (const x of [-17.62, -5.30, 5.30, 17.62]) {
-      const bottom = cinemaGroundHeight(x, startZ);
-      const top = cinemaGroundHeight(x, endZ);
+      // The lower inner grip clears the seated view of the screen without narrowing the aisle.
+      const grip = Math.abs(x) < 10 ? 0.69 : 0.90;
+      const post = grip - 0.01;
       rails.push({
-        x, y: (bottom + top) * 0.5 + 0.90, z: (startZ + endZ) * 0.5,
+        x, y: (bottom + top) * 0.5 + grip, z: (startZ + endZ) * 0.5,
         length: Math.hypot(endZ - startZ, top - bottom), slope: Math.atan2(top - bottom, endZ - startZ),
       });
-      railPosts.push([x, bottom + 0.445, startZ, 0.052, 0.89, 0.052]);
-      railPosts.push([x, top + 0.445, endZ, 0.052, 0.89, 0.052]);
+      railPosts.push([x, bottom + post / 2, startZ, 0.052, post, 0.052]);
+      railPosts.push([x, top + post / 2, endZ, 0.052, post, 0.052]);
     }
   }
   cinemaBoxes(group, 'Handrail posts', finish.box, finish.darkSteel, railPosts);
   for (const { x, y, z, length, slope } of rails) {
     const rail = new Mesh(finish.box, finish.bronze);
-    rail.name = 'Handrail at three-riser flight';
+    rail.name = 'Handrail to accessible cross aisle';
     rail.position.set(x, y, z);
     rail.rotation.x = -slope;
     rail.scale.set(0.064, 0.053, length + 0.055);

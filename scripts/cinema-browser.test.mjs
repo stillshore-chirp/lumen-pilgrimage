@@ -26,15 +26,33 @@ after(async () => {
   finally { await server?.close(); }
 });
 
-function observeCinema() {
+function observeCinema(captureScreenshots) {
   const uniforms = new WeakMap();
-  const probe = { position: null, lamps: null, live: null, peakDarkness: 0 };
+  const fadePrograms = new WeakMap();
+  const probe = { position: null, lamps: null, live: null, darkness: 0, peakDarkness: 0 };
   window.cinemaProbe = probe;
   const gl = WebGL2RenderingContext.prototype;
   const locate = gl.getUniformLocation;
   const setVector = gl.uniform3f;
   const setFloat = gl.uniform1f;
   const setMatrix = gl.uniformMatrix4fv;
+  const clear = gl.clear;
+  const useProgram = gl.useProgram;
+  let activeProgram = null;
+  if (captureScreenshots) {
+    gl.clear = function (mask) {
+      // The transition plane stops drawing altogether when fully transparent.
+      if ((mask & this.COLOR_BUFFER_BIT) && !this.getParameter(this.DRAW_FRAMEBUFFER_BINDING)) {
+        probe.darkness = 0;
+      }
+      clear.call(this, mask);
+    };
+    gl.useProgram = function (program) {
+      useProgram.call(this, program);
+      activeProgram = program;
+      if (fadePrograms.has(program)) probe.darkness = fadePrograms.get(program);
+    };
+  }
   gl.getUniformLocation = function (program, name) {
     const location = locate.call(this, program, name);
     if (location && ['viewMatrix', 'cinemaLamps', 'cinemaLive', 'darkness'].includes(name)) uniforms.set(location, name);
@@ -46,7 +64,11 @@ function observeCinema() {
   };
   gl.uniform1f = function (location, value) {
     if (uniforms.get(location) === 'cinemaLive') probe.live = value;
-    if (uniforms.get(location) === 'darkness') probe.peakDarkness = Math.max(probe.peakDarkness, value);
+    if (uniforms.get(location) === 'darkness') {
+      probe.peakDarkness = Math.max(probe.peakDarkness, value);
+      if (activeProgram) fadePrograms.set(activeProgram, value);
+      probe.darkness = value;
+    }
     setFloat.call(this, location, value);
   };
   gl.uniformMatrix4fv = function (location, transpose, matrix, ...rest) {
@@ -67,7 +89,7 @@ async function openCinema(t) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.addInitScript(observeCinema);
+  await page.addInitScript(observeCinema, Boolean(output));
   await page.goto(`${origin}/?world=cinema&time=night`);
   await page.getByRole('heading', { name: '映画館シアター（大）' }).waitFor();
   await page.waitForFunction(() => document.hasFocus() && window.cinemaProbe.position);
@@ -88,13 +110,15 @@ async function holdKey(page, key, reached) {
 }
 
 async function screenshot(page, name) {
-  if (output) await page.screenshot({ path: join(output, `cinema-${name}.png`) });
+  if (!output) return;
+  await page.waitForFunction(() => window.cinemaProbe.darkness === 0);
+  await page.screenshot({ path: join(output, `cinema-${name}.png`) });
 }
 
 test('cinema boots with seated controls, walks the stepped aisle and exits through a level doorway', { timeout }, async t => {
   const { page, errors } = await openCinema(t);
   const initial = await page.evaluate(() => window.cinemaProbe.position);
-  assert.ok(Math.abs(initial[1] - 2.855) < .01);
+  assert.ok(Math.abs(initial[1] - 4.400) < .01);
   assert.ok(Math.abs(initial[2] - 33.45) < .01);
   await page.getByText('座位', { exact: true }).waitFor();
   await holdKey(page, 'w', () => window.cinemaProbe.position[2] < 33.22);
@@ -102,13 +126,13 @@ test('cinema boots with seated controls, walks the stepped aisle and exits throu
   await page.getByText('歩行', { exact: true }).waitFor();
   await holdKey(page, 'd', () => window.cinemaProbe.position[0] > 6.42);
   await holdKey(page, 's', () => window.cinemaProbe.position[2] > 51);
-  assert.ok(Math.abs((await page.evaluate(() => window.cinemaProbe.position))[1] - 5.585) < .09);
+  assert.ok(Math.abs((await page.evaluate(() => window.cinemaProbe.position))[1] - 9.040) < .09);
   await travel(page, '後方側席（R20）', 'rear');
-  await page.waitForFunction(() => Math.abs(window.cinemaProbe.position[1] - 5.085) < .01);
+  await page.waitForFunction(() => Math.abs(window.cinemaProbe.position[1] - 8.540) < .01);
   assert.equal(await page.evaluate(() => window.cinemaProbe.peakDarkness), 1);
   await screenshot(page, 'rear');
   await travel(page, '車いす席（R08）', 'accessible');
-  await page.waitForFunction(() => Math.abs(window.cinemaProbe.position[1] - 2.53) < .01);
+  await page.waitForFunction(() => Math.abs(window.cinemaProbe.position[1] - 3.800) < .01);
   await screenshot(page, 'accessible');
   await page.keyboard.press('c');
   await holdKey(page, 'w', () => window.cinemaProbe.position[2] < 29.82);

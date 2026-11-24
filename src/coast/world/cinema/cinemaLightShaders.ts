@@ -2,7 +2,7 @@ import {
   CINEMA_LENS_SCATTER, CINEMA_LIGHT_BOUNCE, CINEMA_LIGHT_DEPTH, CINEMA_LIGHT_META, CINEMA_LIGHT_PAGES,
   CINEMA_PROJECTOR_CONTRAST, CINEMA_ROOM_RETURN,
 } from './cinemaLightTransport';
-import { CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_ROOM_HEIGHT, CINEMA_SCREEN } from './cinemaLayout';
+import { CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_ROOM_HEIGHT, CINEMA_SCREEN } from './cinemaLayout';
 
 export const cinemaPassVertex = /* glsl */ `
   void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }
@@ -226,7 +226,7 @@ export const cinemaRoomPars = /* glsl */ `
   vec3 cinemaArchitecturalLight(vec3 p, vec3 n, vec2 tread) {
     float ax = abs(p.x);
     float edge = ${aisleFalloff};
-    float heightAboveTread = p.y - tread.x * 4.0;
+    float heightAboveTread = p.y - tread.x;
     float atFloor = 1.0 - smoothstep(0.04, 0.65, abs(heightAboveTread));
     float edgeLight = edge * atFloor * (0.035 + 0.28 * tread.y)
       * (0.62 + 0.38 * max(0.0, n.y - 0.25 * n.z));
@@ -268,9 +268,10 @@ export const cinemaRoomFragment = /* glsl */ `
   vec3 cinemaNormal = inverseTransformDirection(normal, viewMatrix);
   vec2 cinemaTread = texture2D(cinemaSteps, vec2(
     clamp((cinemaWorld.z - (${CINEMA_BOUNDS.minZ})) / ${CINEMA_BOUNDS.maxZ - CINEMA_BOUNDS.minZ}.0, 0.0, 1.0), 0.5)).rg;
+  cinemaTread.x *= ${CINEMA_CROSS_AISLES[3].y.toFixed(3)};
   vec3 cinemaIncident = cinemaArchitecturalLight(cinemaWorld, cinemaNormal, cinemaTread);
   if (cinemaLive > 0.5) {
-    cinemaIncident += cinemaProjectorWhite * cinemaReceive(cinemaWorld, cinemaNormal, cinemaWorld.y - cinemaTread.x * 4.0);
+    cinemaIncident += cinemaProjectorWhite * cinemaReceive(cinemaWorld, cinemaNormal, cinemaWorld.y - cinemaTread.x);
   }
   outgoingLight += diffuseColor.rgb * (1.0 - 0.74 * metalnessFactor) * cinemaIncident;
 `;
