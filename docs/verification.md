@@ -35,7 +35,7 @@ npm run check
 
 ## ブラウザでの回帰テスト
 
-ブラウザー試験は、`dist/` を Vite のプレビューサーバーから開くため、実行前に `npm run build` を完了させます。`COAST_CHROME_CHANNEL=chrome` はインストール済みの Chrome を選びます。Playwright 付属の Chromium を使う場合は、必要に応じて `npx playwright install chromium --no-shell` を一度実行します。各試験は Playwright で自動操作し、実機の入力機器や音響機器は使いません。
+ブラウザー試験は、`dist/` を Vite のプレビューサーバーから開くため、実行前に `npm run build` を完了させます。`COAST_CHROME_CHANNEL=chrome` はインストール済みの Chrome を選びます。Playwright 付属の Chromium を使う場合は、必要に応じて `npx playwright install chromium --no-shell` を一度実行します。各試験は Playwright で自動操作し、実機の入力機器や音響機器は使いません。インストール済み Chrome で描画や操作の待機がタイムアウトする場合は、Playwright が指定する Chromium でも条件をそろえて確認できます。
 
 景観探索のブラウザテストはビルド後に MacBook の Google Chrome で `COAST_CHROME_CHANNEL=chrome npm run test:coast:browser` を実行します。Playwright の Chromium を使う場合は、次のコマンドで準備と実行ができます。
 
@@ -54,7 +54,7 @@ npm run test:coast:browser
 
 仮想モニターの通し試験はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:monitor:browser` で実行します。別のブラウザコンテキスト間のWebRTC接続、承認、映像面の描画、音声波形、音量と描画品質の独立性、配置操作、停止と解放を検証します。描画パターンと合成音からブラウザーのメディアトラックを生成し、テスト側で `getDisplayMedia()` の画面選択を差し替えます。OSの実画面取得やシステム音声経路はこの試験の対象外です。`npm run test:monitor` のWebXR入力試験も模擬セッションで実行します。
 
-映画館はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:cinema:browser` で確認します。座位の初期位置から移動し、客席の段床、4つの着地点、扉での退出、照明と試映の制御を確認します。ChromeのOfflineAudioContextで直接音・残響の波形、席間と品質間の音量差を測ります。`CINEMA_SCREENSHOTS` にディレクトリを指定すると場内を撮影します。仮想モニターの通し試験では、映画館の幕に横長と縦長の共有映像を映し、非常点検時の映写・音声停止、共有終了も確認します。
+映画館はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:cinema:browser` で確認します。`--no-shell` で導入した Chromium を使う場合は、`COAST_CHROME_CHANNEL=chromium npm run test:cinema:browser` を実行してください。音響試験はチャンネル未指定時に Chromium のヘッドレスシェルを使います。座位の初期位置から移動し、客席の段床、4つの着地点、扉での退出、照明と試映の制御を確認します。ChromeのOfflineAudioContextで直接音・残響の波形、席間と品質間の音量差を測ります。`CINEMA_SCREENSHOTS` にディレクトリを指定すると場内を撮影します。仮想モニターの通し試験では、映画館の幕に横長と縦長の共有映像を映し、非常点検時の映写・音声停止、共有終了も確認します。
 
 ## 実機での確認
 
