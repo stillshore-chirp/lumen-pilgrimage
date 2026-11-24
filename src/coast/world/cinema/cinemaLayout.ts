@@ -1,6 +1,27 @@
+import type { CinemaBox } from './cinemaFinishes';
+
 export const CINEMA_LABEL = '映画館シアター（大）';
 export const CINEMA_BOUNDS = { minX: -20, maxX: 20, minZ: -3.1, maxZ: 53.9 } as const;
 export const CINEMA_ROOM_HEIGHT = 22;
+const roomLength = CINEMA_BOUNDS.maxZ - CINEMA_BOUNDS.minZ;
+const roomWidth = CINEMA_BOUNDS.maxX - CINEMA_BOUNDS.minX;
+const baffleCenters = Array.from({ length: 4 }, (_, i) => CINEMA_BOUNDS.minZ + (i + 1) * roomLength / 5);
+export const CINEMA_CEILING_BAFFLES = baffleCenters.map((z): CinemaBox =>
+  [0, CINEMA_ROOM_HEIGHT - .35, z, roomWidth, .70, .285]);
+export const CINEMA_CEILING_COFFERS: readonly CinemaBox[] = [
+  ...baffleCenters.map((z): CinemaBox => [0, CINEMA_ROOM_HEIGHT - .70, z, roomWidth, .027, .338]),
+  ...Array.from({ length: 5 }, (_, i) => {
+    const z = CINEMA_BOUNDS.minZ + (i + .5) * roomLength / 5;
+    return [-1, 1].flatMap((side): CinemaBox[] => [
+      [side * 12.99, CINEMA_ROOM_HEIGHT - .20, z, 12.23, .33, 11.26],
+      [side * 18.76, 19.21, z, 2.12, .24, 11.21],
+      [side * 19.52, 18.77, z, .62, .28, 11.21],
+    ]);
+  }).flat(),
+];
+
+export const CINEMA_SEAT_BACK_SHELL = [0, .705, .235, .647, .681, .120, .13] as const;
+export const CINEMA_SEAT_BACK_CUSHION = [0, .740, .156, .610, .633, .160, .13] as const;
 const SCREEN_WIDTH = 30;
 const SCREEN_HEIGHT = SCREEN_WIDTH * 9 / 16;
 const SCREEN_CENTER = 9.8;

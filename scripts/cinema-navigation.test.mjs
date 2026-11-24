@@ -11,7 +11,7 @@ const hooks = registerHooks({
   },
 });
 const {
-  CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_DESTINATIONS, CINEMA_DOOR_WIDTH,
+  CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CEILING_COFFERS, CINEMA_CROSS_AISLES, CINEMA_DESTINATIONS, CINEMA_DOOR_WIDTH,
   CINEMA_EXITS, CINEMA_PLACES, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN, CINEMA_TREADS,
   CINEMA_WHEELCHAIR_BAY, cinemaGroundHeight,
 } = await import('../src/coast/world/cinema/cinemaLayout.ts');
@@ -94,6 +94,20 @@ test('cinema destinations start on the corresponding deck and face the center of
     assert.ok(Math.abs(place.x - Math.tan(place.yaw) * place.z) < 1e-8);
     const target = y + place.seatedEyeHeight + Math.tan(place.pitch) * Math.hypot(place.x, place.z);
     assert.ok(Math.abs(target - (CINEMA_SCREEN.bottom + CINEMA_SCREEN.height / 2)) < 1e-8);
+  }
+});
+
+test('chair backs support landing and the ceiling follows the baffles and side coffers', () => {
+  const { x, z } = CINEMA_DESTINATIONS[0];
+  const floor = cinemaGroundHeight(x, z);
+  const chairTop = cinemaNavigation.groundHeight(x, z + .29);
+  assert.ok(chairTop > floor + 1 && chairTop < floor + 1.12);
+  assert.equal(cinemaNavigation.blocksWalking(x, z + .29, floor), true);
+  assert.equal(cinemaNavigation.blocksWalking(x, z + .29, chairTop), false);
+  assert.equal(cinemaNavigation.blocksWalking(x, z, floor), false);
+  assert.equal(cinemaNavigation.ceilingHeight(x, z), CINEMA_ROOM_HEIGHT);
+  for (const [cx, cy, cz, , height] of CINEMA_CEILING_COFFERS) {
+    assert.ok(cinemaNavigation.ceilingHeight(cx, cz) <= cy - height / 2);
   }
 });
 
