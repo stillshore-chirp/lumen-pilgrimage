@@ -54,7 +54,11 @@ npm run test:coast:browser
 
 仮想モニターの通し試験はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:monitor:browser` で実行します。別のブラウザコンテキスト間のWebRTC接続、承認、映像面の描画、音声波形、音量と描画品質の独立性、配置操作、停止と解放を検証します。描画パターンと合成音からブラウザーのメディアトラックを生成し、テスト側で `getDisplayMedia()` の画面選択を差し替えます。OSの実画面取得やシステム音声経路はこの試験の対象外です。`npm run test:monitor` のWebXR入力試験も模擬セッションで実行します。
 
-映画館はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:cinema:browser` で確認します。`--no-shell` で導入した Chromium を使う場合は、`COAST_CHROME_CHANNEL=chromium npm run test:cinema:browser` を実行してください。音響試験はチャンネル未指定時に Chromium のヘッドレスシェルを使います。座位の初期位置から移動し、客席の段床、4つの着地点、出口境界で通り抜けできずEキーでもワールドが変わらないこと、ファストトラベルでの入り江往復、照明と試映の制御を確認します。ChromeのOfflineAudioContextで直接音・残響の波形、席間と品質間の音量差を測ります。`CINEMA_SCREENSHOTS` にディレクトリを指定すると場内を撮影します。仮想モニターの通し試験では、映画館の幕に横長と縦長の共有映像を映し、非常点検時の映写・音声停止、共有終了も確認します。
+映画館の [配置テスト](../scripts/cinema-navigation.test.mjs) は、通常席の眼高1.15 mと車いす席の眼高1.00 mから幕の下端へ線を引き、前列の背もたれと床上1.30 mの頭頂モデルを越えることを確認します。頭頂モデルの高さに対する最小余裕は2 cmです。座位から見て手すりと支柱が幕に重ならないこと、段数、踏面26 cm以上とけあげ18 cm以下、横通路と車いすスペースの高さ、8か所の扉との接続も検証します。
+
+映画館はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:cinema:browser` で確認します。`--no-shell` で導入した Chromium を使う場合は、`COAST_CHROME_CHANNEL=chromium npm run test:cinema:browser` を実行してください。音響試験はチャンネル未指定時に Chromium のヘッドレスシェルを使います。
+
+座位の初期位置から移動し、客席の段床と着地点、非常口の閉じた境界、ファストトラベルでの入り江往復、照明と試映の制御を確認します。ChromeのOfflineAudioContextで直接音・残響の波形、席間と品質間の音量差を測ります。`CINEMA_SCREENSHOTS` にディレクトリを指定すると中段中央・後方側席・車いす席からの画面と、上映時・清掃時の場内を撮影します。仮想モニターの通し試験では、映画館の幕に横長と縦長の共有映像を映し、非常点検時の映写・音声停止、共有終了も確認します。
 
 ## 実機での確認
 

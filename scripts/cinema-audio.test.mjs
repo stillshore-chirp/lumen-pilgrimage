@@ -12,26 +12,28 @@ const hook = registerHooks({
 });
 const { CINEMA_SPEAKERS, cinemaReflections, cinemaReflectionTaper, cinemaSeatDrr, cinemaSeatTrim, createCinemaTail } =
   await import('../src/coast/world/cinema/cinemaAcoustics.ts');
+const { CINEMA_DESTINATIONS, CINEMA_ROWS, cinemaGroundHeight } =
+  await import('../src/coast/world/cinema/cinemaLayout.ts');
 hook.deregister();
 
-const seats = [
-  [0.39, 1.15, 20], [0.39, 2.855, 33.45], [13.71, 5.085, 50.5], [12.715, 4.060, 44],
-  [-12.715, 2.53, 31.75],
-];
+const [centerSeat, frontSeat, rearSeat, wheelchairSeat] = CINEMA_DESTINATIONS;
+const seats = [frontSeat, centerSeat, rearSeat, { ...wheelchairSeat, x: 12.715, z: CINEMA_ROWS[14].z }, wheelchairSeat]
+  .map(({ x, z, seatedEyeHeight }) => [x, cinemaGroundHeight(x, z) + seatedEyeHeight, z]);
 
 test('cinema geometry follows the design distances and reflection ordering', () => {
   const [front, center, rear, accessible] = seats.map(seat => new Vector3(...seat));
   const speaker = CINEMA_SPEAKERS[2];
   const frontPaths = Object.fromEntries(cinemaReflections(speaker, front).map(path => [path.surface, path]));
   const backPaths = Object.fromEntries(cinemaReflections(speaker, rear).map(path => [path.surface, path]));
-  assert.ok(Math.abs(speaker.position.distanceTo(front) / 343 - 0.0706) < 0.00025);
-  assert.ok(Math.abs(frontPaths.ceiling.delay - 0.0378) < 0.00025);
-  assert.ok(Math.abs(frontPaths.right.delay - 0.0648) < 0.00025);
-  assert.equal(cinemaReflectionTaper(frontPaths.rear.delay), 0);
-  assert.ok(Math.abs(backPaths.right.delay - 0.0130) < 0.00025);
-  assert.ok(Math.abs(backPaths.rear.delay - 0.0191) < 0.00025);
+  assert.ok(Math.abs(speaker.position.distanceTo(front) / 343 - 0.0708) < 0.00025);
+  assert.ok(Math.abs(frontPaths.ceiling.delay - 0.0372) < 0.00025);
+  assert.ok(Math.abs(frontPaths.right.delay - 0.0647) < 0.00025);
+  assert.equal(frontPaths.rear, undefined); // The raked deck occludes the rear return to R01.
+  assert.equal(cinemaReflectionTaper(0.080), 0);
+  assert.ok(Math.abs(backPaths.right.delay - 0.0131) < 0.00025);
+  assert.ok(Math.abs(backPaths.rear.delay - 0.0192) < 0.00025);
   assert.ok(backPaths.right.amplitude[0] > backPaths.right.amplitude[5]);
-  assert.ok(Math.abs(cinemaSeatTrim(front) - 1.15) < 0.015);
+  assert.ok(Math.abs(cinemaSeatTrim(front) - 1.11) < 0.015);
   assert.ok(Math.abs(cinemaSeatTrim(center)) < 1e-9);
   assert.ok(Math.abs(cinemaSeatTrim(rear) - cinemaSeatTrim(front)) < 3);
   assert.deepEqual([front, center, rear, accessible].map(cinemaSeatDrr), [16, 13, 10, 11]);

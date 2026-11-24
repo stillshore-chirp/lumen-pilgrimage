@@ -2,7 +2,9 @@ import { Vector3 } from 'three';
 import type { CoastMovement } from '../../CoastControls';
 import { coastRandom } from '../../terrain';
 import { createFootfall } from '../residence/residenceAudioSamples';
-import { CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_TREADS, cinemaGroundHeight } from './cinemaLayout';
+import {
+  CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_DESTINATIONS, CINEMA_TREADS, cinemaGroundHeight,
+} from './cinemaLayout';
 import { CINEMA_SPEAKERS, createCinemaTail } from './cinemaAcoustics';
 
 export type CinemaDemoCue = 'left' | 'right' | 'center' | 'overhead' | 'rear';
@@ -86,6 +88,8 @@ function stepSurface(position: Vector3): 'wool' | 'stone' {
   return onStair ? 'stone' : 'wool';
 }
 
+const defaultSeat = CINEMA_DESTINATIONS[0];
+
 export class CinemaAmbience {
   private context?: AudioContext;
   private graph?: CinemaAmbienceGraph;
@@ -93,7 +97,8 @@ export class CinemaAmbience {
   private disposed = false;
   private level = 0.7;
   private muted = false;
-  private listener = new Vector3(0.39, 2.855, 33.45);
+  private listener = new Vector3(defaultSeat.x,
+    cinemaGroundHeight(defaultSeat.x, defaultSeat.z) + defaultSeat.seatedEyeHeight, defaultSeat.z);
   private lastStepFrame?: { position: Vector3; elapsed: number };
   private stepTravel = 0;
   private stepIndex = 0;

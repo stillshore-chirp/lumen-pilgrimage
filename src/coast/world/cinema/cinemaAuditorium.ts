@@ -3,7 +3,8 @@ import { cinemaBoxes, cinemaFinishes, type CinemaBox, type CinemaFinishes } from
 import { createCinemaExits } from './cinemaFixtures';
 import { createCinemaFloor } from './cinemaFloor';
 import {
-  CINEMA_BOUNDS, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH, CINEMA_EXITS, CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, cinemaGroundHeight,
+  CINEMA_BOUNDS, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH, CINEMA_EXITS, CINEMA_PROJECTION_Y,
+  CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, CINEMA_SIDE_SURROUNDS, cinemaGroundHeight,
 } from './cinemaLayout';
 import { createCinemaSeats } from './cinemaSeats';
 
@@ -14,7 +15,7 @@ const HEIGHT = CINEMA_ROOM_HEIGHT;
 const SPAN = ROOM.maxX - ROOM.minX;
 const LENGTH = ROOM.maxZ - ROOM.minZ;
 const MID_Z = (ROOM.minZ + ROOM.maxZ) * 0.5;
-const PROJECTION_Y = 10.35;
+const PROJECTION_Y = CINEMA_PROJECTION_Y;
 const WINDOWS = [-1.44, 1.44];
 const WINDOW_WIDTH = 1.84;
 const WINDOW_HEIGHT = 0.99;
@@ -109,7 +110,8 @@ function addWalls(group: Group, finish: CinemaFinishes): void {
 
   for (let i = 0; i < 14; i += 1) {
     const x = -18.45 + i * 2.84;
-    const bottom = Math.abs(x) < 3.0 ? 11.16 : 7.0;
+    const lowerPanelEdge = cinemaGroundHeight(x, ROOM.maxZ) + CINEMA_DOOR_HEIGHT + 0.645;
+    const bottom = Math.abs(x) < 3.0 ? PROJECTION_Y + WINDOW_HEIGHT / 2 + 0.315 : lowerPanelEdge;
     panels.push([x, (19.0 + bottom) * 0.5, 53.83, 2.77, 19.0 - bottom, 0.14]);
     for (let j = -2; j <= 2; j += 1) {
       ribs.push([x + j * 0.54, (19.0 + bottom) * 0.5, 53.67, 0.103, 18.90 - bottom, 0.235]);
@@ -128,10 +130,9 @@ function addWalls(group: Group, finish: CinemaFinishes): void {
 }
 
 function addScreenSurround(group: Group, finish: CinemaFinishes): void {
-  const { width, height, bottom } = CINEMA_SCREEN;
+  const { width, height, bottom, center } = CINEMA_SCREEN;
   const half = width * 0.5;
   const top = bottom + height;
-  const center = bottom + height * 0.5;
   const masks: CinemaBox[] = [
     [0, bottom * 0.5, -0.235, width + 0.062, bottom, 0.208],
     [0, (top + HEIGHT) * 0.5, -0.235, width + 0.062, HEIGHT - top, 0.208],
@@ -141,7 +142,7 @@ function addScreenSurround(group: Group, finish: CinemaFinishes): void {
   const frame: CinemaBox[] = [
     [0, bottom - 0.104, 0.009, width + 0.42, 0.208, 0.26],
     [0, top + 0.104, 0.009, width + 0.42, 0.208, 0.26],
-    [0, 18.62, -0.096, 33.92, 0.19, 0.39],
+    [0, top + 0.38, -0.096, 33.92, 0.19, 0.39],
   ];
   const reveal: CinemaBox[] = [
     [0, bottom - 0.273, 0.079, width + 0.62, 0.027, 0.068],
@@ -226,11 +227,9 @@ function addAuditoriumEquipment(group: Group, finish: CinemaFinishes): void {
   const cabinets: CinemaBox[] = [];
   const grilles: CinemaBox[] = [];
   for (const sign of [-1, 1]) {
-    for (let i = 0; i < 10; i += 1) {
-      const z = 6.0 + i * 43 / 9;
-      const y = 8 + i * 4 / 9;
-      cabinets.push([sign * 19.43, y, z, 0.75, 0.92, 0.61]);
-      grilles.push([sign * 19.042, y - 0.015, z, 0.038, 0.78, 0.51]);
+    for (const { x, y, z } of CINEMA_SIDE_SURROUNDS) {
+      cabinets.push([sign * (x + 0.388), y + 0.015, z, 0.75, 0.92, 0.61]);
+      grilles.push([sign * x, y, z, 0.038, 0.78, 0.51]);
     }
     for (let i = 0; i < 8; i += 1) {
       const z = 8 + i * 6;

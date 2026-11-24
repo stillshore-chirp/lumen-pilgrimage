@@ -4,10 +4,10 @@ import {
   SRGBTransfer, UnsignedByteType, Vector2, Vector3, VideoTexture, WebGLRenderTarget,
   type Group, type Texture, type WebGLRenderer,
 } from 'three';
-import { CINEMA_BOUNDS, CINEMA_SCREEN, CINEMA_TREADS } from './cinemaLayout';
+import { CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_SCREEN, CINEMA_TREADS } from './cinemaLayout';
 import {
   CINEMA_LIGHT_META, CINEMA_REFERENCE_WHITE, CINEMA_ROOM_RETURN,
-  CINEMA_SCREEN_CENTER, CINEMA_SCREENING_SPILL, bakeCinemaLightTransport, cinemaLightQuality,
+  CINEMA_SCREENING_SPILL, bakeCinemaLightTransport, cinemaLightQuality,
   cinemaPictureOpening, type CinemaLightingQuality,
 } from './cinemaLightTransport';
 import {
@@ -28,13 +28,14 @@ const HISTORY_MIN_CD = 0.001;
 
 function makeTreadProfile(): DataTexture {
   const width = 2048;
+  const maxFloorY = CINEMA_CROSS_AISLES[3].y;
   const data = new Uint8Array(width * 4);
   let tread = 0;
   for (let index = 0; index < width; index += 1) {
     const z = CINEMA_BOUNDS.minZ + (CINEMA_BOUNDS.maxZ - CINEMA_BOUNDS.minZ) * (index + 0.5) / width;
     while (tread + 1 < CINEMA_TREADS.length && CINEMA_TREADS[tread + 1].z <= z) tread += 1;
     const { z: nose, y, rise } = CINEMA_TREADS[tread];
-    data[4 * index] = Math.round(y / 4 * 255);
+    data[4 * index] = Math.round(y / maxFloorY * 255);
     data[4 * index + 1] = rise > 0 ? Math.round(Math.exp(-4.6 * (z - nose)) * 255) : 0;
     data[4 * index + 3] = 255;
   }
@@ -152,7 +153,7 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
     new MeshBasicMaterial({ map: black, toneMapped: false }),
   );
   screen.name = 'Thirty-metre cinema projection screen';
-  screen.position.set(0, CINEMA_SCREEN_CENTER, CINEMA_SCREEN.z);
+  screen.position.set(0, CINEMA_SCREEN.center, CINEMA_SCREEN.z);
   screen.material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, input, atlas, lighting);
     shader.fragmentShader = shader.fragmentShader
