@@ -35,8 +35,9 @@ Vite が表示した URL を Chrome で開きます。入り江から始まり�
 
 | 変更対象 | 主な場所 |
 | --- | --- |
-| 起動、ワールド選択、ワールド切替 | [`src/main.ts`](../src/main.ts)、[`CoastApp.ts`](../src/coast/CoastApp.ts)、[`CoastTravelPanel.ts`](../src/coast/CoastTravelPanel.ts) |
-| 操作、移動先、共有する時間・場所の状態 | [`CoastControls.ts`](../src/coast/CoastControls.ts)、[`coastDestinations.ts`](../src/coast/coastDestinations.ts) |
+| 起動ルートと初期状態、移動先・時間帯の URL 判断 | [`explorationRoute.ts`](../src/coast/explorationRoute.ts) |
+| ワールド読込、起動表示、移動の適用 | [`src/main.ts`](../src/main.ts)、[`CoastApp.ts`](../src/coast/CoastApp.ts)、[`CoastTravelPanel.ts`](../src/coast/CoastTravelPanel.ts) |
+| 操作、移動先と座標、共有する時間・場所の状態 | [`CoastControls.ts`](../src/coast/CoastControls.ts)、[`coastDestinations.ts`](../src/coast/coastDestinations.ts) |
 | 海岸・森・湖 | [`CoastWorld.ts`](../src/coast/CoastWorld.ts)、`src/coast/world/` の各景観モジュール |
 | 展望台 | [`OverlookWorld.ts`](../src/coast/world/overlook/OverlookWorld.ts) と `src/coast/world/overlook/` |
 | 70階住戸 | [`ResidenceWorld.ts`](../src/coast/world/residence/ResidenceWorld.ts)、[`residencePlan.ts`](../src/coast/world/residence/residencePlan.ts)、[`ResidenceControlPanel.ts`](../src/coast/ResidenceControlPanel.ts) |

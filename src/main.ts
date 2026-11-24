@@ -1,17 +1,17 @@
 import { RESIDENCE_LABEL } from './coast/world/residence/residenceFloor';
 import { CINEMA_LABEL } from './coast/world/cinema/cinemaLayout';
+import { parseStartupRoute } from './coast/explorationRoute';
 
 const mount = document.querySelector<HTMLDivElement>('#app');
 if (!mount) {
   throw new Error('Missing #app mount point');
 }
 
-const options = new URLSearchParams(location.search);
-const world = options.get('world');
-const name = world === 'overlook' ? '丘陵展望台' : world === 'residence' ? RESIDENCE_LABEL :
-  world === 'cinema' ? CINEMA_LABEL : null;
+const route = parseStartupRoute(location.search);
+const name = route.worldId === 'overlook' ? '丘陵展望台' : route.worldId === 'residence' ? RESIDENCE_LABEL :
+  route.worldId === 'cinema' ? CINEMA_LABEL : null;
 try {
-  if (options.get('monitor') === 'sender') {
+  if (route.monitorSender) {
     const { mountMonitorSender } = await import('./monitor/monitorSender');
     mountMonitorSender(mount);
   } else {
@@ -22,9 +22,9 @@ try {
       loading.setAttribute('role', 'status');
       loading.textContent = `${name}を読み込んでいます。`;
       mount.replaceChildren(loading);
-      const scene = world === 'residence'
+      const scene = route.worldId === 'residence'
         ? await (await import('./coast/world/residence/ResidenceWorld')).loadResidenceScene()
-        : world === 'cinema'
+        : route.worldId === 'cinema'
           ? (await import('./coast/world/cinema/CinemaWorld')).loadCinemaScene()
           : await (await import('./coast/world/overlook/OverlookWorld')).loadOverlookScene();
       mount.replaceChildren();
@@ -38,7 +38,7 @@ try {
   const notice = document.createElement('main');
   notice.className = 'coast-error';
   const message = document.createElement('p');
-  message.textContent = options.get('monitor') === 'sender'
+  message.textContent = route.monitorSender
     ? '画面共有ページを読み込めませんでした。ページを再読み込みしてください。'
     : name
       ? `${name}を読み込めませんでした。ページを再読み込みしてください。`

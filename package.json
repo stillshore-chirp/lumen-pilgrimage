@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "check": "npm run build && npm run validate:harness && npm run test:coast && npm run test:monitor && npm run test:residence && npm run test:cinema",
-    "test:coast": "node --test scripts/coast-controls.test.mjs scripts/coast-terrain.test.mjs scripts/coast-acoustics.test.mjs",
+    "test:coast": "node --test scripts/coast-controls.test.mjs scripts/coast-terrain.test.mjs scripts/coast-acoustics.test.mjs scripts/exploration-route.test.mjs",
     "test:coast:browser": "node --test scripts/coast-browser.test.mjs",
     "test:monitor": "node --test scripts/monitor-signaling.test.mjs scripts/monitor-session.test.mjs scripts/monitor-capture.test.mjs scripts/monitor-pose.test.mjs scripts/monitor-xr.test.mjs scripts/monitor-audio.test.mjs",
     "test:monitor:browser": "node --test scripts/monitor-browser.test.mjs",

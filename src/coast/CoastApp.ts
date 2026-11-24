@@ -7,6 +7,7 @@ import type { MonitorTheater } from '../monitor/monitorObject';
 import type { MonitorView } from '../monitor/monitorView';
 import type { CoastBirdCue } from './coastBirdCue';
 import { EXPLORATION_WORLDS, findDestination, type ExplorationWorldId } from './coastDestinations';
+import { decideTravel, readInitialExplorationState, urlForTime } from './explorationRoute';
 import { createCoastTravelPanel } from './CoastTravelPanel';
 import { CoastWorld, type CoastQuality } from './CoastWorld';
 import { createResidenceControlPanel, type ResidenceControlSection } from './ResidenceControlPanel';
@@ -80,8 +81,8 @@ export class CoastApp {
   private disposed = false;
 
   constructor(private readonly mount: HTMLElement, loaded?: ExplorationScene) {
-    const path = new URLSearchParams(location.search);
     this.worldId = loaded?.id ?? 'coast';
+    const initialRoute = readInitialExplorationState(this.worldId, location.search);
     const description = EXPLORATION_WORLDS.find(({ id }) => id === this.worldId)!;
     const overlook = this.worldId === 'overlook';
     const residence = this.worldId === 'residence';
@@ -92,8 +93,8 @@ export class CoastApp {
     this.interaction = loaded?.interaction;
     this.camera = overlook ? new PerspectiveCamera(54, 1, 0.20, 43500)
       : new PerspectiveCamera(60, 1, residence || cinema ? 0.08 : 0.12, residence ? 43500 : cinema ? 110 : 2500);
-    this.time = path.get('time') === 'night' || (residence && !path.has('time')) ? 'night' : 'day';
-    const destination = findDestination(this.worldId, path.get('place'));
+    this.time = initialRoute.time;
+    const destination = findDestination(this.worldId, initialRoute.placeId);
     this.world.setTimeOfDay(this.time);
     this.audio.setTimeOfDay?.(this.time);
     this.mount.classList.add('coast');
@@ -300,21 +301,23 @@ export class CoastApp {
   }
 
   private goTo(worldId: string, placeId: string): void {
-    const place = findDestination(worldId, placeId);
-    if (!place) return;
-    const address = new URL(location.href);
-    address.searchParams.set('world', worldId);
-    address.searchParams.set('place', placeId);
-    address.searchParams.set('time', this.time);
-    if (worldId !== this.worldId) {
-      location.assign(address);
+    const decision = decideTravel({
+      href: location.href,
+      currentWorldId: this.worldId,
+      targetWorldId: worldId,
+      destination: findDestination(worldId, placeId),
+      time: this.time,
+    });
+    if (decision.kind === 'invalid') return;
+    if (decision.kind === 'navigate') {
+      location.assign(decision.url);
       return;
     }
     const relocate = () => {
-      this.controls.relocate(place);
+      this.controls.relocate(decision.destination);
       this.monitor?.relocateViewer();
       this.travel.setPlace(worldId, placeId);
-      history.replaceState(null, '', address);
+      history.replaceState(null, '', decision.url);
     };
     if (!this.seatTransition || (!this.renderer.xr.isPresenting && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
       relocate();
@@ -329,9 +332,7 @@ export class CoastApp {
     this.world.setTimeOfDay(time);
     this.audio.setTimeOfDay?.(time);
     this.travel.setTimeOfDay(time);
-    const address = new URL(location.href);
-    address.searchParams.set('time', time);
-    history.replaceState(null, '', address);
+    history.replaceState(null, '', urlForTime(location.href, time));
   }
 
   private bindMonitor(actions: Element): void {

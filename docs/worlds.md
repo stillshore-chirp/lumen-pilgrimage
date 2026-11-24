@@ -11,13 +11,13 @@
 
 ## 起動 URL、時間帯、設定の引き継ぎ
 
-[起動処理](../src/main.ts)が解釈するクエリは `monitor` と `world` です。`monitor=sender` はワールド選択より先に配信ページを開きます。`world` は `overlook`、`residence`、`cinema` の完全一致で追加ワールドを読み込みます。省略時と未登録値は海岸へ進みます。登録済みワールドの読み込みに失敗した場合は起動エラー画面を表示します。過去の `scene=expedition` はワールド選択に使われず、現行の探索を開きます。
+[起動ルートの判断](../src/coast/explorationRoute.ts)は `monitor` と `world` を読みます。`monitor=sender` はワールド選択より先に配信ページを開くルートになります。`world` は `overlook`、`residence`、`cinema` の完全一致で追加ワールドを選びます。省略時と未登録値は海岸を選びます。[main.ts](../src/main.ts)は選ばれたルートに応じて配信ページまたはワールドを読み込み、読み込みに失敗した場合は起動エラー画面を表示します。過去の `scene=expedition` はワールド選択に使われず、現行の探索を開きます。
 
-[着地点一覧](../src/coast/coastDestinations.ts)と[CoastApp](../src/coast/CoastApp.ts)は `place` を現在のワールド内で照合します。有効な着地点がない場合は、そのワールドの `navigation.spawn` が初期位置になります。各ワールドで使える ID とラベルも一覧にまとめているので、新しい到着点は同じ一覧へ追加し、対応するナビゲーションの `spawn` とブラウザーテストも照合してください。`scene=expedition` の旧URLを扱うブラウザーテストはありますが、未登録の `world` や `place` のフォールバックを個別に固定するテストは見当たりません。これらの挙動を変更する場合は起動・着地の回帰条件を追加してください。
+[explorationRoute.ts](../src/coast/explorationRoute.ts)の`readInitialExplorationState`は読み込み後の `place` と `time` を解釈し、[着地点一覧](../src/coast/coastDestinations.ts)がワールドごとの有効な移動先と座標を定義します。[CoastApp](../src/coast/CoastApp.ts)は解釈した初期状態を読み込み済みワールドへ適用し、有効な着地点がない場合はそのワールドの `navigation.spawn` を初期位置にします。各ワールドで使えるIDとラベルも一覧にまとめているので、新しい到着点は同じ一覧へ追加し、対応するナビゲーションの `spawn` とブラウザーテストも照合してください。
 
 時間帯は `time=night` のとき夜です。その他の値は昼として扱い、住戸だけは `time` 自体がない場合に夜から始まります。`?world=overlook&place=upper-deck` は展望台の2階、`?world=residence&place=foyer&time=day` は昼の玄関、`?world=cinema` は中段中央を開きます。利用方法は[探索ガイド](exploration.md)を参照してください。
 
-昼夜ボタンを押すと、現在のワールドと音響へ反映し、URL の `time` を `history.replaceState` で更新します。ワールド間の移動は `world`、`place`、現在の `time` を同じ URL に載せてページを読み直します。同一ワールドの移動はカメラと移動モードを着地点に戻し、URL を置き換えます。ファストトラベルを開く時点でキー入力と予約操作を消し、ゲームパッドのボタン状態を同期し、キャンバスのポインターロックを解除します。着地処理でも入力を消し、飛行・潜水・垂直速度をリセットしてから、目的地の支持面と眼高へカメラを置きます。座席着地は指定眼高を使います。映画館では昼夜のUIを隠し、ワールド側の `setTimeOfDay` も空処理です。移動元の時刻はURLに保持されるため、映画館から別ワールドへ移るとその時刻を渡します。
+昼夜ボタンを押すと、現在のワールドと音響へ反映し、`urlForTime` が計算した URL を `history.replaceState` で適用します。ワールド間移動では `decideTravel` が `world`、`place`、現在の `time` を含む URL を計算し、`CoastApp` がページを読み直します。同一ワールド内では `CoastApp` がカメラと移動モードを着地点に戻して URL を置き換えます。ファストトラベルを開く時点でキー入力と予約操作を消し、ゲームパッドのボタン状態を同期し、キャンバスのポインターロックを解除します。着地処理でも入力を消し、飛行・潜水・垂直速度をリセットしてから、目的地の支持面と眼高へカメラを置きます。座席着地は指定眼高を使います。映画館では昼夜のUIを隠し、ワールド側の `setTimeOfDay` も空処理です。移動元の時刻はURLに保持されるため、映画館から別ワールドへ移るとその時刻を渡します。
 
 ### 夜の入り江から展望台へ移動する
 
@@ -95,7 +95,8 @@
 
 ## 共通の変更経路
 
-- 起動先、到着ID、時間帯の引き継ぎは [main.ts](../src/main.ts)、[CoastApp.ts](../src/coast/CoastApp.ts)、[coastDestinations.ts](../src/coast/coastDestinations.ts)、[CoastTravelPanel.ts](../src/coast/CoastTravelPanel.ts)を追います。別ワールドへ座標を直渡しせず、移動先IDと時刻をURLへ渡します。[海岸・展望台のブラウザーテスト](../scripts/coast-browser.test.mjs)にURLと描画時刻の既存例があります。
+- 起動先、到着ID、時間帯の引き継ぎは [explorationRoute.ts](../src/coast/explorationRoute.ts)、[main.ts](../src/main.ts)、[CoastApp.ts](../src/coast/CoastApp.ts)、[coastDestinations.ts](../src/coast/coastDestinations.ts)、[CoastTravelPanel.ts](../src/coast/CoastTravelPanel.ts)を追います。別ワールドへ座標を直渡しせず、移動先IDと時刻をURLへ渡します。[海岸・展望台のブラウザーテスト](../scripts/coast-browser.test.mjs)にURLと描画時刻の既存例があります。
+- [ルート判断と着地点検索の単体テスト](../scripts/exploration-route.test.mjs)は未知のワールドを海岸へ戻す判断と、未登録・他ワールドの `place` が着地点に解決されないことを確認します。このテストは純粋な選択と検索を対象とし、無効な `place` でブラウザー起動した際に `CoastApp` が `navigation.spawn` へ着地する画面挙動は確認しません。既存の[ブラウザーテスト](../scripts/coast-browser.test.mjs)は `scene=expedition` の旧URLと通常のURL・時刻保持を確認します。
 - 移動入力、フォーカス、移動の解除は [CoastControls.ts](../src/coast/CoastControls.ts)、[CoastApp.ts](../src/coast/CoastApp.ts)、[CoastTravelPanel.ts](../src/coast/CoastTravelPanel.ts)を追います。モニター表示・VRとの競合条件は[monitorView.ts](../src/monitor/monitorView.ts)と[monitorXR.ts](../src/monitor/monitorXR.ts)も確認します。[操作単体テスト](../scripts/coast-controls.test.mjs)と[WebXR模擬入力テスト](../scripts/monitor-xr.test.mjs)があります。
 - 時刻、照明、音響、フレーム更新の接続は [CoastApp.ts](../src/coast/CoastApp.ts)から各 `*World.ts`、[CoastAudio.ts](../src/coast/CoastAudio.ts)へ追います。地形・住戸・映画館の編集先と専用テストは、以下の各ワールド節にまとめています。
 
