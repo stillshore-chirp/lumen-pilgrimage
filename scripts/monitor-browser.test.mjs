@@ -303,6 +303,29 @@ async function waitForVideo(viewer, expectedAudioTracks, [width, height] = [320,
   assert.ok(playback.frames > 1, 'Chrome decoded successive native WebRTC video frames');
 }
 
+async function assertWorldLightingKeepsPlayback(viewer) {
+  const lighting = viewer.getByRole('group', { name: 'ワールド照明' });
+  const video = viewer.locator(videoSelector);
+  await video.evaluate(element => {
+    window.lightingPlayback = { stream: element.srcObject, peer: window.monitorPeers[0] };
+  });
+  for (const label of ['一括点灯', '一括消灯', '既定']) {
+    const before = await video.evaluate(element => element.currentTime);
+    const control = button(lighting, label);
+    await control.click();
+    assert.equal(await control.getAttribute('aria-pressed'), 'true');
+    assert.equal(await video.evaluate(element => {
+      const { stream, peer } = window.lightingPlayback;
+      return element.srcObject === stream && window.monitorPeers.length === 1
+        && window.monitorPeers[0] === peer && peer.connectionState === 'connected';
+    }), true, `the same connection and stream survive ${label}`);
+    await viewer.waitForFunction(({ selector, before }) => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      return document.querySelector(selector).currentTime > before + .1 && audio?.peak > .001;
+    }, { selector: videoSelector, before });
+  }
+}
+
 async function screenPixels(viewer, file) {
   const path = screenshotDirectory && file ? join(screenshotDirectory, `${file}.png`) : undefined;
   // Measure only what the scene renders. Controls can overlap the projected monitor.
@@ -575,6 +598,10 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     assert.ok(speakers.every(source => source[3] === 'HRTF'));
     assert.ok(speakers.slice(0, 4).every(source => source[2] < -6));
     assert.ok(speakers.slice(4).every(source => source[2] > -2));
+
+    await button(viewer, '仮想モニター').click();
+    await assertWorldLightingKeepsPlayback(viewer);
+    await button(viewer, '仮想モニター').click();
 
     await button(viewer, 'モニター音をミュート').click();
     await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001);
@@ -884,6 +911,7 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
     await button(panel, '閉じる').click();
     await viewer.waitForFunction(audible);
     assert.ok((await screenPixels(viewer)).count > 8_000);
+    await assertWorldLightingKeepsPlayback(viewer);
 
     await button(sender, '共有を停止').click();
     await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
