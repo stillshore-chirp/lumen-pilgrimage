@@ -5,6 +5,23 @@ export type CoastMovement = 'walk' | 'crouch' | 'wade' | 'swim' | 'dive' | 'flig
 
 type DivePhase = 'entering' | 'submerged' | 'surfacing';
 
+interface PlanarInput {
+  readonly forward: number;
+  readonly right: number;
+  readonly vertical: number;
+}
+
+interface XRView {
+  readonly yaw: number;
+  readonly headOffset: Vector3;
+}
+
+export interface CoastXRMovement extends PlanarInput {
+  readonly jump: boolean;
+  readonly dive: boolean;
+  readonly flight: boolean;
+}
+
 export interface CoastControlCallbacks {
   onMovementChange: (movement: CoastMovement) => void;
   onLockChange: (locked: boolean) => void;
@@ -63,6 +80,8 @@ const WALK_SLOPE_EPSILON = 0.000001;
 const BOUNDS_PADDING = 0.35;
 const MAX_FLIGHT_HEIGHT = 255;
 const GAMEPAD_DEADZONE = 0.16;
+const XR_WALK_SPEED = 2.7;
+const XR_FLIGHT_SPEED = 6;
 
 const coastNavigation: CoastNavigation = {
   bounds: COAST_BOUNDS, spawn: SPAWN, groundHeight, waterLevel: coastWaterLevel,
@@ -97,6 +116,7 @@ export class CoastControls {
   private previousGamepadJump = false;
   private previousGamepadDive = false;
   private pointerLockRequestPending = false;
+  private desktopInputEnabled = true;
   private disposed = false;
 
   constructor(camera: PerspectiveCamera, canvas: HTMLCanvasElement, callbacks: CoastControlCallbacks,
@@ -183,8 +203,13 @@ export class CoastControls {
     this.updateMovementMode();
   }
 
+  setDesktopInputEnabled(enabled: boolean): void {
+    this.desktopInputEnabled = enabled;
+    this.releaseInput();
+  }
+
   requestLock(): void {
-    if (this.disposed || this.pointerLockRequestPending || document.pointerLockElement === this.canvas) return;
+    if (!this.desktopInputEnabled || this.disposed || this.pointerLockRequestPending || document.pointerLockElement === this.canvas) return;
 
     this.canvas.focus({ preventScroll: true });
     this.pointerLockRequestPending = true;
@@ -206,15 +231,34 @@ export class CoastControls {
       return;
     }
 
-    const delta = Number.isFinite(dt) ? Math.max(0, Math.min(dt, MAX_DELTA)) : 0;
+    const delta = this.frameDelta(dt);
     const input = this.readMovementInput(delta);
     if (delta === 0) return;
-    const pace = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
-      ? SPRINT_MULTIPLIER
-      : 1;
+    const pace = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? SPRINT_MULTIPLIER : 1;
+    this.advance(input, pace, delta);
+  }
 
+  updateXR(dt: number, input: CoastXRMovement, view: XRView): void {
+    if (this.disposed) return;
+    const delta = this.frameDelta(dt);
+    if (input.flight) this.toggleFlight();
+    if (input.jump && !this.flying) this.jumpQueued = true;
+    if (input.dive && !this.flying) this.diveQueued = true;
+    if (delta > 0) this.advance(this.normalizePlanarInput(input.forward, input.right, input.vertical), 1, delta, view);
+  }
+
+  alignDesktopView(yaw: number, pitch: number): void {
+    this.camera.rotation.set(this.clampPitch(pitch), yaw, 0);
+  }
+
+  private frameDelta(dt: number): number {
+    return Number.isFinite(dt) ? Math.max(0, Math.min(dt, MAX_DELTA)) : 0;
+  }
+
+  private advance(input: PlanarInput, pace: number, delta: number, view?: XRView): void {
+    const offset = view && view.headOffset.lengthSq() > 0.000001 ? view.headOffset : undefined;
     if (this.flying) {
-      this.updateFlight(input.forward, input.right, input.vertical, pace, delta);
+      this.updateFlight(input, pace, delta, view?.yaw, offset);
       return;
     }
 
@@ -228,9 +272,9 @@ export class CoastControls {
         this.verticalVelocity = 0;
       }
     }
-    this.setPlanarMovement(input.forward, input.right);
-    if (this.divePhase !== null) this.updateDive(input.vertical, delta);
-    else this.updateGroundMovement(pace, delta);
+    this.setPlanarMovement(input.forward, input.right, view?.yaw);
+    if (this.divePhase !== null) this.updateDive(input.vertical, delta, offset);
+    else this.updateGroundMovement(pace, delta, Boolean(view), offset);
     this.diveQueued = false;
     this.crouchQueued = false;
   }
@@ -322,7 +366,7 @@ export class CoastControls {
   }
 
   private canUseSceneInput(): boolean {
-    return document.visibilityState !== 'hidden' && document.hasFocus();
+    return this.desktopInputEnabled && document.visibilityState !== 'hidden' && document.hasFocus();
   }
 
   private canUseSceneKeyboard(event: KeyboardEvent): boolean {
@@ -422,15 +466,14 @@ export class CoastControls {
     return { forward, right, vertical: Math.max(-1, Math.min(vertical, 1)) };
   }
 
-  private setPlanarMovement(forwardInput: number, rightInput: number): void {
-    const yaw = this.camera.rotation.y;
+  private setPlanarMovement(forwardInput: number, rightInput: number, yaw = this.camera.rotation.y): void {
     this.forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     this.right.set(Math.cos(yaw), 0, -Math.sin(yaw));
     this.movement.copy(this.forward).multiplyScalar(forwardInput)
       .addScaledVector(this.right, rightInput);
   }
 
-  private updateGroundMovement(pace: number, dt: number): void {
+  private updateGroundMovement(pace: number, dt: number, immersive: boolean, offset?: Vector3): void {
     const position = this.camera.position;
     const foot = position.y - this.eyeHeight;
     const depth = this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z);
@@ -448,15 +491,18 @@ export class CoastControls {
     if (this.movement.lengthSq() > 0) {
       const water = smoothstep(0.12, SWIM_DEPTH, depth);
       const walkSpeed = this.navigation.walkSpeed ?? WALK_SPEED;
-      const speed = walkSpeed * pace * (1 - water) + SWIM_SPEED * water;
+      const normalSpeed = walkSpeed * pace * (1 - water) + SWIM_SPEED * water;
+      const speed = immersive ? Math.min(normalSpeed, XR_WALK_SPEED) : normalSpeed;
       this.movement.multiplyScalar(speed * dt);
-      followSupport = this.moveAlongSupport(this.movement.x, this.movement.z, foot, verticalStep, followSupport);
+      followSupport = this.moveAlongSupport(this.movement.x, this.movement.z, foot, verticalStep, followSupport, offset);
     }
 
     const floorY = this.supportHeight(position.x, position.z) + this.eyeHeight;
     const ceilingY = this.ceilingY(position.x, position.z);
-    position.y = followSupport ? floorY : Math.max(floorY, Math.min(ceilingY, position.y + verticalStep));
-    const hitCeiling = nextVelocity > 0 && position.y >= ceilingY;
+    const targetY = followSupport ? floorY : Math.max(floorY, Math.min(ceilingY, position.y + verticalStep));
+    // Support changes have already been checked at each horizontal step, including its height.
+    position.y = followSupport ? targetY : this.limitHeadY(position, targetY, offset);
+    const hitCeiling = nextVelocity > 0 && (position.y >= ceilingY || position.y < targetY);
     this.verticalVelocity = position.y > floorY && !hitCeiling ? nextVelocity : 0;
     if (this.posture === 'crouch'
       && this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z) > WADE_DEPTH) {
@@ -473,7 +519,7 @@ export class CoastControls {
     this.camera.position.y = Math.min(this.ceilingY(x, z), foot + this.eyeHeight);
   }
 
-  private updateDive(verticalInput: number, dt: number): void {
+  private updateDive(verticalInput: number, dt: number, offset?: Vector3): void {
     const position = this.camera.position;
     const { x, z } = position;
     const water = this.waterLevel(x, z);
@@ -490,25 +536,25 @@ export class CoastControls {
 
     if (this.divePhase === 'surfacing') {
       const swimY = Math.max(ground, water - SWIM_DEPTH) + EYE_HEIGHT;
-      position.y = Math.min(swimY, Math.max(floor, position.y + step));
+      position.y = this.limitHeadY(position, Math.min(swimY, Math.max(floor, position.y + step)), offset);
     } else {
       // Finish the initial dip even for a tap, then keep the chosen depth on release.
       const entryY = Math.max(floor, water - DIVE_ENTRY_DEPTH);
       const holdY = this.divePhase === 'entering' ? entryY : ceiling;
       const target = verticalInput < 0 ? floor : Math.min(holdY, position.y);
-      position.y = Math.max(floor, target, position.y - step);
+      position.y = this.limitHeadY(position, Math.max(floor, target, position.y - step), offset);
       if (position.y <= entryY) this.divePhase = 'submerged';
     }
 
     this.movement.multiplyScalar(DIVE_SPEED * dt);
-    this.moveAlongDiveFloor(this.movement.x, this.movement.z);
+    this.moveAlongDiveFloor(this.movement.x, this.movement.z, offset);
     if (this.divePhase === 'surfacing' && position.y >= this.supportHeight(position.x, position.z) + EYE_HEIGHT) {
       this.divePhase = null;
     }
     this.updateMovementMode();
   }
 
-  private moveAlongDiveFloor(deltaX: number, deltaZ: number): void {
+  private moveAlongDiveFloor(deltaX: number, deltaZ: number, offset?: Vector3): void {
     const position = this.camera.position;
     const steps = Math.ceil(Math.hypot(deltaX, deltaZ) / WALK_SAMPLE_DISTANCE);
     if (steps === 0) return;
@@ -525,7 +571,9 @@ export class CoastControls {
       const floor = this.diveFloorY(x, z, ground);
       if ((this.divePhase !== 'surfacing' && floor > water - DIVE_SURFACE_CLEARANCE)
         || floor > position.y + distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON)) return false;
-      position.set(x, Math.max(position.y, floor), z);
+      const y = Math.max(position.y, floor);
+      if (!this.headCanFollow(position.x, position.y, position.z, x, y, z, offset)) return false;
+      position.set(x, y, z);
       return true;
     };
 
@@ -538,32 +586,31 @@ export class CoastControls {
     }
   }
 
-  private updateFlight(
-    forwardInput: number,
-    rightInput: number,
-    verticalInput: number,
-    pace: number,
-    dt: number
-  ): void {
-    this.camera.getWorldDirection(this.viewDirection);
-    this.forward.copy(this.viewDirection);
-    this.right.set(Math.cos(this.camera.rotation.y), 0, -Math.sin(this.camera.rotation.y));
-    this.movement.copy(this.forward).multiplyScalar(forwardInput)
-      .addScaledVector(this.right, rightInput)
-      .addScaledVector(this.up, verticalInput);
+  private updateFlight(input: PlanarInput, pace: number, dt: number, headYaw?: number, offset?: Vector3): void {
+    if (headYaw === undefined) {
+      this.camera.getWorldDirection(this.viewDirection);
+      const yaw = this.camera.rotation.y;
+      this.right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+      this.movement.copy(this.viewDirection).multiplyScalar(input.forward).addScaledVector(this.right, input.right);
+    } else {
+      this.setPlanarMovement(input.forward, input.right, headYaw);
+    }
+    this.movement.addScaledVector(this.up, input.vertical);
 
     if (this.movement.lengthSq() > 1) this.movement.normalize();
-    this.movement.multiplyScalar(FLIGHT_SPEED * pace * dt);
+    const speed = headYaw === undefined ? FLIGHT_SPEED : XR_FLIGHT_SPEED;
+    this.movement.multiplyScalar(speed * pace * dt);
     const { x, y, z } = this.camera.position;
     const targetX = this.clampX(x + this.movement.x);
     const targetZ = this.clampZ(z + this.movement.z);
     const indoor = this.navigation.ceilingHeight !== undefined;
     const ceiling = Math.min(this.navigation.flightCeiling, this.ceilingY(x, z));
     const floor = indoor ? this.flightFloorHeight(x, z) : -Infinity;
-    const targetY = Math.min(ceiling, Math.max(floor, y + this.movement.y));
+    const targetY = this.limitHeadY(this.camera.position, Math.min(ceiling, Math.max(floor, y + this.movement.y)), offset);
     const sampleDistance = indoor ? WALK_SAMPLE_DISTANCE : FLIGHT_SAMPLE_DISTANCE;
     const steps = Math.ceil(Math.hypot(targetX - x, targetZ - z) / sampleDistance);
     let clear = true;
+    let previousX = x, previousY = y, previousZ = z;
     for (let step = 1; step <= steps; step += 1) {
       const t = step / steps;
       const sampleX = x + (targetX - x) * t, sampleZ = z + (targetZ - z) * t;
@@ -571,10 +618,14 @@ export class CoastControls {
       const blocked = this.navigation.blocksFlight
         ? this.navigation.blocksFlight(sampleX, sampleZ)
         : this.navigation.blocksWalking?.(sampleX, sampleZ, sampleY - CAMERA_SURFACE_CLEARANCE);
-      if (blocked || sampleY < this.flightFloorHeight(sampleX, sampleZ) || sampleY > this.ceilingY(sampleX, sampleZ)) {
+      if (blocked || sampleY < this.flightFloorHeight(sampleX, sampleZ) || sampleY > this.ceilingY(sampleX, sampleZ)
+        || !this.headCanFollow(previousX, previousY, previousZ, sampleX, sampleY, sampleZ, offset)) {
         clear = false;
         break;
       }
+      previousX = sampleX;
+      previousY = sampleY;
+      previousZ = sampleZ;
     }
     const safeX = clear ? targetX : x;
     const safeZ = clear ? targetZ : z;
@@ -582,7 +633,7 @@ export class CoastControls {
   }
 
   private moveAlongSupport(
-    deltaX: number, deltaZ: number, foot: number, verticalStep: number, onSupport: boolean
+    deltaX: number, deltaZ: number, foot: number, verticalStep: number, onSupport: boolean, offset?: Vector3
   ): boolean {
     const position = this.camera.position;
     const steps = Math.max(1, Math.ceil(Math.hypot(deltaX, deltaZ) / WALK_SAMPLE_DISTANCE));
@@ -603,6 +654,9 @@ export class CoastControls {
       const rise = height - support;
       const walkableRise = distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON);
       if (followSupport ? rise > walkableRise : height > footAtStep + FOOT_CLEARANCE) return false;
+      const previousFoot = followSupport ? support : footAtStep;
+      if (!this.headCanFollow(position.x, previousFoot + this.eyeHeight, position.z,
+        x, nextFoot + this.eyeHeight, z, offset)) return false;
       if (rise < -walkableRise) followSupport = false;
       position.x = x;
       position.z = z;
@@ -620,6 +674,31 @@ export class CoastControls {
       if (!slide) break;
     }
     return followSupport;
+  }
+
+  private headCanFollow(x: number, y: number, z: number,
+    nextX: number, nextY: number, nextZ: number, offset?: Vector3): boolean {
+    if (!offset || !this.headBlocked(nextX + offset.x, nextY + offset.y, nextZ + offset.z)) return true;
+    // During overlap, a retreat on one axis cannot offset advancing into clearance on the other.
+    const xAlongHeadOffset = (nextX - x) * offset.x;
+    const zAlongHeadOffset = (nextZ - z) * offset.z;
+    const retreating = xAlongHeadOffset <= 0 && zAlongHeadOffset <= 0
+      && (xAlongHeadOffset < 0 || zAlongHeadOffset < 0);
+    return retreating && this.headBlocked(x + offset.x, y + offset.y, z + offset.z);
+  }
+
+  private headBlocked(x: number, y: number, z: number): boolean {
+    const foot = y - CAMERA_SURFACE_CLEARANCE;
+    return this.clampX(x) !== x || this.clampZ(z) !== z || foot < this.navigation.groundHeight(x, z)
+      || y > this.ceilingY(x, z) || this.navigation.blocksWalking?.(x, z, foot) === true;
+  }
+
+  private limitHeadY(position: Vector3, targetY: number, offset?: Vector3): number {
+    if (!offset || targetY === position.y) return targetY;
+    const x = position.x + offset.x, z = position.z + offset.z;
+    if (targetY > position.y) return Math.min(targetY, Math.max(position.y, this.ceilingY(x, z) - offset.y));
+    const floor = this.navigation.groundHeight(x, z) + CAMERA_SURFACE_CLEARANCE - offset.y;
+    return Math.max(targetY, Math.min(position.y, floor));
   }
 
   private supportHeight(x: number, z: number): number {

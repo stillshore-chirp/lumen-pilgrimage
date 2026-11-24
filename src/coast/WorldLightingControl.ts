@@ -7,14 +7,14 @@ export interface WorldLightingControl {
   setArtificialLightingMode(mode: WorldLightingMode): void;
 }
 
-const choices = [
+export const worldLightingChoices = [
   { mode: 'on', label: '一括点灯' },
   { mode: 'off', label: '一括消灯' },
   { mode: 'auto', label: '既定' },
 ] as const;
 
 export function bindWorldLightingControl(element: HTMLElement, world: WorldLightingControl) {
-  const buttons = choices.map(({ mode, label }) => {
+  const buttons = worldLightingChoices.map(({ mode, label }) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;

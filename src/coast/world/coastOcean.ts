@@ -474,7 +474,9 @@ export function createCoastOcean(time: THREE.IUniform<number>, atmosphere: Coast
   let lastReflection = -Infinity;
   let reflectedNight = atmosphere.night.value;
   mesh.onBeforeRender = (renderer, scene, camera, geometry, material, group) => {
-    const canReflect = high && camera.position.y > SEA_LEVEL + 0.17 && camera.position.z < 164;
+    // This throttled reflection target is shared by both eyes. Use the sky reflection in VR.
+    const canReflect = high && !renderer.xr.isPresenting
+      && camera.position.y > SEA_LEVEL + 0.17 && camera.position.z < 164;
     surface.uniforms.uLiveReflection.value = Number(canReflect);
     if (!canReflect) {
       lastReflection = -Infinity;

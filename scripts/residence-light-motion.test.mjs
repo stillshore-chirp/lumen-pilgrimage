@@ -75,8 +75,8 @@ test('night windows keep the city lights stable during a slow pan', { timeout: 9
   await page.route('**/assets/CoastApp-*.js', async route => {
     const response = await route.fetch();
     const source = await response.text();
-    const render = /this\.world\.prepareRender\?\.\(this\.renderer,(\w+)\),this\.renderer\.render\(this\.world\.scene,\1\)/;
-    assert.match(source, render, 'test hook must sample the canvas immediately after the main draw');
+    const render = /this\.world\.prepareRender\?\.\(this\.renderer,(\w+)\),this\.renderer\.render\(this\.world\.scene,[^()]+\)/;
+    assert.ok(render.test(source), 'test hook must sample the canvas immediately after the main draw');
     const body = source.replace(render, (draw, camera) => `window.residenceLightMotion.prepare(${camera}),${draw},`
       + 'window.residenceLightMotion.sample(this.renderer.domElement)');
     await route.fulfill({ response, body });

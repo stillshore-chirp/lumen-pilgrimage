@@ -1,9 +1,11 @@
-import { Group, PerspectiveCamera, Vector2, type Scene, type WebGLRenderer } from 'three';
+import { PerspectiveCamera, Vector2, type Scene, type WebGLRenderer } from 'three';
 import { MonitorAudio, type MonitorAudioMode } from './monitorAudio';
 import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
 import { MonitorObject, type MonitorTheater } from './monitorObject';
 import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
 import { MonitorXR } from './monitorXR';
+import type { CoastXR } from '../coast/CoastXR';
+import { renderImmersiveStatus } from '../xr/ImmersiveSession';
 import './monitorView.css';
 
 export interface MonitorViewBinding {
@@ -11,7 +13,6 @@ export interface MonitorViewBinding {
   toggle: HTMLButtonElement;
   scene: Scene;
   camera: PerspectiveCamera;
-  eyeHeight(): number;
   releaseInput(): void;
 }
 
@@ -19,10 +20,9 @@ export class MonitorView {
   private readonly screen = new MonitorObject();
   private readonly desktop = new MonitorDesktop(this.screen);
   private readonly audio = new MonitorAudio();
-  private readonly rig = new Group();
-  private readonly xrRenderCamera = new PerspectiveCamera();
-  private readonly xrViewCamera = new PerspectiveCamera();
   private readonly xr: MonitorXR;
+  private readonly unsubscribeXR: () => void;
+  private xrSession: XRSession | null = null;
   private readonly receiver: MonitorReceiver;
   private readonly events = new AbortController();
   private readonly pointer = new Vector2();
@@ -56,6 +56,8 @@ export class MonitorView {
   private dragMode: MonitorDragMode = 'move';
   private editing = false;
   private pendingXRSummon = false;
+  private summonOnEntry = false;
+  private panelOpenOnExit = false;
   private theater: MonitorTheater | null = null;
   private audioPlayback: 'off' | 'on' | 'retry' = 'off';
   private audioStart: Promise<boolean> | null = null;
@@ -64,6 +66,7 @@ export class MonitorView {
     private binding: MonitorViewBinding,
     private readonly renderer: WebGLRenderer,
     mediaRoot: HTMLElement,
+    private readonly explorationXR: CoastXR,
   ) {
     const { entry, toggle, scene } = binding;
     this.canvas = renderer.domElement;
@@ -161,16 +164,14 @@ export class MonitorView {
     // Keep the playing element in the document while replacing world controls.
     mediaRoot.append(this.video);
 
-    this.xrRenderCamera.copy(binding.camera);
-    this.rig.add(this.xrRenderCamera);
-    scene.add(this.rig, this.screen.group);
-    this.xr = new MonitorXR(renderer.xr, this.rig, this.screen, {
-      onStatusChange: ({ state, message }) => {
-        this.xrButton.disabled = state === 'checking' || state === 'unavailable' || state === 'starting';
-        this.xrButton.textContent = state === 'presenting' ? 'VRを終了' : 'VRで見る';
-        this.xrStatus.textContent = message;
-      },
-      onSessionChange: (presenting) => this.setXRPresentation(presenting),
+    scene.add(this.screen.group);
+    this.xr = new MonitorXR(renderer.xr, explorationXR.rig, this.screen);
+    this.unsubscribeXR = explorationXR.session.observe((status, session) => {
+      renderImmersiveStatus(this.xrButton, this.xrStatus, status, 'VRで見る', 'VRを終了');
+      if (session === this.xrSession) return;
+      this.xrSession = session;
+      this.xr.setSession(session);
+      this.setXRPresentation(Boolean(session));
     });
     this.receiver = new MonitorReceiver({
       onState: state => this.setConnectionState(state),
@@ -180,7 +181,6 @@ export class MonitorView {
     this.bindPointer();
     this.setConnectionState(this.state);
     this.setOpen(true);
-    void this.xr.checkSupport();
   }
 
   get hasActiveConnection(): boolean {
@@ -188,11 +188,30 @@ export class MonitorView {
   }
 
   get blocksSceneInput(): boolean {
-    return this.editing || this.renderer.xr.isPresenting;
+    return this.editing;
   }
 
-  get renderCamera(): PerspectiveCamera {
-    return this.renderer.xr.isPresenting ? this.xrRenderCamera : this.binding.camera;
+  get isGrabbing(): boolean { return this.xr.isGrabbing; }
+
+  releaseGrab(): void { this.xr.release(); }
+
+  get displayActionLabel(): string { return this.visibilityButton.textContent ?? ''; }
+
+  get audioActionLabel(): string { return this.audioButton.textContent ?? ''; }
+
+  get canToggleAudio(): boolean { return !this.audioButton.disabled; }
+
+  get canSetFloatingPose(): boolean { return this.screen.isFloating; }
+
+  toggleDisplayInXR(): void {
+    this.pendingXRSummon = !this.screen.isVisible;
+    if (!this.pendingXRSummon) this.setScreenVisible(false);
+  }
+
+  resetDisplayInXR(): void {
+    if (!this.screen.isFloating) return;
+    this.placed = false;
+    this.pendingXRSummon = true;
   }
 
   togglePanel(): void {
@@ -236,12 +255,10 @@ export class MonitorView {
     this.binding = binding;
     binding.entry.append(this.panel);
     binding.toggle.setAttribute('aria-controls', this.panel.id);
-    binding.scene.add(this.rig, this.screen.group);
+    binding.scene.add(this.screen.group);
     this.placed = false;
     this.setTheater(theater, true);
     if (this.renderer.xr.isPresenting) {
-      this.anchorXR();
-      this.resizeXRCamera();
       this.pendingXRSummon = this.screen.isVisible || this.pendingXRSummon;
       if (this.pendingXRSummon) this.placed = false;
     }
@@ -269,21 +286,10 @@ export class MonitorView {
     this.updateDisplayTarget(!floating && Boolean(cinema) || this.screen.isVisible);
   }
 
-  update(frame?: XRFrame): PerspectiveCamera {
-    const { camera } = this.binding;
-    const { renderer } = this;
-    const reference = frame && renderer.xr.getReferenceSpace();
-    const pose = reference && frame?.getViewerPose(reference);
-    let viewer = camera;
-    if (pose) {
-      this.rig.updateMatrixWorld();
-      this.xrViewCamera.matrix.fromArray(pose.transform.matrix).premultiply(this.rig.matrixWorld);
-      this.xrViewCamera.matrix.decompose(this.xrViewCamera.position, this.xrViewCamera.quaternion, this.xrViewCamera.scale);
-      viewer = this.xrViewCamera;
-      if (this.pendingXRSummon) {
-        this.pendingXRSummon = false;
-        this.setScreenVisible(true, viewer);
-      }
+  update(viewer: PerspectiveCamera, frame?: XRFrame): void {
+    if (frame && this.pendingXRSummon) {
+      this.pendingXRSummon = false;
+      this.setScreenVisible(true, viewer);
     }
     this.xr.update(frame);
     this.screen.update();
@@ -298,18 +304,6 @@ export class MonitorView {
     const soundSource = this.audioMode.value === 'television' ? this.theater?.screen : this.screen.group;
     this.audio.update(viewer, soundSource ?? this.screen.group);
     if (!this.panel.hidden) this.updateAudioStatus();
-    return viewer;
-  }
-
-  relocateViewer(): void {
-    if (this.renderer.xr.isPresenting) this.anchorXR();
-  }
-
-  private anchorXR(): void {
-    const { camera } = this.binding;
-    this.rig.position.copy(camera.position);
-    this.rig.position.y -= this.binding.eyeHeight();
-    this.rig.rotation.set(0, camera.rotation.y, 0);
   }
 
   release(): void {
@@ -318,17 +312,16 @@ export class MonitorView {
     this.audio.stop();
     this.theater?.cinema?.project(null);
     this.xr.release();
-    const session = this.renderer.xr.getSession();
-    if (session) void session.end().catch(() => {});
   }
 
   dispose(): void {
     this.release();
     this.events.abort();
+    this.unsubscribeXR();
     this.xr.dispose();
     this.audio.dispose();
     this.screen.dispose();
-    this.binding.scene.remove(this.rig, this.screen.group);
+    this.screen.group.removeFromParent();
     this.panel.remove();
     this.video.remove();
   }
@@ -390,22 +383,16 @@ export class MonitorView {
     this.audio.setMode(this.audioMode.value as MonitorAudioMode);
   }
 
-  private resizeXRCamera(): void {
-    const { near, far } = this.binding.camera;
-    this.xrRenderCamera.near = near;
-    this.xrRenderCamera.far = far;
-  }
-
   private setXRPresentation(presenting: boolean): void {
-    this.setOpen(!presenting);
     if (presenting) {
-      this.binding.releaseInput();
-      this.anchorXR();
-      this.resizeXRCamera();
-      this.pendingXRSummon = !this.screen.isVisible && (this.screen.isFloating || !this.theater?.cinema);
+      this.panelOpenOnExit = !this.panel.hidden;
+      this.setOpen(false);
+      this.pendingXRSummon = this.summonOnEntry && !this.screen.isVisible
+        && (this.screen.isFloating || !this.theater?.cinema);
       if (this.pendingXRSummon) this.placed = false;
     } else {
       this.pendingXRSummon = false;
+      this.setOpen(this.panelOpenOnExit);
     }
   }
 
@@ -536,7 +523,10 @@ export class MonitorView {
       this.syncSharedAudio();
     }, listen);
     this.audioButton.addEventListener('click', () => void this.toggleAudio(), listen);
-    this.xrButton.addEventListener('click', () => void this.xr.toggleSession(), listen);
+    this.xrButton.addEventListener('click', () => {
+      this.summonOnEntry = !this.xrSession;
+      void this.explorationXR.session.toggle().finally(() => { this.summonOnEntry = false; });
+    }, listen);
     this.panel.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
         if (this.editing) this.setEditing(false);

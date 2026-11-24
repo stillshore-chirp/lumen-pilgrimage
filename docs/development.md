@@ -27,7 +27,7 @@ Vite が表示した URL を Chrome で開きます。入り江から始まり�
 | WebGL 2 | Three.js が景観とワールドを描画します。[`CoastApp`](../src/coast/CoastApp.ts) は WebGL renderer を作り、WebGL 2 が使えない場合は [`main.ts`](../src/main.ts) が Chrome とグラフィックアクセラレーションの確認を案内します。 |
 | Web Audio API | [`CoastAudio`](../src/coast/CoastAudio.ts) が環境音を空間化し、[`monitorAudio`](../src/monitor/monitorAudio.ts) と[映画館の再生処理](../src/coast/world/cinema/cinemaPlayback.ts)が共有音声を処理します。環境音は画面上の利用者操作から開始します。 |
 | WebRTC | [`monitorSession.ts`](../src/monitor/monitorSession.ts) が画面・音声を端末間で直接送ります。ペアリングは Vite の[シグナリング middleware](../server/virtual-monitor-signaling.mjs)を使い、STUN/TURN を設定していないため、別端末同士は直接到達できる必要があります。詳しくは[仮想モニター技術仕様](monitor.md)を参照してください。 |
-| WebXR | [`monitorXR.ts`](../src/monitor/monitorXR.ts) が `immersive-vr` を検査し、`local-floor` を必須、手の追跡を任意として開始します。対応ブラウザーとヘッドセットが必要です。入力試験は模擬で、実機確認は[検証ガイド](verification.md#別端末とvr)に分けてあります。 |
+| WebXR | [`ImmersiveSession.ts`](../src/xr/ImmersiveSession.ts) が `immersive-vr` を検査し、`local-floor` を必須、手の追跡を任意として開始します。操縦とヘッドセット追跡は [`CoastXR.ts`](../src/coast/CoastXR.ts) が接続します。入力試験は模擬で、実機確認は[検証ガイド](verification.md#別端末とvr)に分けてあります。 |
 
 主な入口は [`package.json`](../package.json) の `dev`、`build`、`check`、`validate:harness`、領域別テストです。GitHub Actions の [CI ワークフロー](../.github/workflows/ci.yml)は `main` への push または pull request で Node.js 22 を用意し、`npm ci` と `npm run check` を実行します。細かなブラウザー試験と実機確認の条件は[検証と配布ビルド](verification.md)に集約しています。
 
@@ -42,7 +42,7 @@ Vite が表示した URL を Chrome で開きます。入り江から始まり�
 | 展望台 | [`OverlookWorld.ts`](../src/coast/world/overlook/OverlookWorld.ts) と `src/coast/world/overlook/` |
 | 70階住戸 | [`ResidenceWorld.ts`](../src/coast/world/residence/ResidenceWorld.ts)、[`residencePlan.ts`](../src/coast/world/residence/residencePlan.ts)、[`ResidenceControlPanel.ts`](../src/coast/ResidenceControlPanel.ts) |
 | 映画館 | [`CinemaWorld.ts`](../src/coast/world/cinema/CinemaWorld.ts)、[`cinemaLayout.ts`](../src/coast/world/cinema/cinemaLayout.ts) |
-| 仮想モニターの送信・視聴・キャプチャ・WebRTC・WebXR・音声 | [`monitorSender.ts`](../src/monitor/monitorSender.ts)、[`monitorCapture.ts`](../src/monitor/monitorCapture.ts)、[`monitorSession.ts`](../src/monitor/monitorSession.ts)、[`monitorXR.ts`](../src/monitor/monitorXR.ts)、[`monitorAudio.ts`](../src/monitor/monitorAudio.ts) |
+| 仮想モニターの送信・視聴・キャプチャ・WebRTC・配置・音声 | [`monitorSender.ts`](../src/monitor/monitorSender.ts)、[`monitorCapture.ts`](../src/monitor/monitorCapture.ts)、[`monitorSession.ts`](../src/monitor/monitorSession.ts)、[`monitorXR.ts`](../src/monitor/monitorXR.ts)、[`monitorAudio.ts`](../src/monitor/monitorAudio.ts) |
 | 仮想モニターのセッション確立 | [`virtual-monitor-signaling.mjs`](../server/virtual-monitor-signaling.mjs) と [`vite.config.mjs`](../vite.config.mjs) |
 | 配布時に読む画像・音声・地理データ | `public/**`。制作・検証の案内は[素材ガイド](assets.md)、出典と再配布条件は各 `ATTRIBUTION.md` が正本です。 |
 | 自動試験 | [`scripts/`](../scripts/) の `*.test.mjs` と [`package.json`](../package.json) のスクリプト |

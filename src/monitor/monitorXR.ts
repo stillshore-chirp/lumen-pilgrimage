@@ -9,16 +9,6 @@ const PINCH_OPEN = 0.028;
 const MIN_TWO_HAND_SPAN = 0.08;
 const DIRECT_REACH = 0.15;
 
-export interface MonitorXRStatus {
-  state: 'checking' | 'available' | 'unavailable' | 'starting' | 'presenting' | 'error';
-  message: string;
-}
-
-interface MonitorXRCallbacks {
-  onStatusChange(status: MonitorXRStatus): void;
-  onSessionChange(presenting: boolean): void;
-}
-
 interface Input {
   source: XRInputSource;
   beam: Line<BufferGeometry, LineBasicMaterial>;
@@ -68,8 +58,6 @@ export class MonitorXR {
   private readonly xr: WebXRManager;
   private readonly rig: Group;
   private readonly monitor: Pick<MonitorObject, 'group' | 'intersect'>;
-  private readonly callbacks: MonitorXRCallbacks;
-  private readonly system = typeof navigator === 'undefined' ? undefined : navigator.xr;
   private readonly inputs = new Map<XRInputSource, Input>();
   private readonly holders: Input[] = [];
   private readonly beamGeometry = new BufferGeometry().setFromPoints([new Vector3(), new Vector3(0, 0, -1)]);
@@ -90,92 +78,32 @@ export class MonitorXR {
   private guide: ReturnType<typeof createGuide> = null;
   private grab: Grab | null = null;
   private session: XRSession | null = null;
-  private status: MonitorXRStatus | null = null;
-  private checking = 0;
-  private busy = false;
-  private presenting = false;
-  private disposed = false;
-
   constructor(
     xr: WebXRManager,
     rig: Group,
     monitor: Pick<MonitorObject, 'group' | 'intersect'>,
-    callbacks: MonitorXRCallbacks,
   ) {
     this.xr = xr;
     this.rig = rig;
     this.monitor = monitor;
-    this.callbacks = callbacks;
-    xr.enabled = true;
-    xr.setReferenceSpaceType('local-floor');
-    xr.addEventListener('sessionend', this.onSessionEnd);
-    this.system?.addEventListener('devicechange', this.onDeviceChange);
   }
 
-  async checkSupport(): Promise<void> {
-    if (this.busy || this.session || this.disposed) return;
-    const check = ++this.checking;
-    if (!this.system) {
-      this.publish('unavailable', 'このブラウザではVRを開始できません。');
-      return;
-    }
-    this.publish('checking', 'VR機器の対応を確認中です。');
-    let supported = false;
-    try {
-      supported = await this.system.isSessionSupported('immersive-vr');
-    } catch { /* The browser can block the feature check through its permissions policy. */ }
-    if (check !== this.checking || this.busy || this.session || this.disposed) return;
-    if (supported) this.publish('available', 'VRで掴むには、グリップを握るか、指でつまみます。');
-    else this.publish('unavailable', 'この環境で利用できるVR機器が見つかりません。');
+  get isGrabbing(): boolean { return this.holders.length > 0; }
+
+  setSession(session: XRSession | null): void {
+    if (this.session === session) return;
+    this.clearSession();
+    this.session = session;
+    if (!session) return;
+    session.addEventListener('squeezestart', this.onSqueezeStart);
+    session.addEventListener('squeezeend', this.onSqueezeEnd);
+    session.addEventListener('inputsourceschange', this.onSourcesChange);
+    session.addEventListener('visibilitychange', this.onVisibilityChange);
+    for (const source of session.inputSources) this.addInput(source);
   }
 
-  async toggleSession(): Promise<void> {
-    if (this.busy || this.disposed || !this.system) return;
-    this.busy = true;
-    ++this.checking;
-    if (this.session) {
-      try {
-        this.release();
-        await this.session.end();
-      } catch {
-        this.publish('presenting', 'VRを終了できませんでした。機器のメニューから退出できます。');
-      } finally {
-        this.busy = false;
-      }
-      return;
-    }
-    this.publish('starting', 'VRを開始しています。');
-    try {
-      const session = await this.system.requestSession('immersive-vr', {
-        requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'],
-      });
-      if (this.disposed) {
-        await session.end();
-        return;
-      }
-      this.session = session;
-      session.addEventListener('squeezestart', this.onSqueezeStart);
-      session.addEventListener('squeezeend', this.onSqueezeEnd);
-      session.addEventListener('inputsourceschange', this.onSourcesChange);
-      session.addEventListener('visibilitychange', this.onVisibilityChange);
-      for (const source of session.inputSources) this.addInput(source);
-      await this.xr.setSession(session);
-      if (session !== this.session || this.disposed) return;
-      this.presenting = true;
-      this.callbacks.onSessionChange(true);
-      this.publish('presenting', 'VR入力の追跡を待っています。');
-    } catch {
-      const session = this.session;
-      this.clearSession();
-      if (session) await session.end().catch(() => undefined);
-      if (!this.disposed) this.publish('error', 'VRを開始できませんでした。接続を確認して再試行してください。');
-    } finally {
-      this.busy = false;
-    }
-  }
-
-  update(frame?: XRFrame): void {
-    if (!this.presenting || !frame || frame.session !== this.session) return;
+  update(frame?: XRFrame): string | undefined {
+    if (!frame || frame.session !== this.session) return;
     if (frame.session.visibilityState !== 'visible') return;
     const reference = this.xr.getReferenceSpace();
     if (!reference) return;
@@ -210,8 +138,8 @@ export class MonitorXR {
     const pinch = hands ? '親指と人差し指でつまむ' : '';
     const message = [grip, pinch, hands + controllers >= 2 ? '両手を広げて拡大' : ''].filter(Boolean).join(' ・ ')
       || 'モニター操作用のVR入力を追跡できません。';
-    this.publish('presenting', message);
     this.updateGuide(message);
+    return message;
   }
 
   release(): void {
@@ -224,12 +152,7 @@ export class MonitorXR {
   }
 
   dispose(): void {
-    this.disposed = true;
-    this.xr.removeEventListener('sessionend', this.onSessionEnd);
-    this.system?.removeEventListener('devicechange', this.onDeviceChange);
-    const session = this.session;
     this.clearSession();
-    if (session) void session.end().catch(() => undefined);
     this.beamGeometry.dispose();
     this.beamMaterial.dispose();
     this.targetMaterial.dispose();
@@ -238,17 +161,9 @@ export class MonitorXR {
     this.guide?.texture.dispose();
   }
 
-  private readonly onDeviceChange = (): void => { void this.checkSupport(); };
-
-  private readonly onSessionEnd = (): void => {
-    if (!this.session) return;
-    this.clearSession();
-    this.publish('available', 'VRを終了しました。');
-  };
-
   private readonly onSqueezeStart = (event: XRInputSourceEvent): void => {
     const input = this.inputs.get(event.inputSource);
-    if (!this.presenting || this.session?.visibilityState !== 'visible' || !this.monitor.group.visible
+    if (this.session?.visibilityState !== 'visible' || !this.monitor.group.visible
       || !input || input.source.hand || input.pressed) return;
     input.pressed = true;
     input.pending = true;
@@ -282,16 +197,6 @@ export class MonitorXR {
     for (const source of this.inputs.keys()) this.removeInput(source);
     this.release();
     if (this.guide) this.guide.sprite.visible = false;
-    if (this.presenting) {
-      this.presenting = false;
-      if (!this.disposed) this.callbacks.onSessionChange(false);
-    }
-  }
-
-  private publish(state: MonitorXRStatus['state'], message: string): void {
-    if (this.status?.state === state && this.status.message === message) return;
-    this.status = { state, message };
-    this.callbacks.onStatusChange(this.status);
   }
 
   private addInput(source: XRInputSource): void {

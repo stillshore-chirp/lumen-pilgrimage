@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
 import { preview } from 'vite';
+import { CINEMA_DESTINATIONS, cinemaGroundHeight } from '../src/coast/world/cinema/cinemaLayout.ts';
 
 const timeout = 90_000;
 const viewport = { width: 1024, height: 680 };
@@ -126,6 +127,11 @@ function observeAudio() {
   const connect = AudioNode.prototype.connect;
   const contexts = [];
   window.monitorSound = {
+    listener() {
+      const listener = contexts.find(({ context, hasStream }) => !hasStream && context.state === 'running')?.context.listener;
+      return listener && [listener.positionX.value, listener.positionY.value, listener.positionZ.value,
+        listener.forwardX.value, listener.forwardY.value, listener.forwardZ.value];
+    },
     monitorResume: 'native',
     heldResumeInUserGesture: false,
     rejectedResumeInUserGesture: false,
@@ -202,44 +208,114 @@ function observeAudio() {
 }
 
 function installSimulatedXR() {
-  const fixture = { requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0 };
+  const fixture = {
+    requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
+    head: { x: 0, y: 1.65, z: 0, yaw: 0 }, eyePoses: {},
+  };
   window.xrFixture = fixture;
   const raf = window.requestAnimationFrame.bind(window);
   const cancelRaf = window.cancelAnimationFrame.bind(window);
   let presenting = false;
   let inXRFrame = false;
+  let viewX = 0;
 
-  const drawElements = WebGL2RenderingContext.prototype.drawElements;
-  WebGL2RenderingContext.prototype.drawElements = function (...args) {
+  const gl = WebGL2RenderingContext.prototype;
+  const drawElements = gl.drawElements;
+  gl.drawElements = function (...args) {
     if (inXRFrame) ++fixture.xrDraws;
     else if (presenting) ++fixture.strayDraws;
     else ++fixture.desktopDraws;
     return drawElements.apply(this, args);
   };
-  WebGL2RenderingContext.prototype.makeXRCompatible = async () => {};
+  gl.makeXRCompatible = async () => {};
+  const viewport = gl.viewport;
+  gl.viewport = function (x, ...rest) {
+    viewX = x;
+    return viewport.call(this, x, ...rest);
+  };
+  const locateUniform = gl.getUniformLocation;
+  const setMatrix = gl.uniformMatrix4fv;
+  const viewMatrices = new WeakSet();
+  gl.getUniformLocation = function (program, name) {
+    const location = locateUniform.call(this, program, name);
+    if (name === 'viewMatrix' && location) viewMatrices.add(location);
+    return location;
+  };
+  gl.uniformMatrix4fv = function (location, transpose, matrix, ...rest) {
+    if (inXRFrame && viewMatrices.has(location) && matrix.length === 16) {
+      fixture.eyePoses[viewX] = {
+        x: -(matrix[0] * matrix[12] + matrix[1] * matrix[13] + matrix[2] * matrix[14]),
+        y: -(matrix[4] * matrix[12] + matrix[5] * matrix[13] + matrix[6] * matrix[14]),
+        z: -(matrix[8] * matrix[12] + matrix[9] * matrix[13] + matrix[10] * matrix[14]),
+        yaw: Math.atan2(matrix[2], matrix[0]),
+      };
+    }
+    return setMatrix.call(this, location, transpose, matrix, ...rest);
+  };
+  const fillText = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+    if (this.canvas.width === 960 && this.canvas.height === 680) {
+      if (y === 58 && x === 34) fixture.menuTitle = text;
+      if (text.startsWith('›  ')) fixture.selection = text.slice(3);
+    }
+    if (this.canvas.width === 960 && this.canvas.height === 104) fixture.hint = text;
+    return fillText.call(this, text, x, y, ...rest);
+  };
   Object.defineProperty(window, 'XRWebGLBinding', { value: undefined, configurable: true });
   window.XRWebGLLayer = class {
     framebuffer = null;
     framebufferWidth = 640;
     framebufferHeight = 480;
-    getViewport() { return { x: 0, y: 0, width: this.framebufferWidth, height: this.framebufferHeight }; }
+    getViewport({ eye }) {
+      return { x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 };
+    }
   };
 
-  const transform = { matrix: new DOMMatrix().translate(0, 1.65, 0).toFloat32Array() };
   const projectionMatrix = new Float32Array([
     1.3, 0, 0, 0, 0, 1.73, 0, 0, 0, 0, -1.001, -1, 0, 0, -.2, 0,
   ]);
-  const viewingPose = { transform, views: [{ eye: 'left', transform, projectionMatrix }] };
+
+  function viewPose() {
+    const { x, y, z, yaw } = fixture.head;
+    const center = new DOMMatrix().translate(x, y, z).rotate(0, yaw * 180 / Math.PI, 0);
+    const transform = { matrix: center.toFloat32Array() };
+    const views = ['left', 'right'].map((eye, index) => ({
+      eye, projectionMatrix,
+      transform: { matrix: center.translate(index === 0 ? -.032 : .032, 0, 0).toFloat32Array() },
+    }));
+    return { transform, views };
+  }
+
+  function controller(handedness) {
+    const transform = {
+      position: { x: handedness === 'left' ? -.24 : .24, y: 1.3, z: -.23 },
+      orientation: { x: 0, y: 0, z: 0, w: 1 },
+    };
+    const space = { transform, emulatedPosition: false };
+    return {
+      handedness, targetRayMode: 'tracked-pointer', profiles: ['meta-quest-touch-plus'],
+      gamepad: {
+        mapping: 'xr-standard', axes: [0, 0, 0, 0],
+        buttons: Array.from({ length: 7 }, () => ({ pressed: false, value: 0 })),
+      },
+      gripSpace: space, targetRaySpace: space,
+    };
+  }
+
   class Session extends EventTarget {
-    inputSources = [];
+    inputSources = [controller('left'), controller('right')];
     visibilityState = 'visible';
-    async requestReferenceSpace() { return {}; }
+    async requestReferenceSpace() { return new EventTarget(); }
     updateRenderState() {}
+    makeFrame() {
+      return { session: this, getViewerPose: viewPose, getPose: space => space };
+    }
     requestAnimationFrame(callback) {
       return raf(time => {
         presenting = inXRFrame = true;
         try {
-          callback(time, { session: this, getViewerPose: () => viewingPose });
+          callback(time, this.makeFrame());
+          ++fixture.frames;
         } finally {
           inXRFrame = false;
         }
@@ -252,11 +328,39 @@ function installSimulatedXR() {
       this.dispatchEvent(new Event('end'));
     }
   }
+
+  fixture.mutate = async change => {
+    const { session } = fixture;
+    const source = session?.inputSources.find(({ handedness }) => handedness === change.side);
+    if (change.axes) source.gamepad.axes.splice(2, 2, ...change.axes);
+    if (change.button !== undefined) source.gamepad.buttons[change.button] = {
+      pressed: change.pressed, value: Number(change.pressed),
+    };
+    if (change.select) session.dispatchEvent(Object.assign(new Event('select'), {
+      inputSource: session.inputSources[1], frame: session.makeFrame(),
+    }));
+    if (change.head) Object.assign(fixture.head, change.head);
+    if (change.visibility) {
+      session.visibilityState = change.visibility;
+      session.dispatchEvent(new Event('visibilitychange'));
+    }
+    const before = fixture.frames;
+    if (!change.select) {
+      while (fixture.frames < before + (change.frames ?? 2)) await new Promise(raf);
+    }
+  };
+
   const xr = new EventTarget();
   xr.isSessionSupported = async () => true;
-  xr.requestSession = async () => {
+  xr.requestSession = async (mode, features) => {
     ++fixture.requests;
-    return new Session();
+    fixture.features = { mode, ...features };
+    fixture.activations.push(navigator.userActivation.isActive);
+    if (fixture.denyNext) {
+      fixture.denyNext = false;
+      throw new DOMException('', 'NotAllowedError');
+    }
+    return fixture.session = new Session();
   };
   Object.defineProperty(navigator, 'xr', { value: xr });
 }
@@ -785,20 +889,24 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
       await button(viewer, '仮想モニター').click();
     }
 
-    async function assertPlaybackContinues(beforeTravel, muted = false) {
+    async function assertLiveMedia(beforeTravel, muted = false) {
       assert.equal(await viewer.evaluate(selector => {
         const { video, peer, canvas, stream, tracks } = window.sharedMonitor;
         return video === document.querySelector(selector) && video.srcObject === stream
           && canvas === document.querySelector('.coast-view') && window.monitorPeers.length === 1
           && window.monitorPeers[0] === peer && peer.connectionState === 'connected'
           && stream.getTracks().every(track => tracks.includes(track) && track.readyState === 'live');
-      }, videoSelector), true, 'world change preserves the receiver, tracks, media element and canvas');
+      }, videoSelector), true, 'the receiver, tracks, media element and canvas are preserved');
       await viewer.waitForFunction(({ selector, beforeTravel, muted }) => {
         const video = document.querySelector(selector);
         const audio = window.monitorSound.read().filter(context => context.hasStream);
         return video.currentTime > beforeTravel + .1 && audio.length === 1 && audio[0].streamSources === 1
           && audio[0].state === 'running' && (muted ? audio[0].peak < .0001 : audio[0].peak > .001);
       }, { selector: videoSelector, beforeTravel, muted });
+    }
+
+    async function assertPlaybackContinues(beforeTravel, muted = false) {
+      await assertLiveMedia(beforeTravel, muted);
       assert.equal(await viewer.locator('[data-monitor-volume]').inputValue(), '50');
       assert.equal(await viewer.getByRole('slider', { name: '全体音量', exact: true }).inputValue(), '125');
       assert.equal(await button(viewer, 'モニターを隠す').isVisible(), true);
@@ -880,6 +988,41 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
 
     await button(viewer, 'VRで見る').click();
     await viewer.waitForFunction(() => window.xrFixture.xrDraws > 10);
+    const xrInput = input => viewer.evaluate(value => window.xrFixture.mutate(value), input);
+    beforeTravel = await video.evaluate(element => element.currentTime);
+    await xrInput({ side: 'left', axes: [0, -1], frames: 6 });
+    await xrInput({ side: 'left', axes: [0, 0] });
+    await assertLiveMedia(beforeTravel);
+
+    const pressXRMenu = async () => {
+      await xrInput({ side: 'left', button: 4, pressed: true });
+      await xrInput({ side: 'left', button: 4, pressed: false });
+    };
+    const xrMenuStep = async label => {
+      await xrInput({ side: 'right', axes: [0, 1] });
+      await viewer.waitForFunction(expected => window.xrFixture.selection?.startsWith(expected), label);
+      await xrInput({ side: 'right', axes: [0, 0] });
+    };
+    await pressXRMenu();
+    await viewer.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
+    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '設定']) await xrMenuStep(label);
+    await xrInput({ select: true });
+    await viewer.waitForFunction(() => window.xrFixture.menuTitle === '設定');
+    for (const label of ['歩行音', '昼', '夜', 'ワールド照明', '仮想モニター']) await xrMenuStep(label);
+    await xrInput({ select: true });
+    await viewer.waitForFunction(() => window.xrFixture.menuTitle === '仮想モニター');
+    await xrMenuStep('視界の前に置き直す');
+    await xrMenuStep('モニター音声 オン');
+    beforeTravel = await video.evaluate(element => element.currentTime);
+    await xrInput({ select: true });
+    await viewer.waitForFunction(() => window.xrFixture.selection === 'モニター音声 オフ');
+    await assertLiveMedia(beforeTravel, true);
+    beforeTravel = await video.evaluate(element => element.currentTime);
+    await xrInput({ select: true });
+    await viewer.waitForFunction(() => window.xrFixture.selection === 'モニター音声 オン');
+    await assertLiveMedia(beforeTravel);
+    await pressXRMenu();
+
     beforeTravel = await video.evaluate(element => element.currentTime);
     await travelTo('中段中央（R09）', 'cinema', 'center');
     const firstXRDraws = await viewer.evaluate(() => window.xrFixture.xrDraws);
@@ -889,8 +1032,9 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
       return { requests, ends, strayDraws };
     }), { requests: 1, ends: 0, strayDraws: 0 });
     assert.equal(await target.inputValue(), 'floating');
+    await assertLiveMedia(beforeTravel);
     const oldDesktopDraws = await viewer.evaluate(() => window.xrFixture.desktopDraws);
-    await button(viewer, 'VRを終了').click();
+    await button(viewer.locator('.coast-xr-entry'), 'VRを終了').click();
     await viewer.waitForFunction(before => window.xrFixture.ends === 1 && window.xrFixture.desktopDraws > before,
       oldDesktopDraws);
     await assertPlaybackContinues(beforeTravel);
@@ -1192,6 +1336,241 @@ test('a browser without screen capture presents an unsupported state', { timeout
     await sender.waitForFunction(() => !document.querySelector('[data-monitor-pair-code]')?.textContent);
   } finally {
     await sender.context().close();
+  }
+});
+
+test('a secure browser without immersive support labels VR as unavailable and keeps desktop controls', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await page.addInitScript(() => {
+      const xr = new EventTarget();
+      xr.isSessionSupported = async () => false;
+      Object.defineProperty(navigator, 'xr', { value: xr });
+    });
+    await page.goto(url.href);
+    const vr = button(page, 'VR非対応');
+    await vr.waitFor();
+    assert.equal(await vr.isDisabled(), true);
+    assert.match(await vr.getAttribute('title'), /没入型VRを利用できません/);
+    await button(page, 'マウス操作を開始').click();
+    await page.waitForFunction(() => document.pointerLockElement?.classList.contains('coast-view'));
+  } finally {
+    await page.close();
+  }
+});
+
+test('Quest exploration enters without a monitor and keeps one stereo XR session through controller travel', { timeout }, async () => {
+  const page = await newPage();
+  page.setDefaultTimeout(25_000);
+  const errors = [];
+  page.on('pageerror', () => errors.push('page'));
+  try {
+    await page.addInitScript(installSimulatedXR);
+    await page.addInitScript(observeAudio);
+    await page.goto(new URL('?world=coast&place=inlet&time=night', url).href);
+    await button(page, '環境音をオン').click();
+    await page.evaluate(() => { window.xrFixture.denyNext = true; });
+    await button(page, 'VRを開始').click();
+    await page.locator('#coast-xr-status').filter({ hasText: 'VRを開始できませんでした' }).waitFor();
+    assert.equal(await page.locator(videoSelector).count(), 0);
+    await button(page, 'VRを開始').click();
+    await page.waitForFunction(() => Boolean(window.xrFixture.eyePoses[320]) && window.xrFixture.frames > 4);
+    const support = await page.evaluate(() => ({
+      activation: window.xrFixture.activations, features: window.xrFixture.features,
+    }));
+    assert.deepEqual(support.activation, [true, true], 'entry and retry use the live page gesture');
+    assert.deepEqual(support.features, {
+      mode: 'immersive-vr', requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'],
+    });
+
+    const change = input => page.evaluate(value => window.xrFixture.mutate(value), input);
+    const pose = () => page.evaluate(() => {
+      const { eyePoses } = window.xrFixture;
+      return {
+        x: (eyePoses[0].x + eyePoses[320].x) / 2,
+        y: (eyePoses[0].y + eyePoses[320].y) / 2,
+        z: (eyePoses[0].z + eyePoses[320].z) / 2,
+        yaw: eyePoses[0].yaw,
+        eyeSpacing: Math.hypot(eyePoses[0].x - eyePoses[320].x, eyePoses[0].z - eyePoses[320].z),
+      };
+    });
+    const clickController = async (side, index) => {
+      await change({ side, button: index, pressed: true });
+      await change({ side, button: index, pressed: false });
+    };
+    const step = async (direction, expected) => {
+      await change({ side: 'right', axes: [0, direction] });
+      await page.waitForFunction(label => window.xrFixture.selection === label, expected);
+      await change({ side: 'right', axes: [0, 0] });
+    };
+    const choose = async () => { await change({ select: true }); };
+    const waitForMenu = title => page.waitForFunction(label => window.xrFixture.menuTitle === label, title);
+
+    const initial = await pose();
+    assert.ok(Math.abs(initial.eyeSpacing - .064) < .002, 'both eye cameras render with distinct positions');
+    assert.ok(Math.abs(initial.x + 12) < .02 && Math.abs(initial.z - 79) < .02);
+    await change({ head: { yaw: Math.PI / 2 } });
+    const turned = await pose();
+    assert.ok(Math.abs(turned.yaw - initial.yaw - Math.PI / 2) < .002);
+    await page.waitForFunction(({ x, y, z, yaw }) => {
+      const listener = window.monitorSound.listener();
+      return listener && Math.hypot(listener[0] - x, listener[1] - y, listener[2] - z) < .02
+        && Math.abs(listener[3] + Math.sin(yaw)) < .002 && Math.abs(listener[5] + Math.cos(yaw)) < .002;
+    }, turned);
+    await page.evaluate(() => { window.xrFixture.session.inputSources[0].gamepad.axes[3] = -1; });
+    await page.waitForFunction(x => (window.xrFixture.eyePoses[0].x + window.xrFixture.eyePoses[320].x) / 2 < x - .25, turned.x);
+    await change({ side: 'left', axes: [0, 0] });
+    const moved = await pose();
+    assert.ok(Math.abs(moved.z - turned.z) < .08, 'left-stick forward follows the headset yaw');
+
+    await change({ head: { x: .21, z: .19 } });
+    const offset = await pose();
+    await change({ side: 'right', axes: [1, 0], frames: 8 });
+    const snapped = await pose();
+    assert.ok(Math.abs(snapped.yaw - offset.yaw + Math.PI / 6) < .002, 'holding a stick gives a single 30 degree snap');
+    assert.ok(Math.hypot(snapped.x - offset.x, snapped.z - offset.z) < .02, 'snap pivots about the tracked head');
+    await change({ side: 'right', axes: [0, 0] });
+    await clickController('left', 5);
+    assert.equal(await page.locator('.coast-mode').textContent(), '自由飛行');
+    await change({ side: 'right', button: 4, pressed: true, frames: 4 });
+    const airborne = await pose();
+    assert.ok(airborne.y > snapped.y + .05, 'A ascends through the shared flight path');
+    await change({ side: 'right', button: 4, pressed: false });
+    await clickController('left', 5);
+
+    await clickController('left', 4);
+    await waitForMenu('ファストトラベル');
+    const atMenu = await pose();
+    await change({ side: 'left', axes: [0, -1], frames: 5 });
+    const modalPose = await pose();
+    assert.ok(Math.hypot(modalPose.x - atMenu.x, modalPose.z - atMenu.z) < .02, 'menu pauses locomotion');
+    await change({ side: 'left', axes: [0, 0] });
+    await step(1, '丘陵展望台');
+    await step(1, '都心の70階住戸');
+    await choose();
+    await waitForMenu('都心の70階住戸');
+    await step(1, 'リビングのホームシアター');
+    await step(1, '住戸の玄関');
+    await step(1, '主寝室');
+    await choose();
+    await page.waitForURL(address => address.searchParams.get('place') === 'primary-bedroom'
+      && address.searchParams.get('time') === 'night');
+    await page.waitForFunction(() => window.xrFixture.hint?.includes('バルコニーの引戸を開ける'));
+    const bedroom = await pose();
+    await change({ head: { x: -.17 } });
+    const leaning = await pose();
+    assert.ok(Math.abs(leaning.x - bedroom.x - .38) < .015, 'physical head lean still moves the rendered viewpoint');
+    await change({ side: 'left', axes: [0, -1], frames: 14 });
+    const againstDoor = await pose();
+    assert.ok(againstDoor.x <= leaning.x + .03, 'stick movement cannot push a leaning viewer into the closed door');
+    await change({ side: 'left', axes: [0, 1] });
+    await page.waitForFunction(x => (window.xrFixture.eyePoses[0].x + window.xrFixture.eyePoses[320].x) / 2 < x - .16, leaning.x);
+    await change({ side: 'left', axes: [0, 0] });
+    await page.waitForFunction(() => window.xrFixture.hint?.includes('バルコニーの引戸を開ける'));
+
+    await choose();
+    await page.waitForFunction(() => window.xrFixture.hint?.includes('バルコニーの引戸を閉める'));
+
+    await clickController('left', 4);
+    await waitForMenu('ファストトラベル');
+    await step(1, '丘陵展望台');
+    await step(1, '都心の70階住戸');
+    await step(1, '映画館シアター（大）');
+    await choose();
+    await waitForMenu('映画館シアター（大）');
+    await choose();
+    await page.waitForURL(address => address.searchParams.get('world') === 'cinema'
+      && address.searchParams.get('place') === 'center' && address.searchParams.get('time') === 'night');
+    const seat = CINEMA_DESTINATIONS[0];
+    await page.waitForFunction(({ z, y }) => {
+      const eye = window.xrFixture.eyePoses[0];
+      return eye && Math.abs(eye.z - z) < .04 && Math.abs(eye.y - y) < .02;
+    }, { z: seat.z, y: cinemaGroundHeight(seat.x, seat.z) + seat.seatedEyeHeight });
+    assert.equal(await page.locator('.coast-mode').textContent(), '座位');
+
+    await clickController('left', 4);
+    await waitForMenu('ファストトラベル');
+    await step(1, '丘陵展望台');
+    await choose();
+    await waitForMenu('丘陵展望台');
+    await choose();
+    await page.waitForURL(address => address.searchParams.get('world') === 'overlook'
+      && address.searchParams.get('place') === 'main-deck' && address.searchParams.get('time') === 'night');
+    await page.waitForFunction(() => window.xrFixture.eyePoses[0]?.y > 345);
+    assert.equal(await page.locator(videoSelector).count(), 0, 'travel did not require a monitor instance');
+    assert.deepEqual(await page.evaluate(() => {
+      const { requests, ends, strayDraws } = window.xrFixture;
+      return { requests, ends, strayDraws };
+    }), { requests: 2, ends: 0, strayDraws: 0 });
+
+    await clickController('left', 4);
+    await waitForMenu('ファストトラベル');
+    await step(1, '丘陵展望台');
+    await step(1, '都心の70階住戸');
+    await step(1, '映画館シアター（大）');
+    await step(1, '設定');
+    await choose();
+    await waitForMenu('設定');
+    await step(1, '歩行音をオフ');
+    await step(1, '昼');
+    await step(1, '夜（選択中）');
+    await step(1, 'ワールド照明');
+    await choose();
+    await waitForMenu('ワールド照明');
+    const lights = page.getByRole('group', { name: 'ワールド照明' });
+    const pressed = lights.locator('[aria-pressed="true"]');
+    for (const [index, label] of ['一括点灯', '一括消灯', '既定'].entries()) {
+      if (index > 0) await step(1, label);
+      await choose();
+      await page.waitForFunction(expected => window.xrFixture.selection === `${expected}（選択中）`, label);
+      await button(lights, label).and(pressed).waitFor({ state: 'attached' });
+    }
+    await clickController('left', 4);
+    await clickController('left', 4);
+    await waitForMenu('ファストトラベル');
+    await step(1, '丘陵展望台');
+    await step(1, '都心の70階住戸');
+    await step(1, '映画館シアター（大）');
+    await step(1, '設定');
+    await step(1, 'VRを終了');
+    const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
+    await choose();
+    await button(page, 'VRを開始').waitFor();
+    await page.waitForFunction(draws => window.xrFixture.desktopDraws > draws && window.xrFixture.ends === 1, desktopDraws);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('a diagonal stick input cannot push a leaning Quest viewer into a closed balcony door', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await page.addInitScript(installSimulatedXR);
+    await page.goto(new URL('?world=residence&place=primary-bedroom&time=night', url).href);
+    await button(page, 'VRを開始').click();
+    await page.waitForFunction(() => window.xrFixture.frames > 4 && window.xrFixture.eyePoses[320]);
+    const change = input => page.evaluate(value => window.xrFixture.mutate(value), input);
+    const pose = () => page.evaluate(() => {
+      const { eyePoses } = window.xrFixture;
+      return [(eyePoses[0].x + eyePoses[320].x) / 2, (eyePoses[0].z + eyePoses[320].z) / 2];
+    });
+    const [x, z] = await pose();
+    await change({ head: { x: .45, z: -.45 } });
+    const [leanX, leanZ] = await pose();
+    assert.ok(Math.abs(leanX - x - .45) < .015 && Math.abs(leanZ - z - .45) < .015,
+      'the tracked view follows the diagonal lean at the closed door');
+    await change({ side: 'left', axes: [-.8, -.6], frames: 14 });
+    const [pushedX] = await pose();
+    assert.ok(pushedX <= leanX + .03, 'sliding along a wall cannot cancel an inward component');
+    await change({ side: 'left', axes: [0, 1] });
+    await page.waitForFunction(lean => {
+      const { eyePoses } = window.xrFixture;
+      return (eyePoses[0].x + eyePoses[320].x) / 2 < lean - .15;
+    }, leanX);
+    await change({ side: 'left', axes: [0, 0] });
+  } finally {
+    await page.close();
   }
 });
 

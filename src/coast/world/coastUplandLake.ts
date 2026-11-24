@@ -134,10 +134,17 @@ export function createUplandLake(time: THREE.IUniform<number>, atmosphere: Coast
   surface.uniforms.uTime = time;
 
   const reflect = mesh.onBeforeRender;
+  let high = false;
   let lastReflection = -Infinity;
   let reflectedNight = atmosphere.night.value;
   mesh.onBeforeRender = (renderer, scene, camera, geometry, material, group) => {
-    if (!surface.uniforms.uLiveReflection.value || camera.position.y < level + 0.17) return;
+    const canReflect = high && !renderer.xr.isPresenting;
+    surface.uniforms.uLiveReflection.value = Number(canReflect);
+    if (!canReflect) {
+      lastReflection = -Infinity;
+      return;
+    }
+    if (camera.position.y < level + 0.17) return;
     if (reflectedNight === atmosphere.night.value && time.value - lastReflection < 0.125) return;
     reflectedNight = atmosphere.night.value;
     lastReflection = time.value;
@@ -146,7 +153,7 @@ export function createUplandLake(time: THREE.IUniform<number>, atmosphere: Coast
   return {
     mesh,
     setQuality(quality: CoastQuality) {
-      surface.uniforms.uLiveReflection.value = Number(quality === 'high');
+      high = quality === 'high';
       lastReflection = -Infinity;
     },
   };

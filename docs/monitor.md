@@ -121,7 +121,7 @@ POST /api/virtual-monitor/join
 
 デスクトップでは「配置を編集」を選び、移動・回転・拡大縮小を選択して映像面をドラッグします。画面の外をつかんだドラッグは始まりません。編集は `Esc` で終わります。モニターは浮遊表示のほか、対応するシーンのテレビや映画館スクリーンへ接続中の映像を表示できます。[デスクトップ配置](../src/monitor/monitorDesktop.ts) · [表示先](../src/monitor/monitorView.ts)
 
-WebXR は `navigator.xr` の `immersive-vr` を使い、`local-floor` を必須、`hand-tracking` を任意に要求します。モーションコントローラーは映像面に照準を合わせ、squeeze/grip でつかみます。手の追跡があるときは親指と人差し指の pinch を使えます。片手で移動・回転し、左右の手を使って拡大縮小できます。追跡を失う、セッションを終了する、またはモニターを隠すと掴みを解除します。VR 入力の実装は[monitorXR.ts](../src/monitor/monitorXR.ts)を参照してください。
+探索画面とモニターパネルは同じ[没入型セッション](../src/xr/ImmersiveSession.ts)を開始します。WebXR は `local-floor` を必須、`hand-tracking` を任意に要求します。モーションコントローラーは映像面に照準を合わせ、squeeze/grip でつかみます。手の追跡があるときは親指と人差し指の pinch を使えます。片手で移動・回転し、左右の手を使って拡大縮小できます。追跡を失う、セッションを終了する、またはモニターを隠すと掴みを解除します。視聴の途中でVRを終了しても同じ接続で再生を続けます。 [モニターのXR入力](../src/monitor/monitorXR.ts) · [VR探索の操作](exploration.md#meta-quest-3-で探索する)
 
 ## 対応条件と確認済み範囲
 
