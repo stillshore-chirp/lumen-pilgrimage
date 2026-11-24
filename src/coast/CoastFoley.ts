@@ -69,7 +69,7 @@ export class CoastFoley {
   private readonly buffers = new Map<Contact, AudioBuffer>();
   private readonly voices: ContactVoice[] = [];
   private readonly send: GainNode;
-  private previous: (CoastPoint & { movement: CoastMovement; elapsed: number }) | undefined;
+  private previous: (CoastPoint & { movement: CoastMovement; elapsed: number; grounded?: boolean }) | undefined;
   private traveled = 0;
   private side = 1;
   private mix = DEFAULT_EXPLORATION_MIX;
@@ -103,9 +103,10 @@ export class CoastFoley {
     }
   }
 
-  update(position: CoastPoint, surface: number, movement: CoastMovement, elapsed: number, now: number): void {
+  update(position: CoastPoint, surface: number, movement: CoastMovement, elapsed: number, now: number,
+    grounded?: boolean): void {
     const previous = this.previous;
-    this.previous = { ...position, movement, elapsed };
+    this.previous = { ...position, movement, elapsed, grounded };
     if (!previous || movement === 'flight') return;
     const dx = position.x - previous.x;
     const dz = position.z - previous.z;
@@ -126,7 +127,11 @@ export class CoastFoley {
 
     const swimming = movement === 'swim' || movement === 'dive';
     const floor = groundHeight(position.x, position.z);
-    if (!swimming && Math.abs(position.y - groundEyeHeight(movement) - floor) > 0.16) {
+    const dry = movement === 'walk' || movement === 'crouch';
+    const supported = dry && grounded !== undefined
+      ? grounded && previous.grounded !== false
+      : Math.abs(position.y - groundEyeHeight(movement) - floor) <= 0.16;
+    if (!swimming && !supported) {
       this.traveled = 0;
       return;
     }

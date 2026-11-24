@@ -247,14 +247,18 @@ test('walking and diving contacts follow separate mix controls in direct sound a
   const direct = mockAudioNode();
   const reflected = mockAudioNode();
   const foley = new CoastFoley(context, direct, reflected);
-  const walk = (x, elapsed) => {
+  const walk = (x, elapsed, grounded) => {
     const z = SPAWN.z;
     const y = groundHeight(x, z) + groundEyeHeight('walk');
-    foley.update({ x, y, z }, SEA_LEVEL, 'walk', elapsed, elapsed);
+    foley.update({ x, y, z }, SEA_LEVEL, 'walk', elapsed, elapsed, grounded);
   };
-  walk(SPAWN.x, 0);
-  walk(SPAWN.x + 0.5, 0.16);
-  walk(SPAWN.x + 1, 0.32);
+  walk(SPAWN.x, 0, false);
+  walk(SPAWN.x + 0.5, 0.16, false);
+  walk(SPAWN.x + 1, 0.32, false);
+  assert.equal(sources.length, 0, 'navigation can report airborne even at the normal eye height');
+  walk(SPAWN.x + 1, 0.48, true);
+  walk(SPAWN.x + 1.5, 0.64, true);
+  walk(SPAWN.x + 2, 0.8, true);
   assert.equal(sources.length, 1);
   const dryContact = sources[0].connections[0];
   const nominalStep = dryContact.gain.value;
@@ -264,14 +268,14 @@ test('walking and diving contacts follow separate mix controls in direct sound a
   const footstepsOnly = { ...DEFAULT_EXPLORATION_MIX, environmentOn: false };
   foley.setMix(footstepsOnly);
   assert.equal(dryContact.gain.value, nominalStep);
-  const dive = { x: SPAWN.x + 1, y: groundHeight(SPAWN.x + 1, SPAWN.z) + 0.2, z: SPAWN.z };
-  foley.update(dive, SEA_LEVEL, 'dive', 0.48, 0.48);
+  const dive = { x: SPAWN.x + 2, y: groundHeight(SPAWN.x + 2, SPAWN.z) + 0.2, z: SPAWN.z };
+  foley.update(dive, SEA_LEVEL, 'dive', 0.96, 0.96);
   assert.equal(sources.length, 1, 'disabled water channel suppresses the dive bubbles');
 
   foley.setMix({ ...DEFAULT_EXPLORATION_MIX, footstepsOn: false });
   assert.equal(dryContact.gain.value, 0);
-  walk(dive.x, 0.64);
-  foley.update(dive, SEA_LEVEL, 'dive', 0.8, 0.8);
+  walk(dive.x, 1.12);
+  foley.update(dive, SEA_LEVEL, 'dive', 1.28, 1.28);
   assert.equal(sources.length, 2);
   const wetContact = sources[1].connections[0];
   const nominalSplash = wetContact.gain.value;
