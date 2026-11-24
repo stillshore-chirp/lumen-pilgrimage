@@ -293,6 +293,7 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     assert.equal(await audioToggle.isDisabled(), false);
     await page.getByRole('button', { name: '環境音をオン' }).click();
     await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '');
     await page.waitForFunction(signalLevel, undefined, { polling: 100 });
     const graph = () => ({
       contexts: window.coastProbe.contexts,
@@ -346,9 +347,11 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     const volume = page.getByRole('slider', { name: '音量' });
     await page.getByRole('button', { name: '環境音をオフ' }).click();
     await page.getByRole('button', { name: '環境音をオン' }).waitFor();
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '');
     await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
     await page.getByRole('button', { name: '環境音をオン' }).click();
     await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '');
     await page.waitForFunction(signalLevel, undefined, { polling: 100 });
     await volume.press('Home');
     assert.equal(await volume.inputValue(), '0');
@@ -365,6 +368,7 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     assert.equal(await volume.inputValue(), '100');
     await page.evaluate(() => window.coastProbe.context.suspend());
     await page.getByRole('button', { name: '環境音をオン' }).waitFor();
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '');
     await page.getByRole('button', { name: '環境音をオン' }).click();
     await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
     await page.waitForFunction(() => window.coastProbe.context.state === 'running');

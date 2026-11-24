@@ -465,10 +465,8 @@ export class CoastApp {
       }
       const operation = request.then(() => {
         if (disposed) return false;
-        message.textContent = audio.isOn()
-          ? '環境音を開始しました。'
-          : muted
-          ? '環境音はオフのままです。再生するには「環境音をオン」を押してください。'
+        message.textContent = audio.isOn() || muted
+          ? ''
           : '環境音を開始できませんでした。もう一度ボタンを押してください。';
         return true;
       }).catch(() => {
@@ -488,7 +486,7 @@ export class CoastApp {
       if (audio.isOn()) {
         muted = true;
         setLevel();
-        message.textContent = '環境音をオフにしました。';
+        message.textContent = '';
         sync();
         return;
       }
@@ -497,7 +495,7 @@ export class CoastApp {
         muted = false;
         setLevel();
         message.textContent = audio.isOn()
-          ? '環境音を開始しました。'
+          ? ''
           : '環境音を開始できませんでした。もう一度ボタンを押してください。';
         sync();
       });
