@@ -705,11 +705,13 @@ test('the residence remote directory keeps its bounds when changing equipment ca
   const categoryNames = ['照明', 'カーテン', '家電・水栓'];
   const tab = name => button(directory, name);
   const choices = name => directory.getByRole('region', { name, exact: true });
+  const listViewport = name => choices(name).locator('.residence-control-list-viewport:not([inert])');
   await button(page, 'メニュー').click();
   await button(residenceDialog(page, 'メニュー'), '住戸の遠隔操作').click();
 
   let bounds;
-  for (const size of [{ width: 960, height: 600 }, { width: 375, height: 710 }, { width: 320, height: 300 }]) {
+  const shortViewport = { width: 320, height: 300 };
+  for (const size of [{ width: 960, height: 600 }, { width: 375, height: 710 }, shortViewport]) {
     await page.setViewportSize(size);
     const categoryBounds = [];
     const listGaps = [];
@@ -727,13 +729,32 @@ test('the residence remote directory keeps its bounds when changing equipment ca
     [bounds] = categoryBounds;
     assert.ok(bounds);
     for (const box of categoryBounds) assert.deepEqual(box, bounds, `Layout moved at ${size.width}×${size.height}`);
-    assert.ok(Math.abs(Math.min(...listGaps)) < 1, 'The tallest list fills the shared space');
+    if (size !== shortViewport) {
+      assert.ok(Math.abs(Math.min(...listGaps)) < 1, 'The tallest list fills the shared space');
+    }
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= size.width);
     assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= size.height);
     assert.ok(await directory.evaluate(element => element.scrollWidth <= element.clientWidth));
     if (screenshots) t.diagnostic(`${size.width}×${size.height}: ${JSON.stringify(bounds)}`);
   }
 
+  await tab('カーテン').click();
+  assert.ok(await listViewport('カーテン').evaluate(element => {
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop > 0 && element.scrollHeight - element.clientHeight - element.scrollTop <= 1;
+  }));
+  assert.ok(await directory.evaluate(element => element.scrollTop === 0 && element.scrollHeight === element.clientHeight));
+  const shownAtEnd = [choices('カーテン').getByRole('button').last(), ...categoryNames.map(tab), button(directory, '閉じる')];
+  for (const control of shownAtEnd) {
+    assert.ok(await control.evaluate(element => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+    }), 'The last device, category buttons and close button must remain visible at the scroll end');
+  }
+  assert.deepEqual(await directory.boundingBox(), bounds);
+  await capture(page, 'residence-remote-320x300-curtains-end');
+
+  await tab('家電・水栓').click();
   const appliances = choices('家電・水栓').getByRole('button');
   const lastAppliance = appliances.last();
   const applianceName = await lastAppliance.textContent();
@@ -743,7 +764,7 @@ test('the residence remote directory keeps its bounds when changing equipment ca
   }), 'The short viewport should require scrolling');
   await appliances.nth(-2).press('Tab');
   assert.ok(await lastAppliance.evaluate(element => element === document.activeElement));
-  assert.ok(await directory.evaluate(element => element.scrollTop > 0));
+  assert.ok(await listViewport('家電・水栓').evaluate(element => element.scrollTop > 0));
   await page.keyboard.press('Enter');
   const device = residenceDialog(page, applianceName);
   assert.equal(await device.locator('[data-residence-section]').count(), 1);
