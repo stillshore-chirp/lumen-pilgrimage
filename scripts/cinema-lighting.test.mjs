@@ -216,6 +216,14 @@ test('lamp ramps, display resumption and emergency keep the picture state consis
     lights.setFrame(null);
     assert.equal(cinemaLive.value, 0);
     assert.notEqual(cinemaSource.value, frame);
+    const beforeHidden = renders;
+    lights.prepareRender(renderer, camera);
+    assert.equal(renders, beforeHidden, 'a hidden source skips both light transport passes');
+    lights.setFrame(frame, 16 / 9);
+    lights.prepareRender(renderer, camera);
+    assert.equal(cinemaLive.value, 1);
+    assert.equal(renders, beforeHidden + 2);
+    assert.equal(cinemaLightPrev.value, cinemaLightNext.value, 'resuming uses the fresh field immediately');
   } finally {
     lights.dispose();
     assert.ok(!scene.children.includes(lights.screen));
