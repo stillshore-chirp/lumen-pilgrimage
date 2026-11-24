@@ -6,7 +6,7 @@
 
 | 責務 | 主な担当 | 主な受け渡し |
 | --- | --- | --- |
-| 起動とアプリの進行 | [explorationRoute.ts](../src/coast/explorationRoute.ts) が URL から入口・初期状態を読み取り、移動先と時間帯の URL を計算します。[main.ts](../src/main.ts) はワールドを読み込み、[CoastApp](../src/coast/CoastApp.ts) は描画、カメラ、入力、画面、フレーム更新と移動の副作用を接続します。 | URL の `world`・`place`・`time` の判断を、現在のワールドと移動状態へ反映します。 |
+| 起動とアプリの進行 | [explorationRoute.ts](../src/coast/explorationRoute.ts) が URL から入口・初期状態を読み取り、移動先と時間帯の URL を計算します。[main.ts](../src/main.ts) は入口を切り替えます。[CoastApp](../src/coast/CoastApp.ts) はワールドの読込処理を持ち、描画、カメラ、入力、画面、フレーム更新と移動の副作用を接続します。 | URL の `world`・`place`・`time` の判断を、現在のワールドと移動状態へ反映します。 |
 | ワールド固有の環境 | [CoastWorld](../src/coast/CoastWorld.ts)、[OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts)、[ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)、[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts) が地形や建物、配置、描画と環境音を組み立てます。 | 各ワールドの地形・配置定義を描画、歩行判定、移動先の計算で共有します。詳細は [ワールド案内](worlds.md) とこの文書の各設計節に記録します。 |
 | 移動と共通状態 | [CoastControls の CoastPose / CoastNavigation](../src/coast/CoastControls.ts) が入力、現在の姿勢、接地を扱います。 | 姿勢、ワールドの支持面、時間帯をフレーム更新へ渡し、描画と音響が同じ位置・昼夜に追従します。 |
 | 仮想モニター | [配信ページ](../src/monitor/monitorSender.ts)、[シグナリング](../server/virtual-monitor-signaling.mjs)、[セッション](../src/monitor/monitorSession.ts) が接続とメディアの受け渡しを担います。 | 視聴側は受け取った映像をワールド内の表示先へ渡し、音を専用のモニター音響へ渡します。シグナリングと直接通信の契約は [仮想モニター仕様](monitor.md) を参照してください。 |

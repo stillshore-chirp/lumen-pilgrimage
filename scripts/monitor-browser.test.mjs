@@ -123,6 +123,7 @@ function observeAudio() {
         analyser.getFloatTimeDomainData(data);
         return {
           hasStream,
+          streamSources: context.probe.streamSources,
           state: context.state,
           peak: Math.max(...data.map(Math.abs)),
           stereo: gains.get('stereo')?.gain.value,
@@ -137,11 +138,14 @@ function observeAudio() {
   window.AudioContext = class extends NativeContext {
     constructor(...args) {
       super(...args);
-      this.probe = { context: this, analyser: this.createAnalyser(), gains: new Map(), panners: [], hasStream: false };
+      this.probe = {
+        context: this, analyser: this.createAnalyser(), gains: new Map(), panners: [], hasStream: false, streamSources: 0,
+      };
       contexts.push(this.probe);
     }
     createMediaStreamSource(stream) {
       this.probe.hasStream = stream.getAudioTracks().length > 0;
+      this.probe.streamSources++;
       return super.createMediaStreamSource(stream);
     }
     createPanner() {
@@ -419,7 +423,7 @@ test('separate tabs pair with approval, render native WebRTC media and control a
   }
 });
 
-test('the residence plays one WebRTC stream on the television and switches the audio output separately', { timeout }, async () => {
+test('residence and cinema transfer one live WebRTC stream to a floating monitor in each destination', { timeout }, async () => {
   const sender = await newPage();
   const viewer = await newPage();
   const errors = [];
@@ -493,12 +497,120 @@ test('the residence plays one WebRTC stream on the television and switches the a
     await button(viewer, 'テレビの表示を切る').click();
     assert.equal((await screenPixels(viewer)).count, 0);
 
-    await button(viewer, 'ファストトラベル').click();
-    await viewer.getByRole('dialog', { name: 'ファストトラベル' }).getByRole('button', { name: '入り江の浜' }).click();
-    await viewer.waitForURL(address => address.searchParams.get('world') === 'coast');
-    await sender.waitForFunction(() => window.monitorPeers[0]?.signalingState === 'closed');
-    await button(viewer, '仮想モニター').click();
+    await button(viewer, 'テレビに表示').click();
+    await mode.selectOption('surround');
+    await viewer.locator('[data-monitor-volume]').evaluate(input => {
+      input.value = '50';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await viewer.evaluate(selector => {
+      const video = document.querySelector(selector);
+      window.sharedMonitor = {
+        video, peer: window.monitorPeers[0], canvas: document.querySelector('.coast-view'),
+        stream: video.srcObject, tracks: video.srcObject.getTracks(),
+      };
+    }, videoSelector);
+
+    async function selectDestination(label) {
+      await button(viewer, 'ファストトラベル').click();
+      await button(viewer.getByRole('dialog', { name: 'ファストトラベル' }), label).click();
+    }
+
+    async function travelTo(label, world, place) {
+      await selectDestination(label);
+      await waitForArrival(world, place);
+    }
+
+    async function waitForArrival(world, place) {
+      await viewer.waitForURL(address => address.searchParams.get('world') === world
+        && address.searchParams.get('place') === place && address.searchParams.get('time') === 'day');
+      await viewer.waitForFunction(() => document.activeElement === document.querySelector('.coast-view'));
+      assert.equal(await viewer.locator('.coast-view').count(), 1);
+      await button(viewer, '仮想モニター').click();
+    }
+
+    async function assertPlaybackContinues(beforeTravel, muted = false) {
+      assert.equal(await viewer.evaluate(selector => {
+        const { video, peer, canvas, stream, tracks } = window.sharedMonitor;
+        return video === document.querySelector(selector) && video.srcObject === stream
+          && canvas === document.querySelector('.coast-view') && window.monitorPeers.length === 1
+          && window.monitorPeers[0] === peer && peer.connectionState === 'connected'
+          && stream.getTracks().every(track => tracks.includes(track) && track.readyState === 'live');
+      }, videoSelector), true, 'world change preserves the receiver, tracks, media element and canvas');
+      await viewer.waitForFunction(({ selector, beforeTravel, muted }) => {
+        const video = document.querySelector(selector);
+        const audio = window.monitorSound.read().filter(context => context.hasStream);
+        return video.currentTime > beforeTravel + .1 && audio.length === 1 && audio[0].streamSources === 1
+          && audio[0].state === 'running' && (muted ? audio[0].peak < .0001 : audio[0].peak > .001);
+      }, { selector: videoSelector, beforeTravel, muted });
+      assert.equal(await viewer.locator('[data-monitor-volume]').inputValue(), '50');
+      assert.equal(await button(viewer, 'モニターを隠す').isVisible(), true);
+      assert.equal(await button(viewer, '配置を編集').isEnabled(), true);
+      assert.ok((await screenPixels(viewer)).count > 2_000, 'shared video is drawn at the new viewpoint');
+    }
+
+    const beforeFailure = viewer.url();
+    const terrain = '**/coast-overlook/overlook-elevation.bin';
+    await viewer.route(terrain, route => route.fulfill({ contentType: 'application/octet-stream', body: 'invalid terrain' }),
+      { times: 1 });
+    await selectDestination('中央展望デッキ');
+    await viewer.locator('.coast-travel-status').filter({ hasText: '読み込めませんでした' }).waitFor();
+    assert.equal(viewer.url(), beforeFailure, 'failed target loading leaves the active world URL in place');
+    await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === window.sharedMonitor.stream
+      && window.sharedMonitor.peer.connectionState === 'connected', videoSelector);
+
+    const requestedTerrain = Promise.withResolvers();
+    const resumeTerrain = Promise.withResolvers();
+    await viewer.route(terrain, async route => {
+      requestedTerrain.resolve();
+      await resumeTerrain.promise;
+      await route.continue();
+    }, { times: 1 });
+    await selectDestination('中央展望デッキ');
+    await requestedTerrain.promise;
+    let beforeTravel = await video.evaluate(element => element.currentTime);
+    try {
+      await travelTo('中段中央（R09）', 'cinema', 'center');
+    } finally {
+      resumeTerrain.resolve();
+    }
+    assert.equal(await target.inputValue(), 'floating');
+    assert.equal(await mode.inputValue(), 'stereo');
+    await assertPlaybackContinues(beforeTravel);
+
+    // Assign the transferred stream to the cinema screen and leave with that room's audio path active.
+    await target.selectOption('television');
+    await mode.selectOption('cinema');
+    assert.ok((await screenPixels(viewer)).count > 8_000);
+    await button(viewer, 'モニター音をミュート').click();
+    beforeTravel = await video.evaluate(element => element.currentTime);
+    await travelTo('入り江の浜', 'coast', 'inlet');
     assert.equal(await viewer.locator('[data-monitor-display-target]').isVisible(), false);
+    assert.equal(await mode.inputValue(), 'stereo');
+    assert.equal(await button(viewer, 'モニター音をミュート').getAttribute('aria-pressed'), 'true');
+    await assertPlaybackContinues(beforeTravel, true);
+    await button(viewer, 'モニター音をミュート').click();
+
+    beforeTravel = await video.evaluate(element => element.currentTime);
+    await viewer.evaluate(() => history.back());
+    await waitForArrival('cinema', 'center');
+    assert.equal(await target.inputValue(), 'floating');
+    await assertPlaybackContinues(beforeTravel);
+
+    beforeTravel = await video.evaluate(element => element.currentTime);
+    await viewer.evaluate(() => history.forward());
+    await waitForArrival('coast', 'inlet');
+    await assertPlaybackContinues(beforeTravel);
+
+    await button(sender, '共有を停止').click();
+    await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
+    await viewer.waitForFunction(() => window.sharedMonitor.peer.connectionState === 'closed'
+      && window.sharedMonitor.tracks.every(track => track.readyState === 'ended')
+      && window.monitorSound.read().some(context => context.hasStream && context.state === 'closed'));
+
+    await viewer.evaluate(() => history.back());
+    await waitForArrival('cinema', 'center');
+    assert.equal(await video.evaluate(element => element.srcObject), null);
     assert.deepEqual(errors, []);
   } finally {
     await Promise.all([sender.context().close(), viewer.context().close()]);

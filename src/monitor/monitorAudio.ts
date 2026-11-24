@@ -129,8 +129,11 @@ export class MonitorAudio {
   setCinema(factory: CinemaPlaybackFactory | null): void {
     if (this.cinemaPlayback === factory) return;
     this.cinemaPlayback = factory;
-    this.disconnectGraph();
-    this.syncTrack();
+    const { graph, context, track } = this;
+    if (!graph || !context || !track) return;
+    this.disconnectCinema(graph);
+    graph.cinema = this.createCinema(context, graph.source, graph.master.node, track);
+    this.setMode(this.mode);
   }
 
   setCinemaQuality(quality: 'light' | 'high'): void {
@@ -363,14 +366,19 @@ export class MonitorAudio {
     const graph = this.graph;
     if (!graph) return;
     this.disconnectSurround(graph);
-    graph.cinema?.playback.dispose();
-    graph.cinema?.level.node.disconnect();
+    this.disconnectCinema(graph);
     graph.master.node.disconnect();
     graph.source.disconnect();
     graph.stereo.node.disconnect();
     graph.spatial?.level.node.disconnect();
     graph.spatial?.panner.disconnect();
     this.graph = null;
+  }
+
+  private disconnectCinema(graph: MonitorGraph): void {
+    graph.cinema?.playback.dispose();
+    graph.cinema?.level.node.disconnect();
+    graph.cinema = null;
   }
 
   private disconnectSurround(graph: MonitorGraph): void {
