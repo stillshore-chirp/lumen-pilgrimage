@@ -165,6 +165,28 @@ test('cinema keeps its exits sealed and uses fast travel to return to the inlet'
   assert.deepEqual(errors, []);
 });
 
+test('cinema can jump, fly over seat backs and land below the auditorium ceiling', { timeout }, async t => {
+  const { page, errors } = await openCinema(t);
+  const flight = button(page, '自由飛行');
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => window.cinemaProbe.position[1] > 4.8);
+  await page.waitForFunction(() => Math.abs(window.cinemaProbe.position[1] - 4.4) < .01);
+
+  await flight.click();
+  assert.equal(await flight.getAttribute('aria-pressed'), 'true');
+  await holdKey(page, 'Space', () => window.cinemaProbe.position[1] > 21.74);
+  const top = await page.evaluate(() => window.cinemaProbe.position);
+  assert.ok(top[1] < 21.76);
+
+  await holdKey(page, 's', () => window.cinemaProbe.position[2] > 34.05);
+  await page.keyboard.press('f');
+  assert.equal(await flight.getAttribute('aria-pressed'), 'false');
+  await page.waitForFunction(() => window.cinemaProbe.position[1] < 6);
+  await page.getByText('歩行', { exact: true }).waitFor();
+  await holdKey(page, 'w', () => window.cinemaProbe.position[2] < 33.98);
+  assert.deepEqual(errors, []);
+});
+
 test('house light scenes, preview projection and quality change together through the normal controls', { timeout }, async t => {
   const { page, errors } = await openCinema(t);
   await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] > .8 && window.cinemaProbe.live === 0);

@@ -74,6 +74,8 @@ export const RESIDENCE_TEA_MATS: readonly ResidenceRect[] = [
 export const RESIDENCE_TEA_HEARTH: ResidenceRect = [4.98, 2.065, 5.404, 2.489];
 export const RESIDENCE_STUDY_RUG: ResidenceRect = [8.42, 1.69, 10.47, 3.92];
 
+export const RESIDENCE_UPPER_SLAB_BOTTOM = 3.19;
+
 export const RESIDENCE_BALCONY_DOOR = { e: 20.7, nFrom: 13.05, nTo: 14.1 } as const;
 export const RESIDENCE_FOYER_POCKET = { west: 9.24, stowLimit: 11, cap: .044 } as const;
 

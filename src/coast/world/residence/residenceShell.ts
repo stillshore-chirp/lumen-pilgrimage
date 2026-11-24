@@ -4,7 +4,7 @@ import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { createResidenceDoors } from './residenceDoors';
 import type { ResidenceMaterials } from './residenceMaterials';
 import { RESIDENCE_BALCONY_DOOR, RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_FOYER_POCKET, RESIDENCE_ROOMS,
-  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS,
+  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_TATAMI, RESIDENCE_UPPER_SLAB_BOTTOM, RESIDENCE_WALLS,
   type ResidenceDoorOpening, type ResidenceRect } from './residencePlan';
 
 type Wall = (typeof RESIDENCE_WALLS)[number];
@@ -15,7 +15,6 @@ export const SOUTH_GLASS_NORTH = .10;
 export const EAST_GLASS_EAST = 22.70;
 const ELEVATOR_CENTERS = [1.70, 4.15, 6.60] as const;
 const GUARD_BASE = .058;
-const UPPER_SLAB_BOTTOM = 3.19;
 
 function lineRect({ axis, fixed }: WallLine, from: number, to: number, near: number, far: number): ResidenceRect {
   return axis === 'e' ? [from, fixed + near, to, fixed + far] : [fixed + near, from, fixed + far, to];
@@ -146,7 +145,7 @@ function addFloorsAndCeilings(geometry: ShellGeometry, materials: ResidenceMater
         geometry.box(materials[room.floor], finish, -.035, 0, undefined, room.floor === 'deck' ? .006 : 0);
       }
       // The upper floor slab forms the soffit over the recessed deck.
-      geometry.box(materials.core, rect, UPPER_SLAB_BOTTOM, 3.50);
+      geometry.box(materials.core, rect, RESIDENCE_UPPER_SLAB_BOTTOM, 3.50);
       if (room.ceiling !== null) {
         geometry.box(materials.ceiling, rect, room.ceiling, room.ceiling + .065);
         ceilings.push({ rect, height: room.ceiling });
@@ -501,7 +500,7 @@ export function createResidenceShell(materials: ResidenceMaterials) {
       continue;
     }
     const half = wall.thickness / 2;
-    const height = wall.kind === 'exterior' ? UPPER_SLAB_BOTTOM : wall.height;
+    const height = wall.kind === 'exterior' ? RESIDENCE_UPPER_SLAB_BOTTOM : wall.height;
     const body = (from: number, to: number, bottom: number, top: number) => geometry.box(materials.wall,
       lineRect(wall, from, to, -half, half), bottom, top);
     const solid = (from: number, to: number) => {
@@ -529,7 +528,7 @@ export function createResidenceShell(materials: ResidenceMaterials) {
     solid(from, wall.to);
   }
   for (const pier of RESIDENCE_FACADE_PIERS) {
-    geometry.box(materials.wall, pier, -.31, UPPER_SLAB_BOTTOM);
+    geometry.box(materials.wall, pier, -.31, RESIDENCE_UPPER_SLAB_BOTTOM);
   }
   geometry.box(materials.wall, RESIDENCE_BATH_SERVICE_SHAFT, 0, 2.55);
   const [stairWest, , stairEast, stairNorth] = RESIDENCE_STAIR_ENCLOSURE;

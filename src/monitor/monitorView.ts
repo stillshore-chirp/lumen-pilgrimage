@@ -197,6 +197,10 @@ export class MonitorView {
     this.setOpen(this.panel.hidden);
   }
 
+  setMasterVolume(multiplier: number): void {
+    this.audio.setMasterVolume(multiplier);
+  }
+
   closePanel(): void {
     this.setOpen(false);
   }

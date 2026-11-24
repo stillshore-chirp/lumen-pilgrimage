@@ -11,7 +11,7 @@
 - [起動処理](../src/main.ts) の `monitor`・`world`、[CoastApp](../src/coast/CoastApp.ts) の `place`・`time` とその既定値、フォールバック、URL更新は直接リンクと移動の契約です。変更時は[ワールド案内](worlds.md)と起動・移動の回帰確認を更新します。ワールド間の移動先はIDと時刻から解決します。
 - [CoastControls](../src/coast/CoastControls.ts) と [CoastTravelPanel](../src/coast/CoastTravelPanel.ts) の操作、フォーカス、ポインターロック、キー・ゲームパッド入力を一続きで確認します。画面表示、操作結果、`aria` の状態を一致させ、主要な操作や案内を変えた場合は[探索ガイド](exploration.md)を更新します。
 - 仮想モニターの要求・応答、状態遷移、期限、終了処理は[仮想モニター仕様](monitor.md)と[シグナリング実装](../server/virtual-monitor-signaling.mjs)が基準です。APIや状態を変える場合は送信側・受信側と契約テストを同じ変更で合わせます。
-- URL にある時間帯とページ内だけで扱う操作状態、唯一永続化している視野角設定のキー `lumen-pilgrimage:fov` は[ワールド案内](worlds.md)の状態管理に従います。永続形式を変える場合は保存済み設定の扱いを決め、仕様と回帰確認に反映します。
+- URL にある時間帯、ページ内だけで扱う操作状態、永続化する視野角と音の設定は[ワールド案内](worlds.md)の状態管理に従います。永続形式を変える場合は保存済み設定の扱いを決め、仕様と回帰確認に反映します。
 
 ### 座標・形状・音響
 

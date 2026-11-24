@@ -84,38 +84,43 @@ export function createRoomImpulse(context: BaseAudioContext, profile: RoomRespon
 }
 
 const SURFACES = {
-  oak: { duration: 0.21, body: 0.074, pitch: 96, texture: 0.122, cutoff: 1_150 },
-  stone: { duration: 0.20, body: 0.067, pitch: 125, texture: 0.148, cutoff: 1_720 },
-  tile: { duration: 0.19, body: 0.063, pitch: 149, texture: 0.156, cutoff: 2_050 },
-  balcony: { duration: 0.22, body: 0.064, pitch: 112, texture: 0.183, cutoff: 1_520 },
-  tatami: { duration: 0.22, body: 0.038, pitch: 78, texture: 0.086, cutoff: 690 },
-  wool: { duration: 0.20, body: 0.032, pitch: 67, texture: 0.069, cutoff: 480 },
+  oak: { contact: 0.111, contactCutoff: 330, brush: 0.096, brushCutoff: 1_130 },
+  stone: { contact: 0.116, contactCutoff: 430, brush: 0.126, brushCutoff: 1_500 },
+  tile: { contact: 0.105, contactCutoff: 480, brush: 0.129, brushCutoff: 1_830 },
+  balcony: { contact: 0.135, contactCutoff: 390, brush: 0.155, brushCutoff: 1_420 },
+  tatami: { contact: 0.067, contactCutoff: 270, brush: 0.062, brushCutoff: 850 },
+  wool: { contact: 0.058, contactCutoff: 235, brush: 0.046, brushCutoff: 650 },
 } satisfies Record<ResidenceSurface, Record<string, number>>;
 
 export function createFootfall(context: BaseAudioContext, surface: ResidenceSurface, seed: number): AudioBuffer {
-  const { duration, body, pitch, texture, cutoff } = SURFACES[surface];
+  const { contact, contactCutoff, brush, brushCutoff } = SURFACES[surface];
   const random = coastRandom(seed);
-  const soleAt = 0.073 + 0.028 * random();
-  const tone = pitch * (0.91 + random() * 0.18);
-  const damping = coefficient(cutoff);
-  const clothLow = coefficient(180);
+  const rise = 0.026 + 0.010 * random();
+  const rollAt = 0.059 + 0.025 * random();
+  const duration = rollAt + 0.121 + 0.023 * random();
+  const weight = 0.88 + 0.24 * random();
+  const contactBand = coefficient(contactCutoff);
+  const brushBand = coefficient(brushCutoff);
+  const lowBand = coefficient(85);
   const buffer = context.createBuffer(1, Math.ceil(duration * SAMPLE_RATE), SAMPLE_RATE);
   const data = buffer.getChannelData(0);
-  let filtered = 0;
+  let contactInput = 0;
+  let sole = 0;
   let low = 0;
+  let brushInput = 0;
+  let cloth = 0;
   for (let i = 0; i < data.length; i += 1) {
     const time = i / SAMPLE_RATE;
     const noise = random() * 2 - 1;
-    filtered += (noise - filtered) * damping;
-    low += (noise - low) * clothLow;
-    const landing = smoothstep(0, 0.016, time) * Math.exp(-time * 38);
-    const soleAge = Math.max(0, time - soleAt);
-    const sole = smoothstep(0, 0.019, soleAge) * Math.exp(-soleAge * 43);
-    const pressure = body * ((Math.sin(TAU * tone * time) * 0.76 + Math.sin(TAU * tone * 1.64 * time) * 0.24)
-      * landing + Math.sin(TAU * tone * 0.89 * soleAge) * sole * 0.23);
-    const brush = smoothstep(0.007, 0.043, time) * (1 - smoothstep(0.052, 0.153, time));
-    const scuff = (filtered - low * 0.68) * texture * (brush * 0.77 + sole * 0.44);
-    data[i] = (pressure + scuff) * (1 - smoothstep(duration - 0.025, duration, time));
+    contactInput += (noise - contactInput) * contactBand;
+    sole += (contactInput - sole) * contactBand;
+    low += (sole - low) * lowBand;
+    brushInput += (noise - brushInput) * brushBand;
+    cloth += (brushInput - cloth) * brushBand;
+    // Let the sole compress, then brush across the floor as the weight rolls forward.
+    const compression = smoothstep(0, rise, time) * (1 - smoothstep(rise, rollAt + 0.047, time));
+    const scuff = smoothstep(0.016, rollAt, time) * (1 - smoothstep(rollAt, duration, time));
+    data[i] = weight * ((sole - low) * contact * compression + (cloth - sole) * brush * scuff);
   }
   return buffer;
 }

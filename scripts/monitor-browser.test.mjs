@@ -233,6 +233,13 @@ async function newPage() {
   return page;
 }
 
+async function setSliderValue(page, name, value) {
+  await page.getByRole('slider', { name, exact: true }).evaluate((slider, nextValue) => {
+    slider.value = String(nextValue);
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+  }, value);
+}
+
 function button(page, name) {
   return page.getByRole('button', { name, exact: true });
 }
@@ -361,6 +368,8 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     ]);
     await sender.goto(new URL('?monitor=sender', url).href);
     await viewer.goto(url.href);
+    // Set the shared master before the monitor view is lazily created.
+    await setSliderValue(viewer, '全体音量', 0);
     await button(viewer, '仮想モニター').click();
     await viewer.getByRole('region', { name: '仮想モニターの操作' }).waitFor();
     await button(viewer, 'モニターを表示').click();
@@ -382,14 +391,35 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     assert.ok(original.count > 2_000, 'synthetic frame pixels are rendered in the scenery');
     assert.ok(Math.abs(original.width / original.height - 16 / 9) < 0.15, 'scene preserves the video aspect ratio');
 
+    await button(viewer, '仮想モニター').click();
     await button(viewer, '環境音をオン').click();
+    await button(viewer, '仮想モニター').click();
     const enableAudio = button(viewer, 'モニター音を有効にする');
     if (await enableAudio.isEnabled()) await enableAudio.click();
+    await waitForMix(viewer, { natural: false, monitor: false });
+    await setSliderValue(viewer, '全体音量', 100);
+    await waitForMix(viewer, { natural: true, monitor: true });
+    // Simulate persisted pageshow to observe the master callback on an existing monitor.
+    // A real pagehide releases the WebRTC stream before a cached page is restored.
+    await viewer.evaluate(() => {
+      const key = 'lumen-pilgrimage:sound';
+      const saved = JSON.parse(localStorage.getItem(key));
+      localStorage.setItem(key, JSON.stringify({ ...saved, master: 0 }));
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    await waitForMix(viewer, { natural: false, monitor: false });
+    await setSliderValue(viewer, '全体音量', 100);
     await waitForMix(viewer, { natural: true, monitor: true });
     const monitorMute = button(viewer, 'モニター音をミュート');
+    await button(viewer, '仮想モニター').click();
     await button(viewer, '環境音をオフ').click();
     await waitForMix(viewer, { natural: false, monitor: true });
     await button(viewer, '環境音をオン').click();
+    await waitForMix(viewer, { natural: true, monitor: true });
+    await button(viewer, '歩行音をオフ').click();
+    await waitForMix(viewer, { natural: true, monitor: true });
+    await button(viewer, '歩行音をオン').click();
+    await button(viewer, '仮想モニター').click();
     await monitorMute.click();
     assert.equal(await monitorMute.getAttribute('aria-pressed'), 'true');
     await waitForMix(viewer, { natural: true, monitor: false });
@@ -561,6 +591,7 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
 
     await button(viewer, 'テレビに表示').click();
     await mode.selectOption('surround');
+    await setSliderValue(viewer, '全体音量', 125);
     await viewer.locator('[data-monitor-volume]').evaluate(input => {
       input.value = '50';
       input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -608,6 +639,7 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
           && audio[0].state === 'running' && (muted ? audio[0].peak < .0001 : audio[0].peak > .001);
       }, { selector: videoSelector, beforeTravel, muted });
       assert.equal(await viewer.locator('[data-monitor-volume]').inputValue(), '50');
+      assert.equal(await viewer.getByRole('slider', { name: '全体音量', exact: true }).inputValue(), '125');
       assert.equal(await button(viewer, 'モニターを隠す').isVisible(), true);
       assert.equal(await button(viewer, '配置を編集').isEnabled(), true);
       assert.ok((await screenPixels(viewer)).count > 2_000, 'shared video is drawn at the new viewpoint');
@@ -668,6 +700,11 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     assert.equal(await button(viewer, 'モニター音をミュート').getAttribute('aria-pressed'), 'true');
     await assertPlaybackContinues(beforeTravel, true);
     await button(viewer, 'モニター音をミュート').click();
+    await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak > .001);
+    await setSliderValue(viewer, '全体音量', 0);
+    await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001);
+    await setSliderValue(viewer, '全体音量', 125);
+    await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak > .001);
 
     beforeTravel = await video.evaluate(element => element.currentTime);
     await viewer.evaluate(() => history.back());

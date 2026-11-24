@@ -2,12 +2,16 @@ import type { CoastNavigation, CoastPose } from '../../CoastControls';
 import { createResidenceDoors, RESIDENCE_WALKER_RADIUS, type ResidenceDoors } from './residenceDoors';
 import {
   RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_ROOMS,
-  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_WALLS, type ResidenceRect, type ResidenceWall,
+  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_UPPER_SLAB_BOTTOM, RESIDENCE_WALLS, type ResidenceRect, type ResidenceWall,
 } from './residencePlan';
 
 const WALKER_RADIUS_SQUARED = RESIDENCE_WALKER_RADIUS ** 2;
 
-const floor = RESIDENCE_ROOMS.filter(room => room.id !== 'PS').flatMap(room => room.rectangles);
+const occupiedRooms = RESIDENCE_ROOMS.filter(room => room.id !== 'PS');
+const floor = occupiedRooms.flatMap(room => room.rectangles);
+const ceilingFootprints = occupiedRooms.flatMap(room => room.rectangles.map(rect => ({
+  rect, height: room.ceiling ?? RESIDENCE_UPPER_SLAB_BOTTOM,
+})));
 const balconyFloor = RESIDENCE_ROOMS.filter(room => room.id === 'BL').flatMap(room => room.rectangles);
 const bounds = {
   minX: Math.min(...floor.map(rect => rect[0])) - 1,
@@ -27,13 +31,16 @@ const permanentObstacles: ResidenceRect[] = [
   ...RESIDENCE_FACADE_PIERS, RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_STAIR_ENCLOSURE,
 ];
 const closedBalconyDoor: ResidenceRect[] = [];
+const lintels: { rect: ResidenceRect; height: number }[] = [];
 
 for (const wall of RESIDENCE_WALLS) {
   let cursor = wall.from;
   for (const opening of wall.openings ?? []) {
     if (opening.kind === 'window') continue;
     if (cursor < opening.from) permanentObstacles.push(wallFootprint(wall, cursor, opening.from));
-    if (opening.kind === 'balcony-door') closedBalconyDoor.push(wallFootprint(wall, opening.from, opening.to));
+    const rect = wallFootprint(wall, opening.from, opening.to);
+    lintels.push({ rect, height: opening.top });
+    if (opening.kind === 'balcony-door') closedBalconyDoor.push(rect);
     cursor = opening.to;
   }
   if (cursor < wall.to) permanentObstacles.push(wallFootprint(wall, cursor, wall.to));
@@ -58,7 +65,18 @@ export function createResidenceNavigation(spawn: CoastPose, furnitureFootprints:
 
   return {
     bounds, spawn, groundHeight: () => 0,
-    flightEnabled: false, jumpEnabled: false, flightCeiling: 2.55, walkSpeed: 2.4,
+    flightCeiling: RESIDENCE_UPPER_SLAB_BOTTOM, walkSpeed: 2.4,
+    ceilingHeight(e, z) {
+      const n = -z;
+      let height = RESIDENCE_UPPER_SLAB_BOTTOM;
+      for (const ceiling of ceilingFootprints) {
+        if (overlapsWalker(ceiling.rect, e, n)) height = Math.min(height, ceiling.height);
+      }
+      for (const lintel of lintels) {
+        if (overlapsWalker(lintel.rect, e, n)) height = Math.min(height, lintel.height);
+      }
+      return height;
+    },
     blocksWalking(e, z) {
       const n = -z;
       return !floor.some(rect => contains(rect, e, n))

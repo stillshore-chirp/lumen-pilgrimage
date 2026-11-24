@@ -1,5 +1,7 @@
 import { groundEyeHeight, type CoastMovement } from '../../CoastControls';
 import type { CoastBirdCue } from '../../coastBirdCue';
+import { connectExplorationOutput } from '../../explorationOutput';
+import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } from '../../explorationSound';
 import { coastRandom, type CoastPoint } from '../../terrain';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import {
@@ -26,10 +28,15 @@ type DoorMotion = {
 type Road = typeof RESIDENCE_ROADS[number];
 type PassBy = { from: Point; to: Point; start: number; duration: number; level: number };
 
+const RESIDENCE_ROOM_SOUNDS = ['traffic', 'doors', 'appliances', 'footsteps'] as const;
+type ResidenceRoomSound = typeof RESIDENCE_ROOM_SOUNDS[number];
+type RoomMixBus = { dry: GainNode; wet: GainNode };
+
 type Graph = {
   master: GainNode;
-  dry: AudioNode;
-  wet: AudioNode;
+  outputNodes: readonly AudioNode[];
+  roomBuses: Record<ResidenceRoomSound, RoomMixBus>;
+  windBus: GainNode;
   roomLevels: GainNode[];
   traffic: { road: Road; position: Point; voice: TrafficVoice }[];
   reflected: TrafficVoice;
@@ -101,8 +108,7 @@ export class ResidenceAudio {
   private graph: Graph | undefined;
   private pendingStart: Promise<void> | undefined;
   private time: CoastTimeOfDay = 'day';
-  private volume = 0.7;
-  private muted = false;
+  private mix = DEFAULT_EXPLORATION_MIX;
   private nextUpdate = 0;
   private nextPass = 0;
   private nextBreeze = 0;
@@ -121,18 +127,21 @@ export class ResidenceAudio {
     readonly appliances?: readonly ResidenceApplianceAudioSource[];
   }) {}
 
-  isOn(): boolean {
-    return Boolean(this.graph && this.context?.state === 'running' && !this.muted);
+  isRunning(): boolean {
+    return Boolean(this.graph && this.context?.state === 'running');
   }
 
   start(): Promise<void> {
     if (this.request.signal.aborted) return Promise.reject(new Error('The residence audio has been disposed'));
-    if (this.pendingStart) return this.pendingStart;
     try {
       if (this.context?.state === 'closed') this.releaseContext();
       const context = this.context ??= new AudioContext({ latencyHint: 'interactive' });
-      // Resume during the button's user gesture before fetching or decoding the recording.
+      // A click can unlock a resume request left pending by navigation.
       const resume = context.state === 'running' ? Promise.resolve() : context.resume();
+      if (this.pendingStart) {
+        void resume.catch(() => undefined);
+        return this.pendingStart;
+      }
       const completion = !this.graph && this.options.appliances?.some(source => source.kind === 'microwave')
         ? this.load(context, MICROWAVE_COMPLETION_FILE, 'microwave completion') : undefined;
       this.pendingStart = (this.graph ? resume : Promise.all([
@@ -151,11 +160,19 @@ export class ResidenceAudio {
     }
   }
 
-  setLevel(volume: number, muted: boolean): void {
-    this.volume = Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0;
-    this.muted = muted;
-    if (!this.context || !this.graph) return;
-    this.graph.master.gain.setTargetAtTime(this.masterLevel(), this.context.currentTime, 0.035);
+  setMix(mix: ExplorationMix): void {
+    this.mix = mix;
+    const { context, graph } = this;
+    if (!context || !graph) return;
+    const now = context.currentTime;
+    graph.master.gain.setTargetAtTime(this.masterLevel(), now, 0.035);
+    graph.windBus.gain.setTargetAtTime(explorationSoundGain(mix, 'wind'), now, 0.035);
+    for (const kind of RESIDENCE_ROOM_SOUNDS) {
+      const { dry, wet } = graph.roomBuses[kind];
+      const gain = explorationSoundGain(mix, kind);
+      dry.gain.setTargetAtTime(gain, now, 0.035);
+      wet.gain.setTargetAtTime(gain, now, 0.035);
+    }
   }
 
   setTimeOfDay(time: CoastTimeOfDay): void {
@@ -218,7 +235,7 @@ export class ResidenceAudio {
   }
 
   private masterLevel(): number {
-    return this.muted ? 0 : this.volume * 0.86;
+    return this.mix.master * (0.7 * 0.86);
   }
 
   private async load(context: AudioContext, file: string, description: string): Promise<AudioBuffer> {
@@ -234,7 +251,8 @@ export class ResidenceAudio {
     const dry = context.createDynamicsCompressor();
     dry.threshold.value = -15;
     dry.ratio.value = 4;
-    dry.connect(master).connect(context.destination);
+    dry.connect(master);
+    const outputNodes = connectExplorationOutput(context, master);
     const wet = context.createGain();
     const roomLevels = RESIDENCE_ROOM_RESPONSES.map((profile, index) => {
       const room = context.createConvolver();
@@ -245,13 +263,32 @@ export class ResidenceAudio {
       wet.connect(level).connect(room).connect(dry);
       return level;
     });
+    const createBus = (destination: AudioNode, level: number) => {
+      const bus = context.createGain();
+      bus.gain.value = level;
+      bus.connect(destination);
+      return bus;
+    };
+    const createRoomBus = (kind: ResidenceRoomSound): RoomMixBus => {
+      const level = explorationSoundGain(this.mix, kind);
+      return { dry: createBus(dry, level), wet: createBus(wet, level) };
+    };
+    const roomBuses = {
+      traffic: createRoomBus('traffic'),
+      doors: createRoomBus('doors'),
+      appliances: createRoomBus('appliances'),
+      footsteps: createRoomBus('footsteps'),
+    };
+    const windBus = createBus(dry, explorationSoundGain(this.mix, 'wind'));
+    const trafficBus = roomBuses.traffic;
+    const trafficVoice = () => spatialVoice(context, trafficBus.dry, trafficBus.wet);
     const traffic = RESIDENCE_ROADS.flatMap(road => road.patches.map(position =>
-      ({ road, position, voice: spatialVoice(context, dry, wet) })));
-    const reflected = spatialVoice(context, dry, wet);
+      ({ road, position, voice: trafficVoice() })));
+    const reflected = trafficVoice();
     const reflectionDelay = context.createDelay(0.16);
     reflectionDelay.delayTime.value = 0.015;
     reflectionDelay.connect(reflected.filter);
-    const vehicles = Array.from({ length: 2 }, () => ({ voice: spatialVoice(context, dry, wet) }));
+    const vehicles = Array.from({ length: 2 }, () => ({ voice: trafficVoice() }));
     const vehicleSamples = [createVehicleSample(context, 711), createVehicleSample(context, 198)];
     const breeze = context.createGain();
     breeze.gain.value = 0;
@@ -259,7 +296,7 @@ export class ResidenceAudio {
     breezePoint.panningModel = 'HRTF';
     breezePoint.rolloffFactor = 0;
     pointAt(breezePoint, { x: 24.2, y: 1.62, z: -13.48 }, now);
-    breeze.connect(breezePoint).connect(dry);
+    breeze.connect(breezePoint).connect(windBus);
     const breezeSample = createBreeze(context);
     const slider = context.createGain();
     slider.gain.value = 0.24;
@@ -267,8 +304,8 @@ export class ResidenceAudio {
     sliderPoint.panningModel = 'HRTF';
     sliderPoint.refDistance = 0.8;
     pointAt(sliderPoint, { ...BALCONY_DOOR, y: 0.28 }, now);
-    slider.connect(sliderPoint).connect(dry);
-    sliderPoint.connect(wet);
+    slider.connect(sliderPoint).connect(roomBuses.doors.dry);
+    sliderPoint.connect(roomBuses.doors.wet);
     const sliderSamples = [createSlider(context, false), createSlider(context, true)];
     const doorSamples = this.options.doorOpenness ? [false, true].map(sliding =>
       [false, true].map(closing => createInteriorDoorSound(context, sliding, closing))) : [];
@@ -278,8 +315,8 @@ export class ResidenceAudio {
       panner.refDistance = 1.35;
       panner.rolloffFactor = 0.85;
       const gain = context.createGain();
-      gain.connect(panner).connect(dry);
-      panner.connect(wet);
+      gain.connect(panner).connect(roomBuses.footsteps.dry);
+      panner.connect(roomBuses.footsteps.wet);
       return { panner, gain, busy: false };
     });
     for (const [index, { voice }] of traffic.entries()) {
@@ -290,9 +327,10 @@ export class ResidenceAudio {
     this.nextPass = now + this.passGap(true);
     this.nextBreeze = now + 24 + this.random() * 18;
     const appliances = this.options.appliances?.length
-      ? createResidenceApplianceAudio(context, dry, wet, this.options.appliances, microwaveCompletion) : undefined;
-    return { master, dry, wet, roomLevels, traffic, reflected, reflectionDelay, vehicles, vehicleSamples, breeze,
-      breezeSample, slider, sliderSamples, doorSamples, feet, appliances };
+      ? createResidenceApplianceAudio(context, roomBuses.appliances.dry, roomBuses.appliances.wet,
+        this.options.appliances, microwaveCompletion) : undefined;
+    return { master, outputNodes, roomBuses, windBus, roomLevels, traffic, reflected, reflectionDelay, vehicles,
+      vehicleSamples, breeze, breezeSample, slider, sliderSamples, doorSamples, feet, appliances };
   }
 
   private passGap(initial: boolean): number {
@@ -385,7 +423,7 @@ export class ResidenceAudio {
       if (direction !== 0 && direction !== motion.direction) {
         motion.direction = direction;
         motion.source?.stop(now);
-        motion.voice ??= spatialVoice(context, graph.dry, graph.wet);
+        motion.voice ??= spatialVoice(context, graph.roomBuses.doors.dry, graph.roomBuses.doors.wet);
         const sample = graph.doorSamples[Number(sliding)][Number(direction < 0)];
         const offset = (direction > 0 ? before : 1 - before) * sample.duration;
         const active = motion;
@@ -473,6 +511,7 @@ export class ResidenceAudio {
     this.doorMotions.clear();
     this.graph?.appliances?.dispose();
     this.graph?.master.disconnect();
+    this.graph?.outputNodes.forEach(node => node.disconnect());
     this.graph = undefined;
     this.previousDoor = undefined;
     this.doorDirection = 0;

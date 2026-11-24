@@ -28,8 +28,7 @@ export interface CoastNavigation {
   readonly blocksWalking?: (x: number, z: number, foot: number) => boolean;
   readonly blocksFlight?: (x: number, z: number) => boolean;
   readonly flightCeiling: number;
-  readonly flightEnabled?: boolean;
-  readonly jumpEnabled?: boolean;
+  readonly ceilingHeight?: (x: number, z: number) => number;
   readonly walkSpeed?: number;
 }
 
@@ -58,6 +57,7 @@ const MAX_FALL_SPEED = 18;
 const MAX_DELTA = 0.05;
 const WALK_SAMPLE_DISTANCE = 0.15;
 const FLIGHT_SAMPLE_DISTANCE = 0.46;
+const CAMERA_SURFACE_CLEARANCE = 0.25;
 const MAX_WALK_SLOPE = 0.95;
 const WALK_SLOPE_EPSILON = 0.000001;
 const BOUNDS_PADDING = 0.35;
@@ -130,6 +130,12 @@ export class CoastControls {
     return this.posture === 'crouch' ? this.crouchEyeHeight : EYE_HEIGHT;
   }
 
+  get isGrounded(): boolean {
+    const { x, y, z } = this.camera.position;
+    return !this.flying && this.divePhase === null && this.verticalVelocity <= 0
+      && y - this.eyeHeight <= this.supportHeight(x, z) + FOOT_CLEARANCE;
+  }
+
   relocate(pose: CoastPose): void {
     if (this.disposed) return;
     this.clearInput();
@@ -157,7 +163,7 @@ export class CoastControls {
   }
 
   toggleFlight(): void {
-    if (this.disposed || this.navigation.flightEnabled === false) return;
+    if (this.disposed) return;
 
     this.flying = !this.flying;
     this.setPosture('walk');
@@ -428,16 +434,15 @@ export class CoastControls {
     const position = this.camera.position;
     const foot = position.y - this.eyeHeight;
     const depth = this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z);
-    const onSupport = this.verticalVelocity <= 0
-      && foot <= this.supportHeight(position.x, position.z) + FOOT_CLEARANCE;
+    const onSupport = this.isGrounded;
     if (this.crouchQueued && onSupport && depth <= WADE_DEPTH) {
       this.setPosture(this.posture === 'walk' ? 'crouch' : 'walk');
     }
-    const jumping = this.navigation.jumpEnabled !== false && this.jumpQueued && onSupport && depth < SWIM_DEPTH;
+    const jumping = this.jumpQueued && onSupport && depth < SWIM_DEPTH;
     this.jumpQueued = false;
     const fallSpeed = jumping ? JUMP_SPEED : this.verticalVelocity;
     const nextVelocity = Math.max(-MAX_FALL_SPEED, fallSpeed - GRAVITY * dt);
-    const verticalStep = nextVelocity * dt;
+    const verticalStep = Math.min(nextVelocity * dt, this.ceilingY(position.x, position.z) - position.y);
 
     let followSupport = onSupport && !jumping;
     if (this.movement.lengthSq() > 0) {
@@ -449,8 +454,10 @@ export class CoastControls {
     }
 
     const floorY = this.supportHeight(position.x, position.z) + this.eyeHeight;
-    position.y = followSupport ? floorY : Math.max(floorY, position.y + verticalStep);
-    this.verticalVelocity = position.y > floorY ? nextVelocity : 0;
+    const ceilingY = this.ceilingY(position.x, position.z);
+    position.y = followSupport ? floorY : Math.max(floorY, Math.min(ceilingY, position.y + verticalStep));
+    const hitCeiling = nextVelocity > 0 && position.y >= ceilingY;
+    this.verticalVelocity = position.y > floorY && !hitCeiling ? nextVelocity : 0;
     if (this.posture === 'crouch'
       && this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z) > WADE_DEPTH) {
       this.setPosture('walk');
@@ -462,7 +469,8 @@ export class CoastControls {
     if (posture === this.posture) return;
     const foot = this.camera.position.y - this.eyeHeight;
     this.posture = posture;
-    this.camera.position.y = foot + this.eyeHeight;
+    const { x, z } = this.camera.position;
+    this.camera.position.y = Math.min(this.ceilingY(x, z), foot + this.eyeHeight);
   }
 
   private updateDive(verticalInput: number, dt: number): void {
@@ -549,14 +557,21 @@ export class CoastControls {
     const { x, y, z } = this.camera.position;
     const targetX = this.clampX(x + this.movement.x);
     const targetZ = this.clampZ(z + this.movement.z);
-    const targetY = Math.min(y + this.movement.y, this.navigation.flightCeiling);
-    const steps = Math.ceil(Math.hypot(targetX - x, targetZ - z) / FLIGHT_SAMPLE_DISTANCE);
+    const indoor = this.navigation.ceilingHeight !== undefined;
+    const ceiling = Math.min(this.navigation.flightCeiling, this.ceilingY(x, z));
+    const floor = indoor ? this.flightFloorHeight(x, z) : -Infinity;
+    const targetY = Math.min(ceiling, Math.max(floor, y + this.movement.y));
+    const sampleDistance = indoor ? WALK_SAMPLE_DISTANCE : FLIGHT_SAMPLE_DISTANCE;
+    const steps = Math.ceil(Math.hypot(targetX - x, targetZ - z) / sampleDistance);
     let clear = true;
     for (let step = 1; step <= steps; step += 1) {
       const t = step / steps;
       const sampleX = x + (targetX - x) * t, sampleZ = z + (targetZ - z) * t;
-      const surface = this.flightFloorHeight(sampleX, sampleZ);
-      if (this.navigation.blocksFlight?.(sampleX, sampleZ) || y + (targetY - y) * t < surface) {
+      const sampleY = y + (targetY - y) * t;
+      const blocked = this.navigation.blocksFlight
+        ? this.navigation.blocksFlight(sampleX, sampleZ)
+        : this.navigation.blocksWalking?.(sampleX, sampleZ, sampleY - CAMERA_SURFACE_CLEARANCE);
+      if (blocked || sampleY < this.flightFloorHeight(sampleX, sampleZ) || sampleY > this.ceilingY(sampleX, sampleZ)) {
         clear = false;
         break;
       }
@@ -582,7 +597,9 @@ export class CoastControls {
       const distance = Math.hypot(x - position.x, z - position.z);
       if (distance === 0) return false;
       const height = this.supportHeight(x, z);
-      if (this.navigation.blocksWalking?.(x, z, followSupport ? height : footAtStep)) return false;
+      const nextFoot = followSupport ? height : footAtStep;
+      if (this.navigation.blocksWalking?.(x, z, nextFoot)
+        || nextFoot + this.eyeHeight > this.ceilingY(x, z)) return false;
       const rise = height - support;
       const walkableRise = distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON);
       if (followSupport ? rise > walkableRise : height > footAtStep + FOOT_CLEARANCE) return false;
@@ -610,7 +627,11 @@ export class CoastControls {
   }
 
   private flightFloorHeight(x: number, z: number): number {
-    return Math.max(this.navigation.groundHeight(x, z), this.waterLevel(x, z)) + 0.25;
+    return Math.max(this.navigation.groundHeight(x, z), this.waterLevel(x, z)) + CAMERA_SURFACE_CLEARANCE;
+  }
+
+  private ceilingY(x: number, z: number): number {
+    return (this.navigation.ceilingHeight?.(x, z) ?? Infinity) - CAMERA_SURFACE_CLEARANCE;
   }
 
   private waterLevel(x: number, z: number): number {

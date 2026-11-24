@@ -86,10 +86,10 @@ async function sampleRendering(page, quality) {
   await writeFile(join(screenshotDirectory, `coast-${quality}-rendering.json`), JSON.stringify(result, null, 2) + '\n');
 }
 
-function installBrowserProbes() {
+function installBrowserProbes({ blockAudioUntilGesture = false } = {}) {
   const probe = {
     context: null, analyser: null, panners: [], pannerTargets: new WeakMap(), delays: [], pad: null,
-    decoded: 0, contexts: 0,
+    decoded: 0, contexts: 0, resumeGestures: [],
   };
   window.coastProbe = probe;
   probe.peak = () => {
@@ -97,6 +97,17 @@ function installBrowserProbes() {
     probe.analyser.getFloatTimeDomainData(signal);
     return Math.max(...signal.map(Math.abs));
   };
+  let trustedGesture = false;
+  if (blockAudioUntilGesture) {
+    const recordGesture = event => { trustedGesture ||= event.isTrusted; };
+    window.addEventListener('click', recordGesture, true);
+    window.addEventListener('keydown', recordGesture, true);
+    probe.blockResumeAgain = async () => {
+      trustedGesture = false;
+      probe.context.testSuspended = true;
+      await probe.context.suspend();
+    };
+  }
   const NativeAudioContext = window.AudioContext;
   const connect = AudioNode.prototype.connect;
   window.AudioContext = class extends NativeAudioContext {
@@ -106,6 +117,22 @@ function installBrowserProbes() {
       probe.context = this;
       probe.analyser = this.createAnalyser();
       probe.analyser.fftSize = 1024;
+      this.testSuspended = blockAudioUntilGesture;
+      if (this.testSuspended) void this.suspend();
+    }
+    get state() {
+      return this.testSuspended ? 'suspended' : super.state;
+    }
+    async resume() {
+      const gesture = blockAudioUntilGesture ? trustedGesture : navigator.userActivation.isActive;
+      probe.resumeGestures.push(gesture);
+      if (this.testSuspended && !gesture) {
+        await new Promise(resolve => { this.releaseResume = resolve; });
+        return;
+      }
+      await super.resume();
+      this.testSuspended = false;
+      this.releaseResume?.();
     }
     createPanner() {
       const panner = super.createPanner();
@@ -271,6 +298,7 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     await capture(page, 'lagoon-light');
 
     const audioToggle = page.locator('.coast-audio');
+    const audioRetry = page.getByRole('button', { name: '音声を再開' });
     assert.equal(await audioToggle.textContent(), '環境音をオン');
     let failWaveOnce = true;
     let releaseWaveFailure;
@@ -284,15 +312,24 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
       }
       await route.continue();
     });
-    await page.getByRole('button', { name: '環境音をオン' }).click();
-    assert.equal(await audioToggle.isDisabled(), true);
+    await audioToggle.click();
+    assert.equal(await audioToggle.textContent(), '環境音をオフ');
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '音声を準備しています。');
+    await audioToggle.click();
+    assert.equal(await audioToggle.textContent(), '環境音をオン');
+    await page.getByRole('button', { name: '歩行音をオフ' }).click();
+    assert.equal(await audioRetry.isVisible(), false);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('lumen-pilgrimage:sound')).environmentOn), false);
+
+    await audioToggle.click();
+    await page.getByRole('button', { name: '歩行音をオン' }).click();
     releaseWaveFailure();
     await page.waitForFunction(() => document.querySelector('.coast-audio-message')?.textContent?.includes(
-      'もう一度ボタンを押してください'));
-    assert.equal(await audioToggle.textContent(), '環境音をオン');
-    assert.equal(await audioToggle.isDisabled(), false);
-    await page.getByRole('button', { name: '環境音をオン' }).click();
-    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+      '音声を開始できませんでした'));
+    assert.equal(await audioToggle.textContent(), '環境音をオフ');
+    assert.equal(await audioToggle.isEnabled(), true);
+    await audioRetry.click();
+    await audioRetry.waitFor({ state: 'hidden' });
     assert.equal(await page.locator('.coast-audio-message').textContent(), '');
     await page.waitForFunction(signalLevel, undefined, { polling: 100 });
     const graph = () => ({
@@ -344,7 +381,7 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     await sampleRendering(page, 'high');
     await light.click();
 
-    const volume = page.getByRole('slider', { name: '音量' });
+    const volume = page.getByRole('slider', { name: '全体音量' });
     await page.getByRole('button', { name: '環境音をオフ' }).click();
     await page.getByRole('button', { name: '環境音をオン' }).waitFor();
     assert.equal(await page.locator('.coast-audio-message').textContent(), '');
@@ -361,16 +398,17 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     await page.waitForFunction(signalLevel, undefined, { polling: 100 });
     await page.getByRole('button', { name: '環境音をオフ' }).click();
     await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
-    assert.equal(await volume.inputValue(), '100');
+    assert.equal(await volume.inputValue(), '300');
     await page.getByRole('button', { name: '環境音をオン' }).click();
     await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
     await page.waitForFunction(signalLevel, undefined, { polling: 100 });
-    assert.equal(await volume.inputValue(), '100');
+    assert.equal(await volume.inputValue(), '300');
     await page.evaluate(() => window.coastProbe.context.suspend());
-    await page.getByRole('button', { name: '環境音をオン' }).waitFor();
+    await audioRetry.waitFor();
+    assert.equal(await audioToggle.textContent(), '環境音をオフ');
     assert.equal(await page.locator('.coast-audio-message').textContent(), '');
-    await page.getByRole('button', { name: '環境音をオン' }).click();
-    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+    await audioRetry.click();
+    await audioRetry.waitFor({ state: 'hidden' });
     await page.waitForFunction(() => window.coastProbe.context.state === 'running');
     assert.equal(await page.evaluate(() => window.coastProbe.decoded), beforeSwitch.decoded);
 
@@ -466,13 +504,221 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     await page.waitForFunction(width => document.querySelector('canvas.coast-view')?.width === width, lightWidth);
     assert.equal(await light.getAttribute('aria-pressed'), 'true');
     assert.equal(await flight.getAttribute('aria-pressed'), 'false');
-    assert.equal(await page.evaluate(() => window.coastProbe.context), null);
+    assert.equal(await audioToggle.textContent(), '環境音をオフ');
+    assert.equal(await volume.inputValue(), '300');
     assert.deepEqual([...externalRequests], []);
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
   }
 });
+
+test('sound settings align and follow fast travel without starting audio on a fresh visit', { timeout }, async () => {
+  const page = await newPage();
+  const volume = page.getByRole('slider', { name: '全体音量' });
+  const steps = page.getByRole('slider', { name: '歩行音' });
+  const birds = page.getByRole('slider', { name: '鳥の声' });
+  const details = page.locator('.coast-sound-details > summary');
+  const travel = page.getByRole('button', { name: 'ファストトラベル' });
+  const dialog = page.getByRole('dialog', { name: 'ファストトラベル' });
+
+  function sliderLayout() {
+    const selectors = ['#coast-fov', '#coast-volume', '#coast-sound-footsteps', '#coast-sound-birds'];
+    return selectors.map(selector => {
+      const { x, width } = document.querySelector(selector).getBoundingClientRect();
+      return { x, width };
+    });
+  }
+
+  async function goTo(label, world) {
+    await travel.click();
+    await dialog.getByRole('button', { name: label, exact: true }).click();
+    await page.waitForURL(address => address.searchParams.get('world') === world, { waitUntil: 'commit' });
+  }
+
+  await page.addInitScript(installBrowserProbes);
+  try {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(url, { waitUntil: 'commit' });
+    assert.equal(await volume.inputValue(), '100');
+    assert.equal(await steps.inputValue(), '100');
+    assert.equal(await birds.isVisible(), false);
+    await details.click();
+    const desktop = await page.evaluate(sliderLayout);
+    assert.ok(desktop.every(track => track.x === desktop[0].x && track.width === 288), JSON.stringify(desktop));
+    const actions = await page.evaluate(() => ['.coast-fov-reset', '.coast-audio', '.coast-footsteps-audio']
+      .map(selector => document.querySelector(selector).getBoundingClientRect().right));
+    assert.ok(actions.every(right => right === actions[0]), JSON.stringify(actions));
+    await capture(page, 'coast-sound-settings-desktop');
+
+    for (const size of [{ width: 375, height: 740 }, { width: 667, height: 375 }]) {
+      await page.setViewportSize(size);
+      const compact = await page.evaluate(sliderLayout);
+      assert.ok(compact.every(track => track.x === compact[0].x && track.width === compact[0].width));
+      assert.ok(compact[0].width > 0 && compact[0].width <= 288);
+      assert.ok(compact[0].width < 288);
+      assert.equal(await page.locator('.coast-settings').evaluate(panel => panel.scrollWidth <= panel.clientWidth), true);
+      if (size.width > size.height) {
+        const masterVisible = await page.locator('.coast-audio').evaluate(button => {
+          const bounds = button.getBoundingClientRect();
+          const dock = button.closest('.coast-dock').getBoundingClientRect();
+          return bounds.top >= dock.top && bounds.bottom <= dock.bottom;
+        });
+        assert.equal(masterVisible, true);
+      }
+      await capture(page, `coast-sound-settings-${size.width}`);
+    }
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await volume.press('End');
+    await steps.press('ArrowLeft');
+    await birds.press('Home');
+    assert.equal(await volume.getAttribute('aria-valuetext'), '300%');
+    assert.equal(await page.evaluate(() => window.coastProbe.contexts), 0);
+    await details.click();
+    await page.getByRole('button', { name: '環境音をオン' }).click();
+    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+    await page.getByRole('button', { name: '歩行音をオフ' }).click();
+    await goTo('中央展望デッキ', 'overlook');
+
+    // Same-origin navigation retains settings and can restore sound without another click.
+    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+    await page.getByRole('button', { name: '音声を再開' }).waitFor({ state: 'hidden' });
+    assert.equal(await page.evaluate(() => window.coastProbe.context.state), 'running');
+    assert.equal(await steps.count(), 0);
+    assert.equal(await volume.inputValue(), '300');
+    await details.click();
+    assert.equal(await birds.inputValue(), '0');
+    assert.equal(await page.getByRole('slider', { name: '交通音' }).isVisible(), true);
+    assert.equal(await page.getByRole('slider', { name: '水音' }).count(), 0);
+    await page.getByRole('button', { name: '環境音をオフ' }).click();
+    await goTo('入り江の浜', 'coast');
+
+    assert.equal(await volume.inputValue(), '300');
+    assert.equal(await steps.inputValue(), '99');
+    assert.equal(await page.getByRole('button', { name: '環境音をオン' }).isVisible(), true);
+    assert.equal(await page.getByRole('button', { name: '歩行音をオン' }).isVisible(), true);
+    assert.equal(await page.evaluate(() => window.coastProbe.contexts), 0);
+    await page.getByRole('button', { name: '歩行音をオン' }).click();
+    await page.getByRole('button', { name: '歩行音をオフ' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '環境音をオン' }).isVisible(), true);
+    await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
+  } finally {
+    await page.close();
+  }
+});
+
+test('saved sound waits for a genuine gesture under an autoplay block and ignores invalid values', { timeout },
+  async () => {
+    const page = await newPage();
+    await page.addInitScript(installBrowserProbes, { blockAudioUntilGesture: true });
+    await page.addInitScript(() => {
+      localStorage.setItem('lumen-pilgrimage:sound', JSON.stringify({
+        master: 1.75, environmentOn: true, footstepsOn: false, levels: { water: 0.2, birds: -1, insects: '0.5' },
+      }));
+    });
+    try {
+      await page.goto(url, { waitUntil: 'commit' });
+      await page.waitForFunction(() => window.coastProbe.resumeGestures.length === 1);
+      const disable = page.getByRole('button', { name: '環境音をオフ' });
+      const retry = page.getByRole('button', { name: '音声を再開' });
+      assert.equal(await disable.isEnabled(), true);
+      assert.equal(await retry.isVisible(), true);
+      assert.equal(await page.getByRole('slider', { name: '全体音量' }).inputValue(), '175');
+      await page.evaluate(() => window.dispatchEvent(new MouseEvent('click')));
+      assert.deepEqual(await page.evaluate(() => window.coastProbe.resumeGestures), [false]);
+
+      await page.keyboard.press('w');
+      await retry.waitFor({ state: 'hidden' });
+      assert.equal(await disable.isVisible(), true);
+      assert.deepEqual(await page.evaluate(() => window.coastProbe.resumeGestures), [false, true]);
+      assert.equal(await page.evaluate(() => window.coastProbe.contexts), 1);
+      await page.locator('.coast-sound-details > summary').click();
+      assert.equal(await page.getByRole('slider', { name: '水音' }).inputValue(), '20');
+      assert.equal(await page.getByRole('slider', { name: '鳥の声' }).inputValue(), '100');
+      assert.equal(await page.getByRole('slider', { name: '虫の声' }).inputValue(), '100');
+      assert.deepEqual(await page.evaluate(() => window.coastProbe.resumeGestures), [false, true]);
+
+      await page.evaluate(async () => {
+        await window.coastProbe.blockResumeAgain();
+        window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      });
+      await retry.waitFor();
+      assert.deepEqual(await page.evaluate(() => window.coastProbe.resumeGestures), [false, true, false]);
+      await page.keyboard.press('w');
+      await retry.waitFor({ state: 'hidden' });
+      assert.deepEqual(await page.evaluate(() => window.coastProbe.resumeGestures), [false, true, false, true]);
+      assert.equal(await page.evaluate(() => window.coastProbe.contexts), 1);
+    } finally {
+      await page.close();
+    }
+  });
+
+test('a simulated persisted pageshow reapplies saved sound without rebuilding the active audio graph', { timeout },
+  async () => {
+    const page = await newPage();
+    const master = page.getByRole('slider', { name: '全体音量' });
+    const footsteps = page.getByRole('slider', { name: '歩行音' });
+    const water = page.getByRole('slider', { name: '水音' });
+    const retry = page.getByRole('button', { name: '音声を再開' });
+
+    function restore(change) {
+      return page.evaluate(change => {
+        const key = 'lumen-pilgrimage:sound';
+        const previous = JSON.parse(localStorage.getItem(key));
+        localStorage.setItem(key, JSON.stringify({
+          ...previous, ...change, levels: { ...previous.levels, ...change.levels },
+        }));
+        window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      }, change);
+    }
+
+    await page.addInitScript(installBrowserProbes);
+    try {
+      await page.goto(url, { waitUntil: 'commit' });
+      await page.getByRole('button', { name: '環境音をオン' }).click();
+      await retry.waitFor({ state: 'hidden' });
+      await page.waitForFunction(signalLevel, undefined, { polling: 100 });
+      await page.locator('.coast-sound-details > summary').click();
+      await restore({ master: 0, footstepsOn: false, levels: { footsteps: 0.37 } });
+      assert.equal(await master.inputValue(), '0');
+      assert.equal(await master.getAttribute('aria-valuetext'), '0%');
+      assert.equal(await footsteps.inputValue(), '37');
+      assert.equal(await page.getByRole('button', { name: '歩行音をオン' }).isVisible(), true);
+      await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
+
+      await restore({ master: 1.43, levels: { water: 0, birds: 0, traffic: 0.54 } });
+      assert.equal(await master.inputValue(), '143');
+      assert.equal(await water.inputValue(), '0');
+      assert.equal(await water.getAttribute('aria-valuetext'), '0%');
+      const changedAt = await page.evaluate(() => window.coastProbe.context.currentTime);
+      await page.waitForFunction(changedAt => window.coastProbe.context.currentTime >= changedAt + 0.4
+        && window.coastProbe.peak() < 0.00001, changedAt);
+      await water.press('End');
+      await page.waitForFunction(signalLevel, undefined, { polling: 100 });
+      assert.deepEqual(await page.evaluate(() => {
+        const saved = JSON.parse(localStorage.getItem('lumen-pilgrimage:sound'));
+        return [saved.master, saved.levels.water, saved.levels.footsteps, saved.levels.traffic];
+      }), [1.43, 1, 0.37, 0.54]);
+
+      await restore({ environmentOn: false });
+      await page.getByRole('button', { name: '環境音をオン' }).waitFor();
+      await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
+      assert.equal(await page.evaluate(() => window.coastProbe.contexts), 1);
+
+      await page.evaluate(() => {
+        Object.defineProperty(window, 'localStorage', {
+          get() { throw new DOMException('Storage denied', 'SecurityError'); },
+        });
+        window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+      });
+      assert.equal(await master.inputValue(), '143');
+      assert.equal(await footsteps.inputValue(), '37');
+      assert.equal(await retry.isVisible(), false);
+    } finally {
+      await page.close();
+    }
+  });
 
 test('both worlds accept the first movement key when the browser finishes focusing after its focus event', { timeout }, async () => {
   const page = await newPage();
@@ -597,8 +843,9 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     const coastDay = await skyBrightness(canvas);
     assert.equal(await day.getAttribute('aria-pressed'), 'true');
     await page.getByRole('button', { name: '環境音をオン' }).click();
-    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
-    await walkWithFocus('w', page.locator('body'));
+    const environment = page.getByRole('button', { name: '環境音をオフ' });
+    await environment.waitFor();
+    await walkWithFocus('w', environment);
 
     const high = page.getByRole('button', { name: '高品質' });
     const light = page.getByRole('button', { name: '軽量' });

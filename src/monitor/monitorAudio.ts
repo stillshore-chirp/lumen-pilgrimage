@@ -1,4 +1,6 @@
 import { MathUtils, Quaternion, Vector3, type Camera, type Object3D } from 'three';
+// @ts-expect-error The Node test runner needs the explicit extension for native TypeScript loading.
+import { connectExplorationOutput } from '../coast/explorationOutput.ts';
 
 export type MonitorAudioMode = 'stereo' | 'spatial' | 'television' | 'surround' | 'cinema';
 export type MonitorAudioStatus = 'idle' | 'ready' | 'gesture-required' | 'unavailable' | 'stream-unavailable';
@@ -58,6 +60,7 @@ interface SurroundGraph {
 interface MonitorGraph {
   source: MediaStreamAudioSourceNode;
   master: FadedGain;
+  outputNodes: readonly AudioNode[];
   stereo: FadedGain;
   spatial: { panner: PannerNode; level: FadedGain } | null;
   surround: SurroundGraph | null;
@@ -92,6 +95,7 @@ export class MonitorAudio {
   private streamUnavailable = false;
   private disposed = false;
   private volume = 0.75;
+  private masterVolume = 1;
   private muted = false;
   private enabled = true;
   private mode: MonitorAudioMode = 'stereo';
@@ -195,6 +199,12 @@ export class MonitorAudio {
   setVolume(volume: number): void {
     if (!Number.isFinite(volume)) return;
     this.volume = MathUtils.clamp(volume, 0, 1);
+    this.updateLevel();
+  }
+
+  setMasterVolume(multiplier: number): void {
+    if (!Number.isFinite(multiplier)) return;
+    this.masterVolume = MathUtils.clamp(multiplier, 0, 3);
     this.updateLevel();
   }
 
@@ -346,8 +356,8 @@ export class MonitorAudio {
 
       source.connect(stereo.node).connect(master.node);
       if (spatial) source.connect(spatial.panner).connect(spatial.level.node).connect(master.node);
-      master.node.connect(context.destination);
-      this.graph = { source, master, stereo, spatial, surround, cinema };
+      const outputNodes = connectExplorationOutput(context, master.node);
+      this.graph = { source, master, outputNodes, stereo, spatial, surround, cinema };
       this.streamUnavailable = false;
       this.setMode(this.mode);
       this.updateLevel();
@@ -358,7 +368,7 @@ export class MonitorAudio {
 
   private updateLevel(): void {
     if (!this.graph || !this.context) return;
-    const level = this.enabled && !this.muted ? this.volume * MAX_GAIN : 0;
+    const level = this.enabled && !this.muted ? this.volume * this.masterVolume * MAX_GAIN : 0;
     this.graph.master.fadeTo(level, this.context.currentTime, LEVEL_FADE_SECONDS);
   }
 
@@ -368,6 +378,7 @@ export class MonitorAudio {
     this.disconnectSurround(graph);
     this.disconnectCinema(graph);
     graph.master.node.disconnect();
+    graph.outputNodes.forEach(node => node.disconnect());
     graph.source.disconnect();
     graph.stereo.node.disconnect();
     graph.spatial?.level.node.disconnect();

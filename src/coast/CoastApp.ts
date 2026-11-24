@@ -8,6 +8,7 @@ import type { MonitorView, MonitorViewBinding } from '../monitor/monitorView';
 import type { CoastBirdCue } from './coastBirdCue';
 import { EXPLORATION_WORLDS, findDestination, type ExplorationWorldId } from './coastDestinations';
 import { decideTravel, parseStartupRoute, readInitialExplorationState, urlForTime } from './explorationRoute';
+import { bindCoastSoundControls } from './CoastSoundControls';
 import { createCoastTravelPanel } from './CoastTravelPanel';
 import { CoastWorld, type CoastQuality } from './CoastWorld';
 import { createResidenceControlPanel, type ResidenceControlSection } from './ResidenceControlPanel';
@@ -38,15 +39,11 @@ interface ExplorationWorld {
   dispose(): void;
 }
 
-type ExplorationAudio = Pick<CoastAudio, 'start' | 'isOn' | 'setLevel' | 'update' | 'dispose'> & {
+type ExplorationAudio = Pick<CoastAudio, 'start' | 'isRunning' | 'setMix' | 'dispose'> & {
+  update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement: CoastMovement,
+    birdCues: readonly CoastBirdCue[], grounded: boolean): void;
   setTimeOfDay?(time: CoastTimeOfDay): void;
 };
-
-interface ExplorationAudioControls {
-  startForPreview(): Promise<void>;
-  sync(): void;
-  dispose(): void;
-}
 
 interface ExplorationInteraction {
   label(position: Vector3, facing: Vector3): string | null;
@@ -83,7 +80,7 @@ export class CoastApp {
   private readonly world: ExplorationWorld;
   private readonly worldId: ExplorationWorldId;
   private readonly audio: ExplorationAudio;
-  private readonly audioControls: ExplorationAudioControls;
+  private readonly audioControls: ReturnType<typeof bindCoastSoundControls>;
   private readonly camera: PerspectiveCamera;
   private readonly canvasLabel: string;
   private readonly ui: HTMLElement;
@@ -161,17 +158,17 @@ export class CoastApp {
             <p class="coast-guide-description"></p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
-            <p class="coast-jump-guide">地上で <kbd>Space</kbd> ジャンプ</p>
+            <p>地上で <kbd>Space</kbd> ジャンプ</p>
             <p><kbd>C</kbd> ${cinema ? '座位／立位' : 'しゃがむ／立つ'}</p>
             <p class="coast-water-guide">泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
             <p><kbd>T</kbd> ファストトラベル</p>
-            <p class="coast-flight-guide"><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
+            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
-              <p class="coast-flight-guide"><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
+              <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
               <p class="coast-water-guide">泳いでいるとき <kbd>B</kbd> 潜る <kbd>A</kbd> 浮上</p>
-              <p class="coast-flight-guide">飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
+              <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
             </details>
           </details>
           <p class="coast-lock-message" role="status" hidden></p>
@@ -182,17 +179,12 @@ export class CoastApp {
             <button type="button" class="coast-light" aria-pressed="true" title="広域の影と軽い植生描画">軽量</button>
             <button type="button" class="coast-high" aria-pressed="false" title="細かな木漏れ日、地表の凹凸と手前の下草">高品質</button>
           </div>
-          <div class="coast-row coast-view-settings">
+          <div class="coast-view-settings coast-setting-row">
             <label class="coast-label" for="coast-fov">視野角</label>
             <input id="coast-fov" type="range" min="40" max="95" step="1">
-            <span class="coast-fov-value" aria-hidden="true"></span>
+            <span class="coast-fov-value coast-setting-value" aria-hidden="true"></span>
             <button type="button" class="coast-fov-reset">既定に戻す</button>
           </div>
-          <div class="coast-row coast-sound">
-            <button type="button" class="coast-audio">環境音をオン</button>
-            <label class="coast-volume">音量 <input type="range" min="0" max="100" step="1" value="70"></label>
-          </div>
-          <p class="coast-audio-message" role="status"></p>
         </section>
       </div>
     `;
@@ -209,17 +201,10 @@ export class CoastApp {
       ui.querySelector('.coast-light')!.setAttribute('title', '広域の影と軽い描画');
       ui.querySelector('.coast-high')!.setAttribute('title', '近くの影と細かな描画');
     }
-    if (loaded.navigation?.jumpEnabled === false) {
-      ui.querySelectorAll('.coast-jump-guide').forEach(node => node.remove());
-    }
-    if (loaded.navigation?.flightEnabled === false) {
-      ui.querySelectorAll('.coast-flight-guide').forEach(node => node.remove());
-    }
 
     const mode = ui.querySelector<HTMLElement>('.coast-mode')!;
     const lock = ui.querySelector<HTMLButtonElement>('.coast-lock')!;
     const flight = ui.querySelector<HTMLButtonElement>('.coast-flight')!;
-    flight.hidden = loaded.navigation?.flightEnabled === false;
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
     this.controls = new CoastControls(this.camera, canvas, {
       diveObstacleHeight: (x, z) => this.world.diveObstacleHeight?.(x, z),
@@ -264,7 +249,10 @@ export class CoastApp {
     this.travelStatus.hidden = true;
     this.travel.element.append(this.travelStatus);
     this.monitorBinding = this.bindMonitor(actions);
-    this.audioControls = this.bindAudio(ui, this.audio);
+    this.audioControls = bindCoastSoundControls(
+      ui.querySelector<HTMLElement>('.coast-settings')!, this.worldId, this.audio,
+      master => this.monitor?.setMasterVolume(master),
+    );
     if (loaded.cinemaControls) {
       this.cinemaPanel = createCinemaPanel(loaded.cinemaControls, () => {
         this.monitor?.closePanel();
@@ -317,6 +305,7 @@ export class CoastApp {
     if (previous) {
       this.monitor = previous.monitor;
       this.monitor?.rebind(this.monitorBinding, this.world.theater ?? null);
+      this.monitor?.setMasterVolume(this.audioControls.masterVolume);
       previous.monitor = undefined;
       previous.disposeWorld();
       this.controls.releaseInput();
@@ -521,6 +510,7 @@ export class CoastApp {
         if (this.disposed) return;
         this.monitor = new MonitorView(binding, this.renderer, this.mount);
         this.monitor.setTheater(this.world.theater ?? null);
+        this.monitor.setMasterVolume(this.audioControls.masterVolume);
       } catch {
         toggle.textContent = '仮想モニターを再読み込み';
       } finally {
@@ -589,94 +579,6 @@ export class CoastApp {
     apply(initialFov);
   }
 
-  private bindAudio(ui: HTMLElement, audio: ExplorationAudio): ExplorationAudioControls {
-    const start = ui.querySelector<HTMLButtonElement>('.coast-audio')!;
-    const volume = ui.querySelector<HTMLInputElement>('.coast-volume input')!;
-    const message = ui.querySelector<HTMLElement>('.coast-audio-message')!;
-    let muted = false;
-    let pending = false;
-    let disposed = false;
-    let pendingStart: Promise<boolean> | undefined;
-    const setLevel = () => audio.setLevel(volume.valueAsNumber / 100, muted);
-    const sync = () => {
-      if (disposed) return;
-      const on = audio.isOn();
-      const label = on ? '環境音をオフ' : '環境音をオン';
-      if (start.textContent !== label) start.textContent = label;
-      if (start.disabled !== pending) start.disabled = pending;
-    };
-    setLevel();
-    async function startAudio(): Promise<boolean> {
-      if (disposed) return false;
-      if (pendingStart) return pendingStart;
-      pending = true;
-      message.textContent = '環境音を準備しています。';
-      sync();
-      let request: Promise<void>;
-      try {
-        // Invoke resume synchronously while the click still carries user activation.
-        request = audio.start();
-      } catch {
-        request = Promise.reject(new Error('Audio start failed'));
-      }
-      const operation = request.then(() => {
-        if (disposed) return false;
-        message.textContent = audio.isOn() || muted
-          ? ''
-          : '環境音を開始できませんでした。もう一度ボタンを押してください。';
-        return true;
-      }).catch(() => {
-        if (disposed) return false;
-        message.textContent = '環境音を開始できませんでした。もう一度ボタンを押してください。';
-        return false;
-      }).finally(() => {
-        pending = false;
-        pendingStart = undefined;
-        sync();
-      });
-      pendingStart = operation;
-      return operation;
-    }
-    const toggleAudio = () => {
-      if (disposed || pending) return;
-      if (audio.isOn()) {
-        muted = true;
-        setLevel();
-        message.textContent = '';
-        sync();
-        return;
-      }
-      void startAudio().then(started => {
-        if (!started || disposed) return;
-        muted = false;
-        setLevel();
-        message.textContent = audio.isOn()
-          ? ''
-          : '環境音を開始できませんでした。もう一度ボタンを押してください。';
-        sync();
-      });
-    };
-    const changeVolume = () => {
-      if (disposed) return;
-      setLevel();
-      sync();
-    };
-    const startForPreview = async () => { await startAudio(); };
-    start.addEventListener('click', toggleAudio);
-    volume.addEventListener('input', changeVolume);
-    sync();
-    return {
-      startForPreview,
-      sync,
-      dispose() {
-        disposed = true;
-        start.removeEventListener('click', toggleAudio);
-        volume.removeEventListener('input', changeVolume);
-        start.disabled = true;
-      },
-    };
-  }
-
   private resizeViewport(): void {
     if (this.renderer.xr.isPresenting) return;
     const width = Math.max(1, this.mount.clientWidth);
@@ -712,7 +614,7 @@ export class CoastApp {
     this.up.copy(viewer.up).applyQuaternion(viewer.quaternion);
     const movement = this.controls.currentMovement;
     this.audio.update(viewer.position, this.forward, this.up, this.elapsed,
-      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues);
+      viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues, this.controls.isGrounded);
     const view = this.monitor?.renderCamera ?? this.camera;
     this.world.prepareRender?.(this.renderer, view);
     this.renderer.render(this.world.scene, view);

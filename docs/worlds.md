@@ -25,13 +25,17 @@
 2. URL の末尾を `?world=coast&place=inlet&time=night` にして、ファストトラベルから「中央展望デッキ」を選びます。
 3. 到着後のURLは `?world=overlook&place=main-deck&time=night` となり、展望台の夜景が表示され、夜ボタンが選択状態になります。既存の[ブラウザーテスト](../scripts/coast-browser.test.mjs)も同じ着地・時刻保持を確認します。
 
-`src/` で永続化する設定は、視野角キー `lumen-pilgrimage:fov` のみです。範囲は40°〜95°、通常の既定値は60°、展望台は54°です。設定変更は `localStorage` に保存され、既定に戻すと保存値を削除します。利用できないストレージでは現在のページ内だけ変更できます。描画品質は起動時に毎回「軽量」へ戻り、時間帯はURL、その他の操作状態はページ内で管理します。[該当実装](../src/coast/CoastApp.ts) · [視野角と描画の利用者ガイド](exploration.md)
+### 設定の保存
+
+視野角と音の設定は同一オリジンの `localStorage` に保存します。視野角キーは `lumen-pilgrimage:fov` です。範囲は40°〜95°、通常の既定値は60°、展望台は54°です。既定に戻すと保存値を削除します。
+
+音の設定キーは `lumen-pilgrimage:sound` です。全体音量、環境音と歩行音のオン・オフ、種類別の音量を保存します。未指定のオン・オフは初回の操作まで保留し、音量は既定の100%を使います。保存値は読み込み時に項目ごとに検証します。BFCacheから復帰したページでも、保存値を読み直して表示と音響に反映します。ストレージを利用できないときは現在のページ内で設定できます。描画品質は起動時に毎回「軽量」へ戻り、時間帯はURL、その他の操作状態はページ内で管理します。 [視野角の実装](../src/coast/CoastApp.ts) · [音の設定の実装](../src/coast/explorationSound.ts) · [探索ガイド](exploration.md)
 
 ## 共通座標・ナビゲーション契約
 
 全ワールドは Three.js の座標を使い、Y を上下、X/Z を床面として扱います。座標原点はワールドごとに独立しています。ファストトラベルは `world`、`place`、`time` を引き継ぎ、各ワールドの目的地から位置を決めます。位置と向きは[CoastPose](../src/coast/CoastControls.ts)の `x`、`z`、`yaw`、`pitch` で表します。着地点に `y` は含めず、地面または水面から眼高を算出します。映画館の座席など、立位以外の視点は `seatedEyeHeight` を指定します。
 
-[CoastNavigation](../src/coast/CoastControls.ts)はワールドごとに境界、初期姿勢、`groundHeight`、任意の水位と衝突判定、飛行上限、移動制限を提供します。共通の移動処理はこの契約から歩行可能性と支持面を読みます。地形や建築を変更するときは、描画形状と同じ座標・高さをナビゲーションへ反映します。
+[CoastNavigation](../src/coast/CoastControls.ts)はワールドごとに境界、初期姿勢、`groundHeight`、任意の水位と衝突判定、飛行上限、任意の天井高を提供します。共通の移動処理はこの契約から移動できる範囲と支持面を読みます。地形や建築を変更するときは、描画形状と同じ座標・高さをナビゲーションへ反映します。
 
 | 実装座標の前提 | 現行の基準 |
 | --- | --- |
@@ -40,11 +44,11 @@
 | 住戸 | 平面の東座標を `x`、北座標を `-z` とし、仕上げ床は `y=0`。街路は住戸床から246 m下です。 |
 | 映画館 | 幕面は `z=0`、客席方向は `+z`。段床、車いすスペース、出口は同じ配置データを使います。 |
 
-立位の眼高は1.65 m、しゃがみは1.15 mです。共通歩行は6.4 m/s、水面の遊泳は4.1 m/s、潜水は3.6 m/s、自由飛行は20.5 m/sです。住戸と映画館は各ワールドの歩行速度を使い、飛行とジャンプを無効にしています。[移動制御](../src/coast/CoastControls.ts) · [利用者向け操作表](exploration.md)
+立位の眼高は1.65 m、しゃがみは1.15 mです。共通歩行は6.4 m/s、水面の遊泳は4.1 m/s、潜水は3.6 m/s、自由飛行は20.5 m/sです。飛行とジャンプは全ワールドで使えます。屋内では移動経路に沿って支持面、壁、開口と天井の高さを確認します。住戸と映画館は各ワールドの歩行速度を使います。[移動制御](../src/coast/CoastControls.ts) · [利用者向け操作表](exploration.md)
 
 ### フレームと入力
 
-[CoastApp のフレーム処理](../src/coast/CoastApp.ts)は、最大0.05秒に制限した経過時間を使い、操作可能なときに移動を更新し、座席遷移、仮想モニターの視点、ワールド更新、UI同期、音響更新の順に処理します。最後に任意の `world.prepareRender` を呼んでからシーンを描画します。環境音はボタン操作から開始します。シーン側の動的表現は `update(elapsed, viewer)`、高コストな描画準備は `prepareRender(renderer, camera)`、時間帯と描画品質は `setTimeOfDay`／`setQuality` を入口に揃えます。ページが通常終了する `pagehide` 時にワールド、音響、操作、レンダラーを破棄します。ページがBFCacheに保持される場合はモニター資源を解放してページ状態を残します。
+[CoastApp のフレーム処理](../src/coast/CoastApp.ts)は、最大0.05秒に制限した経過時間を使い、操作可能なときに移動を更新し、座席遷移、仮想モニターの視点、ワールド更新、UI同期、音響更新の順に処理します。最後に任意の `world.prepareRender` を呼んでからシーンを描画します。環境音・歩行音はボタン操作またはオン設定の復元で開始します。自動再生が保留された場合は、最初の有効なクリックやキー入力で再開を試みます。シーン側の動的表現は `update(elapsed, viewer)`、高コストな描画準備は `prepareRender(renderer, camera)`、時間帯と描画品質は `setTimeOfDay`／`setQuality` を入口に揃えます。ページが通常終了する `pagehide` 時にワールド、音響、操作、レンダラーを破棄します。ページがBFCacheに保持される場合はモニター資源を解放してページ状態を残します。
 
 - **デスクトップ:** 文書が表示中でフォーカスを持ち、入力先がキャンバス・本文・ポインターロック中のキャンバスであれば、WASDなどのキー入力を読みます。操作パネル内のボタン・折りたたみ見出し・範囲スライダーも、ダイアログ外では平面移動キーを受け付けます。その他のボタン、リンク、フォーム、編集欄はキーボード移動を止めます。Cによるしゃがみ・潜水入力は通常の移動モード条件に従います。マウス視点はキャンバスのポインターロック中に限ります。T はファストトラベル、E はそのワールドが選んだ近接操作です。
 - **標準ゲームパッド:** 最初に見つかった接続済みの `standard` mapping を読み、左右スティックで移動と視点を操作します。入力のデッドゾーンは0.16です。Xbox配置のA/B/Yはジャンプまたは上昇、潜水または下降、飛行切替に使います。ゲームパッドの軸はキーボード入力に加算されます。
@@ -79,7 +83,7 @@
 
 ### 都心の70階住戸 — `residence`
 
-[residencePlan.ts](../src/coast/world/residence/residencePlan.ts)の壁・開口・各室の平面を基準に、[residenceShell.ts](../src/coast/world/residence/residenceShell.ts)の建具と[residenceNavigation.ts](../src/coast/world/residence/residenceNavigation.ts)の歩行判定を作ります。[ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)が都市、住戸躯体、家具、カーテン、照明、反射、近接操作を統合します。家具は歩行を妨げない前提で、壁・建具・手すり・バルコニー引戸は歩行可否に反映します。歩行速度は2.4 m/sです。
+[residencePlan.ts](../src/coast/world/residence/residencePlan.ts)の壁・開口・各室の平面を基準に、[residenceShell.ts](../src/coast/world/residence/residenceShell.ts)の建具と[residenceNavigation.ts](../src/coast/world/residence/residenceNavigation.ts)の歩行判定を作ります。[ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)が都市、住戸躯体、家具、カーテン、照明、反射、近接操作を統合します。室内家具は通り抜けられます。壁・建具・手すり・バルコニー引戸は歩行、飛行、ジャンプ中の移動を止めます。室ごとの天井、開口の上端、バルコニーの上階スラブ下面で上昇を止めます。歩行速度は2.4 m/sです。
 
 主な着地点はリビング南窓、ホームシアター、玄関、主寝室、茶室、書斎です。寸法と納まりの現行正本は[70階住戸の設計資料](residence/residence-70f-design.md)と[70階住戸の平面・展開図PDF](residence/residence-70f-drawings.pdf)です。[50階住戸PDF](residence/residence-50f-drawings.pdf)は過去案の比較資料です。現行の受け入れ条件は70階住戸の設計資料を基準にします。設備・操作の案内は[探索ガイド](exploration.md)を参照してください。
 
@@ -89,7 +93,7 @@
 
 [cinemaLayout.ts](../src/coast/world/cinema/cinemaLayout.ts)が幕、20列の客席、段床、通路、車いすスペース、出口、移動先の共通配置データを持ちます。室内寸法は40 × 57 × 22 mです。スクリーンは16:9の30 × 16.875 mで、中心は前方床から9.8 mです。通常席580席と同伴席8席、車いすスペース8か所で596人分の位置を用意します。
 
-[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)が座席移動、上映、館内照明、空間音響をまとめます。[cinemaNavigation.ts](../src/coast/world/cinema/cinemaNavigation.ts)は座席背面と通路の歩行判定を同じ配置から作ります。映画館内の歩行は3.2 m/sで、飛行・ジャンプを無効にします。
+[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)が座席移動、上映、館内照明、空間音響をまとめます。[cinemaNavigation.ts](../src/coast/world/cinema/cinemaNavigation.ts)は座席背面と通路の歩行判定を同じ配置から作ります。映画館内の歩行は3.2 m/sです。背もたれは歩行を止め、上から越えることもできます。飛行中もスクリーン手前と客席側の外周で止まり、天井と梁の下まで上昇できます。
 
 出口の扉と表示灯は館内の造作です。館外への移動はファストトラベルで行います。
 
