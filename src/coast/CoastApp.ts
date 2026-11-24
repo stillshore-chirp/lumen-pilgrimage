@@ -140,17 +140,17 @@ export class CoastApp {
             <p class="coast-guide-description"></p>
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
-            <p class="coast-jump-guide">地上で <kbd>Space</kbd> ジャンプ</p>
+            <p>地上で <kbd>Space</kbd> ジャンプ</p>
             <p><kbd>C</kbd> ${cinema ? '座位／立位' : 'しゃがむ／立つ'}</p>
             <p class="coast-water-guide">泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
             <p><kbd>T</kbd> ファストトラベル</p>
-            <p class="coast-flight-guide"><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
+            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
-              <p class="coast-flight-guide"><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
+              <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
               <p class="coast-water-guide">泳いでいるとき <kbd>B</kbd> 潜る <kbd>A</kbd> 浮上</p>
-              <p class="coast-flight-guide">飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
+              <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
             </details>
           </details>
           <p class="coast-lock-message" role="status" hidden></p>
@@ -188,18 +188,11 @@ export class CoastApp {
       ui.querySelector('.coast-light')!.setAttribute('title', '広域の影と軽い描画');
       ui.querySelector('.coast-high')!.setAttribute('title', '近くの影と細かな描画');
     }
-    if (loaded?.navigation.jumpEnabled === false) {
-      ui.querySelectorAll('.coast-jump-guide').forEach(node => node.remove());
-    }
-    if (loaded?.navigation.flightEnabled === false) {
-      ui.querySelectorAll('.coast-flight-guide').forEach(node => node.remove());
-    }
     this.mount.append(canvas, ui);
 
     const mode = ui.querySelector<HTMLElement>('.coast-mode')!;
     const lock = ui.querySelector<HTMLButtonElement>('.coast-lock')!;
     const flight = ui.querySelector<HTMLButtonElement>('.coast-flight')!;
-    flight.hidden = loaded?.navigation.flightEnabled === false;
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
     this.controls = new CoastControls(this.camera, canvas, {
       diveObstacleHeight: (x, z) => this.world.diveObstacleHeight?.(x, z),

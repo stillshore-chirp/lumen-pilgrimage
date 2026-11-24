@@ -3,7 +3,7 @@ import {
   PlaneGeometry, RGBAFormat, UnsignedByteType, type Material,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { CINEMA_PLACES } from './cinemaLayout';
+import { CINEMA_PLACES, CINEMA_SEAT_BACK_CUSHION, CINEMA_SEAT_BACK_SHELL } from './cinemaLayout';
 import type { CinemaFinishes } from './cinemaFinishes';
 
 type SeatPart = readonly [
@@ -54,9 +54,9 @@ export function createCinemaSeats(group: Group, finish: CinemaFinishes) {
     parent.add(mesh);
   }
 
-  addParts(main, 'Moulded outer backs', finish.protection, [[0, 0.705, 0.235, 0.647, 0.681, 0.120, 0.13]], 0.12);
+  addParts(main, 'Moulded outer backs', finish.protection, [CINEMA_SEAT_BACK_SHELL], 0.12);
   addParts(main, 'Woven back cushions', finish.seatFabric, [
-    [0, 0.740, 0.156, 0.610, 0.633, 0.160, 0.13],
+    CINEMA_SEAT_BACK_CUSHION,
     [0, 0.444, 0.080, 0.593, 0.385, 0.142, -0.17],
   ], 0.20);
   addParts(main, 'Powder-coated stanchions', finish.darkSteel, [

@@ -31,7 +31,7 @@
 
 全ワールドは Three.js の座標を使い、Y を上下、X/Z を床面として扱います。座標原点はワールドごとに独立しています。ファストトラベルは `world`、`place`、`time` を引き継ぎ、各ワールドの目的地から位置を決めます。位置と向きは[CoastPose](../src/coast/CoastControls.ts)の `x`、`z`、`yaw`、`pitch` で表します。着地点に `y` は含めず、地面または水面から眼高を算出します。映画館の座席など、立位以外の視点は `seatedEyeHeight` を指定します。
 
-[CoastNavigation](../src/coast/CoastControls.ts)はワールドごとに境界、初期姿勢、`groundHeight`、任意の水位と衝突判定、飛行上限、移動制限を提供します。共通の移動処理はこの契約から歩行可能性と支持面を読みます。地形や建築を変更するときは、描画形状と同じ座標・高さをナビゲーションへ反映します。
+[CoastNavigation](../src/coast/CoastControls.ts)はワールドごとに境界、初期姿勢、`groundHeight`、任意の水位と衝突判定、飛行上限、任意の天井高を提供します。共通の移動処理はこの契約から移動できる範囲と支持面を読みます。地形や建築を変更するときは、描画形状と同じ座標・高さをナビゲーションへ反映します。
 
 | 実装座標の前提 | 現行の基準 |
 | --- | --- |
@@ -40,7 +40,7 @@
 | 住戸 | 平面の東座標を `x`、北座標を `-z` とし、仕上げ床は `y=0`。街路は住戸床から246 m下です。 |
 | 映画館 | 幕面は `z=0`、客席方向は `+z`。段床、車いすスペース、出口は同じ配置データを使います。 |
 
-立位の眼高は1.65 m、しゃがみは1.15 mです。共通歩行は6.4 m/s、水面の遊泳は4.1 m/s、潜水は3.6 m/s、自由飛行は20.5 m/sです。住戸と映画館は各ワールドの歩行速度を使い、飛行とジャンプを無効にしています。[移動制御](../src/coast/CoastControls.ts) · [利用者向け操作表](exploration.md)
+立位の眼高は1.65 m、しゃがみは1.15 mです。共通歩行は6.4 m/s、水面の遊泳は4.1 m/s、潜水は3.6 m/s、自由飛行は20.5 m/sです。飛行とジャンプは全ワールドで使えます。屋内では移動経路に沿って支持面、壁、開口と天井の高さを確認します。住戸と映画館は各ワールドの歩行速度を使います。[移動制御](../src/coast/CoastControls.ts) · [利用者向け操作表](exploration.md)
 
 ### フレームと入力
 
@@ -79,7 +79,7 @@
 
 ### 都心の70階住戸 — `residence`
 
-[residencePlan.ts](../src/coast/world/residence/residencePlan.ts)の壁・開口・各室の平面を基準に、[residenceShell.ts](../src/coast/world/residence/residenceShell.ts)の建具と[residenceNavigation.ts](../src/coast/world/residence/residenceNavigation.ts)の歩行判定を作ります。[ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)が都市、住戸躯体、家具、カーテン、照明、反射、近接操作を統合します。家具は歩行を妨げない前提で、壁・建具・手すり・バルコニー引戸は歩行可否に反映します。歩行速度は2.4 m/sです。
+[residencePlan.ts](../src/coast/world/residence/residencePlan.ts)の壁・開口・各室の平面を基準に、[residenceShell.ts](../src/coast/world/residence/residenceShell.ts)の建具と[residenceNavigation.ts](../src/coast/world/residence/residenceNavigation.ts)の歩行判定を作ります。[ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)が都市、住戸躯体、家具、カーテン、照明、反射、近接操作を統合します。室内家具は通り抜けられます。壁・建具・手すり・バルコニー引戸は歩行、飛行、ジャンプ中の移動を止めます。室ごとの天井、開口の上端、バルコニーの上階スラブ下面で上昇を止めます。歩行速度は2.4 m/sです。
 
 主な着地点はリビング南窓、ホームシアター、玄関、主寝室、茶室、書斎です。寸法と納まりの現行正本は[70階住戸の設計資料](residence/residence-70f-design.md)と[70階住戸の平面・展開図PDF](residence/residence-70f-drawings.pdf)です。[50階住戸PDF](residence/residence-50f-drawings.pdf)は過去案の比較資料です。現行の受け入れ条件は70階住戸の設計資料を基準にします。設備・操作の案内は[探索ガイド](exploration.md)を参照してください。
 
@@ -89,7 +89,7 @@
 
 [cinemaLayout.ts](../src/coast/world/cinema/cinemaLayout.ts)が幕、20列の客席、段床、通路、車いすスペース、出口、移動先の共通配置データを持ちます。室内寸法は40 × 57 × 22 mです。スクリーンは16:9の30 × 16.875 mで、中心は前方床から9.8 mです。通常席580席と同伴席8席、車いすスペース8か所で596人分の位置を用意します。
 
-[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)が座席移動、上映、館内照明、空間音響をまとめます。[cinemaNavigation.ts](../src/coast/world/cinema/cinemaNavigation.ts)は座席背面と通路の歩行判定を同じ配置から作ります。映画館内の歩行は3.2 m/sで、飛行・ジャンプを無効にします。
+[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)が座席移動、上映、館内照明、空間音響をまとめます。[cinemaNavigation.ts](../src/coast/world/cinema/cinemaNavigation.ts)は座席背面と通路の歩行判定を同じ配置から作ります。映画館内の歩行は3.2 m/sです。背もたれは歩行を止め、上から越えることもできます。飛行中もスクリーン手前と客席側の外周で止まり、天井と梁の下まで上昇できます。
 
 出口の扉と表示灯は館内の造作です。館外への移動はファストトラベルで行います。
 

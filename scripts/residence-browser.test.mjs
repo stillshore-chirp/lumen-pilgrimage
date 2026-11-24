@@ -320,6 +320,36 @@ test('C crouches and stands at the living-room window and fast travel restores s
   assert.deepEqual(errors, []);
 });
 
+test('the residence jumps and flies within the living room ceiling and windows', { timeout }, async t => {
+  const { page, errors } = await openResidence(t);
+  const mode = page.locator('.coast-mode');
+  const flight = button(page, '自由飛行');
+  const start = await camera(page);
+  assert.equal(await flight.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Space');
+  await page.waitForFunction(y => window.residenceProbe.camera.y > y + .35, start.y);
+  await page.waitForFunction(y => Math.abs(window.residenceProbe.camera.y - y) < .01, start.y);
+
+  await page.keyboard.press('f');
+  assert.equal(await mode.textContent(), '自由飛行');
+  assert.equal(await flight.getAttribute('aria-pressed'), 'true');
+  await hold(page, 'Space', () => page.waitForFunction(() => window.residenceProbe.camera.y > 2.74));
+  assert.ok((await camera(page)).y < 2.76);
+
+  await hold(page, 'w', async () => {
+    await page.waitForFunction(() => window.residenceProbe.camera.z > -.75);
+    await moreMovementFrames(page);
+  });
+  const byWindow = await camera(page);
+  assert.ok(byWindow.z < -.35 && byWindow.y < 2.76, JSON.stringify(byWindow));
+  await flight.click();
+  assert.equal(await flight.getAttribute('aria-pressed'), 'false');
+  await page.waitForFunction(y => Math.abs(window.residenceProbe.camera.y - y) < .01, start.y);
+  const landed = await camera(page);
+  assert.ok(Math.hypot(landed.x - byWindow.x, landed.z - byWindow.z) < .01);
+  assert.deepEqual(errors, []);
+});
+
 test('tea room and study are accessible in the travel panel and have flush walking paths', { timeout }, async t => {
   const { page, errors } = await openResidence(t, 'foyer');
   const landscape = '.coast-ui { visibility: hidden; }';
