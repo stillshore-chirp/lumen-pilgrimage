@@ -111,7 +111,8 @@ export class MonitorView {
           <label class="monitor-view-volume">モニター音量
             <input data-monitor-volume type="range" min="0" max="100" step="1" value="75">
           </label>
-          <button type="button" data-monitor-sound aria-label="モニター音声" aria-pressed="false" disabled>モニター音声 オフ</button>
+          <button type="button" data-monitor-sound aria-label="モニター音声" aria-describedby="monitor-audio-status"
+            aria-pressed="false" disabled>モニター音声 オフ</button>
         </div>
         <label class="monitor-view-mode">モニターの音響
           <select data-monitor-sound-mode>
@@ -122,7 +123,7 @@ export class MonitorView {
             <option value="cinema" hidden disabled>映画館の空間音響</option>
           </select>
         </label>
-        <p role="status" data-monitor-audio-status></p>
+        <p id="monitor-audio-status" role="status" data-monitor-audio-status></p>
       </div>
       <div class="monitor-view-section">
         <button type="button" data-monitor-xr disabled>VRで見る</button>
@@ -204,7 +205,8 @@ export class MonitorView {
 
   async toggleAudio(): Promise<void> {
     if (this.audioButton.disabled) return;
-    if (this.audioPlayback === 'on' && this.audio.getStatus() === 'ready') {
+    if (this.audioStart || (this.audioPlayback === 'on' && this.audio.getStatus() === 'ready')) {
+      this.audioStart = null;
       this.audioPlayback = 'off';
     } else {
       this.audioPlayback = 'off';
@@ -471,26 +473,29 @@ export class MonitorView {
   private updateAudioStatus(): void {
     const audioStatus = this.audio.getStatus();
     const { phase, audio } = this.state;
+    const canPlay = phase === 'connected' && audio.available && audio.output !== 'pc' && audioStatus !== 'unavailable';
     const on = this.audioPlayback === 'on' && audioStatus === 'ready';
     let message = '';
     if (phase === 'connected') {
       if (!audio.available) message = '配信元から共有音声が取得されていません。';
       else if (audio.pcPlaybackSuppressed) message = '共有音声は停止中です。PC側の再生は配信元で共有対象を選び直すと再開します。';
-      else if (audio.output === 'pc') message = '配信元で「PC側のみ」が選ばれています。';
+      else if (audio.output === 'pc') message = '配信元で「PC側のみ」が選ばれているため、視聴側の音声は停止中です。';
       else if (audioStatus === 'unavailable') message = 'この視聴ブラウザで共有音声を再生できません。';
-      else if (this.audioStart) message = '共有音声を開始しています。';
+      else if (this.audioStart) message = '共有音声を開始しています。もう一度押すと取り消せます。';
       else if (this.audioPlayback === 'retry' || (this.audioPlayback === 'on' && !on)) {
         message = '共有音声を再生できません。「モニター音声」を押して再試行してください。';
       } else if (audio.output === 'viewer') message = '配信元で「VR側のみ」が選ばれています。';
       else if (on && this.audioMode.value === 'surround') message = 'ステレオ音源は左右のフロントスピーカーから再生します。';
     }
     if (this.audioStatus.textContent !== message) this.audioStatus.textContent = message;
-    const pressed = String(on);
+    const pressed = String(canPlay && (on || this.audioStart !== null));
     if (this.audioButton.getAttribute('aria-pressed') !== pressed) this.audioButton.setAttribute('aria-pressed', pressed);
-    const label = `モニター音声 ${on ? 'オン' : 'オフ'}`;
+    let buttonState = on ? 'オン' : 'オフ';
+    if (this.audioStart) buttonState = '開始待ち';
+    if (phase === 'connected' && !canPlay) buttonState = '停止中';
+    const label = `モニター音声 ${buttonState}`;
     if (this.audioButton.textContent !== label) this.audioButton.textContent = label;
-    const disabled = phase !== 'connected' || !audio.available || audio.output === 'pc'
-      || audioStatus === 'unavailable' || this.audioStart !== null;
+    const disabled = !canPlay;
     if (this.audioButton.disabled !== disabled) this.audioButton.disabled = disabled;
   }
 

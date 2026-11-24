@@ -126,8 +126,9 @@ function observeAudio() {
   const connect = AudioNode.prototype.connect;
   const contexts = [];
   window.monitorSound = {
-    holdMonitorResume: false,
+    monitorResume: 'native',
     heldResumeInUserGesture: false,
+    rejectedResumeInUserGesture: false,
     read() {
       return contexts.map(({ context, analyser, panners, gains, hasStream }) => {
         const data = new Float32Array(analyser.fftSize);
@@ -136,6 +137,7 @@ function observeAudio() {
           hasStream,
           streamSources: context.probe.streamSources,
           state: context.state,
+          time: context.currentTime,
           peak: Math.max(...data.map(Math.abs)),
           stereo: gains.get('stereo')?.gain.value,
           spatial: gains.get('spatial')?.gain.value,
@@ -155,13 +157,23 @@ function observeAudio() {
       contexts.push(this.probe);
     }
     get state() {
-      if (this.probe?.hasStream && window.monitorSound.holdMonitorResume) return 'suspended';
+      if (this.probe?.hasStream && window.monitorSound.monitorResume !== 'native') return 'suspended';
       return super.state;
     }
     resume() {
-      if (this.probe?.hasStream && window.monitorSound.holdMonitorResume) {
+      const mode = this.probe?.hasStream ? window.monitorSound.monitorResume : 'native';
+      if (mode === 'reject') {
+        window.monitorSound.rejectedResumeInUserGesture = navigator.userActivation.isActive;
+        return Promise.reject(new DOMException('', 'NotAllowedError'));
+      }
+      if (mode === 'hold') {
         window.monitorSound.heldResumeInUserGesture = navigator.userActivation.isActive;
-        return new Promise(() => {});
+        return new Promise((resolve, reject) => {
+          window.monitorSound.releaseMonitorResume = () => {
+            window.monitorSound.monitorResume = 'native';
+            return super.resume().then(resolve, reject);
+          };
+        });
       }
       return super.resume();
     }
@@ -464,15 +476,21 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     const audioOutput = sender.getByRole('combobox', { name: '音声の出力先' });
     await audioOutput.selectOption('pc');
     await sender.waitForFunction(() => !window.captureFixture.streams[0].getAudioTracks()[0].enabled);
-    await viewer.locator('[data-monitor-audio-status]').filter({ hasText: '配信元で「PC側のみ」が選ばれています。' }).waitFor();
+    const pcOnly = '配信元で「PC側のみ」が選ばれているため、視聴側の音声は停止中です。';
+    await viewer.locator('[data-monitor-audio-status]').filter({ hasText: pcOnly }).waitFor();
     assert.equal(await audioToggle.isDisabled(), true);
-    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 停止中');
+    const description = await audioToggle.evaluate(button =>
+      document.getElementById(button.getAttribute('aria-describedby')).textContent);
+    assert.equal(description, pcOnly);
     await waitForMix(viewer, { natural: true, monitor: false });
     await audioOutput.selectOption('both');
     await sender.waitForFunction(() => window.captureFixture.streams[0].getAudioTracks()[0].enabled);
     await waitForMix(viewer, { natural: true, monitor: true });
     assert.equal(await audioToggle.isEnabled(), true);
     assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 オン');
     await audioOutput.selectOption('viewer');
     await sender.locator('[data-monitor-capture-audio]').filter({ hasText: /現在は「両方」/ }).waitFor();
     await waitForMix(viewer, { natural: true, monitor: true });
@@ -548,7 +566,7 @@ test('separate tabs pair with approval, render native WebRTC media and control a
   }
 });
 
-test('the audio toggle retries a pending start and begins off after a new pairing', { timeout }, async () => {
+test('the audio toggle cancels and retries a pending start, and begins off after a new pairing', { timeout }, async () => {
   const sender = await newPage();
   const viewer = await newPage();
   try {
@@ -568,17 +586,42 @@ test('the audio toggle retries a pending start and begins off after a new pairin
     await requestPairing(sender, viewer);
     await button(sender, '接続を許可').click();
     await waitForVideo(viewer, 1);
-    await viewer.evaluate(() => { window.monitorSound.holdMonitorResume = true; });
+    await viewer.evaluate(() => { window.monitorSound.monitorResume = 'hold'; });
     await audioToggle.click();
     await audioStatus.filter({ hasText: '共有音声を開始しています。' }).waitFor();
-    assert.equal(await audioToggle.isDisabled(), true);
+    assert.equal(await audioToggle.isEnabled(), true);
     await audioStatus.filter({ hasText: '再試行してください' }).waitFor();
     assert.equal(await audioToggle.isEnabled(), true);
     assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
     assert.equal(await viewer.evaluate(() => window.monitorSound.heldResumeInUserGesture), true);
     await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001);
 
-    await viewer.evaluate(() => { window.monitorSound.holdMonitorResume = false; });
+    await viewer.evaluate(() => { window.monitorSound.monitorResume = 'reject'; });
+    await audioToggle.click();
+    await audioStatus.filter({ hasText: '再試行してください' }).waitFor();
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await viewer.evaluate(() => window.monitorSound.rejectedResumeInUserGesture), true);
+
+    await viewer.evaluate(() => { window.monitorSound.monitorResume = 'hold'; });
+    await audioToggle.click();
+    await audioStatus.filter({ hasText: 'もう一度押すと取り消せます。' }).waitFor();
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 開始待ち');
+    await audioToggle.press('Space');
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 オフ');
+    const resumedAt = await viewer.evaluate(async () => {
+      await window.monitorSound.releaseMonitorResume();
+      return window.monitorSound.read().find(context => context.hasStream).time;
+    });
+    await viewer.waitForFunction(resumedAt => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      return audio.state === 'running' && audio.time > resumedAt + .15;
+    }, resumedAt);
+    assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    const latePeak = await viewer.evaluate(() => window.monitorSound.read().find(context => context.hasStream).peak);
+    assert.ok(latePeak < .0001, 'late context resume keeps the cancelled stream silent');
+
     await audioToggle.click();
     const audible = () => window.monitorSound.read().some(context => context.hasStream && context.peak > .001 && context.state === 'running');
     await viewer.waitForFunction(audible);
@@ -978,6 +1021,7 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
     await viewer.locator('[data-monitor-audio-status]').filter({ hasText: '共有音声が取得されていません' }).waitFor();
     assert.equal(await audioToggle.isDisabled(), true);
     assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await audioToggle.textContent(), 'モニター音声 停止中');
     await button(sender, '共有を停止').click();
     await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
     assert.equal((await screenPixels(viewer)).count, 0);
