@@ -1572,7 +1572,7 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
   }
 });
 
-test('XR quality adjusts both layer types and retains the selected mode on desktop return', { timeout }, async () => {
+test('XR quality adjusts both layer types and survives travel and desktop return', { timeout }, async () => {
   for (const layer of ['projection', 'base']) {
     const page = await newPage();
     try {
@@ -1604,6 +1604,21 @@ test('XR quality adjusts both layer types and retains the selected mode on deskt
       await page.waitForFunction(() => window.xrFixture.selection === '高品質（選択中）　周辺の細部を保つ');
       assert.deepEqual(await foveation(), { value: .25, scale: 1 }, layer);
       assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      if (layer === 'projection') {
+        for (let presses = 0; presses < 2; presses++) {
+          await change({ side: 'left', button: 4, pressed: true });
+          await change({ side: 'left', button: 4, pressed: false });
+        }
+        await page.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル'
+          && window.xrFixture.selection === '入り江と山道');
+        await change({ select: true });
+        await page.waitForFunction(() => window.xrFixture.menuTitle === '入り江と山道');
+        await change({ select: true });
+        await page.waitForURL(address => address.searchParams.get('world') === 'coast');
+        assert.deepEqual(await foveation(), { value: .25, scale: 1 }, 'travel preserves the projection layer quality');
+        assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+        assert.equal(await page.evaluate(() => window.xrFixture.requests), 1, 'travel continues the current session');
+      }
       const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
       await button(page.locator('.coast-xr-entry'), 'VRを終了').click();
       await page.waitForFunction(draws => window.xrFixture.ends === 1 && window.xrFixture.desktopDraws > draws, desktopDraws);
