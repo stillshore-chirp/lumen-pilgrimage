@@ -139,7 +139,11 @@ test('house light scenes, preview projection and quality change together through
   await button(dialog, '上映').click();
   await button(dialog, '試映を再生').click();
   await page.waitForFunction(() => window.cinemaProbe.live === 1);
-  await button(page, '環境音を再開').waitFor();
+  await button(page, '環境音をオフ').waitFor();
+  await button(page, '環境音をオフ').click();
+  await button(page, '環境音をオン').waitFor();
+  await button(page, '環境音をオン').click();
+  await button(page, '環境音をオフ').waitFor();
   await button(page, '高品質').click();
   await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] < .15 && window.cinemaProbe.live === 1);
   await screenshot(page, 'screening');
