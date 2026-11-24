@@ -89,6 +89,7 @@ flowchart LR
 ## 音響
 
 - 音響は明示操作で開始する。[海岸の発音点](../src/coast/coastShore.ts) は海につながる浅瀬と陸の境界から求め、波が打つ方向へ動かす。再生中の発音点はクロスフェードで入れ替える。[伝播の計算](../src/coast/coastAcoustics.ts) は岩壁による遮蔽と短い反射、開口を経由する到達音を扱う。[足音と水音](../src/coast/CoastFoley.ts) は移動・潜水と地表の材質から選ぶ。カメラが潜ると、水中にいる深さに応じてミックスの高域を下げる。
+- [住戸と映画館の足音](../src/coast/world/residence/residenceAudioSamples.ts) は、靴底が沈む低い接地音と、体重が前へ移るときの短い擦れを帯域の異なるノイズから合成する。石やタイルは擦れの輪郭が残り、木床は落ち着いた音、絨毯はさらにこもった音になる。映画館では足元の位置から絨毯と段鼻を判定し、一歩ごとに移動距離と0.48秒以上の間隔を取る。 [映画館の発音処理](../src/coast/world/cinema/cinemaAmbience.ts)
 - [丘陵展望台の音響](../src/coast/world/overlook/overlookAudio.ts) は幹線の高さを含む中心線を分割し、各区間の距離と丘による遮蔽で音の強さと高域の減衰を求める。道路ごとに合成した音を頭部伝達関数（HRTF）で定位させる。昼は低木に鳥声、夜はデッキ前方の草地と斜面に虫の声を間隔をずらして配置する。虫の音も高低差と地形の遮蔽を反映する。 [録音の出典と伝搬の資料](../public/coast-overlook/ATTRIBUTION.md)
 - `CoastApp` は描画と音響に同じ時間帯を渡す。自然景観では昼の鳥声と夜の虫声をなじませ、丘陵展望台と住戸の夜は交通の発音量を下げる。静穏な昼と弱い夜間逆転層を想定し、伝搬経路の曲がり方を地形遮蔽に反映する。遠方の低域を補正し、近くの波や落水、潜水時の処理は各音源の位置と水深に従う。[大気による吸収と屈折の資料](https://www.fhwa.dot.gov/ENVIRonment/noise/noise_barriers/design_construction/design/design03.cfm)
 - [落水](../src/coast/world/coastWaterfall.ts) は水の加速と岩に沿った流れを描く。泡と霧の起点は海・湖ごとの水位に合わせ、音響は描画と同じ着水点を参照する。
