@@ -74,11 +74,12 @@ async function openCinema(t) {
   return { page, errors };
 }
 
-async function travel(page, label, place) {
+async function travel(page, label, place, world = 'cinema') {
   await button(page, 'ファストトラベル').click();
   const dialog = page.getByRole('dialog', { name: 'ファストトラベル' });
   await dialog.getByRole('button', { name: label }).click();
-  await page.waitForURL(address => address.searchParams.get('place') === place && address.searchParams.get('time') === 'night');
+  await page.waitForURL(address => address.searchParams.get('world') === world
+    && address.searchParams.get('place') === place && address.searchParams.get('time') === 'night');
 }
 
 async function holdKey(page, key, reached) {
@@ -91,7 +92,7 @@ async function screenshot(page, name) {
   if (output) await page.screenshot({ path: join(output, `cinema-${name}.png`) });
 }
 
-test('cinema boots with seated controls, walks the stepped aisle and exits through a level doorway', { timeout }, async t => {
+test('cinema keeps its exits sealed and uses fast travel to return to the inlet', { timeout }, async t => {
   const { page, errors } = await openCinema(t);
   const initial = await page.evaluate(() => window.cinemaProbe.position);
   assert.ok(Math.abs(initial[1] - 2.855) < .01);
@@ -119,14 +120,24 @@ test('cinema boots with seated controls, walks the stepped aisle and exits throu
     canvas.dispatchEvent(new MouseEvent('mousemove', { movementX }));
   }, (rotation - Math.PI / 2) / .0022);
   await holdKey(page, 'w', () => window.cinemaProbe.position[0] < -18.1);
-  await page.getByRole('button', { name: '出口 E3 を開く' }).waitFor();
-  await page.keyboard.press('e');
-  await page.getByRole('button', { name: 'E3 からシアターを退出' }).waitFor();
+  const atExit = await page.evaluate(() => window.cinemaProbe.position);
+  assert.ok(Math.hypot(atExit[0] + 20, atExit[2] - 29.7) < 2.35, 'E is tested within reach of exit E3');
+  assert.equal(await page.getByRole('button', { name: /出口|シアターを退出/ }).count(), 0,
+    'sealed exit scenery has no E-key action');
   await screenshot(page, 'exit');
   await page.keyboard.press('e');
-  await page.waitForURL(address => address.searchParams.get('world') === 'coast'
-    && address.searchParams.get('place') === 'inlet' && address.searchParams.get('time') === 'night');
+  await page.keyboard.press('e');
+  assert.equal(new URL(page.url()).searchParams.get('world'), 'cinema', 'E at a sealed exit does not change worlds');
+  await holdKey(page, 'w', () => window.cinemaProbe.position[0] < -19.60);
+  assert.ok((await page.evaluate(() => window.cinemaProbe.position))[0] >= -19.66,
+    'the west auditorium boundary blocks walking through the exit');
+  await page.evaluate(() => document.exitPointerLock());
+  await page.waitForFunction(() => !document.querySelector('.coast')?.classList.contains('coast-locked'));
+  assert.equal(new URL(page.url()).searchParams.get('world'), 'cinema', 'releasing pointer lock keeps the current world');
+  await travel(page, '入り江の浜', 'inlet', 'coast');
   await page.getByRole('heading', { name: '自然景観探索' }).waitFor();
+  await travel(page, '中段中央（R09）', 'center');
+  await page.getByRole('heading', { name: '映画館シアター（大）' }).waitFor();
   assert.deepEqual(errors, []);
 });
 

@@ -1,9 +1,8 @@
-import { Color, MathUtils, Scene, Vector3, type Texture } from 'three';
+import { Color, Scene, type Texture } from 'three';
 import type { ExplorationScene } from '../../CoastApp';
 import type { CoastQuality } from '../../CoastWorld';
 import { CinemaAmbience } from './cinemaAmbience';
 import { createCinemaAuditorium } from './cinemaAuditorium';
-import { CINEMA_EXITS } from './cinemaLayout';
 import { createCinemaLighting, type CinemaLightingMode } from './cinemaLighting';
 import type { CinemaControls } from './CinemaPanel';
 import { createCinemaPlayback } from './cinemaPlayback';
@@ -18,19 +17,11 @@ export function loadCinemaScene(): ExplorationScene {
   const lighting = createCinemaLighting(scene, auditorium.group);
   const audio = new CinemaAmbience();
   const preview = createCinemaPreview();
-  const doors = CINEMA_EXITS.map(exit => ({
-    exit,
-    amount: 0,
-    openUntil: 0,
-    soundOrigin: new Vector3(exit.x, exit.y + 1, exit.z),
-  }));
-
   let elapsed = 0;
   let mode: CinemaLightingMode = 'arrival';
   let quality: CoastQuality = 'light';
   let sharedTexture: Texture | null = null;
   let sharedAspect: number | undefined;
-  let currentDoor: typeof doors[number] | undefined;
   const projectionPaused = () => mode === 'service' || mode === 'emergency';
 
   function stopPreview(): void {
@@ -81,34 +72,6 @@ export function loadCinemaScene(): ExplorationScene {
     navigation: cinemaNavigation,
     audio,
     cinemaControls,
-    interaction: {
-      label(position, facing) {
-        currentDoor = undefined;
-        let nearest = 2.35;
-        for (const door of doors) {
-          const { x, y, z } = door.exit;
-          const dx = x - position.x;
-          const dz = z - position.z;
-          const distance = Math.hypot(dx, dz);
-          if (distance >= nearest || position.y < y || position.y > y + 2.4) continue;
-          if (dx * facing.x + dz * facing.z < distance * .48) continue;
-          nearest = distance;
-          currentDoor = door;
-        }
-        if (!currentDoor) return null;
-        const { id } = currentDoor.exit;
-        if (currentDoor.amount >= .9) return `${id} からシアターを退出`;
-        return currentDoor.openUntil > elapsed ? `${id} を開いています` : `出口 ${id} を開く`;
-      },
-      invoke() {
-        const door = currentDoor;
-        if (!door) return;
-        if (door.amount >= .9) return { exit: true };
-        if (door.openUntil > elapsed) return;
-        door.openUntil = elapsed + 8;
-        audio.playDoor(door.soundOrigin);
-      },
-    },
     world: {
       scene,
       theater: {
@@ -123,7 +86,6 @@ export function loadCinemaScene(): ExplorationScene {
         lighting.setQuality(next);
       },
       update(now, camera) {
-        const dt = now - elapsed;
         elapsed = now;
         if (preview.playing) {
           preview.update(now, cue => audio.playDemoCue(cue));
@@ -131,14 +93,6 @@ export function loadCinemaScene(): ExplorationScene {
             audio.stopDemoCue();
             applyProjection();
           }
-        }
-        for (const door of doors) {
-          const sign = door.openUntil > now ? 1 : -1;
-          const amount = MathUtils.clamp(door.amount + sign * dt / .62, 0, 1);
-          if (door.amount === amount) continue;
-          if (sign < 0 && amount === 0) audio.playDoor(door.soundOrigin, true);
-          door.amount = amount;
-          auditorium.setExitOpen(door.exit.id, amount * amount * (3 - 2 * amount));
         }
         lighting.update(now, camera);
         return [];

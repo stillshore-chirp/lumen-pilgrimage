@@ -49,7 +49,7 @@ interface ExplorationAudioControls {
 
 interface ExplorationInteraction {
   label(position: Vector3, facing: Vector3): string | null;
-  invoke(): void | { readonly openSection: string } | { readonly exit: true };
+  invoke(): void | { readonly openSection: string };
 }
 
 export interface ExplorationScene {
@@ -244,7 +244,7 @@ export class CoastApp {
       this.cinemaPanel = createCinemaPanel(loaded.cinemaControls, () => {
         this.monitor?.closePanel();
         this.controls.releaseInput();
-      }, () => this.goTo('coast', 'inlet'), this.audioControls.startForPreview);
+      }, this.audioControls.startForPreview);
       actions.append(this.cinemaPanel.element);
     }
     if (loaded?.residenceControls?.length) {
@@ -297,7 +297,6 @@ export class CoastApp {
   private invokeInteraction(): boolean {
     if (!this.interaction || !this.interactionLabel()) return false;
     const action = this.interaction.invoke();
-    if (action && 'exit' in action) this.goTo('coast', 'inlet');
     if (action && 'openSection' in action) this.residencePanel?.open(action.openSection, this.renderer.domElement);
     return true;
   }
