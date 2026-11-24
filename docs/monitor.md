@@ -45,9 +45,9 @@ POST /api/virtual-monitor/join
 }
 ```
 
-それ以降の要求は共通の `sessionId` と役割トークンを使います。`poll` は `{ "sessionId": "<session-id>", "revision": 1 }`、`approve` は `{ "sessionId": "<session-id>", "accept": true }`、`offer` と `answer` は `{ "sessionId": "<session-id>", "description": { "type": "offer", "sdp": "<complete-sdp>" } }` の形です。`answer` では `type` を `answer` にします。`audio` は `{ "sessionId": "<session-id>", "audio": { "available": true, "output": "both" } }`、`close` は `{ "sessionId": "<session-id>" }` です。
+それ以降の要求は共通の `sessionId` と役割トークンを使います。`poll` は `{ "sessionId": "<session-id>", "revision": 1 }`、`approve` は `{ "sessionId": "<session-id>", "accept": true }`、`offer` と `answer` は `{ "sessionId": "<session-id>", "description": { "type": "offer", "sdp": "<complete-sdp>" } }` の形です。`answer` では `type` を `answer` にします。`audio` は `{ "sessionId": "<session-id>", "audioSequence": 1, "audio": { "available": true, "output": "both" } }`、`close` は `{ "sessionId": "<session-id>" }` です。
 
-`create` は `sessionId`、`token`、`code`、`snapshot` を返し、`join` は `sessionId`、`token`、`snapshot` を返します。それ以外の成功応答は `{ "snapshot": { … } }` です。snapshot には常に `revision`、`phase`、`audio` があり、`verification`、`offer`、`answer` はその状態で値がある場合にだけ含まれます。音声情報の `pcPlaybackSuppressed` も必要な状態でだけ含まれます。
+`create` は `sessionId`、`token`、`code`、`snapshot` を返し、`join` は `sessionId`、`token`、`snapshot` を返します。それ以外の成功応答は `{ "snapshot": { … } }` です。snapshot には常に `revision`、`phase`、`audio` があり、`verification`、`offer`、`answer` はその状態で値がある場合にだけ含まれます。音声情報の `pcPlaybackSuppressed` も必要な状態でだけ含まれます。承認済みの応答には `authorization` が加わり、応答生成時点から承認上限までの `approvalRemainingMs` と、両端末のうち先に通信が途絶えた側の失効までの `activityRemainingMs` をミリ秒で返します。既存クライアントはこの追加項目を無視できます。更新後のクライアントは期限を返す同梱のシグナリングサーバーを使います。すでに開いている共有へ端末側の期限を適用するには、配信・視聴の両方のページを更新し、新しいコードで接続します。
 
 | action | 実行できる側 | 契約 |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ POST /api/virtual-monitor/join
 | `approve` | 配信側 | `pending` の間だけ `accept: true/false` を受け付けます。拒否はセッションを閉じます。承認は確認番号を破棄して `approved` に進めます。 |
 | `offer` | 配信側 | 承認後に一度だけ送れます。description の type は `offer`、SDP は空でない文字列である必要があります。 |
 | `answer` | 視聴側 | 承認後に offer が届いた場合だけ一度送れます。description の type は `answer`、SDP は空でない文字列である必要があります。 |
-| `audio` | 配信側 | `available` は boolean、`output` は `pc`・`viewer`・`both` のいずれかです。PC 側の再生抑止情報を付ける場合は、音声あり・`pc` 出力の組み合わせだけを受け付けます。 |
+| `audio` | 配信側 | `available` は boolean、`output` は `pc`・`viewer`・`both` のいずれかです。PC 側の再生抑止情報を付ける場合は、音声あり・`pc` 出力の組み合わせだけを受け付けます。設定を変更するたびに正の整数 `audioSequence` を増やします。古い番号や重複は設定と生存確認の時刻を更新しません。従来の番号なし要求は、その共有で番号付きの最初の更新が受理されるまで使えます。 |
 | `close` | どちらの役割も | セッションを閉じ、コード、確認番号、SDP、役割トークンを破棄します。 |
 
 配信側のコードは発行から 120 秒で失効し、1 件の視聴先が join すると再利用できません。承認後は 8 時間で失効します。承認後、配信側または視聴側のどちらかから 90 秒間、認証済みリクエストが届かない場合も閉じます。通常は poll がこの生存確認を担います。poll は最大 10 秒待ちます。サーバーの終了時には全セッションを閉じます。
@@ -91,7 +91,7 @@ POST /api/virtual-monitor/join
 
 クライアントのシグナリング要求は 15 秒、ICE 候補収集は 8 秒、接続確立は 30 秒、WebRTC の `disconnected` 状態からの猶予は 5 秒です。接続確立に失敗したときや接続が終了したときは、配信側で共有を開始し、新しいコードで接続します。
 
-確立済みの接続で映像トラックが `live` の間は、通信エラー、要求のタイムアウト、前の poll の処理中（`409`）、要求制限（`429`）、一時的なサーバーエラーが起きた poll を、同じセッションと最後に受け取った revision で再試行します。待機間隔は 1 秒から最大 8 秒まで段階的に延ばします。その間も同じ接続とトラックを使います。サーバーからセッション終了や期限切れの通知、認証・権限エラーを受け取った場合は終了します。上記のサーバー側の有効期限と WebRTC の切断猶予を適用します。
+確立済みの接続で映像トラックが `live` の間は、通信エラー、要求のタイムアウト、前の poll の処理中（`409`）、要求制限（`429`）、一時的なサーバーエラーが起きた poll を、同じセッションと最後に受け取った revision で再試行します。待機間隔は 1 秒から最大 8 秒まで段階的に延ばします。その間も同じ接続とトラックを使います。サーバーからセッション終了や期限切れの通知、認証・権限エラーを受け取った場合は終了します。応答が途絶えても、端末は確認できた承認と生存確認の期限の早い方で接続とメディアを解放します。有効な応答を受け取った場合に限り生存確認の期限を更新します。承認の上限は延長しません。WebRTC 自体の切断猶予も適用します。
 
 メニューの開閉、映像面の表示・非表示と表示先、住戸の照明、時間帯や描画品質の変更中も共有を維持します。視聴ページの `pagehide` でブラウザーが履歴キャッシュへの保持を通知した場合は、既存の接続とメディアをページに残します。視聴ページの通常終了と配信ページからの離脱では接続とメディアを解放します。
 

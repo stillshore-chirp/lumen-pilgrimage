@@ -75,6 +75,7 @@ test('signaling reserves one viewer and relays SDP only after sender approval', 
   const sender = await checked(post('create', {}));
   assert.ok(/^[0-9A-F]{4}(?:-[0-9A-F]{4}){2}$/.test(sender.code));
   assert.equal(sender.snapshot.phase, 'waiting');
+  assert.equal(sender.snapshot.authorization, undefined);
   assert.equal(sender.snapshot.revision, 0);
   const audio = { available: true, output: 'viewer' };
   await checked(act(sender, 'audio', { audio }));
@@ -86,6 +87,7 @@ test('signaling reserves one viewer and relays SDP only after sender approval', 
   const viewer = results.find(result => result.status === 200).data;
   assert.ok(viewer.token !== sender.token);
   assert.equal(viewer.snapshot.phase, 'pending');
+  assert.equal(viewer.snapshot.authorization, undefined);
   assert.deepEqual(viewer.snapshot.audio, audio);
   assert.equal(viewer.snapshot.offer, undefined);
   const pending = await checked(act(sender, 'poll', { revision: 0 }));
@@ -164,6 +166,36 @@ test('pairing expires and approved sessions require heartbeats from both peers',
   time += 45_000;
   await checked(act(sender, 'poll', { revision: 0 }), 404);
   await checked(act(viewer, 'poll', { revision: 0 }), 404);
+});
+
+test('a delayed audio update cannot replace newer settings or refresh the heartbeat', async context => {
+  let time = 0;
+  const { post, act, checked } = await setup(context, { now: () => time });
+  const sender = await checked(post('create', {}));
+  const viewer = await checked(post('join', { code: sender.code }));
+  const approved = await checked(act(sender, 'approve', { accept: true }));
+  assert.deepEqual(approved.snapshot.authorization, { approvalRemainingMs: 8 * 60 * 60_000, activityRemainingMs: 90_000 });
+  const both = { available: true, output: 'both' };
+  const pc = { available: true, output: 'pc' };
+  await checked(act(sender, 'audio', { audio: pc, audioSequence: 0 }), 400);
+  const previous = await checked(act(sender, 'audio', { audio: both, audioSequence: 1 }));
+  const latest = await checked(act(sender, 'audio', { audio: both, audioSequence: 3 }));
+  assert.equal(latest.snapshot.revision, previous.snapshot.revision, 'unchanged audio still records the newer sequence');
+
+  time += 60_000;
+  await checked(act(viewer, 'poll', { revision: 0 }));
+  for (const audioSequence of [2, 3, undefined]) {
+    const stale = await checked(act(sender, 'audio', { audio: pc, audioSequence }));
+    assert.deepEqual(stale.snapshot.audio, both);
+    assert.equal(stale.snapshot.revision, latest.snapshot.revision);
+    assert.deepEqual(stale.snapshot.authorization, {
+      approvalRemainingMs: 8 * 60 * 60_000 - 60_000, activityRemainingMs: 30_000,
+    });
+  }
+
+  time += 30_000;
+  await checked(act(viewer, 'poll', { revision: 0 }), 404);
+  await checked(act(sender, 'audio', { audio: both, audioSequence: 4 }), 404);
 });
 
 test('long polling returns an unchanged revision and signaling disposal wakes active polls', async context => {

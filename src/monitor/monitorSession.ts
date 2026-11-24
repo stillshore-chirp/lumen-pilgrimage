@@ -16,12 +16,14 @@ export type MonitorConnectionState = {
 };
 
 type Description = { type: 'offer' | 'answer'; sdp: string };
+type Authorization = { approvalRemainingMs: number; activityRemainingMs: number };
 type Snapshot = {
   revision: number;
   phase: 'waiting' | 'pending' | 'approved' | 'closed';
   verification?: string;
   offer?: Description;
   answer?: Description;
+  authorization?: Authorization;
   audio: MonitorSharedAudio;
 };
 type Credentials = { sessionId: string; token: string };
@@ -36,11 +38,17 @@ type Connection = {
   credentials?: Credentials;
   peer?: RTCPeerConnection;
   video?: MediaStreamTrack;
+  authorizationClock?: { wall: number; monotonic: number; elapsed: number };
+  authorization?: { approvalDeadline: number; activityDeadline: number };
+  authorizationTimer?: ReturnType<typeof setTimeout>;
   connectionTimer?: ReturnType<typeof setTimeout>;
   disconnectTimer?: ReturnType<typeof setTimeout>;
 };
 
 const SIGNAL_TIMEOUT = 15_000;
+const MAX_APPROVAL_DURATION = 8 * 60 * 60_000;
+const MAX_ACTIVITY_DURATION = 90_000;
+const AUTHORIZATION_EXPIRED = '接続の有効期限が切れたため、共有を終了しました。';
 const INITIAL_SIGNAL_RETRY_DELAY = 1_000;
 const MAX_SIGNAL_RETRY_DELAY = 8_000;
 const ICE_TIMEOUT = 8_000;
@@ -58,6 +66,23 @@ class SignalError extends Error {
 }
 
 class MonitorFailure extends Error {}
+
+function authorizationTime(connection: Connection): number {
+  const wall = Date.now();
+  const monotonic = performance.now();
+  const previous = connection.authorizationClock;
+  // Elapsed time includes suspension and cannot be reduced by turning back the system clock.
+  const elapsed = previous ? previous.elapsed + Math.max(wall - previous.wall, monotonic - previous.monotonic) : 0;
+  connection.authorizationClock = { wall, monotonic, elapsed };
+  return elapsed;
+}
+
+function remainingAuthorization(value: number, limit: number): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new MonitorFailure('共有の有効期限を確認できません。配信サーバーを確認してください。');
+  }
+  return Math.min(value, limit);
+}
 
 function canRetrySignal(endpoint: RetryEndpoint, error: unknown): boolean {
   if (error instanceof SignalError) {
@@ -200,13 +225,44 @@ abstract class MonitorSession<Active extends Connection> {
     return true;
   }
 
-  protected request<T extends SnapshotResult>(
+  protected async request<T extends SnapshotResult>(
     connection: Active,
     endpoint: Endpoint,
     payload: Record<string, unknown>,
   ): Promise<T> {
+    const requestedAt = authorizationTime(connection);
+    this.checkAuthorization(connection, requestedAt);
+    const abort = connection.controller.signal;
+    const result = await signal<T>(endpoint, payload, connection.credentials, abort);
+    this.checkAuthorization(connection, authorizationTime(connection));
+    if (result.snapshot.phase === 'approved') {
+      this.updateAuthorization(connection, result.snapshot.authorization, requestedAt);
+    }
+    return result;
+  }
+
+  private checkAuthorization(connection: Active, now: number): void {
+    const authorization = connection.authorization;
+    if (authorization && now >= Math.min(authorization.approvalDeadline, authorization.activityDeadline)) {
+      this.finish(connection, 'ended', AUTHORIZATION_EXPIRED);
+    }
     connection.controller.signal.throwIfAborted();
-    return signal<T>(endpoint, payload, connection.credentials, connection.controller.signal);
+  }
+
+  private updateAuthorization(connection: Active, reported: Authorization | undefined, requestedAt: number): void {
+    const approval = requestedAt + remainingAuthorization(reported?.approvalRemainingMs ?? -1, MAX_APPROVAL_DURATION);
+    const activity = requestedAt + remainingAuthorization(reported?.activityRemainingMs ?? -1, MAX_ACTIVITY_DURATION);
+    const previous = connection.authorization;
+    // A delayed reply must not extend approval or replace a more recent heartbeat.
+    const approvalDeadline = Math.min(previous?.approvalDeadline ?? approval, approval);
+    const activityDeadline = Math.max(previous?.activityDeadline ?? activity, activity);
+    connection.authorization = { approvalDeadline, activityDeadline };
+    const now = authorizationTime(connection);
+    this.checkAuthorization(connection, now);
+    clearTimeout(connection.authorizationTimer);
+    connection.authorizationTimer = setTimeout(() => {
+      this.finish(connection, 'ended', AUTHORIZATION_EXPIRED);
+    }, Math.min(approvalDeadline, activityDeadline) - now);
   }
 
   protected async poll(connection: Active, snapshot: Snapshot, apply: (snapshot: Snapshot) => Promise<void>): Promise<void> {
@@ -310,6 +366,7 @@ abstract class MonitorSession<Active extends Connection> {
   private release(connection: Active, notifyServer = true): void {
     this.current = undefined;
     connection.controller.abort();
+    clearTimeout(connection.authorizationTimer);
     clearTimeout(connection.connectionTimer);
     clearTimeout(connection.disconnectTimer);
     connection.peer?.close();
@@ -323,6 +380,7 @@ type SenderConnection = Connection & {
   audioTrack?: MediaStreamTrack;
   audioWrite?: Promise<void>;
   announcedAudio?: MonitorSharedAudio;
+  audioSequence: number;
   code?: string;
   decision?: boolean;
 };
@@ -338,6 +396,7 @@ export class MonitorSender extends MonitorSession<SenderConnection> {
       stream,
       video: liveTrack(stream.getVideoTracks()),
       audioTrack: liveTrack(stream.getAudioTracks()),
+      audioSequence: 1,
       controller: new AbortController(),
       state: {
         phase: 'waiting',
@@ -393,6 +452,7 @@ export class MonitorSender extends MonitorSession<SenderConnection> {
     if (connection.audioTrack) connection.audioTrack.enabled = available && audio.output !== 'pc';
     const effectiveAudio: MonitorSharedAudio = { available, output: audio.output };
     if (available && audio.pcPlaybackSuppressed) effectiveAudio.pcPlaybackSuppressed = true;
+    if (!sameAudio(connection.state.audio, effectiveAudio)) ++connection.audioSequence;
     this.publish(connection, { ...connection.state, audio: effectiveAudio });
     if (!connection.credentials) return;
     try {
@@ -426,7 +486,7 @@ export class MonitorSender extends MonitorSession<SenderConnection> {
           const { audio } = connection.state;
           // If the response is lost, the server may already have applied the change.
           connection.announcedAudio = undefined;
-          await this.request(connection, 'audio', { audio });
+          await this.request(connection, 'audio', { audio, audioSequence: connection.audioSequence });
           connection.announcedAudio = audio;
         });
       }

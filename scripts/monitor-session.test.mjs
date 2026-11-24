@@ -84,6 +84,12 @@ function installTransport(t) {
 
 function installSignaling(t, initial = {}) {
   let snapshot = { revision: 1, phase: 'waiting', audio: { available: false, output: 'both' }, ...initial };
+  function currentSnapshot() {
+    return snapshot.phase === 'approved'
+      ? { authorization: { approvalRemainingMs: 8 * 60 * 60_000, activityRemainingMs: 90_000 }, ...snapshot }
+      : snapshot;
+  }
+
   const pending = new Set();
   const calls = [];
   const overrides = {};
@@ -106,9 +112,9 @@ function installSignaling(t, initial = {}) {
     }
     switch (action) {
       case 'create':
-        return Response.json({ sessionId: 'session', token: 'sender-token', code: 'AAAA-BBBB-CCCC', snapshot });
+        return Response.json({ sessionId: 'session', token: 'sender-token', code: 'AAAA-BBBB-CCCC', snapshot: currentSnapshot() });
       case 'join':
-        return Response.json({ sessionId: payload.code, token: 'viewer-token', snapshot });
+        return Response.json({ sessionId: payload.code, token: 'viewer-token', snapshot: currentSnapshot() });
       case 'audio': publish({ audio: payload.audio }); break;
       case 'approve': publish({ phase: payload.accept ? 'approved' : 'closed' }); break;
       case 'offer': publish({ offer: payload.description }); break;
@@ -132,7 +138,7 @@ function installSignaling(t, initial = {}) {
         }
         break;
     }
-    return Response.json({ snapshot });
+    return Response.json({ snapshot: currentSnapshot() });
   });
   return { calls, overrides, publish };
 }
@@ -368,8 +374,10 @@ for (const { terminal, expectedPhase, closes } of [
     peer.setConnectionState('connected');
 
     const outputs = [];
-    overrides.audio = ({ audio }) => {
+    const sequences = [];
+    overrides.audio = ({ audio, audioSequence }) => {
       outputs.push(audio.output);
+      sequences.push(audioSequence);
       const status = terminal === 403 || (terminal === 404 && outputs.length > 1) ? terminal : 503;
       return new Response(null, { status });
     };
@@ -400,6 +408,81 @@ for (const { terminal, expectedPhase, closes } of [
     t.mock.timers.tick(16_000);
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(outputs, terminal === 404 ? ['pc', 'both'] : ['pc']);
+    assert.ok(sequences.every(sequence => Number.isSafeInteger(sequence) && sequence > 0));
+    if (terminal === 404) assert.equal(sequences[1], sequences[0] + 1);
     assert.equal(calls.filter(call => call.action === 'close').length, closes);
   });
 }
+
+for (const { limit, approvalRemainingMs, expiresAt } of [
+  { limit: 'peer activity', approvalRemainingMs: 8 * 60 * 60_000, expiresAt: 91_000 },
+  { limit: 'original approval', approvalRemainingMs: 5_000, expiresAt: 5_000 },
+]) {
+  test(`an isolated live receiver releases media at the ${limit} deadline`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+    t.mock.method(performance, 'now', () => Date.now());
+    const peers = installTransport(t);
+    const { calls, overrides, publish } = installSignaling(t, {
+      phase: 'approved', offer: { type: 'offer', sdp: 'v=0' },
+      authorization: { approvalRemainingMs, activityRemainingMs: 90_000 },
+    });
+    const states = [];
+    const streams = [];
+    const receiver = new MonitorReceiver({ onState: state => states.push(state), onStream: stream => streams.push(stream) });
+    t.after(() => receiver.disconnect());
+
+    await receiver.connect('AAAA-BBBB-CCCC');
+    await until(() => peers[0]?.iceGatheringState === 'gathering', 'receiver did not start ICE gathering');
+    const [peer] = peers;
+    peer.finishIce();
+    const video = new Track('video');
+    peer.receive(video);
+    peer.setConnectionState('connected');
+    await until(() => calls.filter(call => call.action === 'poll').length >= 2, 'receiver did not start polling');
+    const [stream] = streams;
+
+    let failed = false;
+    overrides.poll = () => {
+      failed = true;
+      return new Response(null, { status: 503 });
+    };
+    publish({});
+    await until(() => failed, 'receiver did not encounter the signal failure');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(states.at(-1).phase, 'connected');
+    assert.equal(video.readyState, 'live');
+
+    // A successful retry refreshes activity; a new response cannot extend the original approval.
+    delete overrides.poll;
+    publish({ authorization: { approvalRemainingMs: 8 * 60 * 60_000, activityRemainingMs: 90_000 },
+      audio: { available: true, output: 'viewer' } });
+    t.mock.timers.tick(1_000);
+    await until(() => states.at(-1).audio.output === 'viewer', 'receiver did not recover on the same peer');
+    assert.deepEqual(peers, [peer]);
+    assert.deepEqual(streams, [stream]);
+
+    t.mock.timers.tick(expiresAt - 1_001);
+    assert.equal(states.at(-1).phase, 'connected');
+    assert.equal(video.readyState, 'live');
+    t.mock.timers.tick(1);
+    assert.equal(states.at(-1).phase, 'ended');
+    assert.equal(peer.connectionState, 'closed');
+    assert.equal(video.readyState, 'ended');
+    assert.deepEqual(streams, [stream, null]);
+    assert.equal(calls.filter(call => call.action === 'close').length, 1);
+  });
+}
+
+test('a receiver requires expiration information before accepting approved media', async t => {
+  const peers = installTransport(t);
+  const { publish } = installSignaling(t, { phase: 'pending' });
+  const states = [];
+  const receiver = new MonitorReceiver({ onState: state => states.push(state), onStream: () => {} });
+  t.after(() => receiver.disconnect());
+
+  await receiver.connect('AAAA-BBBB-CCCC');
+  publish({ phase: 'approved', authorization: undefined, offer: { type: 'offer', sdp: 'v=0' } });
+  await until(() => states.at(-1).phase === 'failed', 'receiver did not reject an approval without expiration');
+  assert.match(states.at(-1).detail, /有効期限/);
+  assert.deepEqual(peers, []);
+});
