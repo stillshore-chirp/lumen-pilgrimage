@@ -258,9 +258,23 @@ test('world lighting changes house lights while projection and safety lighting r
   await button(dialog, '非常点検').click();
   await page.waitForFunction(() => window.cinemaProbe.live === 0 && window.cinemaProbe.lamps?.[2] > .8);
   assert.equal(await button(dialog, '試映を再生').isDisabled(), true);
+  await button(dialog, '閉じる').click();
+  const status = lighting.getByRole('status');
+  await status.filter({ hasText: '非常点検中は照明の一括操作を利用できません。' }).waitFor();
+  for (const name of ['一括点灯', '一括消灯', '既定']) {
+    assert.equal(await button(lighting, name).isDisabled(), true);
+  }
+  await button(lighting, '一括点灯').dispatchEvent('click');
+  assert.equal(await button(lighting, '一括消灯').getAttribute('aria-pressed'), 'true');
+  await screenshot(page, 'emergency-world-light-locked');
+  await button(page, '上映設定').click();
   await button(dialog, '清掃').click();
   await button(dialog, '閉じる').click();
-  await page.waitForFunction(() => window.cinemaProbe.lamps?.[1] > 1 && window.cinemaProbe.live === 0);
+  await status.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] === 0 && window.cinemaProbe.lamps?.[1] > 1
+    && window.cinemaProbe.live === 0);
   assert.equal(await button(lighting, '一括消灯').getAttribute('aria-pressed'), 'true');
+  await button(lighting, '一括点灯').click();
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] > .8 && window.cinemaProbe.lamps?.[1] > 1);
   assert.deepEqual(errors, []);
 });

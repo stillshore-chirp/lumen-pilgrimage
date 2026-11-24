@@ -340,7 +340,11 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
       resources = null;
     },
     get artificialLightingMode() { return lightingMode; },
+    get artificialLightingUnavailableReason() {
+      return mode === 'emergency' ? '非常点検中は照明の一括操作を利用できません。' : undefined;
+    },
     setArtificialLightingMode(next: WorldLightingMode): void {
+      if (disposed || mode === 'emergency') return;
       lightingMode = next;
       applyLamps();
     },

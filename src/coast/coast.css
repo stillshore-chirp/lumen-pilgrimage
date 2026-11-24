@@ -199,6 +199,20 @@
   margin-block-end: 8px;
 }
 
+.coast-world-lighting button:disabled {
+  cursor: default;
+}
+
+.coast-world-lighting button[aria-pressed="true"]:disabled {
+  color: #133833;
+}
+
+.coast-world-lighting .coast-lighting-status {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.85em;
+}
+
 .coast-setting-row > .coast-label {
   margin: 0;
 }

@@ -3,6 +3,7 @@ export type WorldLightingState = WorldLightingMode | 'custom';
 
 export interface WorldLightingControl {
   readonly artificialLightingMode: WorldLightingState;
+  readonly artificialLightingUnavailableReason?: string;
   setArtificialLightingMode(mode: WorldLightingMode): void;
 }
 
@@ -24,12 +25,28 @@ export function bindWorldLightingControl(element: HTMLElement, world: WorldLight
     element.append(button);
     return { mode, button };
   });
-  let previous: WorldLightingState | undefined;
+  const status = document.createElement('p');
+  status.className = 'coast-lighting-status';
+  status.setAttribute('role', 'status');
+  status.hidden = true;
+  element.append(status);
+
+  let previousMode: WorldLightingState | undefined;
+  let previousReason: string | undefined;
   function sync(): void {
     const current = world.artificialLightingMode;
-    if (previous === current) return;
-    previous = current;
-    for (const { mode, button } of buttons) button.setAttribute('aria-pressed', String(mode === current));
+    const reason = world.artificialLightingUnavailableReason;
+    if (previousMode === current && previousReason === reason) return;
+    if (previousReason !== reason) {
+      status.hidden = reason === undefined;
+      status.textContent = reason ?? '';
+    }
+    previousMode = current;
+    previousReason = reason;
+    for (const { mode, button } of buttons) {
+      button.disabled = reason !== undefined;
+      button.setAttribute('aria-pressed', String(mode === current));
+    }
   }
   sync();
   return sync;
