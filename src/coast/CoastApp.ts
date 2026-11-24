@@ -4,7 +4,7 @@ import {
 import { CoastAudio } from './CoastAudio';
 import { CoastXR } from './CoastXR';
 import type { ImmersiveMenuItem } from '../xr/ImmersiveMenu';
-import { renderImmersiveStatus } from '../xr/ImmersiveSession';
+import { renderImmersiveStatus, type ImmersiveStatus } from '../xr/ImmersiveSession';
 import { CoastControls, type CoastMovement, type CoastNavigation } from './CoastControls';
 import type { MonitorTheater } from '../monitor/monitorObject';
 import type { MonitorView, MonitorViewBinding } from '../monitor/monitorView';
@@ -20,6 +20,7 @@ import { cinemaLightingModes, createCinemaPanel, type CinemaControls } from './w
 import { createCinemaSeatTransition } from './world/cinema/cinemaSeatTransition';
 import { disposeSceneDrawables } from './disposeSceneDrawables';
 import { bindWorldLightingControl, worldLightingChoices, type WorldLightingControl } from './WorldLightingControl';
+import { ResidenceShaderPreparation } from './world/residence/residenceShaderPreparation';
 import './coast.css';
 
 const qualitySettings = {
@@ -94,6 +95,9 @@ export class CoastApp {
   private readonly monitorBinding: MonitorViewBinding;
   private readonly xr: CoastXR;
   private readonly bindXRStatus: () => () => void;
+  private readonly syncXRStatus: () => void;
+  private readonly residenceShaders?: ResidenceShaderPreparation;
+  private xrSupported = false;
   private unsubscribeXR?: () => void;
   private readonly lockView: () => void;
   private readonly forward = new Vector3();
@@ -138,6 +142,9 @@ export class CoastApp {
     const residence = this.worldId === 'residence';
     const cinema = this.worldId === 'cinema';
     this.world = loaded.world;
+    if (residence && this.renderer.xr.enabled) {
+      this.residenceShaders = new ResidenceShaderPreparation(this.renderer, this.world.scene);
+    }
     if (cinema) this.seatTransition = createCinemaSeatTransition(this.world.scene);
     this.audio = loaded.audio;
     this.interaction = loaded.interaction;
@@ -271,11 +278,23 @@ export class CoastApp {
     const vrButton = vr.querySelector('button')!;
     const vrStatus = vr.querySelector('p')!;
     vrButton.addEventListener('click', () => void this.xr.session.toggle(), { signal: this.events.signal });
+    let xrStatus: ImmersiveStatus | undefined;
+    this.syncXRStatus = () => {
+      if (!xrStatus) return;
+      const unavailable = xrStatus.state === 'unavailable' && window.isSecureContext;
+      const preparing = xrStatus.state === 'available' && this.residenceShaders?.pending;
+      renderImmersiveStatus(vrButton, vrStatus, xrStatus, unavailable ? 'VR非対応' : 'VRを開始', 'VRを終了');
+      if (preparing) {
+        vrButton.disabled = true;
+        vrStatus.textContent = 'VRの描画を準備しています。';
+      }
+      vrButton.title = unavailable ? xrStatus.message : '';
+      vrStatus.hidden = !preparing && (xrStatus.state === 'available' || xrStatus.state === 'presenting' || unavailable);
+    };
     this.bindXRStatus = () => this.xr.session.observe(status => {
-      const unavailable = status.state === 'unavailable' && window.isSecureContext;
-      renderImmersiveStatus(vrButton, vrStatus, status, unavailable ? 'VR非対応' : 'VRを開始', 'VRを終了');
-      vrButton.title = unavailable ? status.message : '';
-      vrStatus.hidden = status.state === 'available' || status.state === 'presenting' || unavailable;
+      xrStatus = status;
+      this.xrSupported = status.state !== 'unavailable' && status.state !== 'checking';
+      this.syncXRStatus();
     });
     this.travelStatus.className = 'coast-panel coast-travel-status';
     this.travelStatus.setAttribute('role', 'status');
@@ -363,6 +382,14 @@ export class CoastApp {
     }
     const listeners = { signal: this.events.signal };
     canvas.addEventListener('click', this.lockView, listeners);
+    if (this.residenceShaders) {
+      const resetShaderPreparation = () => {
+        this.residenceShaders?.reset();
+        this.syncXRStatus();
+      };
+      canvas.addEventListener('webglcontextlost', resetShaderPreparation, listeners);
+      canvas.addEventListener('webglcontextrestored', resetShaderPreparation, listeners);
+    }
     window.addEventListener('keydown', this.onSceneKey, listeners);
     window.addEventListener('popstate', this.onPopState, listeners);
     window.addEventListener('pagehide', this.onPageHide, listeners);
@@ -797,6 +824,11 @@ export class CoastApp {
       this.camera.position);
     this.world.prepareRender?.(this.renderer, viewer);
     this.renderer.render(this.world.scene, immersive ? this.xr.camera : this.camera);
+    if (this.residenceShaders && this.xrSupported) {
+      const pending = this.residenceShaders.pending;
+      this.residenceShaders.advance(immersive ? this.renderer.xr.getCamera() : this.camera);
+      if (pending !== this.residenceShaders.pending) this.syncXRStatus();
+    }
   };
 
   private readonly onPageShow = (event: PageTransitionEvent): void => {

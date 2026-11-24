@@ -207,7 +207,7 @@ function observeAudio() {
   };
 }
 
-function installSimulatedXR() {
+function installSimulatedXR(layerType = 'base') {
   const fixture = {
     requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
     head: { x: 0, y: 1.65, z: 0, yaw: 0 }, eyePoses: {},
@@ -261,14 +261,41 @@ function installSimulatedXR() {
     if (this.canvas.width === 960 && this.canvas.height === 104) fixture.hint = text;
     return fillText.call(this, text, x, y, ...rest);
   };
-  Object.defineProperty(window, 'XRWebGLBinding', { value: undefined, configurable: true });
+  const framebufferWidth = 640;
+  const framebufferHeight = 480;
+  const eyeViewport = ({ eye }) => ({ x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 });
+  const Binding = layerType === 'projection' ? class {
+    constructor(_session, context) {
+      this.context = context;
+    }
+    createProjectionLayer({ scaleFactor, colorFormat, depthFormat }) {
+      const context = this.context;
+      const texture = format => {
+        const result = context.createTexture();
+        context.bindTexture(context.TEXTURE_2D, result);
+        context.texStorage2D(context.TEXTURE_2D, 1, format, framebufferWidth, framebufferHeight);
+        context.bindTexture(context.TEXTURE_2D, null);
+        return result;
+      };
+      this.colorTexture = texture(colorFormat);
+      this.depthStencilTexture = texture(depthFormat);
+      fixture.scaleFactor = scaleFactor;
+      return { textureWidth: framebufferWidth, textureHeight: framebufferHeight, ignoreDepthValues: true, fixedFoveation: 1 };
+    }
+    getViewSubImage(_layer, view) {
+      return { colorTexture: this.colorTexture, depthStencilTexture: this.depthStencilTexture, viewport: eyeViewport(view) };
+    }
+  } : undefined;
+  Object.defineProperty(window, 'XRWebGLBinding', { value: Binding, configurable: true });
   window.XRWebGLLayer = class {
     framebuffer = null;
-    framebufferWidth = 640;
-    framebufferHeight = 480;
-    getViewport({ eye }) {
-      return { x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 };
+    framebufferWidth = framebufferWidth;
+    framebufferHeight = framebufferHeight;
+    fixedFoveation = 1;
+    constructor(_session, _context, options) {
+      fixture.scaleFactor = options.framebufferScaleFactor;
     }
+    getViewport(view) { return eyeViewport(view); }
   };
 
   const projectionMatrix = new Float32Array([
@@ -306,7 +333,9 @@ function installSimulatedXR() {
     inputSources = [controller('left'), controller('right')];
     visibilityState = 'visible';
     async requestReferenceSpace() { return new EventTarget(); }
-    updateRenderState() {}
+    updateRenderState({ baseLayer, layers }) {
+      fixture.layer = baseLayer ?? layers?.[0] ?? fixture.layer;
+    }
     makeFrame() {
       return { session: this, getViewerPose: viewPose, getPose: space => space };
     }
@@ -1538,6 +1567,115 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await button(page, 'VRを開始').waitFor();
     await page.waitForFunction(draws => window.xrFixture.desktopDraws > draws && window.xrFixture.ends === 1, desktopDraws);
     assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+function observeShaderPreparation(supportsParallel) {
+  const completion = 0x91b1;
+  const probe = window.shaderPreparation = { allow: false, polls: 0, links: 0, firstUses: 0 };
+  const gl = WebGL2RenderingContext.prototype;
+  const extension = gl.getExtension;
+  const parameter = gl.getProgramParameter;
+  const link = gl.linkProgram;
+  const info = gl.getProgramInfoLog;
+  gl.getExtension = function (name) {
+    if (name === 'KHR_parallel_shader_compile') return supportsParallel ? { COMPLETION_STATUS_KHR: completion } : null;
+    return extension.call(this, name);
+  };
+  gl.getProgramParameter = function (program, pname) {
+    if (pname === completion) {
+      probe.polls++;
+      return probe.allow;
+    }
+    return parameter.call(this, program, pname);
+  };
+  gl.linkProgram = function (program) {
+    probe.links++;
+    return link.call(this, program);
+  };
+  gl.getProgramInfoLog = function (program) {
+    probe.firstUses++;
+    return info.call(this, program);
+  };
+}
+
+test('the residence prepares the first interior view before starting projection XR by day and night', { timeout }, async () => {
+  for (const time of ['day', 'night']) {
+    const page = await newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    try {
+      await page.addInitScript(installSimulatedXR, 'projection');
+      await page.addInitScript(observeShaderPreparation, true);
+      await page.goto(new URL(`?world=residence&place=living-window&time=${time}`, url).href);
+      const entry = button(page, 'VRを開始');
+      await page.waitForFunction(() => window.shaderPreparation.polls > 0);
+      assert.equal(await entry.isDisabled(), true);
+      assert.equal(await page.locator('#coast-xr-status').textContent(), 'VRの描画を準備しています。');
+      assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+
+      await page.evaluate(() => { window.shaderPreparation.allow = true; });
+      await entry.click();
+      await page.waitForFunction(() => window.xrFixture.eyePoses[320] && window.xrFixture.frames >= 5);
+      const result = await page.evaluate(async () => {
+        const probe = window.shaderPreparation;
+        const { links, firstUses } = probe;
+        const fixture = window.xrFixture;
+        const before = fixture.eyePoses[0].yaw;
+        await fixture.mutate({ head: { yaw: Math.PI }, frames: 5 });
+        const after = fixture.eyePoses[0].yaw;
+        return { links: probe.links - links, firstUses: probe.firstUses - firstUses,
+          turned: Math.cos(before - after) < -.99, activation: fixture.activations };
+      });
+      assert.deepEqual(result, { links: 0, firstUses: 0, turned: true, activation: [true] }, time);
+
+      if (time === 'night') {
+        const travel = page.getByRole('dialog', { name: 'ファストトラベル' });
+        await button(page, 'ファストトラベル').click();
+        await button(travel, '入り江の浜').click();
+        await page.waitForURL(address => address.searchParams.get('world') === 'coast');
+        assert.equal(await button(page, 'VRを終了').isEnabled(), true);
+        assert.deepEqual(await page.evaluate(() => [window.xrFixture.requests, window.xrFixture.ends]), [1, 0]);
+      }
+
+      const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
+      await button(page, 'VRを終了').click();
+      await page.waitForFunction(draws => window.xrFixture.desktopDraws > draws && window.xrFixture.ends === 1, desktopDraws);
+      assert.equal(await entry.isEnabled(), true);
+      assert.deepEqual(errors, []);
+    } finally {
+      await page.close();
+    }
+  }
+});
+
+test('the residence prepares the first projection XR turn without parallel shader compilation support', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await page.addInitScript(installSimulatedXR, 'projection');
+    await page.addInitScript(observeShaderPreparation, false);
+    await page.goto(new URL('?world=residence&place=living-window&time=night', url).href);
+    const entry = button(page, 'VRを開始');
+    await page.waitForFunction(() => document.querySelector('#coast-xr-status')?.textContent === 'VRの描画を準備しています。'
+      && document.querySelector('.coast-xr-entry button')?.disabled);
+    await entry.click();
+    await page.waitForFunction(() => window.xrFixture.frames > 4 && window.xrFixture.eyePoses[320]);
+    const result = await page.evaluate(async () => {
+      const probe = window.shaderPreparation;
+      const { links, firstUses } = probe;
+      const fixture = window.xrFixture;
+      const before = fixture.eyePoses[0].yaw;
+      await fixture.mutate({ head: { yaw: Math.PI }, frames: 5 });
+      return {
+        polls: probe.polls, links: probe.links - links, firstUses: probe.firstUses - firstUses,
+        turned: Math.cos(before - fixture.eyePoses[0].yaw) < -.99, activation: fixture.activations,
+      };
+    });
+    assert.deepEqual(result, { polls: 0, links: 0, firstUses: 0, turned: true, activation: [true] });
+    await button(page, 'VRを終了').click();
+    await button(page, 'VRを開始').waitFor();
   } finally {
     await page.close();
   }
