@@ -35,7 +35,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   furniture.group.add(curtains.group);
   const scene = new Scene();
   scene.add(city.group, shell.group, furniture.group);
-  bindResidenceCityVisibility(scene, city.group);
+  bindResidenceCityVisibility(scene, city.group, city.regionalCity);
   const invalidateReflections = () => reflections.invalidate();
   const theaterLights = createResidenceTheaterLights(furniture.theater.screen, invalidateReflections);
   const lighting = createResidenceLighting(scene, materials, furniture.obstacles, invalidateReflections, theaterLights);

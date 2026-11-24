@@ -181,6 +181,7 @@ export async function createResidenceCity() {
   setQuality('light');
   return {
     group,
+    regionalCity: basin.group,
     setTimeOfDay,
     setQuality,
     update(time: number, _camera?: THREE.PerspectiveCamera) {

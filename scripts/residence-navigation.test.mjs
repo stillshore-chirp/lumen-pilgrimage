@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { after, test } from 'node:test';
-import { ArrayCamera, Group, PerspectiveCamera, Raycaster, Scene, Vector3 } from 'three';
+import { ArrayCamera, BoxGeometry, Group, InstancedBufferAttribute, InstancedBufferGeometry, Mesh,
+  PerspectiveCamera, Raycaster, Scene, Vector3, Vector4 } from 'three';
 
 const src = new URL('../src/', import.meta.url).href;
 const hooks = registerHooks({
@@ -74,11 +75,12 @@ function reachableFrom(nav, e, n) {
   return (east, north) => seen.has(grid(east, north));
 }
 
-function cityRenderProbe() {
+function cityRenderProbe(regional = new Group()) {
   const scene = new Scene();
   const city = new Group();
+  city.add(regional);
   scene.add(city);
-  bindResidenceCityVisibility(scene, city);
+  bindResidenceCityVisibility(scene, city, regional);
   const renderer = { xr: { enabled: true, isPresenting: true } };
   function visibleDuring(camera) {
     scene.onBeforeRender(renderer, scene, camera, null);
@@ -86,11 +88,12 @@ function cityRenderProbe() {
     scene.onAfterRender(renderer, scene, camera);
     return visible;
   }
-  return { city, renderer, visibleDuring };
+  return { city, renderer, visibleDuring, scene };
 }
 
 function residenceEye(x, z, yaw, pitch, lensShift = 0) {
   const eye = new PerspectiveCamera(86, 1, .08, 43500);
+  eye.viewport = new Vector4(0, 0, 1832, 1920);
   eye.position.set(x, 1.65, z);
   eye.rotation.set(pitch, yaw, 0, 'YXZ');
   eye.projectionMatrix.elements[8] += lensShift;
@@ -135,6 +138,74 @@ test('city culling leaves open doorways and views near the facade or on the balc
   assert.equal(visibleAt(19.7, -13.58, -Math.PI / 2, -.1), true, 'The sliding balcony door exposes the outside');
   assert.equal(visibleAt(20.66, -13.58, Math.PI / 2, -.1), true, 'The near plane can cross the balcony threshold');
   assert.equal(visibleAt(21.65, -13.58, Math.PI / 2, -.1), true, 'The balcony remains outside the culling bounds');
+});
+
+test('immersive opening bounds cull only hidden regional batches and restore their state', () => {
+  const tv = findDestination('residence', 'living-theater');
+  const left = residenceEye(tv.x - .033, tv.z, tv.yaw, tv.pitch);
+  const right = residenceEye(tv.x + .033, tv.z, tv.yaw, tv.pitch);
+  const region = new Group();
+  region.scale.z = -1;
+  const shape = new BoxGeometry(1, 1, 1);
+  function batch(projectedX) {
+    const center = new Vector3(projectedX, 0, .999).unproject(right);
+    const geometry = new InstancedBufferGeometry();
+    geometry.setAttribute('position', shape.getAttribute('position'));
+    geometry.setAttribute('cityCenter', new InstancedBufferAttribute(
+      new Float32Array([center.x, center.y, -center.z]), 3,
+    ));
+    geometry.setAttribute('cityScale', new InstancedBufferAttribute(new Float32Array([.1, .1, .1]), 3));
+    const object = new Mesh(geometry);
+    region.add(object);
+    return object;
+  }
+  const throughGlass = batch(.66);
+  const behindWall = batch(-.55);
+  const shadowCaster = batch(-.6);
+  shadowCaster.castShadow = true;
+  const alreadyHidden = batch(-.65);
+  alreadyHidden.visible = false;
+  const { city, renderer, scene } = cityRenderProbe(region);
+  const headset = new ArrayCamera([left, right]);
+  const flags = () => [city, throughGlass, behindWall, shadowCaster, alreadyHidden].map(object => object.visible);
+  const begin = () => scene.onBeforeRender(renderer, scene, headset, null);
+  const end = () => scene.onAfterRender(renderer, scene, headset);
+  begin();
+  assert.deepEqual(flags(), [true, true, false, true, false]);
+  end();
+  assert.deepEqual(flags(), [true, true, true, true, false]);
+
+  // The first eye alone faces solid interior walls. The second eye keeps its outside batch.
+  const interiorEye = residenceEye(15.2, -8.45, 0, -.2);
+  headset.cameras = [interiorEye, right];
+  begin();
+  assert.deepEqual(flags(), [true, true, false, true, false]);
+  end();
+
+  for (const otherEye of [
+    residenceEye(20.66, -13.58, Math.PI / 2, -.1),
+    residenceEye(21.65, -13.58, Math.PI / 2, -.1),
+    residenceEye(tv.x, tv.z, tv.yaw, .3),
+  ]) {
+    if (otherEye.rotation.x > 0) {
+      otherEye.position.y = 2.93;
+      otherEye.updateMatrixWorld();
+    }
+    headset.cameras = [right, otherEye];
+    begin();
+    assert.deepEqual(flags(), [true, true, true, true, false]);
+    end();
+  }
+  renderer.xr.isPresenting = false;
+  headset.cameras = [left, right];
+  begin();
+  assert.deepEqual(flags(), [true, true, true, true, false]);
+  end();
+  for (const object of region.children) {
+    object.geometry.dispose();
+    object.material.dispose();
+  }
+  shape.dispose();
 });
 
 test('dwelling follows the drawing dimensions and all travel poses have continuous level support', () => {
