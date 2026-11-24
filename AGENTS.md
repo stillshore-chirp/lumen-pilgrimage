@@ -7,7 +7,8 @@
 - [README.md](README.md) に、起動手順と利用者・開発者向けの文書案内があります。
 - 実装とレビューには [コーディング規約](docs/coding-standards.md) を適用してください。
 - 変更内容に対応する文書は [文書の責務と更新基準](docs/documentation-structure.md) で正本と更新条件を確認し、該当箇所を更新してください。
-- [Issue・PRの記載](docs/agent-harness.md#issueprの記載) と、文書や参照を変えたときの [静的検査](docs/agent-harness.md#更新と検証) はハーネスガイドを参照してください。
+- ソースコード変更は [Issue・PRの記載](docs/agent-harness.md#issueprの記載) に従って主Issueと受け入れ条件を確定してから着手し、各段階の確認も同ガイドに従ってください。
+- 文書や参照を変えたときの [静的検査](docs/agent-harness.md#更新と検証) はハーネスガイドを参照してください。
 - リポジトリ内に作業計画を残す場合は [作業計画テンプレート](plans/TEMPLATE.md) を使えます。
 
 ## 変更時に確認する契約
