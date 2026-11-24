@@ -50,7 +50,27 @@ function anchor(heading) {
 }
 
 function withoutFencedCode(source) {
-  return source.replace(/^ {0,3}(`{3,}|~{3,})[^\r\n]*\r?\n[\s\S]*?^ {0,3}\1[ \t]*$/gm, (fence) => fence.replace(/[^\r\n]/g, ''));
+  const lines = source.split(/(\r\n|\n|\r)/);
+  let openFence;
+  for (let index = 0; index < lines.length; index += 2) {
+    const line = lines[index];
+    if (openFence) {
+      lines[index] = ' '.repeat(line.length);
+      const closing = line.match(/^ {0,3}(`+|~+)[ \t]*$/)?.[1];
+      if (closing?.[0] === openFence.character && closing.length >= openFence.length) {
+        openFence = undefined;
+      }
+      continue;
+    }
+
+    const opening = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (!opening || (opening[1][0] === '`' && opening[2].includes('`'))) {
+      continue;
+    }
+    openFence = { character: opening[1][0], length: opening[1].length };
+    lines[index] = ' '.repeat(line.length);
+  }
+  return lines.join('');
 }
 
 function headingAnchors(source) {
@@ -167,7 +187,7 @@ function run() {
       continue;
     }
     links.set(doc, checkLinks(doc, source));
-    for (const [, name] of withoutFencedCode(source).matchAll(/\bnpm run ([\w:-]+)/g)) {
+    for (const [, name] of source.matchAll(/\bnpm run ([\w:-]+)/g)) {
       if (!Object.hasOwn(scripts, name)) {
         errors.push(`${doc}: unknown npm script ${name}`);
       }
