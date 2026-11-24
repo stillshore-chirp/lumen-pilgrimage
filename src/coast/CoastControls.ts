@@ -5,6 +5,18 @@ export type CoastMovement = 'walk' | 'crouch' | 'wade' | 'swim' | 'dive' | 'flig
 
 type DivePhase = 'entering' | 'submerged' | 'surfacing';
 
+interface PlanarInput {
+  readonly forward: number;
+  readonly right: number;
+  readonly vertical: number;
+}
+
+export interface CoastXRMovement extends PlanarInput {
+  readonly jump: boolean;
+  readonly dive: boolean;
+  readonly flight: boolean;
+}
+
 export interface CoastControlCallbacks {
   onMovementChange: (movement: CoastMovement) => void;
   onLockChange: (locked: boolean) => void;
@@ -63,6 +75,8 @@ const WALK_SLOPE_EPSILON = 0.000001;
 const BOUNDS_PADDING = 0.35;
 const MAX_FLIGHT_HEIGHT = 255;
 const GAMEPAD_DEADZONE = 0.16;
+const XR_WALK_SPEED = 2.7;
+const XR_FLIGHT_SPEED = 6;
 
 const coastNavigation: CoastNavigation = {
   bounds: COAST_BOUNDS, spawn: SPAWN, groundHeight, waterLevel: coastWaterLevel,
@@ -97,6 +111,7 @@ export class CoastControls {
   private previousGamepadJump = false;
   private previousGamepadDive = false;
   private pointerLockRequestPending = false;
+  private desktopInputEnabled = true;
   private disposed = false;
 
   constructor(camera: PerspectiveCamera, canvas: HTMLCanvasElement, callbacks: CoastControlCallbacks,
@@ -183,8 +198,13 @@ export class CoastControls {
     this.updateMovementMode();
   }
 
+  setDesktopInputEnabled(enabled: boolean): void {
+    this.desktopInputEnabled = enabled;
+    this.releaseInput();
+  }
+
   requestLock(): void {
-    if (this.disposed || this.pointerLockRequestPending || document.pointerLockElement === this.canvas) return;
+    if (!this.desktopInputEnabled || this.disposed || this.pointerLockRequestPending || document.pointerLockElement === this.canvas) return;
 
     this.canvas.focus({ preventScroll: true });
     this.pointerLockRequestPending = true;
@@ -206,15 +226,33 @@ export class CoastControls {
       return;
     }
 
-    const delta = Number.isFinite(dt) ? Math.max(0, Math.min(dt, MAX_DELTA)) : 0;
+    const delta = this.frameDelta(dt);
     const input = this.readMovementInput(delta);
     if (delta === 0) return;
-    const pace = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')
-      ? SPRINT_MULTIPLIER
-      : 1;
+    const pace = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? SPRINT_MULTIPLIER : 1;
+    this.advance(input, pace, delta);
+  }
 
+  updateXR(dt: number, input: CoastXRMovement, headYaw: number): void {
+    if (this.disposed) return;
+    const delta = this.frameDelta(dt);
+    if (input.flight) this.toggleFlight();
+    if (input.jump && !this.flying) this.jumpQueued = true;
+    if (input.dive && !this.flying) this.diveQueued = true;
+    if (delta > 0) this.advance(this.normalizePlanarInput(input.forward, input.right, input.vertical), 1, delta, headYaw);
+  }
+
+  alignDesktopView(yaw: number, pitch: number): void {
+    this.camera.rotation.set(this.clampPitch(pitch), yaw, 0);
+  }
+
+  private frameDelta(dt: number): number {
+    return Number.isFinite(dt) ? Math.max(0, Math.min(dt, MAX_DELTA)) : 0;
+  }
+
+  private advance(input: PlanarInput, pace: number, delta: number, headYaw?: number): void {
     if (this.flying) {
-      this.updateFlight(input.forward, input.right, input.vertical, pace, delta);
+      this.updateFlight(input, pace, delta, headYaw);
       return;
     }
 
@@ -228,9 +266,9 @@ export class CoastControls {
         this.verticalVelocity = 0;
       }
     }
-    this.setPlanarMovement(input.forward, input.right);
+    this.setPlanarMovement(input.forward, input.right, headYaw);
     if (this.divePhase !== null) this.updateDive(input.vertical, delta);
-    else this.updateGroundMovement(pace, delta);
+    else this.updateGroundMovement(pace, delta, headYaw !== undefined);
     this.diveQueued = false;
     this.crouchQueued = false;
   }
@@ -322,7 +360,7 @@ export class CoastControls {
   }
 
   private canUseSceneInput(): boolean {
-    return document.visibilityState !== 'hidden' && document.hasFocus();
+    return this.desktopInputEnabled && document.visibilityState !== 'hidden' && document.hasFocus();
   }
 
   private canUseSceneKeyboard(event: KeyboardEvent): boolean {
@@ -422,15 +460,14 @@ export class CoastControls {
     return { forward, right, vertical: Math.max(-1, Math.min(vertical, 1)) };
   }
 
-  private setPlanarMovement(forwardInput: number, rightInput: number): void {
-    const yaw = this.camera.rotation.y;
+  private setPlanarMovement(forwardInput: number, rightInput: number, yaw = this.camera.rotation.y): void {
     this.forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     this.right.set(Math.cos(yaw), 0, -Math.sin(yaw));
     this.movement.copy(this.forward).multiplyScalar(forwardInput)
       .addScaledVector(this.right, rightInput);
   }
 
-  private updateGroundMovement(pace: number, dt: number): void {
+  private updateGroundMovement(pace: number, dt: number, immersive: boolean): void {
     const position = this.camera.position;
     const foot = position.y - this.eyeHeight;
     const depth = this.waterLevel(position.x, position.z) - this.navigation.groundHeight(position.x, position.z);
@@ -448,7 +485,8 @@ export class CoastControls {
     if (this.movement.lengthSq() > 0) {
       const water = smoothstep(0.12, SWIM_DEPTH, depth);
       const walkSpeed = this.navigation.walkSpeed ?? WALK_SPEED;
-      const speed = walkSpeed * pace * (1 - water) + SWIM_SPEED * water;
+      const normalSpeed = walkSpeed * pace * (1 - water) + SWIM_SPEED * water;
+      const speed = immersive ? Math.min(normalSpeed, XR_WALK_SPEED) : normalSpeed;
       this.movement.multiplyScalar(speed * dt);
       followSupport = this.moveAlongSupport(this.movement.x, this.movement.z, foot, verticalStep, followSupport);
     }
@@ -538,22 +576,20 @@ export class CoastControls {
     }
   }
 
-  private updateFlight(
-    forwardInput: number,
-    rightInput: number,
-    verticalInput: number,
-    pace: number,
-    dt: number
-  ): void {
-    this.camera.getWorldDirection(this.viewDirection);
-    this.forward.copy(this.viewDirection);
-    this.right.set(Math.cos(this.camera.rotation.y), 0, -Math.sin(this.camera.rotation.y));
-    this.movement.copy(this.forward).multiplyScalar(forwardInput)
-      .addScaledVector(this.right, rightInput)
-      .addScaledVector(this.up, verticalInput);
+  private updateFlight(input: PlanarInput, pace: number, dt: number, headYaw?: number): void {
+    if (headYaw === undefined) {
+      this.camera.getWorldDirection(this.viewDirection);
+      const yaw = this.camera.rotation.y;
+      this.right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+      this.movement.copy(this.viewDirection).multiplyScalar(input.forward).addScaledVector(this.right, input.right);
+    } else {
+      this.setPlanarMovement(input.forward, input.right, headYaw);
+    }
+    this.movement.addScaledVector(this.up, input.vertical);
 
     if (this.movement.lengthSq() > 1) this.movement.normalize();
-    this.movement.multiplyScalar(FLIGHT_SPEED * pace * dt);
+    const speed = headYaw === undefined ? FLIGHT_SPEED : XR_FLIGHT_SPEED;
+    this.movement.multiplyScalar(speed * pace * dt);
     const { x, y, z } = this.camera.position;
     const targetX = this.clampX(x + this.movement.x);
     const targetZ = this.clampZ(z + this.movement.z);

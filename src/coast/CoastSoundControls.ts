@@ -97,9 +97,12 @@ export function bindCoastSoundControls(
     restoreListeners = undefined;
   }
 
+  const environmentText = () => settings.environmentOn ? '環境音をオフ' : '環境音をオン';
+  const footstepsText = () => wantsFootsteps() ? '歩行音をオフ' : '歩行音をオン';
+
   function sync(): void {
-    const environmentLabel = settings.environmentOn ? '環境音をオフ' : '環境音をオン';
-    const footstepsLabel = wantsFootsteps() ? '歩行音をオフ' : '歩行音をオン';
+    const environmentLabel = environmentText();
+    const footstepsLabel = footstepsText();
     if (environment.textContent !== environmentLabel) environment.textContent = environmentLabel;
     if (footsteps && footsteps.textContent !== footstepsLabel) footsteps.textContent = footstepsLabel;
     const needsResume = wantsAudio() && !audio.isRunning();
@@ -213,16 +216,18 @@ export function bindCoastSoundControls(
     restoreSound();
   }, { signal: listeners.signal });
 
-  environment.addEventListener('click', () => {
+  function toggleEnvironment(): void {
     const next = settings.environmentOn !== true;
     applySettings({ ...settings, environmentOn: next, footstepsOn: settings.footstepsOn ?? true });
     if (next) void startAudio(true);
-  }, { signal: listeners.signal });
-  footsteps?.addEventListener('click', () => {
+  }
+  function toggleFootsteps(): void {
     const next = !wantsFootsteps();
     applySettings({ ...settings, footstepsOn: next });
     if (next) void startAudio(true);
-  }, { signal: listeners.signal });
+  }
+  environment.addEventListener('click', toggleEnvironment, { signal: listeners.signal });
+  footsteps?.addEventListener('click', toggleFootsteps, { signal: listeners.signal });
   retry.addEventListener('click', () => {
     if (wantsAudio()) void startAudio(true);
   }, { signal: listeners.signal });
@@ -231,6 +236,10 @@ export function bindCoastSoundControls(
   restoreSound();
   return {
     get masterVolume() { return settings.master; },
+    get environmentLabel() { return environmentText(); },
+    get footstepsLabel() { return hasFootsteps ? footstepsText() : undefined; },
+    toggleEnvironment,
+    toggleFootsteps,
     async startForPreview() {
       if (settings.environmentOn === null) {
         applySettings({ ...settings, environmentOn: true, footstepsOn: settings.footstepsOn ?? true });

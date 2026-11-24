@@ -5,6 +5,8 @@ import {
   BoxGeometry, DoubleSide, EventDispatcher, Group, Mesh, MeshBasicMaterial, Quaternion, Scene, Vector3,
 } from 'three';
 
+const { ImmersiveSession } = await import('../src/xr/ImmersiveSession.ts');
+
 const moduleUrl = new URL('../src/monitor/monitorXR.ts', import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -113,16 +115,26 @@ function fixture(t, options = {}) {
   };
   const statuses = [];
   const transitions = [];
-  const xr = new MonitorXR(manager, rig, monitor, {
-    onStatusChange: value => statuses.push(value), onSessionChange: value => transitions.push(value),
+  const xr = new ImmersiveSession(manager);
+  const grab = new MonitorXR(manager, rig, monitor);
+  let current = null;
+  const unsubscribe = xr.observe((status, active) => {
+    statuses.push(status);
+    if (current === active) return;
+    current = active;
+    transitions.push(Boolean(active));
+    grab.setSession(active);
   });
   const frame = { session, getPose: space => space.pose, getJointPose: space => space.pose };
   t.after(() => {
+    unsubscribe();
+    grab.dispose();
     xr.dispose();
     target.geometry.dispose();
     target.material.dispose();
   });
-  return { xr, session, rig, group, statuses, transitions, requestCount: () => requestCount, update: () => xr.update(frame) };
+  return { xr, session, rig, group, statuses, transitions, requestCount: () => requestCount, update: () => grab.update(frame) };
+
 }
 
 function matchesPose(group, position, rotation, scale = 1) {
@@ -140,7 +152,7 @@ test('Touch grip uses the aim ray and a world-aligned 6DoF offset until release'
   const initial = new Vector3(0, 0, -3.25).applyQuaternion(turn).add(rig.position);
   group.position.copy(initial);
   group.quaternion.copy(turn);
-  await xr.toggleSession();
+  await xr.toggle();
 
   controller.targetRaySpace.pose = pose(6, 0, 0);
   session.squeeze(controller, true);
@@ -170,7 +182,7 @@ test('Touch grip uses the aim ray and a world-aligned 6DoF offset until release'
 test('hand pinch uses joint poses and wrist rotation, with a fresh open gesture after tracking is lost', async t => {
   const { xr, session, group, update } = fixture(t);
   const source = hand('left');
-  await xr.toggleSession();
+  await xr.toggle();
   session.add(source);
   update();
   session.squeeze(source, true);
@@ -217,7 +229,7 @@ test('two different hands clamp scale, rebase on disconnect, and drop on session
   session.add(right);
   session.add(duplicate);
   session.add(left);
-  await xr.toggleSession();
+  await xr.toggle();
   update();
   session.squeeze(right, true);
   session.squeeze(duplicate, true);
@@ -233,7 +245,7 @@ test('two different hands clamp scale, rebase on disconnect, and drop on session
   setHand(left, -0.01, 0.016);
   update();
   matchesPose(group, center, new Quaternion(), MONITOR_MIN_SCALE);
-  assert.match(statuses.at(-1).message, /両手/);
+  assert.match(update(), /両手/);
 
   session.remove(left);
   update();
@@ -255,7 +267,7 @@ test('hiding the monitor drops the grab and showing it requires a new gesture', 
   const { xr, session, group, update } = fixture(t);
   const controller = grip('right');
   session.add(controller);
-  await xr.toggleSession();
+  await xr.toggle();
   session.squeeze(controller, true);
   update();
   group.visible = false;
@@ -277,7 +289,7 @@ test('unsupported devices and denied sessions expose status without changing the
   await t.test('no WebXR', async t => {
     const { xr, statuses, transitions, requestCount } = fixture(t, { unsupported: true });
     await xr.checkSupport();
-    await xr.toggleSession();
+    await xr.toggle();
     assert.equal(statuses.at(-1).state, 'unavailable');
     assert.deepEqual(transitions, []);
     assert.equal(requestCount(), 0);
@@ -286,18 +298,17 @@ test('unsupported devices and denied sessions expose status without changing the
     const { xr, statuses, transitions, requestCount } = fixture(t, { reject: true });
     await xr.checkSupport();
     assert.equal(statuses.at(-1).state, 'available');
-    await xr.toggleSession();
+    await xr.toggle();
     assert.equal(statuses.at(-1).state, 'error');
     assert.deepEqual(transitions, []);
     assert.equal(requestCount(), 1);
   });
   await t.test('gaze and trigger-only controller have no grab tracking', async t => {
-    const { xr, session, statuses, update } = fixture(t);
+    const { xr, session, update } = fixture(t);
     session.add({ handedness: 'none', targetRayMode: 'gaze', targetRaySpace: { pose: pose(0, 0, 0) } });
     const triggerOnly = { ...grip('right'), gamepad: { mapping: 'xr-standard', buttons: [{}] } };
     session.add(triggerOnly);
-    await xr.toggleSession();
-    update();
-    assert.match(statuses.at(-1).message, /追跡できません/);
+    await xr.toggle();
+    assert.match(update(), /追跡できません/);
   });
 });

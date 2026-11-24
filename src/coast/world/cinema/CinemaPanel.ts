@@ -8,7 +8,7 @@ export interface CinemaControls {
   toggleSample(): void;
 }
 
-const lightingModes = [
+export const cinemaLightingModes = [
   ['arrival', '入退場'],
   ['screening', '上映'],
   ['service', '清掃'],
@@ -51,7 +51,7 @@ export function createCinemaPanel(
   lighting.className = 'coast-row';
   lighting.setAttribute('role', 'group');
   lighting.setAttribute('aria-label', '館内照明');
-  const modes = lightingModes.map(([mode, label]) => {
+  const modes = cinemaLightingModes.map(([mode, label]) => {
     const choice = button(label);
     choice.addEventListener('click', () => {
       controls.setMode(mode);

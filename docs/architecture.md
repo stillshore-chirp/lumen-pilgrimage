@@ -36,6 +36,7 @@ flowchart LR
 
 - [explorationRoute.ts](../src/coast/explorationRoute.ts) の `parseStartupRoute` が起動入口を選び、`readInitialExplorationState` が読み込み後の初期到着点と時間帯を解釈する。同モジュールの `decideTravel` と `urlForTime` は移動先・時間帯を反映した URL を計算する。[main.ts](../src/main.ts) は `#app`、ワールドの遅延読み込み、起動中・エラー時の表示、配信ページへの振り分けを担当します。`?world=overlook` は丘陵展望台、`?world=residence` は都心の70階住戸、`?world=cinema` は映画館シアター（大）を読み込みます。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts) · [CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)
 - `CoastApp` は読み込み済みワールドへ初期状態を適用し、レンダラー、カメラ、UI、フレームループ、操作を接続します。ファストトラベルでは [CoastTravelPanel](../src/coast/CoastTravelPanel.ts) から移動先を受け取り、[coastDestinations.ts](../src/coast/coastDestinations.ts) が定義する着地点と到着時の向きを使います。`CoastApp` は移動時の再読み込みや履歴更新、カメラ・ダイアログ・座席の遷移を適用します。
+- [CoastXR](../src/coast/CoastXR.ts) は、ワールドを交換しても同じ没入型セッションとXR rigを維持する。ワールド側の到着姿勢と支持面へXRの床と向きを合わせ、ヘッドセットから得た視点を景観更新と音響に渡す。デスクトップの画角は保存設定を使い、没入型の両眼投影はヘッドセットに従う。 [XRセッション](../src/xr/ImmersiveSession.ts) · [ワールドの操作契約](worlds.md#フレームと入力)
 - [CoastSoundControls](../src/coast/CoastSoundControls.ts) が環境音、歩行音、全体と種類別の音量を各ワールドの音響へ渡します。全体音量は [MonitorView](../src/monitor/monitorView.ts) にも渡し、接続した共有音に反映します。 [音の設定の保存形式](worlds.md#設定の保存)
 
 ## 仮想モニターの設計
@@ -46,7 +47,7 @@ flowchart LR
 - [シグナリング](../server/virtual-monitor-signaling.mjs) はViteの開発・プレビューで同一オリジンのPOSTを受ける。配信元が視聴先を許可してからセッションを接続し、一時情報はプロセス内に保持して接続終了時に破棄する。録画・保存は行わない。接続の役割、期限、メディア経路は [仮想モニター仕様](monitor.md) にまとめています。
 - [視聴パネル](../src/monitor/monitorView.ts) を初めて開くと、一枚の [映像面](../src/monitor/monitorObject.ts) を景観に追加できる。映像面の位置・向き・大きさはワールド座標に保持する。映像の縦横比に合わせて同じ平面を描き、映像を失ったらそこに状態を表示する。配置編集時はFPSのマウスロックを解除し、ドラッグを映像面に渡す。
 - 住戸のテレビは同じ映像テクスチャを壁の固定画面に描く。表示先と音の出力方式は別に選べる。5.1ch出力では、受信したチャンネルを音声の数に応じて割り当て、住戸内のスピーカーの位置から頭部伝達関数で定位させる。 [テレビとスピーカーの配置](../src/coast/world/residence/residenceTheater.ts) · [ITU-R BS.775-4](https://www.itu.int/rec/R-REC-BS.775-4-202212-I/en) · [Web Audioのチャンネル順序](https://www.w3.org/TR/webaudio/#ChannelOrdering)
-- [VR入力](../src/monitor/monitorXR.ts) はWebXRの `local-floor` に接続する。コントローラーの `squeeze` と手の関節座標によるピンチを個別に扱う。追跡を失った場合は掴みを解除し、その時点の姿勢に固定する。デスクトップの視点とFOVはVRセッションから独立している。[W3C WebXR](https://www.w3.org/TR/webxr/) · [WebXR Hand Input](https://www.w3.org/TR/webxr-hand-input-1/)
+- [モニターのVR入力](../src/monitor/monitorXR.ts) は探索と同じXR rigを使う。コントローラーのグリップと手の関節座標によるピンチを扱う。追跡を失うと掴みを解除し、その時点の姿勢に固定する。 [W3C WebXR Hand Input](https://www.w3.org/TR/webxr-hand-input-1/)
 - [モニター音声](../src/monitor/monitorAudio.ts) は受信音声専用のWeb Audioコンテキストを持つ。音量とミュートを滑らかに変更し、頭部固定ステレオとHRTFによる定位・距離減衰・指向性を切り替える。映像要素はミュートし、Web Audioに再生を集約する。描画品質は自然環境音・共有音声の処理に影響しない。
 
 ## 地形と移動

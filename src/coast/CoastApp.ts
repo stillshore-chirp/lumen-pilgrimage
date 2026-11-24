@@ -2,6 +2,9 @@ import {
   NeutralToneMapping, PCFShadowMap, PerspectiveCamera, Vector3, WebGLRenderer, type Scene,
 } from 'three';
 import { CoastAudio } from './CoastAudio';
+import { CoastXR } from './CoastXR';
+import type { ImmersiveMenuItem } from '../xr/ImmersiveMenu';
+import { renderImmersiveStatus } from '../xr/ImmersiveSession';
 import { CoastControls, type CoastMovement, type CoastNavigation } from './CoastControls';
 import type { MonitorTheater } from '../monitor/monitorObject';
 import type { MonitorView, MonitorViewBinding } from '../monitor/monitorView';
@@ -11,9 +14,9 @@ import { decideTravel, parseStartupRoute, readInitialExplorationState, urlForTim
 import { bindCoastSoundControls } from './CoastSoundControls';
 import { createCoastTravelPanel } from './CoastTravelPanel';
 import { CoastWorld, type CoastQuality } from './CoastWorld';
-import { createResidenceControlPanel, type ResidenceControlSection } from './ResidenceControlPanel';
+import { createResidenceControlPanel, type ResidenceControl, type ResidenceControlSection } from './ResidenceControlPanel';
 import type { CoastTimeOfDay } from './world/coastAtmosphere';
-import { createCinemaPanel, type CinemaControls } from './world/cinema/CinemaPanel';
+import { cinemaLightingModes, createCinemaPanel, type CinemaControls } from './world/cinema/CinemaPanel';
 import { createCinemaSeatTransition } from './world/cinema/cinemaSeatTransition';
 import { disposeSceneDrawables } from './disposeSceneDrawables';
 import './coast.css';
@@ -87,6 +90,9 @@ export class CoastApp {
   private readonly events = new AbortController();
   private readonly travelStatus = document.createElement('p');
   private readonly monitorBinding: MonitorViewBinding;
+  private readonly xr: CoastXR;
+  private readonly bindXRStatus: () => () => void;
+  private unsubscribeXR?: () => void;
   private readonly lockView: () => void;
   private readonly forward = new Vector3();
   private readonly up = new Vector3();
@@ -98,6 +104,10 @@ export class CoastApp {
   private readonly interactionButton?: HTMLButtonElement;
   private readonly residencePanel?: ReturnType<typeof createResidenceControlPanel>;
   private readonly cinemaPanel?: ReturnType<typeof createCinemaPanel>;
+  private readonly cinemaControls?: CinemaControls;
+  private readonly residenceControls: readonly ResidenceControlSection[];
+  private loadingTravel = false;
+  private showTravelStatusUntil = 0;
   private monitor?: MonitorView;
   private readonly seatTransition?: ReturnType<typeof createCinemaSeatTransition>;
   private time: CoastTimeOfDay;
@@ -114,8 +124,12 @@ export class CoastApp {
     private currentUrl = new URL(location.href),
     private readonly renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }),
     private currentHistoryIndex = readHistoryIndex(history.state),
+    xr?: CoastXR,
   ) {
     this.worldId = loaded.id;
+    this.xr = xr ?? new CoastXR(this.renderer.xr);
+    this.cinemaControls = loaded.cinemaControls;
+    this.residenceControls = loaded.residenceControls ?? [];
     const initialRoute = readInitialExplorationState(this.worldId, currentUrl.search);
     const description = EXPLORATION_WORLDS.find(({ id }) => id === this.worldId)!;
     const overlook = this.worldId === 'overlook';
@@ -223,7 +237,7 @@ export class CoastApp {
     }, loaded.navigation);
     if (destination) this.controls.relocate(destination);
     this.lockView = () => {
-      if (!this.monitor?.blocksSceneInput) this.controls.requestLock();
+      if (!this.renderer.xr.isPresenting && !this.monitor?.blocksSceneInput) this.controls.requestLock();
     };
     lock.addEventListener('click', this.lockView);
     flight.addEventListener('click', () => {
@@ -244,6 +258,19 @@ export class CoastApp {
     this.travelDialog = this.travel.element.querySelector('dialog')!;
     const actions = ui.querySelector('.coast-header-actions')!;
     actions.prepend(this.travel.element);
+    const vr = document.createElement('div');
+    vr.className = 'coast-travel-panel coast-xr-entry';
+    vr.innerHTML = '<button type="button" disabled aria-describedby="coast-xr-status">VRを開始</button>'
+      + '<p class="coast-panel coast-xr-status" id="coast-xr-status" role="status"></p>';
+    actions.append(vr);
+    const vrButton = vr.querySelector('button')!;
+    const vrStatus = vr.querySelector('p')!;
+    vrButton.addEventListener('click', () => void this.xr.session.toggle(), { signal: this.events.signal });
+    this.bindXRStatus = () => this.xr.session.observe(status => {
+      renderImmersiveStatus(vrButton, vrStatus, status, 'VRを開始', 'VRを終了');
+      vrStatus.hidden = status.state === 'available' || status.state === 'presenting'
+        || (status.state === 'unavailable' && window.isSecureContext);
+    });
     this.travelStatus.className = 'coast-panel coast-travel-status';
     this.travelStatus.setAttribute('role', 'status');
     this.travelStatus.hidden = true;
@@ -300,6 +327,22 @@ export class CoastApp {
       canvas.tabIndex = 0;
       this.mount.replaceChildren(canvas, this.ui);
     }
+    this.unsubscribeXR = this.bindXRStatus();
+    this.xr.bind({
+      scene: this.world.scene, camera: this.camera, controls: this.controls,
+      openMenu: () => this.openXRMenu(),
+      onMenuOpen: () => {
+        this.monitor?.closePanel();
+        this.monitor?.releaseGrab();
+        this.controls.releaseInput();
+      },
+      interaction: viewer => this.interactionLabel(viewer),
+      interact: viewer => this.invokeInteraction(viewer),
+      blocking: () => this.sceneDialogOpen() || Boolean(this.seatTransition?.active)
+        || Boolean(this.monitor?.isGrabbing) || this.loadingTravel,
+      status: () => this.loadingTravel || performance.now() < this.showTravelStatusUntil
+        ? this.travelStatus.textContent ?? '' : '',
+    });
     this.resize.observe(this.mount);
     this.resizeViewport();
     if (previous) {
@@ -324,12 +367,13 @@ export class CoastApp {
   }
 
   private readonly onXRSessionEnd = (): void => {
+    this.lastFrame = 0;
     this.resizeViewport();
     this.renderer.setAnimationLoop(this.render);
   };
 
   private readonly onSceneKey = (event: KeyboardEvent): void => {
-    if ((event.code !== 'KeyT' && event.code !== 'KeyE') || event.repeat
+    if (this.renderer.xr.isPresenting || (event.code !== 'KeyT' && event.code !== 'KeyE') || event.repeat
       || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
     if (this.sceneDialogOpen() || (event.target instanceof Element
       && event.target.closest('input, textarea, select, [contenteditable]'))) return;
@@ -341,16 +385,118 @@ export class CoastApp {
     }
   };
 
-  private interactionLabel(): string | null {
+  private interactionLabel(viewer = this.camera): string | null {
     if (this.sceneDialogOpen() || this.monitor?.blocksSceneInput) return null;
-    return this.interaction?.label(this.camera.position, this.camera.getWorldDirection(this.forward)) ?? null;
+    return this.interaction?.label(viewer.position, viewer.getWorldDirection(this.forward)) ?? null;
   }
 
-  private invokeInteraction(): boolean {
-    if (!this.interaction || !this.interactionLabel()) return false;
+  private invokeInteraction(viewer = this.camera): boolean {
+    if (!this.interaction || !this.interactionLabel(viewer)) return false;
     const action = this.interaction.invoke();
-    if (action && 'openSection' in action) this.residencePanel?.open(action.openSection, this.renderer.domElement);
+    if (action && 'openSection' in action) {
+      if (viewer === this.camera) this.residencePanel?.open(action.openSection, this.renderer.domElement);
+      else {
+        const section = this.residenceControls.find(({ id }) => id === action.openSection);
+        if (section) this.openXRResidenceSection(section);
+      }
+    }
     return true;
+  }
+
+  private openXRMenu(): void {
+    const worlds = EXPLORATION_WORLDS.map(world => ({
+      label: world.label,
+      invoke: () => this.xr.openMenu(world.label, [
+        ...world.places.map(place => ({
+          label: place.label,
+          invoke: () => { this.xr.closeMenu(); this.goTo(world.id, place.id); },
+        })),
+        { label: '探索メニューに戻る', invoke: () => this.openXRMenu() },
+      ]),
+    }));
+    this.xr.openMenu('ファストトラベル', [
+      ...worlds,
+      { label: '設定', invoke: () => this.openXRSettings() },
+      { label: 'VRを終了', invoke: () => void this.xr.session.stop() },
+    ]);
+  }
+
+  private openXRSettings(): void {
+    const items: ImmersiveMenuItem[] = [
+      { label: () => this.audioControls.environmentLabel, invoke: () => this.audioControls.toggleEnvironment() },
+    ];
+    if (this.audioControls.footstepsLabel) items.push({
+      label: () => this.audioControls.footstepsLabel ?? '', invoke: () => this.audioControls.toggleFootsteps(),
+    });
+    if (this.worldId !== 'cinema') items.push(
+      { label: () => this.time === 'day' ? '昼（選択中）' : '昼', invoke: () => this.setTimeOfDay('day') },
+      { label: () => this.time === 'night' ? '夜（選択中）' : '夜', invoke: () => this.setTimeOfDay('night') },
+    );
+    const monitor = this.monitor;
+    if (monitor) items.push({
+      label: '仮想モニター',
+      invoke: () => this.xr.openMenu('仮想モニター', [
+        {
+          label: () => monitor.displayActionLabel,
+          invoke: () => { monitor.toggleDisplayInXR(); this.xr.closeMenu(); },
+        },
+        {
+          label: '視界の前に置き直す', enabled: () => monitor.canSetFloatingPose,
+          invoke: () => { monitor.resetDisplayInXR(); this.xr.closeMenu(); },
+        },
+        { label: '設定に戻る', invoke: () => this.openXRSettings() },
+      ]),
+    });
+    const cinema = this.cinemaControls;
+    if (cinema) items.push({
+      label: '上映設定',
+      invoke: () => this.xr.openMenu('上映設定', [
+        ...cinemaLightingModes.map(([mode, label]) => ({
+          label: () => cinema.mode === mode ? `${label}（選択中）` : label,
+          invoke: () => cinema.setMode(mode),
+        })),
+        {
+          label: () => cinema.samplePlaying ? '試映を停止' : '試映を再生',
+          enabled: () => cinema.canStartSample || cinema.samplePlaying,
+          invoke: () => {
+            if (!cinema.samplePlaying) void this.audioControls.startForPreview();
+            cinema.toggleSample();
+          },
+        },
+        { label: '設定に戻る', invoke: () => this.openXRSettings() },
+      ]),
+    });
+    items.push({ label: '探索メニューに戻る', invoke: () => this.openXRMenu() });
+    this.xr.openMenu('設定', items);
+  }
+
+  private openXRResidenceSection(section: ResidenceControlSection): void {
+    const items = section.controls.flatMap<ImmersiveMenuItem>(control => this.residenceXRItem(section, control));
+    this.xr.openMenu(section.title, [...items, { label: '閉じる', invoke: () => this.xr.closeMenu() }]);
+  }
+
+  private residenceXRItem(section: ResidenceControlSection, control: ResidenceControl): ImmersiveMenuItem[] {
+    switch (control.kind) {
+      case 'output': return [{ label: () => `${control.label}  ${control.read()}` }];
+      case 'toggle': return [{
+        label: () => `${control.label}  ${control.get() ? 'ON' : 'OFF'}`,
+        invoke: () => control.set(!control.get()),
+        enabled: () => !control.disabled?.(),
+      }];
+      case 'button': return [{ label: control.label, invoke: control.invoke, enabled: () => !control.disabled?.() }];
+      case 'select': return [{
+        label: () => `${control.label}  ${control.options.find(option => option.value === control.get())?.label ?? ''}`,
+        enabled: () => !control.disabled?.(),
+        invoke: () => this.xr.openMenu(control.label, [
+          ...control.options.map(({ value, label }) => ({
+            label: () => control.get() === value ? `${label}（選択中）` : label,
+            invoke: () => { if (!control.disabled?.()) control.set(value); this.openXRResidenceSection(section); },
+          })),
+          { label: '戻る', invoke: () => this.openXRResidenceSection(section) },
+        ]),
+      }];
+      case 'color': return [];
+    }
   }
 
   private sceneDialogOpen(): boolean {
@@ -367,7 +513,7 @@ export class CoastApp {
     });
     if (decision.kind === 'invalid') return;
     if (decision.kind === 'navigate') {
-      if (this.monitor?.hasActiveConnection) void this.changeWorld(decision.url);
+      if (this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection) void this.changeWorld(decision.url);
       else {
         ++this.travelRequest;
         location.assign(decision.url);
@@ -378,7 +524,8 @@ export class CoastApp {
     this.showTravelStatus('');
     const relocate = () => {
       this.controls.relocate(decision.destination);
-      this.monitor?.relocateViewer();
+      this.monitor?.releaseGrab();
+      this.xr.relocate();
       this.travel.setPlace(worldId, placeId);
       this.replaceUrl(decision.url);
     };
@@ -411,7 +558,8 @@ export class CoastApp {
     const destination = findDestination(worldId, placeId) ?? description.places[0];
     this.controls.releaseInput();
     this.controls.relocate(destination);
-    this.monitor?.relocateViewer();
+    this.monitor?.releaseGrab();
+    this.xr.relocate();
     this.travel.setPlace(worldId, destination.id);
     this.applyTimeOfDay(time);
     this.currentUrl = url;
@@ -425,7 +573,7 @@ export class CoastApp {
     this.seatTransition?.cancel();
     this.controls.releaseInput();
     this.monitor?.closePanel();
-    this.showTravelStatus(`${label}を読み込んでいます。`);
+    this.showTravelStatus(`${label}を読み込んでいます。`, true);
     let loaded: ExplorationScene | undefined;
     let next: CoastApp;
     let targetHistoryIndex: number;
@@ -437,7 +585,7 @@ export class CoastApp {
         return;
       }
       targetHistoryIndex = historyIndex ?? readHistoryIndex(history.state) + 1;
-      next = new CoastApp(this.mount, loaded, url, this.renderer, targetHistoryIndex);
+      next = new CoastApp(this.mount, loaded, url, this.renderer, targetHistoryIndex, this.xr);
     } catch {
       loaded?.audio.dispose();
       loaded?.world.dispose();
@@ -455,7 +603,9 @@ export class CoastApp {
     next.start(this);
   }
 
-  private showTravelStatus(message: string): void {
+  private showTravelStatus(message: string, loading = false): void {
+    this.loadingTravel = loading;
+    this.showTravelStatusUntil = message ? performance.now() + 6500 : 0;
     this.travelStatus.textContent = message;
     this.travelStatus.hidden = !message;
   }
@@ -496,7 +646,6 @@ export class CoastApp {
     actions.append(entry);
     const binding = {
       entry, toggle, scene: this.world.scene, camera: this.camera,
-      eyeHeight: () => this.controls.eyeHeight,
       releaseInput: () => this.controls.releaseInput(),
     };
     toggle.addEventListener('click', async () => {
@@ -508,7 +657,7 @@ export class CoastApp {
       try {
         const { MonitorView } = await import('../monitor/monitorView');
         if (this.disposed) return;
-        this.monitor = new MonitorView(binding, this.renderer, this.mount);
+        this.monitor = new MonitorView(binding, this.renderer, this.mount, this.xr);
         this.monitor.setTheater(this.world.theater ?? null);
         this.monitor.setMasterVolume(this.audioControls.masterVolume);
       } catch {
@@ -598,15 +747,20 @@ export class CoastApp {
     this.lastFrame = now;
     this.elapsed += dt;
     this.audioControls.sync();
-    if (!this.sceneDialogOpen() && !this.monitor?.blocksSceneInput
+    const immersive = this.renderer.xr.isPresenting;
+    if (!immersive && !this.sceneDialogOpen() && !this.monitor?.blocksSceneInput
       && !this.seatTransition?.active) this.controls.update(dt);
     this.seatTransition?.update(dt);
-    const viewer = this.monitor?.update(frame) ?? this.camera;
+    const viewer = this.xr.update(frame, dt);
+    const allowGrab = this.xr.hasTracking && !this.xr.menuOpen && !this.sceneDialogOpen()
+      && !this.loadingTravel && !this.seatTransition?.active;
+    if (!allowGrab) this.monitor?.releaseGrab();
+    this.monitor?.update(viewer, allowGrab ? frame : undefined);
     const birdCues = this.world.update(this.elapsed, viewer);
     this.residencePanel?.sync();
     if (this.cinemaPanel?.dialog.open) this.cinemaPanel.sync();
     if (this.interactionButton) {
-      const label = this.interactionLabel();
+      const label = immersive ? null : this.interactionLabel();
       this.interactionButton.hidden = !label;
       if (label && label !== this.interactionButton.textContent) this.interactionButton.textContent = label;
     }
@@ -615,9 +769,8 @@ export class CoastApp {
     const movement = this.controls.currentMovement;
     this.audio.update(viewer.position, this.forward, this.up, this.elapsed,
       viewer !== this.camera && movement === 'crouch' ? 'walk' : movement, birdCues, this.controls.isGrounded);
-    const view = this.monitor?.renderCamera ?? this.camera;
-    this.world.prepareRender?.(this.renderer, view);
-    this.renderer.render(this.world.scene, view);
+    this.world.prepareRender?.(this.renderer, viewer);
+    this.renderer.render(this.world.scene, immersive ? this.xr.camera : this.camera);
   };
 
   private readonly onPageShow = (event: PageTransitionEvent): void => {
@@ -629,10 +782,13 @@ export class CoastApp {
     if (event.persisted) {
       this.showTravelStatus('');
       this.monitor?.release();
+      void this.xr.session.stop();
       return;
     }
     this.renderer.setAnimationLoop(null);
     this.monitor?.dispose();
+    this.renderer.xr.removeEventListener('sessionend', this.onXRSessionEnd);
+    this.xr.dispose();
     this.disposeWorld();
     this.renderer.dispose();
   };
@@ -640,6 +796,7 @@ export class CoastApp {
   private disposeWorld(): void {
     this.disposed = true;
     this.events.abort();
+    this.unsubscribeXR?.();
     this.renderer.xr.removeEventListener('sessionend', this.onXRSessionEnd);
     this.audioControls.dispose();
     this.seatTransition?.dispose();
