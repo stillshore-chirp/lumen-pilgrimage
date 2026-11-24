@@ -318,15 +318,14 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     assert.ok(original.count > 2_000, 'synthetic frame pixels are rendered in the scenery');
     assert.ok(Math.abs(original.width / original.height - 16 / 9) < 0.15, 'scene preserves the video aspect ratio');
 
-    await button(viewer, '環境音を開始').click();
+    await button(viewer, '環境音をオン').click();
     const enableAudio = button(viewer, 'モニター音を有効にする');
     if (await enableAudio.isEnabled()) await enableAudio.click();
     await waitForMix(viewer, { natural: true, monitor: true });
-    const naturalMute = button(viewer, 'ミュート');
     const monitorMute = button(viewer, 'モニター音をミュート');
-    await naturalMute.click();
+    await button(viewer, '環境音をオフ').click();
     await waitForMix(viewer, { natural: false, monitor: true });
-    await naturalMute.click();
+    await button(viewer, '環境音をオン').click();
     await monitorMute.click();
     assert.equal(await monitorMute.getAttribute('aria-pressed'), 'true');
     await waitForMix(viewer, { natural: true, monitor: false });

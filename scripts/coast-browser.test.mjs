@@ -88,7 +88,8 @@ async function sampleRendering(page, quality) {
 
 function installBrowserProbes() {
   const probe = {
-    context: null, analyser: null, panners: [], pannerTargets: new WeakMap(), delays: [], pad: null, decoded: 0, contexts: 0,
+    context: null, analyser: null, panners: [], pannerTargets: new WeakMap(), delays: [], pad: null,
+    decoded: 0, contexts: 0,
   };
   window.coastProbe = probe;
   probe.peak = () => {
@@ -123,7 +124,9 @@ function installBrowserProbes() {
     }
   };
   AudioNode.prototype.connect = function (destination, ...args) {
-    if (destination === probe.context?.destination) connect.call(this, probe.analyser);
+    if (destination === probe.context?.destination) {
+      connect.call(this, probe.analyser);
+    }
     if (this instanceof PannerNode) probe.pannerTargets.set(this, destination);
     return connect.call(this, destination, ...args);
   };
@@ -267,8 +270,30 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     assert.deepEqual(fonts, ['38px', '24px', '24px', '22px']);
     await capture(page, 'lagoon-light');
 
-    await page.getByRole('button', { name: '環境音を開始' }).click();
-    await page.getByRole('button', { name: '環境音を再開' }).waitFor();
+    const audioToggle = page.locator('.coast-audio');
+    assert.equal(await audioToggle.textContent(), '環境音をオン');
+    let failWaveOnce = true;
+    let releaseWaveFailure;
+    const blockedWaveFailure = new Promise(resolve => { releaseWaveFailure = resolve; });
+    await page.route('**/coast-audio/waves.ogg', async route => {
+      if (failWaveOnce) {
+        failWaveOnce = false;
+        await blockedWaveFailure;
+        await route.fulfill({ status: 200, body: '' });
+        return;
+      }
+      await route.continue();
+    });
+    await page.getByRole('button', { name: '環境音をオン' }).click();
+    assert.equal(await audioToggle.isDisabled(), true);
+    releaseWaveFailure();
+    await page.waitForFunction(() => document.querySelector('.coast-audio-message')?.textContent?.includes(
+      'もう一度ボタンを押してください'));
+    assert.equal(await audioToggle.textContent(), '環境音をオン');
+    assert.equal(await audioToggle.isDisabled(), false);
+    await page.getByRole('button', { name: '環境音をオン' }).click();
+    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '');
     await page.waitForFunction(signalLevel, undefined, { polling: 100 });
     const graph = () => ({
       contexts: window.coastProbe.contexts,
@@ -319,20 +344,33 @@ test('the coast renders, wades, dives, flies, spatializes audio, and resets rend
     await sampleRendering(page, 'high');
     await light.click();
 
-    const mute = page.getByRole('button', { name: 'ミュート' });
-    await mute.click();
-    assert.equal(await mute.getAttribute('aria-pressed'), 'true');
-    await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
-    await mute.click();
-    await page.waitForFunction(signalLevel, undefined, { polling: 100 });
     const volume = page.getByRole('slider', { name: '音量' });
+    await page.getByRole('button', { name: '環境音をオフ' }).click();
+    await page.getByRole('button', { name: '環境音をオン' }).waitFor();
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '');
+    await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
+    await page.getByRole('button', { name: '環境音をオン' }).click();
+    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '');
+    await page.waitForFunction(signalLevel, undefined, { polling: 100 });
     await volume.press('Home');
     assert.equal(await volume.inputValue(), '0');
+    assert.equal(await audioToggle.textContent(), '環境音をオフ');
     await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
     await volume.press('End');
     await page.waitForFunction(signalLevel, undefined, { polling: 100 });
+    await page.getByRole('button', { name: '環境音をオフ' }).click();
+    await page.waitForFunction(() => window.coastProbe.peak() < 0.00001);
+    assert.equal(await volume.inputValue(), '100');
+    await page.getByRole('button', { name: '環境音をオン' }).click();
+    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
+    await page.waitForFunction(signalLevel, undefined, { polling: 100 });
+    assert.equal(await volume.inputValue(), '100');
     await page.evaluate(() => window.coastProbe.context.suspend());
-    await page.getByRole('button', { name: '環境音を再開' }).click();
+    await page.getByRole('button', { name: '環境音をオン' }).waitFor();
+    assert.equal(await page.locator('.coast-audio-message').textContent(), '');
+    await page.getByRole('button', { name: '環境音をオン' }).click();
+    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
     await page.waitForFunction(() => window.coastProbe.context.state === 'running');
     assert.equal(await page.evaluate(() => window.coastProbe.decoded), beforeSwitch.decoded);
 
@@ -558,8 +596,8 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     await page.goto(url, { waitUntil: 'commit' });
     const coastDay = await skyBrightness(canvas);
     assert.equal(await day.getAttribute('aria-pressed'), 'true');
-    await page.getByRole('button', { name: '環境音を開始' }).click();
-    await page.getByRole('button', { name: '環境音を再開' }).waitFor();
+    await page.getByRole('button', { name: '環境音をオン' }).click();
+    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
     await walkWithFocus('w', page.locator('body'));
 
     const high = page.getByRole('button', { name: '高品質' });
@@ -726,10 +764,10 @@ test('the overlook plays quiet spatial audio and its upper deck can be reached a
 
   try {
     await page.goto(`${url}?world=overlook&place=east-terrace&time=night`, { waitUntil: 'commit' });
-    await button('環境音を開始').waitFor();
+    await button('環境音をオン').waitFor();
     assert.equal(await page.evaluate(() => window.coastProbe.contexts), 0);
-    await button('環境音を開始').click();
-    await button('環境音を再開').waitFor();
+    await button('環境音をオン').click();
+    await button('環境音をオフ').waitFor();
     await page.waitForFunction(() => window.coastProbe.decoded === 3
       && window.coastProbe.panners.filter(panner => panner.panningModel === 'HRTF').length >= 6
       && window.coastProbe.peak() > 0.001 && window.coastProbe.peak() < 0.24);
@@ -754,11 +792,11 @@ test('the overlook plays quiet spatial audio and its upper deck can be reached a
     });
     await page.waitForFunction(() => window.coastProbe.insectPeak() > 0.001);
 
-    const mute = button('ミュート');
-    await mute.click();
-    assert.equal(await mute.getAttribute('aria-pressed'), 'true');
+    await button('環境音をオフ').click();
+    await button('環境音をオン').waitFor();
     await page.waitForFunction(() => window.coastProbe.peak() < 0.0001);
-    await mute.click();
+    await button('環境音をオン').click();
+    await button('環境音をオフ').waitFor();
     await button('昼').click();
     await page.waitForFunction(() => window.coastProbe.peak() > 0.001);
     await page.waitForFunction(() => window.coastProbe.insectGain() < 0.005
@@ -813,8 +851,8 @@ test('captures the inlet spray in daylight and at night from the east coastal wa
   await page.addInitScript(installBrowserProbes);
   try {
     await page.goto(`${url}?world=coast&place=inlet&time=day`, { waitUntil: 'commit' });
-    await page.getByRole('button', { name: '環境音を開始', exact: true }).click();
-    await page.getByRole('button', { name: '環境音を再開', exact: true }).waitFor();
+    await page.getByRole('button', { name: '環境音をオン', exact: true }).click();
+    await page.getByRole('button', { name: '環境音をオフ', exact: true }).waitFor();
     await page.waitForFunction(() => window.coastProbe.context.listener.positionZ.value > 70);
 
     // Follow the existing east walk to the rise above the inlet's shore ledge.

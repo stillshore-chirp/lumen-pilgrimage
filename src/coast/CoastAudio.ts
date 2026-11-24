@@ -435,6 +435,10 @@ export class CoastAudio {
   private lastShoreSelection: CoastPoint | undefined;
   private scheduleTimer: ReturnType<typeof setTimeout> | undefined;
 
+  isOn(): boolean {
+    return this.started && this.context?.state === 'running' && !this.muted;
+  }
+
   start(): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('CoastAudio has been disposed'));
     if (this.pendingStart) return this.pendingStart;

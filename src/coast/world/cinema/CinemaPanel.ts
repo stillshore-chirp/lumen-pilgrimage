@@ -23,7 +23,7 @@ function button(label: string): HTMLButtonElement {
 }
 
 export function createCinemaPanel(
-  controls: CinemaControls, onOpen: () => void, leave: () => void, startAudio: () => Promise<void>,
+  controls: CinemaControls, onOpen: () => void, startAudio: () => Promise<void>,
 ) {
   const element = document.createElement('div');
   element.className = 'coast-travel-panel';
@@ -63,8 +63,7 @@ export function createCinemaPanel(
   const actions = document.createElement('div');
   actions.className = 'coast-row';
   const sample = button('試映を再生');
-  const exit = button('入り江へ戻る');
-  actions.append(sample, exit);
+  actions.append(sample);
   content.append(header, lighting, actions);
   dialog.append(content);
   element.append(trigger, dialog);
@@ -98,6 +97,5 @@ export function createCinemaPanel(
       dialog.close();
     }
   });
-  exit.addEventListener('click', leave);
   return { element, dialog, sync };
 }
