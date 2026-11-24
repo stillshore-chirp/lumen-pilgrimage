@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { WorldLightingMode } from '../../WorldLightingControl';
 import { createOverlookDeckContacts, PARAPET_CAP } from './overlookDeckDetail';
 import { OverlookModel, overlookFinishes, seededDetail, type OverlookFinishes } from './overlookModel';
 import { addOverlookPavilion } from './overlookPavilion';
@@ -379,18 +380,27 @@ export function createOverlookDeck(high: THREE.IUniform<number>, nightAmount: TH
   addOverlookPavilion(model, finish);
   const upperPools = addOverlookUpperDeck(model, finish, contacts.add);
   const { lamps, wallLight } = addLampPools(group, model, finish, upperPools);
-  const contactTexture = contacts.apply(finish, wallLamps, OVERLOOK_UPPER_DECK_HEIGHT, high, nightAmount);
+  const deckLights = { value: 0 };
+  const contactTexture = contacts.apply(finish, wallLamps, OVERLOOK_UPPER_DECK_HEIGHT, high, nightAmount, deckLights);
   model.finish(group);
-  lamps.visible = false;
+  let lightingMode: WorldLightingMode = 'auto';
+  function applyLamps(): void {
+    const on = lightingMode === 'auto' ? nightAmount.value === 1 : lightingMode === 'on';
+    deckLights.value = Number(on);
+    finish.frosted.emissiveIntensity = on ? 0.80 : lightingMode === 'auto' ? 0.04 : 0;
+    finish.window.emissiveIntensity = on ? 0.36 : 0;
+    lamps.visible = on;
+  }
+  applyLamps();
   return {
     group,
-    setQuality(highQuality: boolean) { wallLight.visible = !highQuality; },
-    setTimeOfDay(time: 'day' | 'night') {
-      const night = time === 'night';
-      finish.frosted.emissiveIntensity = night ? 0.80 : 0.04;
-      finish.window.emissiveIntensity = night ? 0.36 : 0;
-      lamps.visible = night;
+    get artificialLightingMode() { return lightingMode; },
+    setArtificialLightingMode(mode: WorldLightingMode) {
+      lightingMode = mode;
+      applyLamps();
     },
+    setQuality(highQuality: boolean) { wallLight.visible = !highQuality; },
+    applyLamps,
     dispose() { contactTexture.dispose(); },
   };
 }

@@ -97,6 +97,8 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
     world: {
       scene,
       theater: furniture.theater,
+      get artificialLightingMode() { return lighting.artificialLightingMode; },
+      setArtificialLightingMode: lighting.setArtificialLightingMode,
       setTimeOfDay(time) {
         city.setTimeOfDay(time);
         shell.setTimeOfDay(time);

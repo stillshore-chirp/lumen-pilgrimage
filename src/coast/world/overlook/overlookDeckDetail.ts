@@ -41,7 +41,7 @@ export function createOverlookDeckContacts() {
     add,
     apply(
       finish: OverlookFinishes, lamps: readonly DeckWallLamp[], upperHeight: number,
-      high: THREE.IUniform<number>, night: THREE.IUniform<number>,
+      high: THREE.IUniform<number>, night: THREE.IUniform<number>, lights: THREE.IUniform<number>,
     ) {
       const contact = new THREE.DataTexture(pixels, width, height, THREE.RGFormat);
       contact.name = 'Pavement contact shadow distances';
@@ -60,6 +60,7 @@ export function createOverlookDeckContacts() {
         material.onBeforeCompile = shader => {
           shader.uniforms.uDeckHigh = high;
           shader.uniforms.uDeckNight = night;
+          shader.uniforms.uDeckLights = lights;
           shader.uniforms.uDeckStone = { value: Number(stone.includes(material)) };
           shader.uniforms.uDeckContact = { value: contact };
           shader.uniforms.uDeckWallLamps = { value: lampFrames };
@@ -76,6 +77,7 @@ export function createOverlookDeckContacts() {
               varying float vDeckUp;
               uniform float uDeckHigh;
               uniform float uDeckNight;
+              uniform float uDeckLights;
               uniform float uDeckStone;
               uniform sampler2D uDeckContact;
               uniform vec4 uDeckWallLamps[${lampFrames.length}];
@@ -146,19 +148,18 @@ export function createOverlookDeckContacts() {
                 float contact = dot(texture2D(uDeckContact, contactUv).rg, vec2(mainContact, upperContact));
                 reflectedLight.indirectDiffuse *= 1.0 - 0.68 * contact;
                 reflectedLight.indirectSpecular *= 1.0 - 0.68 * contact;
-                if (uDeckNight > 0.0) {
-                  if (uDeckStone > 0.0 && vDeckPoint.y < 0.54
-                    && (vDeckPoint.z < -19.9 || abs(vDeckPoint.x) > 31.4)) {
-                    vec3 stoneNormal = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
-                    reflectedLight.directDiffuse += deckWallLight(stoneNormal) * diffuseColor.rgb * (1.0 - 0.4 * contact);
-                  } else if (uDeckStone == 0.0) {
-                    vec3 ray = reflect(-normalize(vViewPosition), normal);
-                    vec3 skyRay = (vec4(ray, 0.0) * viewMatrix).xyz;
-                    skyRay.y = max(0.0, skyRay.y) + 0.26;
-                    float grazing = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 4.0);
-                    vec3 skyLight = coastSkyRadiance(normalize(skyRay));
-                    reflectedLight.indirectSpecular += skyLight * (0.23 + 0.43 * grazing) * (1.0 - 0.68 * contact);
-                  }
+                if (uDeckLights > 0.0 && uDeckStone > 0.0 && vDeckPoint.y < 0.54
+                  && (vDeckPoint.z < -19.9 || abs(vDeckPoint.x) > 31.4)) {
+                  vec3 stoneNormal = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
+                  reflectedLight.directDiffuse += deckWallLight(stoneNormal) * diffuseColor.rgb * (1.0 - 0.4 * contact);
+                }
+                if (uDeckNight > 0.0 && uDeckStone == 0.0) {
+                  vec3 ray = reflect(-normalize(vViewPosition), normal);
+                  vec3 skyRay = (vec4(ray, 0.0) * viewMatrix).xyz;
+                  skyRay.y = max(0.0, skyRay.y) + 0.26;
+                  float grazing = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 4.0);
+                  vec3 skyLight = coastSkyRadiance(normalize(skyRay));
+                  reflectedLight.indirectSpecular += skyLight * (0.23 + 0.43 * grazing) * (1.0 - 0.68 * contact);
                 }
               }`);
         };

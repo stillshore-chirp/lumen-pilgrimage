@@ -3,6 +3,7 @@ import { createResidenceContactMap } from './residenceContactMap';
 import { createResidenceLightSpill } from './residenceLightSpill';
 import { teaShojiTransmission } from './residenceShoji';
 import type { CoastQuality } from '../../CoastWorld';
+import type { WorldLightingMode, WorldLightingState } from '../../WorldLightingControl';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { RESIDENCE_SUN } from './residenceCityMaterials';
 import { createResidenceLightField, diningPendants, diningPendantHeight, diningPendantNorth, fabricLamps,
@@ -197,8 +198,12 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   const field = createResidenceLightField(furnitureObstacles);
   const spill = createResidenceLightSpill(residenceFieldOrigin, residenceFieldExtent);
   const nightAmount = { value: 0 };
-  const overrides = new Map<string, boolean>();
-  const theaterOverrides = new Map<string, boolean>();
+  const normalProfile = {
+    overrides: new Map<string, boolean>(), theaterOverrides: new Map<string, boolean>(), theater: false,
+  };
+  let profile = normalProfile;
+  let lightingMode: WorldLightingMode = 'auto';
+  let individuallyAdjusted = false;
   const windowTransmission = { value: new Float32Array(windowRooms.length).fill(1) };
   const windowRoomIndex = new Map(windowRooms.map((room, index) => [room.id, index]));
   const teaShoji = { value: teaShojiTransmission(1) };
@@ -209,9 +214,10 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   }).join('\n');
   const livingFixtures = new Set(roomSources.LD);
   function isOn(source: LightSource): boolean {
-    const normal = overrides.get(source.id) ?? (nightAmount.value === 1 || source.daytime === true);
-    if (livingFixtures.has(source) && theaterLights?.enabled()) {
-      return theaterOverrides.get(source.id) ?? (source.kind === 'foot' && normal);
+    const automatic = nightAmount.value === 1 || source.daytime === true;
+    const normal = profile.overrides.get(source.id) ?? (lightingMode === 'auto' ? automatic : lightingMode === 'on');
+    if (livingFixtures.has(source) && profile.theater) {
+      return profile.theaterOverrides.get(source.id) ?? (source.kind === 'foot' && normal);
     }
     return normal;
   }
@@ -291,19 +297,34 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     onFixtureChange?.();
   }
 
+  function refreshAllRooms(): void {
+    const night = nightAmount.value === 1;
+    for (const id of Object.keys(roomSources)) field.updateRoom(id, isOn, night);
+    refreshEmitters();
+    spill.invalidate();
+    invalidateShadows();
+    // Small built-in accents that do not have a room switch share this finish.
+    const accentStrength = night ? 1.18 : lightingMode === 'on' ? .61 : .10;
+    materials.lamp.emissiveIntensity = lightingMode === 'off' ? 0 : accentStrength;
+  }
+
   function setTheater(on: boolean): void {
-    theaterOverrides.clear();
+    profile.theaterOverrides.clear();
+    profile.theater = on;
     theaterLights?.setEnabled(on);
   }
 
   function setFixtures(room: string, sources: readonly LightSource[], on: boolean, remoteBulk = false): void {
-    const inTheater = room === 'LD' && theaterLights?.enabled();
+    const inTheater = room === 'LD' && profile.theater;
     const exitTheater = inTheater && remoteBulk;
     if (exitTheater) setTheater(false);
-    const states = inTheater && !remoteBulk ? theaterOverrides : overrides;
+    const states = inTheater && !remoteBulk ? profile.theaterOverrides : profile.overrides;
     const changed = exitTheater || sources.some(source => isOn(source) !== on);
     for (const source of sources) states.set(source.id, on);
-    if (changed) refreshRoom(room);
+    if (changed) {
+      if (lightingMode !== 'auto') individuallyAdjusted = true;
+      refreshRoom(room);
+    }
   }
 
   function theaterControls() {
@@ -312,8 +333,9 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       { kind: 'toggle' as const, id: 'theater-light', label: 'シアター照明',
         get: theaterLights.enabled,
         set(on: boolean) {
-          if (theaterLights.enabled() === on) return;
+          if (profile.theater === on) return;
           setTheater(on);
+          if (lightingMode !== 'auto') individuallyAdjusted = true;
           refreshRoom('LD');
         } },
       { kind: 'color' as const, id: 'theater-color', label: 'シアター照明の色',
@@ -536,6 +558,24 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     },
     sections,
     nearby,
+    get artificialLightingMode(): WorldLightingState {
+      return individuallyAdjusted ? 'custom' : lightingMode;
+    },
+    setArtificialLightingMode(mode: WorldLightingMode): void {
+      if (mode === lightingMode && !individuallyAdjusted) return;
+      lightingMode = mode;
+      individuallyAdjusted = false;
+      // Keep the room settings used by the default mode available when the bulk choice is cleared.
+      const allOn = mode === 'on';
+      profile = mode === 'auto' ? normalProfile : {
+        overrides: new Map(),
+        theaterOverrides: new Map(allOn ? roomSources.LD.map(source => [source.id, true]) : []),
+        theater: allOn && theaterLights !== undefined,
+      };
+      theaterLights?.setEnabled(profile.theater);
+      refreshAllRooms();
+      onFixtureChange?.();
+    },
     invalidateShadows,
     setDaylightTransmission(roomId: string, transmission: number) {
       const index = windowRoomIndex.get(roomId);
@@ -568,11 +608,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       daylight.intensity = night ? 0 : sunPower;
       daylight.castShadow = !night;
       daylight.shadow.needsUpdate = !night;
-      for (const id of Object.keys(roomSources)) field.updateRoom(id, isOn, night);
-      refreshEmitters();
-      spill.invalidate();
-      updateSpill();
-      materials.lamp.emissiveIntensity = night ? 1.18 : 0.10;
+      refreshAllRooms();
       materials.glass.opacity = night ? 0.027 : 0.050;
       materials.guard.opacity = night ? 0.061 : 0.090;
     },

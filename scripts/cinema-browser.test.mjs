@@ -262,3 +262,67 @@ test('house light scenes, preview projection and quality change together through
   await screenshot(page, 'service');
   assert.deepEqual(errors, []);
 });
+
+async function auditoriumBrightness(page) {
+  return page.locator('canvas.coast-view').evaluate(source => new Promise(resolve => requestAnimationFrame(() => {
+    const sample = document.createElement('canvas');
+    sample.width = 32;
+    sample.height = 20;
+    const context = sample.getContext('2d');
+    context.drawImage(source, 0, 0, sample.width, sample.height);
+    const { data } = context.getImageData(0, 0, sample.width, sample.height);
+    let total = 0;
+    for (let i = 0; i < data.length; i += 4) total += data[i] + data[i + 1] + data[i + 2];
+    resolve(total / (sample.width * sample.height * 3));
+  })));
+}
+
+test('world lighting changes house lights while projection and safety lighting retain their modes', { timeout }, async t => {
+  const { page, errors } = await openCinema(t);
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] > .8 && window.cinemaProbe.live === 0);
+  const lighting = page.getByRole('group', { name: 'ワールド照明' });
+  const arrival = await auditoriumBrightness(page);
+  await screenshot(page, 'arrival-world-light-on');
+  await button(lighting, '一括消灯').click();
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] === 0);
+  const dark = await auditoriumBrightness(page);
+  assert.ok(arrival - dark > 6, `Auditorium lighting: ${arrival} → ${dark}`);
+  t.diagnostic(`Auditorium light ${dark.toFixed(1)} → ${arrival.toFixed(1)}`);
+  await screenshot(page, 'arrival-world-light-off');
+  await button(lighting, '既定').click();
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] > .8);
+
+  const dialog = page.getByRole('dialog', { name: '上映設定' });
+  await button(page, '上映設定').click();
+  await button(dialog, '上映').click();
+  await button(dialog, '試映を再生').click();
+  await page.waitForFunction(() => window.cinemaProbe.live === 1);
+  await dialog.waitFor({ state: 'hidden' });
+  await button(lighting, '一括点灯').click();
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] > .8 && window.cinemaProbe.live === 1);
+  await button(lighting, '一括消灯').click();
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] === 0 && window.cinemaProbe.live === 1);
+  await button(page, '上映設定').click();
+  await button(dialog, '非常点検').click();
+  await page.waitForFunction(() => window.cinemaProbe.live === 0 && window.cinemaProbe.lamps?.[2] > .8);
+  assert.equal(await button(dialog, '試映を再生').isDisabled(), true);
+  await button(dialog, '閉じる').click();
+  const status = lighting.getByRole('status');
+  await status.filter({ hasText: '非常点検中は照明の一括操作を利用できません。' }).waitFor();
+  for (const name of ['一括点灯', '一括消灯', '既定']) {
+    assert.equal(await button(lighting, name).isDisabled(), true);
+  }
+  await button(lighting, '一括点灯').dispatchEvent('click');
+  assert.equal(await button(lighting, '一括消灯').getAttribute('aria-pressed'), 'true');
+  await screenshot(page, 'emergency-world-light-locked');
+  await button(page, '上映設定').click();
+  await button(dialog, '清掃').click();
+  await button(dialog, '閉じる').click();
+  await status.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] === 0 && window.cinemaProbe.lamps?.[1] > 1
+    && window.cinemaProbe.live === 0);
+  assert.equal(await button(lighting, '一括消灯').getAttribute('aria-pressed'), 'true');
+  await button(lighting, '一括点灯').click();
+  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] > .8 && window.cinemaProbe.lamps?.[1] > 1);
+  assert.deepEqual(errors, []);
+});
