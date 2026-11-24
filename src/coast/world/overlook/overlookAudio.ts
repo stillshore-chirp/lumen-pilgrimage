@@ -1,5 +1,7 @@
 import { MathUtils, type Vector3 } from 'three';
 import { REFRACTION_SHELF_HZ, thermalLowShelfDb, thermalRayLift } from '../../coastAcoustics';
+import { connectExplorationOutput } from '../../explorationOutput';
+import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } from '../../explorationSound';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 
 type SoundPoint = Readonly<{ x: number; y: number; z: number }>;
@@ -28,6 +30,9 @@ const BIRD_PHRASE_COUNT = 4;
 // Source activity drops at night. The receiver-side spectrum follows propagation separately.
 const TRAFFIC_GAIN = { day: 0.33, night: 0.18 };
 const CRICKET_RECORDING_GAIN = 1.7;
+const NOMINAL_MASTER_GAIN = 0.7;
+const MIX_SOUNDS = ['traffic', 'insects', 'birds'] as const;
+type MixSound = typeof MIX_SOUNDS[number];
 // The grass and scrub below the front railing. Each patch has its own slice of the field recording.
 const CRICKET_PATCHES = [
   { x: 7, z: -35, clipStart: 2, firstCall: 0.06, rate: 1.00, gain: 0.96 },
@@ -64,6 +69,8 @@ export class OverlookAudio {
   private readonly crickets: CricketVoice[] = [];
   private context: AudioContext | undefined;
   private master: GainNode | undefined;
+  private output: readonly AudioNode[] = [];
+  private mixBuses: Record<MixSound, GainNode> | undefined;
   private trafficBus: GainNode | undefined;
   private insectBus: GainNode | undefined;
   private cricketBuffer: AudioBuffer | undefined;
@@ -71,8 +78,7 @@ export class OverlookAudio {
   private birdBuffer: AudioBuffer | undefined;
   private readonly birdPerches: PannerNode[] = [];
   private pendingStart: Promise<void> | undefined;
-  private volume = 0.7;
-  private muted = false;
+  private mix = DEFAULT_EXPLORATION_MIX;
   private time: CoastTimeOfDay = 'day';
   private nextPropagation = 0;
   private nextBird = 0;
@@ -84,18 +90,18 @@ export class OverlookAudio {
       .filter(({ sections, weight }) => sections.length && weight > 0);
   }
 
-  isOn(): boolean {
-    return Boolean(this.master && this.context?.state === 'running' && !this.muted);
+  isRunning(): boolean {
+    return Boolean(this.master && this.context?.state === 'running');
   }
 
   start(): Promise<void> {
     if (this.request.signal.aborted) return Promise.reject(new Error('OverlookAudio has been disposed'));
-    if (this.pendingStart) return this.pendingStart;
     try {
       this.context ??= new AudioContext({ latencyHint: 'interactive' });
       const context = this.context;
-      // Request playback while the user gesture is still active.
+      // A gesture can unlock an earlier start that is still waiting on resume.
       const resume = context.state === 'running' ? Promise.resolve() : context.resume();
+      if (this.pendingStart) return Promise.all([resume, this.pendingStart]).then(() => undefined);
       if (this.master) return resume;
       this.pendingStart = Promise.all([
         resume,
@@ -112,11 +118,13 @@ export class OverlookAudio {
     }
   }
 
-  setLevel(volume: number, muted: boolean): void {
-    this.volume = Number.isFinite(volume) ? MathUtils.clamp(volume, 0, 1) : 0;
-    this.muted = muted;
-    if (this.master && this.context) {
-      this.master.gain.setTargetAtTime(muted ? 0 : this.volume, this.context.currentTime, 0.035);
+  setMix(mix: ExplorationMix): void {
+    this.mix = mix;
+    if (!this.master || !this.context || !this.mixBuses) return;
+    const now = this.context.currentTime;
+    this.master.gain.setTargetAtTime(mix.master * NOMINAL_MASTER_GAIN, now, 0.035);
+    for (const sound of MIX_SOUNDS) {
+      this.mixBuses[sound].gain.setTargetAtTime(explorationSoundGain(mix, sound), now, 0.035);
     }
   }
 
@@ -178,6 +186,10 @@ export class OverlookAudio {
     const context = this.context;
     this.context = undefined;
     this.master?.disconnect();
+    for (const node of this.output) node.disconnect();
+    this.output = [];
+    if (this.mixBuses) for (const sound of MIX_SOUNDS) this.mixBuses[sound].disconnect();
+    this.mixBuses = undefined;
     if (context && context.state !== 'closed') void context.close().catch(() => undefined);
     this.master = undefined;
     this.trafficBus = undefined;
@@ -199,17 +211,29 @@ export class OverlookAudio {
   private beginLayers(context: AudioContext, traffic: AudioBuffer, crickets: AudioBuffer, birds: AudioBuffer): void {
     const night = this.time === 'night';
     const master = context.createGain();
-    master.gain.value = this.muted ? 0 : this.volume;
-    master.connect(context.destination);
+    master.gain.value = this.mix.master * NOMINAL_MASTER_GAIN;
+    this.output = connectExplorationOutput(context, master);
+    const createMixBus = (sound: MixSound) => {
+      const bus = context.createGain();
+      bus.gain.value = explorationSoundGain(this.mix, sound);
+      bus.connect(master);
+      return bus;
+    };
+    const mixBuses = {
+      traffic: createMixBus('traffic'),
+      insects: createMixBus('insects'),
+      birds: createMixBus('birds'),
+    };
+    this.mixBuses = mixBuses;
     const trafficBus = context.createGain();
     trafficBus.gain.value = TRAFFIC_GAIN[this.time];
-    trafficBus.connect(master);
+    trafficBus.connect(mixBuses.traffic);
     const insectBus = context.createGain();
     insectBus.gain.value = night ? 1 : 0;
-    insectBus.connect(master);
+    insectBus.connect(mixBuses.insects);
     const birdBus = context.createGain();
     birdBus.gain.value = night ? 0 : 1;
-    birdBus.connect(master);
+    birdBus.connect(mixBuses.birds);
     this.master = master;
     this.trafficBus = trafficBus;
     this.insectBus = insectBus;

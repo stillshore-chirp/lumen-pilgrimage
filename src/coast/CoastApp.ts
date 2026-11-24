@@ -8,6 +8,7 @@ import type { MonitorView } from '../monitor/monitorView';
 import type { CoastBirdCue } from './coastBirdCue';
 import { EXPLORATION_WORLDS, findDestination, type ExplorationWorldId } from './coastDestinations';
 import { decideTravel, readInitialExplorationState, urlForTime } from './explorationRoute';
+import { bindCoastSoundControls } from './CoastSoundControls';
 import { createCoastTravelPanel } from './CoastTravelPanel';
 import { CoastWorld, type CoastQuality } from './CoastWorld';
 import { createResidenceControlPanel, type ResidenceControlSection } from './ResidenceControlPanel';
@@ -37,17 +38,11 @@ interface ExplorationWorld {
   dispose(): void;
 }
 
-type ExplorationAudio = Pick<CoastAudio, 'start' | 'isOn' | 'setLevel' | 'dispose'> & {
+type ExplorationAudio = Pick<CoastAudio, 'start' | 'isRunning' | 'setMix' | 'dispose'> & {
   update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement: CoastMovement,
     birdCues: readonly CoastBirdCue[], grounded: boolean): void;
   setTimeOfDay?(time: CoastTimeOfDay): void;
 };
-
-interface ExplorationAudioControls {
-  startForPreview(): Promise<void>;
-  sync(): void;
-  dispose(): void;
-}
 
 interface ExplorationInteraction {
   label(position: Vector3, facing: Vector3): string | null;
@@ -69,7 +64,7 @@ export class CoastApp {
   private readonly world: ExplorationWorld;
   private readonly worldId: ExplorationWorldId;
   private readonly audio: ExplorationAudio;
-  private readonly audioControls: ExplorationAudioControls;
+  private readonly audioControls: ReturnType<typeof bindCoastSoundControls>;
   private readonly camera: PerspectiveCamera;
   private readonly forward = new Vector3();
   private readonly up = new Vector3();
@@ -161,17 +156,12 @@ export class CoastApp {
             <button type="button" class="coast-light" aria-pressed="true" title="広域の影と軽い植生描画">軽量</button>
             <button type="button" class="coast-high" aria-pressed="false" title="細かな木漏れ日、地表の凹凸と手前の下草">高品質</button>
           </div>
-          <div class="coast-row coast-view-settings">
+          <div class="coast-view-settings coast-setting-row">
             <label class="coast-label" for="coast-fov">視野角</label>
             <input id="coast-fov" type="range" min="40" max="95" step="1">
-            <span class="coast-fov-value" aria-hidden="true"></span>
+            <span class="coast-fov-value coast-setting-value" aria-hidden="true"></span>
             <button type="button" class="coast-fov-reset">既定に戻す</button>
           </div>
-          <div class="coast-row coast-sound">
-            <button type="button" class="coast-audio">環境音をオン</button>
-            <label class="coast-volume">音量 <input type="range" min="0" max="100" step="1" value="70"></label>
-          </div>
-          <p class="coast-audio-message" role="status"></p>
         </section>
       </div>
     `;
@@ -233,8 +223,11 @@ export class CoastApp {
     this.travelDialog = this.travel.element.querySelector('dialog')!;
     const actions = ui.querySelector('.coast-header-actions')!;
     actions.prepend(this.travel.element);
+    this.audioControls = bindCoastSoundControls(
+      ui.querySelector<HTMLElement>('.coast-settings')!, this.worldId, this.audio,
+      master => this.monitor?.setMasterVolume(master),
+    );
     this.bindMonitor(actions);
-    this.audioControls = this.bindAudio(ui, this.audio);
     if (loaded?.cinemaControls) {
       this.cinemaPanel = createCinemaPanel(loaded.cinemaControls, () => {
         this.monitor?.closePanel();
@@ -358,6 +351,7 @@ export class CoastApp {
           eyeHeight: () => this.controls.eyeHeight, releaseInput: () => this.controls.releaseInput(),
         });
         this.monitor.setTheater(this.world.theater ?? null);
+        this.monitor.setMasterVolume(this.audioControls.masterVolume);
         toggle.setAttribute('aria-controls', 'monitor-view-panel');
       } catch {
         toggle.textContent = '仮想モニターを再読み込み';
@@ -425,94 +419,6 @@ export class CoastApp {
       save(null);
     });
     apply(initialFov);
-  }
-
-  private bindAudio(ui: HTMLElement, audio: ExplorationAudio): ExplorationAudioControls {
-    const start = ui.querySelector<HTMLButtonElement>('.coast-audio')!;
-    const volume = ui.querySelector<HTMLInputElement>('.coast-volume input')!;
-    const message = ui.querySelector<HTMLElement>('.coast-audio-message')!;
-    let muted = false;
-    let pending = false;
-    let disposed = false;
-    let pendingStart: Promise<boolean> | undefined;
-    const setLevel = () => audio.setLevel(volume.valueAsNumber / 100, muted);
-    const sync = () => {
-      if (disposed) return;
-      const on = audio.isOn();
-      const label = on ? '環境音をオフ' : '環境音をオン';
-      if (start.textContent !== label) start.textContent = label;
-      if (start.disabled !== pending) start.disabled = pending;
-    };
-    setLevel();
-    async function startAudio(): Promise<boolean> {
-      if (disposed) return false;
-      if (pendingStart) return pendingStart;
-      pending = true;
-      message.textContent = '環境音を準備しています。';
-      sync();
-      let request: Promise<void>;
-      try {
-        // Invoke resume synchronously while the click still carries user activation.
-        request = audio.start();
-      } catch {
-        request = Promise.reject(new Error('Audio start failed'));
-      }
-      const operation = request.then(() => {
-        if (disposed) return false;
-        message.textContent = audio.isOn() || muted
-          ? ''
-          : '環境音を開始できませんでした。もう一度ボタンを押してください。';
-        return true;
-      }).catch(() => {
-        if (disposed) return false;
-        message.textContent = '環境音を開始できませんでした。もう一度ボタンを押してください。';
-        return false;
-      }).finally(() => {
-        pending = false;
-        pendingStart = undefined;
-        sync();
-      });
-      pendingStart = operation;
-      return operation;
-    }
-    const toggleAudio = () => {
-      if (disposed || pending) return;
-      if (audio.isOn()) {
-        muted = true;
-        setLevel();
-        message.textContent = '';
-        sync();
-        return;
-      }
-      void startAudio().then(started => {
-        if (!started || disposed) return;
-        muted = false;
-        setLevel();
-        message.textContent = audio.isOn()
-          ? ''
-          : '環境音を開始できませんでした。もう一度ボタンを押してください。';
-        sync();
-      });
-    };
-    const changeVolume = () => {
-      if (disposed) return;
-      setLevel();
-      sync();
-    };
-    const startForPreview = async () => { await startAudio(); };
-    start.addEventListener('click', toggleAudio);
-    volume.addEventListener('input', changeVolume);
-    sync();
-    return {
-      startForPreview,
-      sync,
-      dispose() {
-        disposed = true;
-        start.removeEventListener('click', toggleAudio);
-        volume.removeEventListener('input', changeVolume);
-        start.disabled = true;
-      },
-    };
   }
 
   private resizeViewport(): void {

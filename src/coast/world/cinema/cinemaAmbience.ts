@@ -1,6 +1,8 @@
 import { Vector3 } from 'three';
 import type { CoastMovement } from '../../CoastControls';
 import type { CoastBirdCue } from '../../coastBirdCue';
+import { connectExplorationOutput } from '../../explorationOutput';
+import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } from '../../explorationSound';
 import { coastRandom } from '../../terrain';
 import { createFootfall } from '../residence/residenceAudioSamples';
 import {
@@ -25,8 +27,13 @@ interface Sound {
   wet?: GainNode;
 }
 
+const CINEMA_SOUNDS = ['wind', 'preview', 'footsteps'] as const;
+type CinemaSound = typeof CINEMA_SOUNDS[number];
+
 interface CinemaAmbienceGraph {
   master: GainNode;
+  outputNodes: readonly AudioNode[];
+  buses: Record<CinemaSound, GainNode>;
   reverb: ConvolverNode;
   foot: Record<'wool' | 'stone', readonly AudioBuffer[]>;
   cue: AudioBuffer;
@@ -97,8 +104,7 @@ export class CinemaAmbience {
   private graph?: CinemaAmbienceGraph;
   private pendingStart?: Promise<void>;
   private disposed = false;
-  private level = 0.7;
-  private muted = false;
+  private mix = DEFAULT_EXPLORATION_MIX;
   private listener = new Vector3(defaultSeat.x,
     cinemaGroundHeight(defaultSeat.x, defaultSeat.z) + defaultSeat.seatedEyeHeight, defaultSeat.z);
   private lastStepFrame?: { position: Vector3; elapsed: number };
@@ -110,17 +116,20 @@ export class CinemaAmbience {
   private preview?: PreviewGraph;
   private lastPreview?: Sound;
 
-  isOn(): boolean {
-    return Boolean(this.graph && this.context?.state === 'running' && !this.muted);
+  isRunning(): boolean {
+    return Boolean(this.graph && this.context?.state === 'running');
   }
 
   start(): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('CinemaAmbience has been disposed'));
-    if (this.pendingStart) return this.pendingStart;
     try {
       const context = this.context ??= new AudioContext({ latencyHint: 'interactive' });
-      // Start only from the caller's audio button gesture, before any async work.
+      // A click can unlock a resume request left pending by navigation.
       const resume = context.state === 'running' ? Promise.resolve() : context.resume();
+      if (this.pendingStart) {
+        void resume.catch(() => undefined);
+        return this.pendingStart;
+      }
       this.pendingStart = resume.then(() => {
         if (this.disposed || this.context !== context) return;
         if (!this.graph) this.begin(context);
@@ -131,10 +140,15 @@ export class CinemaAmbience {
     }
   }
 
-  setLevel(volume: number, muted: boolean): void {
-    this.level = Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : 0;
-    this.muted = muted;
-    if (this.context && this.graph) this.graph.master.gain.setTargetAtTime(muted ? 0 : this.level, this.context.currentTime, 0.035);
+  setMix(mix: ExplorationMix): void {
+    this.mix = mix;
+    const { context, graph } = this;
+    if (!context || !graph) return;
+    const now = context.currentTime;
+    graph.master.gain.setTargetAtTime(mix.master * 0.7, now, 0.035);
+    for (const kind of CINEMA_SOUNDS) {
+      graph.buses[kind].gain.setTargetAtTime(explorationSoundGain(mix, kind), now, 0.035);
+    }
   }
 
   update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement?: CoastMovement,
@@ -172,7 +186,7 @@ export class CinemaAmbience {
     const foot = new Vector3(position.x - forward.z * offset, 0, position.z + forward.x * offset);
     foot.y = cinemaGroundHeight(foot.x, foot.z) + 0.05;
     const samples = this.graph.foot[stepSurface(foot)];
-    this.playAt(samples[this.stepIndex % samples.length], foot, movement === 'crouch' ? 0.34 : 0.55, 0.11);
+    this.playAt('footsteps', samples[this.stepIndex % samples.length], foot, movement === 'crouch' ? 0.34 : 0.55, 0.11);
     this.stepIndex += 1;
   }
 
@@ -180,7 +194,7 @@ export class CinemaAmbience {
     if (!this.graph || !this.context) return;
     this.fadePreviewVoice(this.context.currentTime);
     const preview = this.preview ??= this.beginPreview(this.context, this.graph);
-    this.lastPreview = this.playAt(this.graph.cue, CUE_POSITION[kind], 0.34, 0.13, undefined, 10, preview);
+    this.lastPreview = this.playAt('preview', this.graph.cue, CUE_POSITION[kind], 0.34, 0.13, undefined, 10, preview);
   }
 
   stopDemoCue(): void {
@@ -204,8 +218,12 @@ export class CinemaAmbience {
     this.lastPreview = undefined;
     this.preview = undefined;
     this.previews.forEach(preview => this.releasePreview(preview));
-    this.graph?.master.disconnect();
-    this.graph?.reverb.disconnect();
+    if (this.graph) {
+      this.graph.master.disconnect();
+      this.graph.outputNodes.forEach(node => node.disconnect());
+      this.graph.reverb.disconnect();
+      for (const kind of CINEMA_SOUNDS) this.graph.buses[kind].disconnect();
+    }
     void this.context?.close().catch(() => undefined);
     this.graph = undefined;
     this.context = undefined;
@@ -214,22 +232,29 @@ export class CinemaAmbience {
   private begin(context: AudioContext): void {
     const master = context.createGain();
     master.gain.value = 0;
-    master.connect(context.destination);
+    const outputNodes = connectExplorationOutput(context, master);
+    const createBus = (kind: CinemaSound) => {
+      const bus = context.createGain();
+      bus.gain.value = explorationSoundGain(this.mix, kind);
+      bus.connect(master);
+      return bus;
+    };
+    const buses = { wind: createBus('wind'), preview: createBus('preview'), footsteps: createBus('footsteps') };
     const reverb = context.createConvolver();
     reverb.normalize = false;
     reverb.buffer = createCinemaTail(context, 85_213);
-    reverb.connect(master);
+    reverb.connect(buses.footsteps);
     this.graph = {
-      master, reverb,
+      master, outputNodes, buses, reverb,
       foot: {
         wool: [601, 731, 947, 211, 6019].map(seed => createFootfall(context, 'wool', seed)),
         stone: [461, 317, 199, 827, 367].map(seed => createFootfall(context, 'stone', seed)),
       },
       cue: cueTone(context),
     };
-    this.setLevel(this.level, this.muted);
+    this.setMix(this.mix);
     [new Vector3(-14, 19.8, 19), new Vector3(14, 19.8, 19), new Vector3(-14, 19.9, 43), new Vector3(14, 19.9, 43)]
-      .forEach((position, i) => this.playAt(fanLoop(context, 2_173 + i * 977), position, 0.17, 0, 0.5 + 0.95 * i, 7));
+      .forEach((position, i) => this.playAt('wind', fanLoop(context, 2_173 + i * 977), position, 0.17, 0, 0.5 + 0.95 * i, 7));
   }
 
   private beginPreview(context: AudioContext, graph: CinemaAmbienceGraph): PreviewGraph {
@@ -237,7 +262,7 @@ export class CinemaAmbience {
     const reverb = context.createConvolver();
     reverb.normalize = false;
     reverb.buffer = graph.reverb.buffer;
-    reverb.connect(output).connect(graph.master);
+    reverb.connect(output).connect(graph.buses.preview);
     const preview = { output, reverb };
     this.previews.add(preview);
     return preview;
@@ -259,7 +284,7 @@ export class CinemaAmbience {
     preview.reverb.disconnect();
   }
 
-  private playAt(buffer: AudioBuffer, position: Vector3, level: number, wet: number, loopOffset?: number,
+  private playAt(kind: CinemaSound, buffer: AudioBuffer, position: Vector3, level: number, wet: number, loopOffset?: number,
     refDistance = 2.5, preview?: PreviewGraph,
   ): Sound | undefined {
     const context = this.context;
@@ -280,7 +305,7 @@ export class CinemaAmbience {
     pan.positionZ.value = position.z;
     const gain = context.createGain();
     gain.gain.value = level;
-    source.connect(gain).connect(pan).connect(preview?.output ?? graph.master);
+    source.connect(gain).connect(pan).connect(preview?.output ?? graph.buses[kind]);
     const sound: Sound = { source, pan, gain };
     if (wet > 0) {
       const send = context.createGain();

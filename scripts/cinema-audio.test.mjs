@@ -209,25 +209,38 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
 
   const silentBeforeGesture = await page.evaluate(async () => {
     const { CinemaAmbience } = await import('/src/coast/world/cinema/cinemaAmbience.ts');
+    const { DEFAULT_EXPLORATION_MIX } = await import('/src/coast/explorationSound.ts');
     const NativeAudioContext = window.AudioContext;
     const contexts = [];
     window.AudioContext = class extends NativeAudioContext {
       panners = [];
       tails = [];
+      routes = new WeakMap();
       constructor(options) {
         super(options);
         const sink = this.createMediaStreamDestination();
         Object.defineProperty(this, 'destination', { value: sink });
         contexts.push(this);
       }
+      trackRoute(node) {
+        const connect = node.connect.bind(node);
+        node.connect = (target, ...args) => {
+          this.routes.set(node, target);
+          return connect(target, ...args);
+        };
+        return node;
+      }
+      createGain() {
+        return this.trackRoute(super.createGain());
+      }
       createPanner() {
-        const panner = super.createPanner();
+        const panner = this.trackRoute(super.createPanner());
         this.panners.push(panner);
         return panner;
       }
       createConvolver() {
-        const node = super.createConvolver();
-        const entry = { disconnected: false };
+        const node = this.trackRoute(super.createConvolver());
+        const entry = { node, disconnected: false };
         const disconnect = node.disconnect.bind(node);
         node.disconnect = (...args) => { entry.disconnected = true; return disconnect(...args); };
         this.tails.push(entry);
@@ -241,21 +254,68 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
     start.textContent = 'Start ambient audio';
     start.onclick = () => { window.cinemaAmbienceStarted = ambience.start(); };
     document.body.append(start);
-    window.cinemaAmbienceFixture = { ambience, contexts };
+    const mix = {
+      ...DEFAULT_EXPLORATION_MIX,
+      master: 3,
+      levels: { ...DEFAULT_EXPLORATION_MIX.levels, wind: .21, preview: .35, footsteps: .62 },
+    };
+    ambience.setMix(mix);
+    window.cinemaAmbienceFixture = { ambience, contexts, mix };
     return contexts.length === 0;
   });
   assert.ok(silentBeforeGesture);
   await page.getByRole('button', { name: 'Start ambient audio' }).click();
   const sceneAudio = await page.evaluate(async () => {
     await window.cinemaAmbienceStarted;
-    const { ambience, contexts: [context] } = window.cinemaAmbienceFixture;
-    const fans = context.panners.length;
+    const { Vector3 } = await import('/node_modules/three/build/three.module.js');
+    const fixture = window.cinemaAmbienceFixture;
+    const { ambience, contexts: [context] } = fixture;
+    const fanPanners = context.panners.slice();
     ambience.playDemoCue('overhead');
     const point = context.panners.at(-1);
-    ambience.stopDemoCue();
-    return { fans, elevation: point.positionY.value, roomTails: context.tails.length, running: context.state };
+    const forward = new Vector3(0, 0, -1);
+    const up = new Vector3(0, 1, 0);
+    [0, .4, .8, 1.2].forEach((x, i) => ambience.update(new Vector3(x, 20, 20), forward, up, i * .13, 'walk'));
+    const { routes } = context;
+    const wind = routes.get(fanPanners[0]);
+    const previewOutput = routes.get(point);
+    const preview = routes.get(previewOutput);
+    const footsteps = routes.get(context.panners.at(-1));
+    fixture.gains = [routes.get(wind), wind, preview, footsteps].map(node => node.gain);
+    return {
+      fans: fanPanners.length, elevation: point.positionY.value, roomTails: context.tails.length,
+      sharedWind: fanPanners.every(pan => routes.get(pan) === wind),
+      isolatedFootstepTail: routes.get(context.tails[0].node) === footsteps && footsteps !== preview,
+      isolatedPreviewTail: routes.get(context.tails[1].node) === previewOutput,
+    };
   });
-  assert.deepEqual(sceneAudio, { fans: 4, elevation: Math.fround(20.381), roomTails: 2, running: 'running' });
+  assert.deepEqual(sceneAudio, {
+    fans: 4, elevation: Math.fround(20.381), roomTails: 2, sharedWind: true,
+    isolatedFootstepTail: true, isolatedPreviewTail: true,
+  });
+
+  const expectGains = targets => page.waitForFunction(expected => {
+    const { ambience, gains } = window.cinemaAmbienceFixture;
+    return ambience.isRunning() && expected.every((value, i) => Math.abs(gains[i].value - value) < .002);
+  }, targets, { timeout: 4000 });
+  await expectGains([2.1, .21, .35, .62]);
+  await page.evaluate(() => {
+    const { ambience, mix } = window.cinemaAmbienceFixture;
+    ambience.setMix({ ...mix, master: 1, environmentOn: false });
+  });
+  await expectGains([.7, 0, 0, .62]);
+  await page.evaluate(() => {
+    const { ambience, mix } = window.cinemaAmbienceFixture;
+    ambience.setMix({ ...mix, master: 1, footstepsOn: false });
+    ambience.playDemoCue('rear');
+  });
+  await expectGains([.7, .21, .35, 0]);
+  await page.evaluate(() => {
+    const { ambience, mix } = window.cinemaAmbienceFixture;
+    ambience.stopDemoCue();
+    ambience.setMix({ ...mix, master: 1 });
+  });
+  await expectGains([.7, .21, .35, .62]);
 
   const footfalls = await page.evaluate(async () => {
     const { Vector3 } = await import('/node_modules/three/build/three.module.js');
@@ -263,7 +323,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
     const { CINEMA_AISLES, CINEMA_TREADS, cinemaGroundHeight } = await import('/src/coast/world/cinema/cinemaLayout.ts');
     const { ambience, contexts: [context] } = window.cinemaAmbienceFixture;
     const steps = [];
-    let elapsed = 0;
+    let elapsed = 1;
     const createSource = context.createBufferSource.bind(context);
     context.createBufferSource = () => {
       const source = createSource();

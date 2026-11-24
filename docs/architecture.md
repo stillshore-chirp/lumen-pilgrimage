@@ -36,6 +36,7 @@ flowchart LR
 
 - [explorationRoute.ts](../src/coast/explorationRoute.ts) の `parseStartupRoute` が起動入口を選び、`readInitialExplorationState` が読み込み後の初期到着点と時間帯を解釈する。同モジュールの `decideTravel` と `urlForTime` は移動先・時間帯を反映した URL を計算する。[main.ts](../src/main.ts) は `#app`、ワールドの遅延読み込み、起動中・エラー時の表示、配信ページへの振り分けを担当します。`?world=overlook` は丘陵展望台、`?world=residence` は都心の70階住戸、`?world=cinema` は映画館シアター（大）を読み込みます。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts) · [CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)
 - `CoastApp` は読み込み済みワールドへ初期状態を適用し、レンダラー、カメラ、UI、フレームループ、操作を接続します。ファストトラベルでは [CoastTravelPanel](../src/coast/CoastTravelPanel.ts) から移動先を受け取り、[coastDestinations.ts](../src/coast/coastDestinations.ts) が定義する着地点と到着時の向きを使います。`CoastApp` は移動時の再読み込みや履歴更新、カメラ・ダイアログ・座席の遷移を適用します。
+- [CoastSoundControls](../src/coast/CoastSoundControls.ts) が環境音、歩行音、全体と種類別の音量を各ワールドの音響へ渡します。全体音量は [MonitorView](../src/monitor/monitorView.ts) にも渡し、接続した共有音に反映します。 [音の設定の保存形式](worlds.md#設定の保存)
 
 ## 仮想モニターの設計
 
