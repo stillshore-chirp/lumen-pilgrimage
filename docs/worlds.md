@@ -11,13 +11,13 @@
 
 ## 起動 URL、時間帯、設定の引き継ぎ
 
-[起動ルートの判断](../src/coast/explorationRoute.ts)は `monitor` と `world` を読みます。`monitor=sender` はワールド選択より先に配信ページを開くルートになります。`world` は `overlook`、`residence`、`cinema` の完全一致で追加ワールドを選びます。省略時と未登録値は海岸を選びます。[main.ts](../src/main.ts)は選ばれたルートに応じて配信ページまたはワールドを読み込み、読み込みに失敗した場合は起動エラー画面を表示します。過去の `scene=expedition` はワールド選択に使われず、現行の探索を開きます。
+[起動ルートの判断](../src/coast/explorationRoute.ts)は `monitor` と `world` を読みます。`monitor=sender` はワールド選択より先に配信ページを開くルートになります。`world` は `overlook`、`residence`、`cinema` の完全一致で追加ワールドを選びます。省略時と未登録値は海岸を選びます。[main.ts](../src/main.ts)は選ばれたルートに応じて配信ページを読み込むか、[CoastApp](../src/coast/CoastApp.ts)のワールド読込処理を呼びます。読み込みに失敗した場合は起動エラー画面を表示します。過去の `scene=expedition` はワールド選択に使われず、現行の探索を開きます。
 
 [explorationRoute.ts](../src/coast/explorationRoute.ts)の`readInitialExplorationState`は読み込み後の `place` と `time` を解釈し、[着地点一覧](../src/coast/coastDestinations.ts)がワールドごとの有効な移動先と座標を定義します。[CoastApp](../src/coast/CoastApp.ts)は解釈した初期状態を読み込み済みワールドへ適用し、有効な着地点がない場合はそのワールドの `navigation.spawn` を初期位置にします。各ワールドで使えるIDとラベルも一覧にまとめているので、新しい到着点は同じ一覧へ追加し、対応するナビゲーションの `spawn` とブラウザーテストも照合してください。
 
 時間帯は `time=night` のとき夜です。その他の値は昼として扱い、住戸だけは `time` 自体がない場合に夜から始まります。`?world=overlook&place=upper-deck` は展望台の2階、`?world=residence&place=foyer&time=day` は昼の玄関、`?world=cinema` は中段中央を開きます。利用方法は[探索ガイド](exploration.md)を参照してください。
 
-昼夜ボタンを押すと、現在のワールドと音響へ反映し、`urlForTime` が計算した URL を `history.replaceState` で適用します。ワールド間移動では `decideTravel` が `world`、`place`、現在の `time` を含む URL を計算し、`CoastApp` がページを読み直します。同一ワールド内では `CoastApp` がカメラと移動モードを着地点に戻して URL を置き換えます。ファストトラベルを開く時点でキー入力と予約操作を消し、ゲームパッドのボタン状態を同期し、キャンバスのポインターロックを解除します。着地処理でも入力を消し、飛行・潜水・垂直速度をリセットしてから、目的地の支持面と眼高へカメラを置きます。座席着地は指定眼高を使います。映画館では昼夜のUIを隠し、ワールド側の `setTimeOfDay` も空処理です。移動元の時刻はURLに保持されるため、映画館から別ワールドへ移るとその時刻を渡します。
+昼夜ボタンを押すと、現在のワールドと音響へ反映し、`urlForTime` が計算した URL を `history.replaceState` で適用します。ワールド間移動では `decideTravel` が `world`、`place`、現在の `time` を含む URL を計算します。[仮想モニターの接続・承認が進行中](monitor.md#接続切断失敗時の状態)は、移動先を読み込んでから同じページのシーンと履歴を更新します。それ以外のワールド間ファストトラベルはページを読み直します。同じページの履歴を戻る・進むときに読み込みが失敗すると、表示中のワールドの履歴項目へ戻ります。失敗した移動先は履歴から再試行できます。同一ワールド内では `CoastApp` がカメラと移動モードを着地点に戻して URL を置き換えます。ファストトラベルを開く時点でキー入力と予約操作を消し、ゲームパッドのボタン状態を同期し、キャンバスのポインターロックを解除します。着地処理でも入力を消し、飛行・潜水・垂直速度をリセットしてから、目的地の支持面と眼高へカメラを置きます。座席着地は指定眼高を使います。映画館では昼夜のUIを隠し、ワールド側の `setTimeOfDay` も空処理です。移動元の時刻はURLに保持されるため、映画館から別ワールドへ移るとその時刻を渡します。
 
 ### 夜の入り江から展望台へ移動する
 

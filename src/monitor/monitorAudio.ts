@@ -33,16 +33,16 @@ class FadedGain {
   }
 
   fadeTo(target: number, now: number, duration: number): void {
-    if (target === this.target) return;
+    if (target === this.target && (duration > 0 || now >= this.endTime)) return;
     // The current point is known even when the previous ramp is interrupted.
     const current = now >= this.endTime
       ? this.target
       : MathUtils.lerp(this.startValue, this.target, (now - this.startTime) / (this.endTime - this.startTime));
     const gain = this.node.gain;
     gain.cancelScheduledValues(now);
-    gain.setValueAtTime(current, now);
-    gain.linearRampToValueAtTime(target, now + duration);
-    this.startValue = current;
+    this.startValue = duration > 0 ? current : target;
+    gain.setValueAtTime(this.startValue, now);
+    if (duration > 0) gain.linearRampToValueAtTime(target, now + duration);
     this.startTime = now;
     this.endTime = now + duration;
     this.target = target;
@@ -133,8 +133,11 @@ export class MonitorAudio {
   setCinema(factory: CinemaPlaybackFactory | null): void {
     if (this.cinemaPlayback === factory) return;
     this.cinemaPlayback = factory;
-    this.disconnectGraph();
-    this.syncTrack();
+    const { graph, context, track } = this;
+    if (!graph || !context || !track) return;
+    this.disconnectCinema(graph);
+    graph.cinema = this.createCinema(context, graph.source, graph.master.node, track);
+    this.setMode(this.mode);
   }
 
   setCinemaQuality(quality: 'light' | 'high'): void {
@@ -216,7 +219,7 @@ export class MonitorAudio {
     this.updateLevel();
   }
 
-  setMode(mode: MonitorAudioMode): void {
+  setMode(mode: MonitorAudioMode, transitionSeconds = MODE_FADE_SECONDS): void {
     this.mode = mode;
     const graph = this.graph;
     if (!graph || !this.context) return;
@@ -224,10 +227,10 @@ export class MonitorAudio {
     const surround = graph.surround !== null && mode === 'surround';
     const cinema = graph.cinema !== null && mode === 'cinema';
     const now = this.context.currentTime;
-    graph.stereo.fadeTo(spatial || surround || cinema ? 0 : 1, now, MODE_FADE_SECONDS);
-    graph.spatial?.level.fadeTo(spatial ? 1 : 0, now, MODE_FADE_SECONDS);
-    graph.surround?.level.fadeTo(surround ? 1 : 0, now, MODE_FADE_SECONDS);
-    graph.cinema?.level.fadeTo(cinema ? 1 : 0, now, MODE_FADE_SECONDS);
+    graph.stereo.fadeTo(spatial || surround || cinema ? 0 : 1, now, transitionSeconds);
+    graph.spatial?.level.fadeTo(spatial ? 1 : 0, now, transitionSeconds);
+    graph.surround?.level.fadeTo(surround ? 1 : 0, now, transitionSeconds);
+    graph.cinema?.level.fadeTo(cinema ? 1 : 0, now, transitionSeconds);
   }
 
   update(camera: Camera, monitor: Object3D): void {
@@ -373,8 +376,7 @@ export class MonitorAudio {
     const graph = this.graph;
     if (!graph) return;
     this.disconnectSurround(graph);
-    graph.cinema?.playback.dispose();
-    graph.cinema?.level.node.disconnect();
+    this.disconnectCinema(graph);
     graph.master.node.disconnect();
     graph.outputNodes.forEach(node => node.disconnect());
     graph.source.disconnect();
@@ -382,6 +384,12 @@ export class MonitorAudio {
     graph.spatial?.level.node.disconnect();
     graph.spatial?.panner.disconnect();
     this.graph = null;
+  }
+
+  private disconnectCinema(graph: MonitorGraph): void {
+    graph.cinema?.playback.dispose();
+    graph.cinema?.level.node.disconnect();
+    graph.cinema = null;
   }
 
   private disconnectSurround(graph: MonitorGraph): void {

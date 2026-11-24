@@ -393,9 +393,13 @@ test('routes L, R, C, LFE, SL and SR to the fixed speakers and frees them on dep
   assert.deepEqual(spatial.gain.events.at(-1), ['ramp', 1, 11.12]);
   assert.deepEqual(surround.gain.events.at(-1), ['ramp', 0, 11.12]);
   audio.setMode('surround');
+  const masterEvents = master.gain.events.length;
+  audio.setMode('stereo', 0);
   audio.setTheaterSpeakers(null);
   assert.equal(audio.supportsSurround(), false);
   assert.ok([layout, splitter, filter, ...positions, surround].every(node => node.disconnected));
   assert.deepEqual(source.connections, [stereo, screen]);
-  assert.deepEqual(stereo.gain.events.at(-1), ['ramp', 1, 11.12]);
+  assert.deepEqual(stereo.gain.events.slice(-2), [['cancel', 11], ['set', 1, 11]]);
+  assert.equal(master.gain.events.length, masterEvents);
+  assert.deepEqual(context.sources, [source]);
 });

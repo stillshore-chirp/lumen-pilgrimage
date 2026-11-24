@@ -24,7 +24,14 @@ export function createCinemaSeatTransition(scene: Scene) {
   let time = 0;
   let move: (() => void) | null = null;
 
+  function cancel(): void {
+    move = null;
+    darkness.value = 0;
+    cover.visible = false;
+  }
+
   return {
+    cancel,
     get active() { return cover.visible; },
     start(relocate: () => void) {
       time = darkness.value * FADE_OUT_SECONDS;
@@ -46,11 +53,10 @@ export function createCinemaSeatTransition(scene: Scene) {
       cover.visible = move !== null || darkness.value > 0;
     },
     dispose() {
-      cover.visible = false;
+      cancel();
       cover.removeFromParent();
       cover.geometry.dispose();
       cover.material.dispose();
-      move = null;
     },
   };
 }
