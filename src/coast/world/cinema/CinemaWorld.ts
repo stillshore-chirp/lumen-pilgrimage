@@ -74,6 +74,8 @@ export function loadCinemaScene(): ExplorationScene {
     cinemaControls,
     world: {
       scene,
+      get artificialLightingMode() { return lighting.artificialLightingMode; },
+      setArtificialLightingMode: lighting.setArtificialLightingMode,
       theater: {
         screen: lighting.screen,
         speakers: [],

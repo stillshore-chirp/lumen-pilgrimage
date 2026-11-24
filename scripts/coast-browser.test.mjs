@@ -235,20 +235,22 @@ function signalLevel() {
   return peak > 0.001 && peak < 0.98 ? peak : 0;
 }
 
-async function skyBrightness(canvas) {
-  return canvas.evaluate(source => new Promise(resolve => requestAnimationFrame(() => {
+async function canvasBrightness(canvas, area) {
+  return canvas.evaluate((source, [x, y, width, height]) => new Promise(resolve => requestAnimationFrame(() => {
     const sample = document.createElement('canvas');
     sample.width = 16;
     sample.height = 8;
     const context = sample.getContext('2d');
-    context.drawImage(source, source.width * 0.35, source.height * 0.16,
-      source.width * 0.30, source.height * 0.15, 0, 0, sample.width, sample.height);
+    context.drawImage(source, source.width * x, source.height * y,
+      source.width * width, source.height * height, 0, 0, sample.width, sample.height);
     const { data } = context.getImageData(0, 0, sample.width, sample.height);
     let total = 0;
     for (let i = 0; i < data.length; i += 4) total += data[i] + data[i + 1] + data[i + 2];
     resolve(total / (sample.width * sample.height * 3));
-  })));
+  })), area);
 }
+
+const skyBrightness = canvas => canvasBrightness(canvas, [0.35, 0.16, 0.30, 0.15]);
 
 test('the coast renders, wades, dives, flies, spatializes audio, and resets rendering quality', { timeout }, async () => {
   const page = await newPage();
@@ -948,6 +950,66 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
   } finally {
     await page.close();
   }
+});
+
+test('world lighting changes lantern and deck illumination independently of time of day', { timeout: 90_000 }, async t => {
+  const page = await newPage();
+  t.after(() => page.close());
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const canvas = page.locator('canvas.coast-view');
+  const lighting = page.getByRole('group', { name: 'ワールド照明' });
+  const on = lighting.getByRole('button', { name: '一括点灯' });
+  const off = lighting.getByRole('button', { name: '一括消灯' });
+  const automatic = lighting.getByRole('button', { name: '既定' });
+  const night = page.getByRole('button', { name: '夜', exact: true });
+  const day = page.getByRole('button', { name: '昼', exact: true });
+  const landscape = '.coast-ui { visibility: hidden; }';
+
+  for (const [world, place, fixture, pool] of [
+    ['coast', 'vermilion', [0.80, 0.59, 0.05, 0.06], [0.77, 0.75, 0.14, 0.12]],
+    ['overlook', 'main-deck', [0.47, 0.645, 0.08, 0.04], [0.46, 0.82, 0.16, 0.12]],
+  ]) {
+    await page.goto(`${url}?world=${world}&place=${place}&time=night`, { waitUntil: 'commit' });
+    await automatic.waitFor();
+    assert.equal(await automatic.getAttribute('aria-pressed'), 'true');
+    await page.waitForFunction(() => document.fonts.status === 'loaded');
+    const skyAtNight = await skyBrightness(canvas);
+    const originalUrl = page.url();
+    await off.press('Space');
+    const darkFixture = await canvasBrightness(canvas, fixture);
+    const darkPool = await canvasBrightness(canvas, pool);
+    await capture(page, `${world}-light-off`, landscape);
+    await on.click();
+    const litFixture = await canvasBrightness(canvas, fixture);
+    const litPool = await canvasBrightness(canvas, pool);
+    await capture(page, `${world}-light-on`, landscape);
+    assert.ok(litFixture - darkFixture > 4, `${world} fixture: ${darkFixture} → ${litFixture}`);
+    assert.ok(litPool - darkPool > 4, `${world} surface: ${darkPool} → ${litPool}`);
+    t.diagnostic(`${world} fixture ${darkFixture.toFixed(1)} → ${litFixture.toFixed(1)}, surface ${darkPool.toFixed(1)} → ${litPool.toFixed(1)}`);
+    assert.equal(page.url(), originalUrl);
+    assert.equal(await night.getAttribute('aria-pressed'), 'true');
+    assert.equal(await on.getAttribute('aria-pressed'), 'true');
+    assert.ok(Math.abs(await skyBrightness(canvas) - skyAtNight) < 5);
+    if (world === 'overlook') {
+      const city = [0.20, 0.35, 0.55, 0.12];
+      await page.getByRole('button', { name: '高品質', exact: true }).click();
+      const brightPaving = await canvasBrightness(canvas, pool);
+      const cityWithLights = await canvasBrightness(canvas, city);
+      await off.click();
+      const dimPaving = await canvasBrightness(canvas, pool);
+      assert.ok(brightPaving - dimPaving > 4, `High-quality deck surface: ${dimPaving} → ${brightPaving}`);
+      assert.ok(Math.abs(await canvasBrightness(canvas, city) - cityWithLights) < 4, 'Deck switch keeps the city lights');
+      await on.click();
+    }
+    await day.click();
+    assert.equal(await on.getAttribute('aria-pressed'), 'true');
+    assert.equal(await day.getAttribute('aria-pressed'), 'true');
+    await automatic.click();
+    assert.equal(await automatic.getAttribute('aria-pressed'), 'true');
+  }
+  assert.deepEqual(errors, []);
 });
 
 test('first-person field of view changes the projection, persists across worlds, and resets to each world default',

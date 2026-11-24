@@ -194,6 +194,11 @@
   margin-block-start: 8px;
 }
 
+.coast-world-lighting {
+  gap: 8px;
+  margin-block-end: 8px;
+}
+
 .coast-setting-row > .coast-label {
   margin: 0;
 }

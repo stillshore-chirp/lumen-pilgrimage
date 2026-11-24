@@ -699,6 +699,60 @@ test('the residence menu opens individual controls and keeps remote and wall con
   assert.deepEqual(errors, []);
 });
 
+test('world lighting changes every room and restores the residence light settings', { timeout }, async t => {
+  const { page, errors } = await openResidence(t, 'living-theater');
+  const lights = page.getByRole('group', { name: 'ワールド照明' });
+  const on = button(lights, '一括点灯');
+  const off = button(lights, '一括消灯');
+  const automatic = button(lights, '既定');
+  const canvas = page.locator('canvas.coast-view');
+  const landscape = '.coast-ui { visibility: hidden; }';
+  const room = await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  const west = button(room, 'ペンダント灯（西）');
+  const east = button(room, 'ペンダント灯（東）');
+  const theater = button(room, 'シアター照明');
+  await west.click();
+  await page.keyboard.press('Escape');
+  await on.click();
+  const lit = await brightness(canvas, [.20, .18, .60, .67]);
+  await capture(page, 'residence-world-light-on', landscape);
+  await off.click();
+  const dark = await brightness(canvas, [.20, .18, .60, .67]);
+  await capture(page, 'residence-world-light-off', landscape);
+  assert.ok(lit.mean - dark.mean > 6, `Living room light: ${dark.mean} → ${lit.mean}`);
+  t.diagnostic(`Living room light ${dark.mean.toFixed(1)} → ${lit.mean.toFixed(1)}`);
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  for (const fixture of [west, east, theater]) assert.equal(await fixture.getAttribute('aria-pressed'), 'false');
+  await east.click();
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await lights.locator('button[aria-pressed="true"]').waitFor({ state: 'hidden' });
+
+  await button(page, '昼').click();
+  const study = await openResidenceDevice(page, '照明', '書斎05');
+  assert.equal(await button(study, 'デスクライト').getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await on.click();
+  await openResidenceDevice(page, '照明', '書斎05');
+  assert.equal(await button(study, 'デスクライト').getAttribute('aria-pressed'), 'true');
+  await page.keyboard.press('Escape');
+
+  await button(page, '夜').click();
+  await automatic.click();
+  await openResidenceDevice(page, '照明', 'リビング・ダイニング');
+  assert.equal(await west.getAttribute('aria-pressed'), 'false');
+  assert.equal(await east.getAttribute('aria-pressed'), 'true');
+  assert.equal(await theater.getAttribute('aria-pressed'), 'false');
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 375, height: 710 });
+  await off.click();
+  assert.equal(await off.getAttribute('aria-pressed'), 'true');
+  assert.ok(await lights.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  await capture(page, 'residence-world-light-mobile');
+  assert.deepEqual(errors, []);
+});
+
 test('the open foyer door lights the gallery floor with its own fixtures off', { timeout }, async t => {
   const { page, errors } = await createPage(t);
   await exposeResidenceScene(page);

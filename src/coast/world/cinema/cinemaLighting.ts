@@ -4,6 +4,7 @@ import {
   SRGBTransfer, UnsignedByteType, Vector2, Vector3, VideoTexture, WebGLRenderTarget,
   type Group, type Texture, type WebGLRenderer,
 } from 'three';
+import type { WorldLightingMode } from '../../WorldLightingControl';
 import { CINEMA_WALL_FOOTLIGHTS } from './cinemaFixtureLighting';
 import { CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_SCREEN, CINEMA_TREADS } from './cinemaLayout';
 import {
@@ -195,6 +196,7 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
 
   let quality: CinemaLightingQuality = 'light';
   let mode: CinemaLightingMode = 'arrival';
+  let lightingMode: WorldLightingMode = 'auto';
   let resources: ReturnType<typeof transportResources> | null = null;
   let frame: Texture | null = null;
   let elapsed = 0;
@@ -208,7 +210,8 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
   let meterPending = false;
   let frameGeneration = 0;
   let disposed = false;
-  const transitionFrom = atlas.cinemaLamps.value.clone();
+  const modeLamps = atlas.cinemaLamps.value.clone();
+  const transitionFrom = modeLamps.clone();
   const transitionTo = transitionFrom.clone();
   let transitionStart = 0;
   let transitionDuration = 0;
@@ -226,7 +229,10 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
   }
 
   function applyLamps(): void {
-    const levels = atlas.cinemaLamps.value;
+    const levels = atlas.cinemaLamps.value.copy(modeLamps);
+    if (lightingMode !== 'auto' && mode !== 'emergency') {
+      levels.x = lightingMode === 'on' ? lampLevels.arrival[0] : 0;
+    }
     for (const [material, { scale, color }] of fixtures) {
       material.color.copy(color).multiplyScalar(levels.getComponent(scale));
     }
@@ -333,12 +339,17 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
       resources?.dispose();
       resources = null;
     },
+    get artificialLightingMode() { return lightingMode; },
+    setArtificialLightingMode(next: WorldLightingMode): void {
+      lightingMode = next;
+      applyLamps();
+    },
     setMode(next: CinemaLightingMode): void {
       if (disposed || mode === next) return;
       const wasProjecting = projectorOn();
       mode = next;
       if (wasProjecting !== projectorOn()) invalidateFrame();
-      transitionFrom.copy(atlas.cinemaLamps.value);
+      transitionFrom.copy(modeLamps);
       transitionTo.set(...lampLevels[next]);
       transitionStart = elapsed;
       if (next === 'arrival') {
@@ -348,7 +359,7 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
         transitionDuration = 8;
       } else if (next === 'emergency') {
         transitionDuration = 0;
-        atlas.cinemaLamps.value.copy(transitionTo);
+        modeLamps.copy(transitionTo);
         applyLamps();
       } else {
         transitionDuration = 0.65;
@@ -360,7 +371,7 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
       lastElapsed = elapsed = time;
       if (transitionDuration > 0) {
         const u = Math.min(1, Math.max(0, (elapsed - transitionStart) / transitionDuration));
-        atlas.cinemaLamps.value.lerpVectors(transitionFrom, transitionTo, u * u * (3 - 2 * u));
+        modeLamps.lerpVectors(transitionFrom, transitionTo, u * u * (3 - 2 * u));
         applyLamps();
         if (u === 1) transitionDuration = 0;
       }
