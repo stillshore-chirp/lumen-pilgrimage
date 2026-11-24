@@ -843,8 +843,9 @@ test('fast travel resets movement, connects the coast and overlook, and preserve
     const coastDay = await skyBrightness(canvas);
     assert.equal(await day.getAttribute('aria-pressed'), 'true');
     await page.getByRole('button', { name: '環境音をオン' }).click();
-    await page.getByRole('button', { name: '環境音をオフ' }).waitFor();
-    await walkWithFocus('w', page.locator('body'));
+    const environment = page.getByRole('button', { name: '環境音をオフ' });
+    await environment.waitFor();
+    await walkWithFocus('w', environment);
 
     const high = page.getByRole('button', { name: '高品質' });
     const light = page.getByRole('button', { name: '軽量' });
