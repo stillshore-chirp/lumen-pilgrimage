@@ -89,6 +89,7 @@ function stepSurface(position: Vector3): 'wool' | 'stone' {
 }
 
 const defaultSeat = CINEMA_DESTINATIONS[0];
+const FOOTFALL_INTERVAL = 0.48;
 
 export class CinemaAmbience {
   private context?: AudioContext;
@@ -101,6 +102,7 @@ export class CinemaAmbience {
     cinemaGroundHeight(defaultSeat.x, defaultSeat.z) + defaultSeat.seatedEyeHeight, defaultSeat.z);
   private lastStepFrame?: { position: Vector3; elapsed: number };
   private stepTravel = 0;
+  private lastFootfall = -Infinity;
   private stepIndex = 0;
   private readonly voices = new Set<Sound>();
   private readonly previews = new Set<PreviewGraph>();
@@ -157,10 +159,12 @@ export class CinemaAmbience {
     }
     const distance = Math.hypot(position.x - previous.position.x, position.z - previous.position.z);
     if (distance > 1.4) { this.stepTravel = 0; return; }
+    if (distance < 0.001) return;
     this.stepTravel += distance;
-    const stride = movement === 'crouch' ? 0.43 : 0.65;
-    if (this.stepTravel < stride) return;
-    this.stepTravel %= stride;
+    const minimumTravel = movement === 'crouch' ? 0.43 : 0.65;
+    if (this.stepTravel < minimumTravel || elapsed - this.lastFootfall < FOOTFALL_INTERVAL) return;
+    this.stepTravel = 0;
+    this.lastFootfall = elapsed;
     const offset = this.stepIndex % 2 ? -0.14 : 0.14;
     const foot = new Vector3(position.x - forward.z * offset, 0, position.z + forward.x * offset);
     foot.y = cinemaGroundHeight(foot.x, foot.z) + 0.05;
@@ -215,8 +219,8 @@ export class CinemaAmbience {
     this.graph = {
       master, reverb,
       foot: {
-        wool: [601, 731, 947].map(seed => createFootfall(context, 'wool', seed)),
-        stone: [461, 317, 199].map(seed => createFootfall(context, 'stone', seed)),
+        wool: [601, 731, 947, 211, 6019].map(seed => createFootfall(context, 'wool', seed)),
+        stone: [461, 317, 199, 827, 367].map(seed => createFootfall(context, 'stone', seed)),
       },
       cue: cueTone(context),
     };

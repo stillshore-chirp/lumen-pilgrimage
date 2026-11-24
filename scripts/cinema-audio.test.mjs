@@ -256,6 +256,55 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
     return { fans, elevation: point.positionY.value, roomTails: context.tails.length, running: context.state };
   });
   assert.deepEqual(sceneAudio, { fans: 4, elevation: Math.fround(20.381), roomTails: 2, running: 'running' });
+
+  const footfalls = await page.evaluate(async () => {
+    const { Vector3 } = await import('/node_modules/three/build/three.module.js');
+    const { cinemaNavigation } = await import('/src/coast/world/cinema/cinemaNavigation.ts');
+    const { CINEMA_AISLES, CINEMA_TREADS, cinemaGroundHeight } = await import('/src/coast/world/cinema/cinemaLayout.ts');
+    const { ambience, contexts: [context] } = window.cinemaAmbienceFixture;
+    const steps = [];
+    let elapsed = 0;
+    const createSource = context.createBufferSource.bind(context);
+    context.createBufferSource = () => {
+      const source = createSource();
+      const start = source.start.bind(source);
+      source.start = (...args) => {
+        const samples = source.buffer.getChannelData(0);
+        const energy = samples.reduce((sum, n) => sum + n * n, 0);
+        const differences = samples.slice(1).reduce((sum, n, i) => sum + (n - samples[i]) ** 2, 0);
+        steps.push({ time: elapsed, texture: differences / energy });
+        start(...args);
+      };
+      return source;
+    };
+    const up = new Vector3(0, 1, 0);
+    const dt = 0.02;
+    const frame = (x, z, movement, forward) => {
+      elapsed += dt;
+      ambience.update(new Vector3(x, cinemaGroundHeight(x, z) + 1.65, z), forward, up, elapsed, movement);
+    };
+    const dx = cinemaNavigation.walkSpeed * dt;
+    const east = new Vector3(1, 0, 0);
+    for (let i = 0; i <= 80; i += 1) frame(-8 + dx * i, 52.4, 'walk', east);
+    const carpet = steps.splice(0);
+    for (let i = 0; i < 30; i += 1) frame(-8 + dx * 80, 52.4, 'walk', east);
+    for (let i = 1; i <= 30; i += 1) frame(-8 + dx * (80 + i), 52.4, 'flight', east);
+    const stopped = steps.splice(0);
+    const stairX = CINEMA_AISLES[1].x;
+    const tread = CINEMA_TREADS.find(tread => tread.row === 10);
+    const back = new Vector3(0, 0, 1);
+    for (let i = 0; i <= 11; i += 1) frame(stairX, tread.z + dx * (i - 11), 'walk', back);
+    return { carpet, stopped, stair: steps };
+  });
+  assert.equal(footfalls.carpet.length, 3);
+  for (let i = 1; i < footfalls.carpet.length; i += 1) {
+    const interval = footfalls.carpet[i].time - footfalls.carpet[i - 1].time;
+    assert.ok(interval >= 0.47 && interval <= 0.52, `walking step interval ${interval}s`);
+  }
+  assert.deepEqual(footfalls.stopped, []);
+  assert.equal(footfalls.stair.length, 1);
+  assert.ok(footfalls.stair[0].texture > Math.max(...footfalls.carpet.map(step => step.texture)) * 2);
+
   await page.waitForFunction(() => window.cinemaAmbienceFixture.contexts[0].tails[1].disconnected);
   await page.evaluate(() => window.cinemaAmbienceFixture.ambience.dispose());
   await page.waitForFunction(() => window.cinemaAmbienceFixture.contexts[0].state === 'closed');
