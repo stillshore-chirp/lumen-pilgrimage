@@ -207,7 +207,7 @@ function observeAudio() {
   };
 }
 
-function installSimulatedXR() {
+function installSimulatedXR(layerType = 'base') {
   const fixture = {
     requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
     head: { x: 0, y: 1.65, z: 0, yaw: 0 }, eyePoses: {},
@@ -261,14 +261,41 @@ function installSimulatedXR() {
     if (this.canvas.width === 960 && this.canvas.height === 104) fixture.hint = text;
     return fillText.call(this, text, x, y, ...rest);
   };
-  Object.defineProperty(window, 'XRWebGLBinding', { value: undefined, configurable: true });
+  const framebufferWidth = 640;
+  const framebufferHeight = 480;
+  const eyeViewport = ({ eye }) => ({ x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 });
+  const Binding = layerType === 'projection' ? class {
+    constructor(_session, context) {
+      this.context = context;
+    }
+    createProjectionLayer({ scaleFactor, colorFormat, depthFormat }) {
+      const context = this.context;
+      const texture = format => {
+        const result = context.createTexture();
+        context.bindTexture(context.TEXTURE_2D, result);
+        context.texStorage2D(context.TEXTURE_2D, 1, format, framebufferWidth, framebufferHeight);
+        context.bindTexture(context.TEXTURE_2D, null);
+        return result;
+      };
+      this.colorTexture = texture(colorFormat);
+      this.depthStencilTexture = texture(depthFormat);
+      fixture.scaleFactor = scaleFactor;
+      return { textureWidth: framebufferWidth, textureHeight: framebufferHeight, ignoreDepthValues: true, fixedFoveation: 1 };
+    }
+    getViewSubImage(_layer, view) {
+      return { colorTexture: this.colorTexture, depthStencilTexture: this.depthStencilTexture, viewport: eyeViewport(view) };
+    }
+  } : undefined;
+  Object.defineProperty(window, 'XRWebGLBinding', { value: Binding, configurable: true });
   window.XRWebGLLayer = class {
     framebuffer = null;
-    framebufferWidth = 640;
-    framebufferHeight = 480;
-    getViewport({ eye }) {
-      return { x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 };
+    framebufferWidth = framebufferWidth;
+    framebufferHeight = framebufferHeight;
+    fixedFoveation = 1;
+    constructor(_session, _context, options) {
+      fixture.scaleFactor = options.framebufferScaleFactor;
     }
+    getViewport(view) { return eyeViewport(view); }
   };
 
   const projectionMatrix = new Float32Array([
@@ -306,7 +333,9 @@ function installSimulatedXR() {
     inputSources = [controller('left'), controller('right')];
     visibilityState = 'visible';
     async requestReferenceSpace() { return new EventTarget(); }
-    updateRenderState() {}
+    updateRenderState({ baseLayer, layers }) {
+      fixture.layer = baseLayer ?? layers?.[0] ?? fixture.layer;
+    }
     makeFrame() {
       return { session: this, getViewerPose: viewPose, getPose: space => space };
     }
@@ -1540,6 +1569,51 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
+  }
+});
+
+test('XR quality adjusts both layer types and retains the selected mode on desktop return', { timeout }, async () => {
+  for (const layer of ['projection', 'base']) {
+    const page = await newPage();
+    try {
+      await page.addInitScript(installSimulatedXR, layer);
+      await page.goto(new URL('?world=residence&place=living-theater&time=night', url).href);
+      await button(page, 'VRを開始').click();
+      await page.waitForFunction(() => window.xrFixture.eyePoses[320] && window.xrFixture.xrDraws > 0);
+      const foveation = () => page.evaluate(() => ({
+        value: window.xrFixture.layer.fixedFoveation, scale: window.xrFixture.scaleFactor,
+      }));
+      assert.deepEqual(await foveation(), { value: .5, scale: 1 }, layer);
+      const change = input => page.evaluate(value => window.xrFixture.mutate(value), input);
+      await change({ side: 'left', button: 4, pressed: true });
+      await change({ side: 'left', button: 4, pressed: false });
+      const next = async expected => {
+        await change({ side: 'right', axes: [0, 1] });
+        await page.waitForFunction(label => window.xrFixture.selection?.startsWith(label), expected);
+        await change({ side: 'right', axes: [0, 0] });
+      };
+      for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '設定']) await next(label);
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.menuTitle === '設定');
+      for (const label of ['歩行音', '昼', '夜', 'ワールド照明', '描画品質']) await next(label);
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.menuTitle === '描画品質'
+        && window.xrFixture.selection === '軽量（選択中）　周辺の描画負荷を抑える');
+      await next('高品質');
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.selection === '高品質（選択中）　周辺の細部を保つ');
+      assert.deepEqual(await foveation(), { value: .25, scale: 1 }, layer);
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
+      await button(page.locator('.coast-xr-entry'), 'VRを終了').click();
+      await page.waitForFunction(draws => window.xrFixture.ends === 1 && window.xrFixture.desktopDraws > draws, desktopDraws);
+      await page.waitForFunction(width => document.querySelector('canvas.coast-view').width === width, viewport.width);
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      await button(page, '軽量').click();
+      await page.waitForFunction(width => document.querySelector('canvas.coast-view').width === width, Math.floor(viewport.width * .8));
+    } finally {
+      await page.close();
+    }
   }
 });
 

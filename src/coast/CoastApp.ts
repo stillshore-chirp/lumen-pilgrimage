@@ -23,9 +23,13 @@ import { bindWorldLightingControl, worldLightingChoices, type WorldLightingContr
 import './coast.css';
 
 const qualitySettings = {
-  light: 0.80,
-  high: 1.75,
-} satisfies Record<CoastQuality, number>;
+  light: { desktopResolution: 0.80, foveation: 0.50 },
+  high: { desktopResolution: 1.75, foveation: 0.25 },
+} satisfies Record<CoastQuality, { desktopResolution: number; foveation: number }>;
+const xrQualityChoices = [
+  ['light', '軽量', '周辺の描画負荷を抑える'],
+  ['high', '高品質', '周辺の細部を保つ'],
+] as const satisfies readonly [CoastQuality, string, string][];
 const FOV_STORAGE_KEY = 'lumen-pilgrimage:fov';
 
 const movementLabels: Record<CoastMovement, string> = {
@@ -102,6 +106,7 @@ export class CoastApp {
   private readonly travel: ReturnType<typeof createCoastTravelPanel>;
   private readonly travelDialog: HTMLDialogElement;
   private readonly resize: ResizeObserver;
+  private readonly applyQuality: (quality: CoastQuality) => void;
   private readonly interaction?: ExplorationInteraction;
   private readonly interactionButton?: HTMLButtonElement;
   private readonly residencePanel?: ReturnType<typeof createResidenceControlPanel>;
@@ -147,7 +152,6 @@ export class CoastApp {
     const destination = findDestination(this.worldId, initialRoute.placeId);
     this.world.setTimeOfDay(this.time);
     this.audio.setTimeOfDay?.(this.time);
-    this.world.setQuality(this.quality);
     this.canvasLabel = residence || cinema ? `${description.label}の探索画面`
       : overlook ? '丘陵の展望デッキの探索画面' : '海岸、森、湖と山の探索画面';
     const canvas = this.renderer.domElement;
@@ -312,7 +316,7 @@ export class CoastApp {
       ui.append(this.interactionButton);
     }
     this.syncLightingControl = bindWorldLightingControl(ui.querySelector<HTMLElement>('.coast-world-lighting')!, this.world);
-    this.bindQuality(ui);
+    this.applyQuality = this.bindQuality(ui);
     this.bindFieldOfView(ui);
     this.resize = new ResizeObserver(() => this.resizeViewport());
   }
@@ -351,7 +355,7 @@ export class CoastApp {
         ? this.travelStatus.textContent ?? '' : '',
     });
     this.resize.observe(this.mount);
-    this.resizeViewport();
+    this.applyQuality(previous?.quality ?? this.quality);
     if (previous) {
       this.monitor = previous.monitor;
       this.monitor?.rebind(this.monitorBinding, this.world.theater ?? null);
@@ -487,6 +491,16 @@ export class CoastApp {
             }
           },
         },
+        { label: '設定に戻る', invoke: () => this.openXRSettings() },
+      ]),
+    });
+    items.push({
+      label: '描画品質',
+      invoke: () => this.xr.openMenu('描画品質', [
+        ...xrQualityChoices.map(([quality, label, detail]) => ({
+          label: () => `${label}${this.quality === quality ? '（選択中）' : ''}　${detail}`,
+          invoke: () => this.applyQuality(quality),
+        })),
         { label: '設定に戻る', invoke: () => this.openXRSettings() },
       ]),
     });
@@ -693,7 +707,7 @@ export class CoastApp {
     return binding;
   }
 
-  private bindQuality(ui: HTMLElement): void {
+  private bindQuality(ui: HTMLElement): (quality: CoastQuality) => void {
     const light = ui.querySelector<HTMLButtonElement>('.coast-light')!;
     const high = ui.querySelector<HTMLButtonElement>('.coast-high')!;
     if (this.worldId === 'residence') {
@@ -707,12 +721,14 @@ export class CoastApp {
     const apply = (quality: CoastQuality) => {
       this.quality = quality;
       this.world.setQuality(quality);
+      this.renderer.xr.setFoveation(qualitySettings[quality].foveation);
       this.resizeViewport();
       light.setAttribute('aria-pressed', String(quality === 'light'));
       high.setAttribute('aria-pressed', String(quality === 'high'));
     };
-    light.addEventListener('click', () => apply('light'));
-    high.addEventListener('click', () => apply('high'));
+    light.addEventListener('click', () => apply('light'), { signal: this.events.signal });
+    high.addEventListener('click', () => apply('high'), { signal: this.events.signal });
+    return apply;
   }
 
   private bindFieldOfView(ui: HTMLElement): void {
@@ -756,7 +772,7 @@ export class CoastApp {
     if (this.renderer.xr.isPresenting) return;
     const width = Math.max(1, this.mount.clientWidth);
     const height = Math.max(1, this.mount.clientHeight);
-    const resolution = qualitySettings[this.quality];
+    const { desktopResolution: resolution } = qualitySettings[this.quality];
     const pixelRatio = this.quality === 'light'
       ? Math.min(window.devicePixelRatio, 1) * resolution
       : Math.min(window.devicePixelRatio, resolution);
