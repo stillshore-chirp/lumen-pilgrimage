@@ -4,6 +4,7 @@ import {
   SRGBTransfer, UnsignedByteType, Vector2, Vector3, VideoTexture, WebGLRenderTarget,
   type Group, type Texture, type WebGLRenderer,
 } from 'three';
+import { CINEMA_WALL_FOOTLIGHTS } from './cinemaFixtureLighting';
 import { CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_SCREEN, CINEMA_TREADS } from './cinemaLayout';
 import {
   CINEMA_LIGHT_META, CINEMA_REFERENCE_WHITE, CINEMA_ROOM_RETURN,
@@ -36,8 +37,12 @@ function makeTreadProfile(): DataTexture {
     while (tread + 1 < CINEMA_TREADS.length && CINEMA_TREADS[tread + 1].z <= z) tread += 1;
     const { z: nose, y, rise } = CINEMA_TREADS[tread];
     data[4 * index] = Math.round(y / maxFloorY * 255);
-    data[4 * index + 1] = rise > 0 ? Math.round(Math.exp(-4.6 * (z - nose)) * 255) : 0;
-    data[4 * index + 3] = 255;
+    const next = CINEMA_TREADS[tread + 1];
+    data[4 * index + 1] = rise > 0 ? Math.round(Math.exp(-13 * (z - nose)) * 255) : 0;
+    data[4 * index + 2] = Math.round(255 * CINEMA_WALL_FOOTLIGHTS.reduce((level, light) => (
+      Math.max(level, Math.exp(-((z - light.z) ** 2) / 0.38))
+    ), 0));
+    data[4 * index + 3] = next ? Math.round(Math.exp(-4.8 * (next.z - z)) * 255) : 0;
   }
   const texture = new DataTexture(data, width, 1);
   texture.name = 'Cinema tread elevations and shielded step light';
@@ -341,10 +346,12 @@ export function createCinemaLighting(scene: Scene, auditorium: Group) {
         transitionDuration = Math.min(5, 2 + 0.45 * extraStops);
       } else if (next === 'screening' && transitionFrom.y === 0 && transitionFrom.z === 0) {
         transitionDuration = 8;
-      } else {
+      } else if (next === 'emergency') {
         transitionDuration = 0;
         atlas.cinemaLamps.value.copy(transitionTo);
         applyLamps();
+      } else {
+        transitionDuration = 0.65;
       }
     },
     update(time: number, _camera: Camera): void {

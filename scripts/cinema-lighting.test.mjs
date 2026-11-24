@@ -13,7 +13,7 @@ const hooks = registerHooks({
 const { createCinemaLighting } = await import('../src/coast/world/cinema/cinemaLighting.ts');
 const {
   bakeCinemaLightTransport, cinemaLightQuality, cinemaPictureOpening, cinemaProjectionFalloff, cinemaScreenLevels,
-  CINEMA_LIGHT_BOUNCE, CINEMA_ROOM_RETURN,
+  CINEMA_LIGHT_BOUNCE, CINEMA_LIGHT_CROWN, CINEMA_ROOM_RETURN,
 } = await import('../src/coast/world/cinema/cinemaLightTransport.ts');
 hooks.deregister();
 
@@ -69,6 +69,24 @@ test('equal APL on opposite sides reverses the room wash at both qualities', () 
   }
 });
 
+test('a bright frame falls off through the auditorium at each quality', () => {
+  for (const quality of ['light', 'high']) {
+    const { columns, rows, probeColumns, probeRows } = cinemaLightQuality[quality];
+    const transport = bakeCinemaLightTransport(quality);
+    const whiteField = index => cinemaProjectionFalloff(
+      (index % columns + 0.5) / columns, (Math.floor(index / columns) + 0.5) / rows,
+    );
+    const wall = column => sum(probe(transport, quality, 2, column, probeRows >> 1), whiteField);
+    const floor = row => sum(probe(transport, quality, 0, probeColumns >> 1, row), whiteField);
+    const seat = (page, row) => sum(probe(transport, quality, page, probeColumns >> 1, row), whiteField);
+    assert.ok(wall(1) > wall(probeColumns - 1) * 5, `${quality} sidewall falloff`);
+    assert.ok(floor(1) > floor(probeRows - 1) * 25, `${quality} floor falloff`);
+    const row = probeRows >> 1;
+    assert.ok(seat(1, row) > seat(CINEMA_LIGHT_CROWN, row) * 1.65, `${quality} grazing seat light`);
+    assert.ok(seat(CINEMA_LIGHT_CROWN, row) > 0, `${quality} seat crown receives its own light`);
+  }
+});
+
 test('raised rear seat receivers still pick up shadows from preceding seat backs', () => {
   const quality = 'high';
   const { columns, rows, probeColumns, probeRows } = cinemaLightQuality[quality];
@@ -109,7 +127,9 @@ test('lamp ramps, display resumption and emergency keep the picture state consis
   const lights = createCinemaLighting(scene, room);
   const shader = { uniforms: {}, fragmentShader: '', vertexShader: '' };
   lights.screen.material.onBeforeCompile(shader);
-  const { cinemaLive, cinemaSource, cinemaLamps, cinemaLightPrev, cinemaLightNext, cinemaProjectorWhite } = shader.uniforms;
+  const {
+    cinemaLive, cinemaSource, cinemaLamps, cinemaLightPrev, cinemaLightNext, cinemaLightBlend, cinemaProjectorWhite,
+  } = shader.uniforms;
   const frame = new Texture();
   const permanentColor = permanent.color.clone();
   const projectionWhite = cinemaProjectorWhite.value;
@@ -147,6 +167,17 @@ test('lamp ramps, display resumption and emergency keep the picture state consis
     lights.prepareRender(renderer, camera);
     assert.equal(renders, 4);
     assert.equal(cinemaLightPrev.value, cinemaLightNext.value);
+    lights.update(0.08, camera);
+    lights.prepareRender(renderer, camera);
+    assert.equal(cinemaLightBlend.value, 0, 'the room still shows the preceding frame on the first sampled update');
+    assert.notEqual(cinemaLightPrev.value, cinemaLightNext.value);
+    lights.update(0.093, camera);
+    lights.prepareRender(renderer, camera);
+    assert.ok(cinemaLightBlend.value > 0.25 && cinemaLightBlend.value < 0.6);
+    lights.update(0.12, camera);
+    lights.prepareRender(renderer, camera);
+    assert.equal(cinemaLightBlend.value, 1, 'the new room field settles within the sampling interval');
+    lights.update(0, camera);
 
     lights.setMode('screening');
     lights.update(4, camera);
@@ -159,7 +190,15 @@ test('lamp ramps, display resumption and emergency keep the picture state consis
     assert.equal(cinemaLive.value, 0);
     assert.ok(cinemaLamps.value.z > 0);
     lights.prepareRender(renderer, camera);
-    assert.equal(renders, 4);
+    assert.equal(renders, 6);
+    lights.setMode('service');
+    assert.ok(cinemaLamps.value.z > 0 && cinemaLamps.value.y === 0);
+    lights.update(8.325, camera);
+    assert.ok(Math.abs(cinemaLamps.value.y - 0.56) < 1e-9);
+    assert.ok(Math.abs(cinemaLamps.value.z - 0.48) < 1e-9);
+    assert.equal(cinemaLive.value, 0);
+    lights.update(8.65, camera);
+    assert.ok(cinemaLamps.value.y > 1.11 && cinemaLamps.value.z < 1e-9);
 
     lights.setMode('arrival');
     lights.prepareRender(renderer, camera);

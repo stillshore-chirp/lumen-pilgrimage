@@ -1,4 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute, Mesh, MeshBasicMaterial, type Group } from 'three';
+import { CINEMA_STEP_MARKER_INSET } from './cinemaFixtureLighting';
 import { cinemaBoxes, type CinemaBox, type CinemaFinishes } from './cinemaFinishes';
 import {
   CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_PLACES, CINEMA_SEAT_BANKS,
@@ -68,7 +69,7 @@ export function createCinemaFloor(group: Group, finish: CinemaFinishes) {
       const { x, width } = aisle;
       nosings.push([x, y - 0.012, z - 0.004, width, 0.025, 0.064]);
       for (const side of [-1, 1]) {
-        const marker = x + side * (width * 0.5 - 0.29);
+        const marker = x + side * (width * 0.5 - CINEMA_STEP_MARKER_INSET);
         nosings.push([marker, y - 0.045, z - 0.024, 0.34, 0.061, 0.035]);
         lenses.push([marker, y - 0.060, z - 0.042, 0.28, 0.012, 0.008]);
         edges.push([marker, y + 0.002, z + 0.012, 0.19, 0.005, 0.012]);

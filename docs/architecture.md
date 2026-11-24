@@ -82,7 +82,8 @@ flowchart LR
 ## 映画館シアター
 
 - 幕面を `z=0`、客席方向を正とする。室内40 × 57 × 22 m、幕の幅30 m、高さ16.875 m、中心高9.8 m。段床・座席・扉と、照明の受光面・音響の経路は配置データを共有する。588席のうち8席が同伴席で、車いすスペース8か所を含む収容人数は596。座席の背は歩行を止め、縦通路では各列の段を歩行用の支持面でつなぐ。車いす席の前後では、前列の頭上に幕の下端が見えるよう段数を増やし、横通路から扉までは同じ高さを通す。 [平面と断面 PDF](cinema/cinema-floor-plan.pdf) · [配置](../src/coast/world/cinema/cinemaLayout.ts) · [歩行判定](../src/coast/world/cinema/cinemaNavigation.ts)
-- 受信した映像テクスチャを固定画高で投影し、線形光量から映写系の散乱と室内の戻り光を求める。幕から壁・床へ届く光の分布はGPUで更新する。軽量と高品質で解像度と更新頻度が異なる。露出を固定し、暗順応は入退場時の場内灯の遷移へ適用する。段鼻・誘導灯は別系統で点灯する。 [照明](../src/coast/world/cinema/cinemaLighting.ts) · [光の伝達](../src/coast/world/cinema/cinemaLightTransport.ts)
+- 受信した映像を元の縦横比のまま幕に投影し、幕を色が場所ごとに変わる拡散面として扱う。幕の各区画から床・壁・天井・座席へ届く光は、受光点の距離と向きから求める。座席の前面と上端は別に計算し、壁のリブと手すりには面の向きに応じた弱い反射を加える。軽量は16×7区画と受光面ごとに4×5点で毎秒最大15回、高品質は32×14区画と7×9点で最大30回更新し、座席の遮蔽と幕への位置別の戻り光も計算する。 [照明](../src/coast/world/cinema/cinemaLighting.ts) · [光の伝達](../src/coast/world/cinema/cinemaLightTransport.ts) · [面光源の放射計算](https://pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Working_with_Radiometric_Integrals)
+- 入場時は壁上部の間接灯を起点に壁面を照らし、暗転中は段鼻・壁下の足元灯と出口誘導灯が点灯する。非常点検では映写を停止し、扉上の灯具から出入口と通路を白く照らす。露出は固定し、明るさの履歴は入退場時の照明切替に使う。技術設計PDFの光の分布図と受光点数は初版の記録で、現行の設定は実装に記載する。 [灯具の位置](../src/coast/world/cinema/cinemaFixtureLighting.ts) · [光と音の技術設計 PDF・第3–4ページ](cinema/cinema-light-sound-design.pdf) · [実館の迷光とコントラストの研究](https://journal.smpte.org/periodicals/SMPTE%20Motion%20Imaging%20Journal/125/4/17/)
 - 共有音から直接音、幕の透過、鏡像法の反射、帯域別の後期残響を合成する。直接音には座席までの距離に応じたゲインを使い、反射に経路差の遅れを加える。高品質は頭部伝達関数と最大12本、軽量は等電力パンと最大4本の初期反射を使う。足音、空調、試聴の音声は共有音と独立する。 [音響](../src/coast/world/cinema/cinemaPlayback.ts) · [光と音の技術設計 PDF](cinema/cinema-light-sound-design.pdf)
 - 清掃・非常点検では現行の投影と共有音の出力を一時停止する。出口扉・表示灯は閉じた館内景観として保ち、館外への移動はファストトラベルで行う。実施設計に必要な屋外避難・廊下以降の設備は、基本設計PDFに建物側の条件として記録した。
 - 同じシアター内で座席を変えると、デスクトップとWebXRで全画面を短時間暗くして着地点を変える。WebXRは座位と頭の向きを追跡し、スクリーンの投影を停止した状態で入っても停止を維持する。 [座席移動](../src/coast/world/cinema/cinemaSeatTransition.ts)
