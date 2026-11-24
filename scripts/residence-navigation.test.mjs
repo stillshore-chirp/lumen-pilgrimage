@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { after, test } from 'node:test';
-import { Raycaster, Vector3 } from 'three';
+import { ArrayCamera, Group, PerspectiveCamera, Raycaster, Scene, Vector3 } from 'three';
 
 const src = new URL('../src/', import.meta.url).href;
 const hooks = registerHooks({
@@ -11,6 +11,7 @@ const hooks = registerHooks({
   },
 });
 const { EXPLORATION_WORLDS, findDestination } = await import('../src/coast/coastDestinations.ts');
+const { bindResidenceCityVisibility } = await import('../src/coast/world/residence/residenceCityVisibility.ts');
 const { createResidenceDoors } = await import('../src/coast/world/residence/residenceDoors.ts');
 const { createResidenceNavigation } = await import('../src/coast/world/residence/residenceNavigation.ts');
 const { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS,
@@ -72,6 +73,69 @@ function reachableFrom(nav, e, n) {
 
   return (east, north) => seen.has(grid(east, north));
 }
+
+function cityRenderProbe() {
+  const scene = new Scene();
+  const city = new Group();
+  scene.add(city);
+  bindResidenceCityVisibility(scene, city);
+  const renderer = { xr: { enabled: true, isPresenting: true } };
+  function visibleDuring(camera) {
+    scene.onBeforeRender(renderer, scene, camera, null);
+    const visible = city.visible;
+    scene.onAfterRender(renderer, scene, camera);
+    return visible;
+  }
+  return { city, renderer, visibleDuring };
+}
+
+function residenceEye(x, z, yaw, pitch, lensShift = 0) {
+  const eye = new PerspectiveCamera(86, 1, .08, 43500);
+  eye.position.set(x, 1.65, z);
+  eye.rotation.set(pitch, yaw, 0, 'YXZ');
+  eye.projectionMatrix.elements[8] += lensShift;
+  eye.projectionMatrixInverse.copy(eye.projectionMatrix).invert();
+  eye.updateMatrixWorld();
+  return eye;
+}
+
+test('immersive city draws when either eye can see an opening and restores visibility after rendering', () => {
+  const { city, renderer, visibleDuring } = cityRenderProbe();
+  const kitchenYaw = Math.atan2(spawn.x - 15.2, 8.45 + spawn.z);
+  const left = residenceEye(spawn.x - .033, spawn.z, kitchenYaw, -.22, -.09);
+  const right = residenceEye(spawn.x + .033, spawn.z, kitchenYaw, -.22);
+  const headset = new ArrayCamera([left, right]);
+  assert.equal(visibleDuring(headset), false, 'The fixed bedroom walls hide the far glazing');
+  assert.equal(city.visible, true, 'Visibility is restored after the immersive scene render');
+
+  const fartherRight = residenceEye(spawn.x + .033, spawn.z, kitchenYaw, -.22, .22);
+  assert.equal(visibleDuring(new ArrayCamera([fartherRight])), true, 'The shifted view reaches an opening');
+  assert.equal(visibleDuring(new ArrayCamera([left, fartherRight])), true, 'An opening seen by one eye keeps the city');
+  assert.equal(visibleDuring(new ArrayCamera([residenceEye(spawn.x, spawn.z, 0, -.29)])),
+    true, 'The east glazing stays visible beside the TV');
+  assert.equal(visibleDuring(new ArrayCamera([residenceEye(spawn.x, spawn.z, spawn.yaw, spawn.pitch)])),
+    true, 'The south glazing keeps its view');
+
+  renderer.xr.isPresenting = false;
+  assert.equal(visibleDuring(left), true, 'Desktop rendering keeps the existing scene');
+  city.visible = false;
+  assert.equal(visibleDuring(left), false, 'Desktop reflection passes may hide the city themselves');
+  assert.equal(city.visible, false);
+});
+
+test('city culling leaves open doorways and views near the facade or on the balcony available', () => {
+  const { visibleDuring } = cityRenderProbe();
+  const headset = new ArrayCamera();
+  const visibleAt = (x, z, yaw, pitch) => {
+    headset.cameras = [residenceEye(x, z, yaw, pitch)];
+    return visibleDuring(headset);
+  };
+  assert.equal(visibleAt(15.2, -8.45, 0, -.2), false, 'The kitchen view faces opaque walls');
+  assert.equal(visibleAt(10.05, -5.85, Math.PI, 0), true, 'The study door can expose a window');
+  assert.equal(visibleAt(19.7, -13.58, -Math.PI / 2, -.1), true, 'The sliding balcony door exposes the outside');
+  assert.equal(visibleAt(20.66, -13.58, Math.PI / 2, -.1), true, 'The near plane can cross the balcony threshold');
+  assert.equal(visibleAt(21.65, -13.58, Math.PI / 2, -.1), true, 'The balcony remains outside the culling bounds');
+});
 
 test('dwelling follows the drawing dimensions and all travel poses have continuous level support', () => {
   const dwelling = RESIDENCE_ROOMS.filter(room => room.id !== 'C0' && room.id !== 'C1');
