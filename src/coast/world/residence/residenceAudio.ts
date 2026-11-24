@@ -121,6 +121,10 @@ export class ResidenceAudio {
     readonly appliances?: readonly ResidenceApplianceAudioSource[];
   }) {}
 
+  isOn(): boolean {
+    return Boolean(this.graph && this.context?.state === 'running' && !this.muted);
+  }
+
   start(): Promise<void> {
     if (this.request.signal.aborted) return Promise.reject(new Error('The residence audio has been disposed'));
     if (this.pendingStart) return this.pendingStart;

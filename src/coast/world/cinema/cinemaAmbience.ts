@@ -102,6 +102,10 @@ export class CinemaAmbience {
   private preview?: PreviewGraph;
   private lastPreview?: Sound;
 
+  isOn(): boolean {
+    return Boolean(this.graph && this.context?.state === 'running' && !this.muted);
+  }
+
   start(): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('CinemaAmbience has been disposed'));
     if (this.pendingStart) return this.pendingStart;

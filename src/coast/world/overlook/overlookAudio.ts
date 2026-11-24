@@ -84,6 +84,10 @@ export class OverlookAudio {
       .filter(({ sections, weight }) => sections.length && weight > 0);
   }
 
+  isOn(): boolean {
+    return Boolean(this.master && this.context?.state === 'running' && !this.muted);
+  }
+
   start(): Promise<void> {
     if (this.request.signal.aborted) return Promise.reject(new Error('OverlookAudio has been disposed'));
     if (this.pendingStart) return this.pendingStart;

@@ -806,8 +806,8 @@ test('closing the fusuma reduces street treble and adjoining-room reverb at a fi
   await page.evaluate(() => window.residenceProbe.relocate({ x: 6.49, z: -5.62, yaw: Math.PI, pitch: 0 }));
   const close = button(page, '茶室の襖を閉める');
   await close.waitFor();
-  await button(page, '環境音を開始').click();
-  await button(page, '環境音を再開').waitFor();
+  await button(page, '環境音をオン').click();
+  await button(page, '環境音をオフ').waitFor();
   await page.waitForFunction(() => {
     const probe = window.residenceProbe;
     return probe.roomSends[5]?.gain.value > .015 && probe.lowpassCutoffs().length >= 3
@@ -845,8 +845,8 @@ test('the primary bedroom slider gates balcony access and the glass rail stops w
   await hold(page, 'd', () => page.waitForFunction(() => window.residenceProbe.camera.z > -13.67));
   await open.waitFor();
 
-  await button(page, '環境音を開始').click();
-  await button(page, '環境音を再開').waitFor();
+  await button(page, '環境音をオン').click();
+  await button(page, '環境音をオフ').waitFor();
   await page.waitForFunction(() => {
     const peak = window.residenceProbe.audioPeak();
     return peak > 0.0001 && peak < 0.98;
@@ -971,8 +971,8 @@ test('nearby appliances open individual controls and start localized audio', { t
   await page.waitForFunction(() => window.residenceProbe.relocate);
   await page.evaluate(() => window.residenceProbe.relocate({ x: 13.48, z: -8.99, yaw: 0, pitch: 0 }));
   await button(page, '電子レンジを操作').waitFor();
-  await button(page, '環境音を開始').click();
-  await button(page, '環境音を再開').waitFor();
+  await button(page, '環境音をオン').click();
+  await button(page, '環境音をオフ').waitFor();
   const initialLoops = await page.evaluate(() => window.residenceProbe.loopStarts);
   const atStart = await camera(page);
   await page.keyboard.press('e');
@@ -1129,7 +1129,7 @@ test('the foyer pocket door closes locally while the gallery, living room and ki
   await relocate({ ...foyer, z: -14.75, pitch: -.11 });
   await capture(page, 'foyer-door-open', landscape);
   await relocate(foyer);
-  await button(page, '環境音を開始').click();
+  await button(page, '環境音をオン').click();
   await page.evaluate(() => document.activeElement.blur());
   await page.waitForFunction(() => window.foyerTrafficGains().some(gain => gain > .0002));
   await moreMovementFrames(page);
