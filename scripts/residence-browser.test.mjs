@@ -851,6 +851,16 @@ test('the primary bedroom slider gates balcony access and the glass rail stops w
     const peak = window.residenceProbe.audioPeak();
     return peak > 0.0001 && peak < 0.98;
   });
+  const soundDetails = page.locator('.coast-sound-details > summary');
+  await soundDetails.click();
+  const traffic = page.locator('#coast-sound-traffic');
+  await traffic.fill('0');
+  await page.waitForFunction(() => window.residenceProbe.audioPeak() < .000001);
+  await traffic.fill('100');
+  await page.waitForFunction(() => window.residenceProbe.audioPeak() > .0001);
+  assert.equal(await page.evaluate(() => window.residenceProbe.contexts), 1);
+  await soundDetails.click();
+  await page.evaluate(() => document.activeElement.blur());
 
   async function walkEastTo(x) {
     await page.waitForFunction(limit => window.residenceProbe.camera.x > limit, x);

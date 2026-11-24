@@ -1,8 +1,15 @@
+import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } from './explorationSound';
 import { groundEyeHeight, type CoastMovement } from './CoastControls';
 import { coastBedrock, coastRandom, coastTrailDistance, groundHeight, groundSlope, type CoastPoint } from './terrain';
 
 type Contact = 'sand' | 'gravel' | 'leaves' | 'wade' | 'stroke' | 'bubbles' | 'splash';
-type ContactVoice = { panner: PannerNode; gain: GainNode; source?: AudioBufferSourceNode; next: number };
+type ContactSound = 'water' | 'footsteps';
+type ContactVoice = {
+  panner: PannerNode;
+  gain: GainNode;
+  next: number;
+  hit?: { source: AudioBufferSourceNode; sound: ContactSound; strength: number };
+};
 
 const CONTACTS: Record<Contact, {
   duration: number; body: number; grit: number; color: number; decay: number; gain: number;
@@ -16,9 +23,13 @@ const CONTACTS: Record<Contact, {
   splash: { duration: 0.61, body: 0.72, grit: 0.97, color: 3_750, decay: 10, gain: 0.44 },
 };
 
+function contactSound(contact: Contact): ContactSound {
+  return contact === 'sand' || contact === 'gravel' || contact === 'leaves' ? 'footsteps' : 'water';
+}
+
 function contactBuffer(context: AudioContext, contact: Contact, seed: number): AudioBuffer {
   const { duration, body, grit, color, decay } = CONTACTS[contact];
-  const wet = contact === 'wade' || contact === 'stroke' || contact === 'bubbles' || contact === 'splash';
+  const wet = contactSound(contact) === 'water';
   const random = coastRandom(seed);
   const rate = 24_000;
   const buffer = context.createBuffer(1, Math.ceil(duration * rate), rate);
@@ -54,14 +65,17 @@ function contactBuffer(context: AudioContext, contact: Contact, seed: number): A
 
 /** Short contacts follow actual displacement and stay at their world position through each hit. */
 export class CoastFoley {
+  private readonly context: AudioContext;
   private readonly buffers = new Map<Contact, AudioBuffer>();
   private readonly voices: ContactVoice[] = [];
   private readonly send: GainNode;
   private previous: (CoastPoint & { movement: CoastMovement; elapsed: number }) | undefined;
   private traveled = 0;
   private side = 1;
+  private mix = DEFAULT_EXPLORATION_MIX;
 
-  constructor(private readonly context: AudioContext, output: AudioNode, reflections: AudioNode) {
+  constructor(context: AudioContext, output: AudioNode, reflections: AudioNode) {
+    this.context = context;
     this.send = context.createGain();
     this.send.gain.value = 0.35;
     this.send.connect(reflections);
@@ -75,6 +89,17 @@ export class CoastFoley {
       gain.connect(panner).connect(output);
       gain.connect(this.send);
       this.voices.push({ gain, panner, next: 0 });
+    }
+  }
+
+  setMix(mix: ExplorationMix): void {
+    this.mix = mix;
+    const now = this.context.currentTime;
+    for (const voice of this.voices) {
+      if (!voice.hit) continue;
+      const { sound, strength } = voice.hit;
+      const target = strength * explorationSoundGain(mix, sound);
+      voice.gain.gain.setTargetAtTime(target, now, 0.035);
     }
   }
 
@@ -130,10 +155,12 @@ export class CoastFoley {
 
   dispose(): void {
     for (const voice of this.voices) {
-      if (voice.source) {
-        voice.source.onended = null;
-        voice.source.stop();
-        voice.source.disconnect();
+      if (voice.hit) {
+        const { source } = voice.hit;
+        source.onended = null;
+        source.stop();
+        source.disconnect();
+        voice.hit = undefined;
       }
       voice.panner.disconnect();
       voice.gain.disconnect();
@@ -143,7 +170,10 @@ export class CoastFoley {
   }
 
   private play(contact: Contact, x: number, y: number, z: number, now: number): void {
-    const voice = this.voices.find(candidate => !candidate.source && candidate.next <= now);
+    const sound = contactSound(contact);
+    const channelGain = explorationSoundGain(this.mix, sound);
+    if (channelGain === 0) return;
+    const voice = this.voices.find(candidate => !candidate.hit && candidate.next <= now);
     if (!voice) return;
     let buffer = this.buffers.get(contact);
     if (!buffer) {
@@ -156,13 +186,14 @@ export class CoastFoley {
     voice.panner.positionX.setValueAtTime(x, now);
     voice.panner.positionY.setValueAtTime(y, now);
     voice.panner.positionZ.setValueAtTime(z, now);
-    voice.gain.gain.setValueAtTime(CONTACTS[contact].gain * (0.82 + Math.random() * 0.18), now);
+    const strength = CONTACTS[contact].gain * (0.82 + Math.random() * 0.18);
+    voice.gain.gain.setValueAtTime(strength * channelGain, now);
     source.connect(voice.gain);
-    voice.source = source;
+    voice.hit = { source, sound, strength };
     voice.next = now + buffer.duration / source.playbackRate.value + 0.04;
     source.onended = () => {
       source.disconnect();
-      voice.source = undefined;
+      voice.hit = undefined;
     };
     source.start(now);
   }
