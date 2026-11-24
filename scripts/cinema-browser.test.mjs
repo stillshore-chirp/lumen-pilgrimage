@@ -82,14 +82,14 @@ function observeCinema(captureScreenshots) {
 
 function button(page, name) { return page.getByRole('button', { name, exact: true }); }
 
-async function openCinema(t) {
+async function openCinema(t, captureScreenshots = Boolean(output)) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   t.after(() => page.context().close());
   page.setDefaultTimeout(15_000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.addInitScript(observeCinema, Boolean(output));
+  await page.addInitScript(observeCinema, captureScreenshots);
   await page.goto(`${origin}/?world=cinema&time=night`);
   await page.getByRole('heading', { name: '映画館シアター（大）' }).waitFor();
   await page.waitForFunction(() => document.hasFocus() && window.cinemaProbe.position);
@@ -114,6 +114,39 @@ async function screenshot(page, name) {
   if (!output) return;
   await page.waitForFunction(() => window.cinemaProbe.darkness === 0);
   await page.screenshot({ path: join(output, `cinema-${name}.png`) });
+}
+
+async function sampleRearSeatLighting(page, quality) {
+  await page.waitForFunction(() => window.cinemaProbe.darkness === 0);
+  const frame = await page.screenshot({
+    path: output ? join(output, `cinema-rear-hidden-${quality}.png`) : undefined,
+    style: '.coast-ui { visibility: hidden !important }',
+  });
+  return page.evaluate(async encoded => {
+    const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    function peak(x, y, width, height, measure) {
+      const { data } = context.getImageData(x, y, width, height);
+      let maximum = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        maximum = Math.max(maximum, measure(data[i], data[i + 1], data[i + 2]));
+      }
+      return maximum;
+    }
+    const luma = (red, green, blue) => 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    return {
+      ceiling: peak(35, 25, 1350, 145, luma),
+      seats: peak(70, 716, 850, 170, luma),
+      exitSign: peak(1190, 580, 25, 38, (red, green) => green - red),
+      tread: peak(1253, 724, 38, 15, luma),
+    };
+  }, frame.toString('base64'));
 }
 
 test('cinema keeps its exits sealed and uses fast travel to return to the inlet', { timeout }, async t => {
@@ -188,12 +221,29 @@ test('cinema can jump, fly over seat backs and land below the auditorium ceiling
 });
 
 test('house light scenes, preview projection and quality change together through the normal controls', { timeout }, async t => {
-  const { page, errors } = await openCinema(t);
+  const { page, errors } = await openCinema(t, true);
   await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] > .8 && window.cinemaProbe.live === 0);
   await screenshot(page, 'arrival');
+  await button(page, '仮想モニター').click();
+  await button(page, '投影を止める').click();
+  await button(page, 'スクリーンに映す').waitFor();
+  await button(page, '仮想モニター').click();
   const dialog = page.getByRole('dialog', { name: '上映設定' });
   await button(page, '上映設定').click();
   await button(dialog, '上映').click();
+  assert.equal(await button(dialog, '試映を再生').isEnabled(), true);
+  await button(dialog, '閉じる').click();
+  await travel(page, '後方側席（R20）', 'rear');
+  await page.waitForFunction(() => Math.abs(window.cinemaProbe.position?.[1] - 8.540) < .01
+    && window.cinemaProbe.lamps?.every(level => level === 0) && window.cinemaProbe.live === 0);
+  for (const quality of ['軽量', '高品質']) {
+    if (quality === '高品質') await button(page, quality).click();
+    const room = await sampleRearSeatLighting(page, quality === '軽量' ? 'light' : 'high');
+    assert.ok(room.ceiling < 1 && room.seats < 1, `${quality}: the upper room receives no unpowered fill`);
+    assert.ok(room.exitSign > 40 && room.tread > 20, `${quality}: the exit sign and tread are visible`);
+  }
+
+  await button(page, '上映設定').click();
   await button(dialog, '試映を再生').click();
   await page.waitForFunction(() => window.cinemaProbe.live === 1);
   await button(page, '環境音をオフ').waitFor();
@@ -201,8 +251,6 @@ test('house light scenes, preview projection and quality change together through
   await button(page, '環境音をオン').waitFor();
   await button(page, '環境音をオン').click();
   await button(page, '環境音をオフ').waitFor();
-  await button(page, '高品質').click();
-  await page.waitForFunction(() => window.cinemaProbe.lamps?.[0] < .15 && window.cinemaProbe.live === 1);
   await screenshot(page, 'screening');
   await button(page, '上映設定').click();
   await button(dialog, '非常点検').click();

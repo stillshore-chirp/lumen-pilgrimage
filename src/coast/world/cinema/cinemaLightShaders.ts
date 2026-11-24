@@ -288,10 +288,9 @@ export const cinemaRoomPars = /* glsl */ `
     float step = atFloor * (marker * (0.10 * tread.y + 0.27 * tread.w) * (0.16 + 0.84 * up)
       + edge * (0.025 * tread.y + 0.059 * tread.w) * up);
     float footlight = tread.z * atFloor * exp(-1.85 * abs(${CINEMA_WALL_LENS_X} - ax)) * (0.24 + 0.76 * up);
-    vec3 stepLight = vec3(1.0, 0.54, 0.26) * (step + 0.42 * footlight);
-    vec3 weakBounce = vec3(0.012, 0.014, 0.017)
-      * (0.54 + 0.46 * max(0.0, n.y)) * (0.62 + 0.38 * smoothstep(0.0, 20.0, p.z));
-    vec3 result = weakBounce + stepLight;
+    // Shielded safety fixtures illuminate the nearby walking surface. The upper room
+    // receives light only from powered house lamps or the projected image.
+    vec3 result = vec3(1.0, 0.54, 0.26) * (step + 0.42 * footlight);
 
     if (cinemaLamps.x > 0.0) {
       float bounce = 0.09 + 0.19 * max(0.0, n.y) + 0.025 * abs(n.x);
