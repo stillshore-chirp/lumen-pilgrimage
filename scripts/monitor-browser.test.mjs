@@ -1518,17 +1518,13 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await choose();
     await waitForMenu('ワールド照明');
     const lights = page.getByRole('group', { name: 'ワールド照明' });
-    await choose();
-    await page.waitForFunction(() => window.xrFixture.selection === '一括点灯（選択中）');
-    assert.equal(await button(lights, '一括点灯').getAttribute('aria-pressed'), 'true');
-    await step(1, '一括消灯');
-    await choose();
-    await page.waitForFunction(() => window.xrFixture.selection === '一括消灯（選択中）');
-    assert.equal(await button(lights, '一括消灯').getAttribute('aria-pressed'), 'true');
-    await step(1, '既定');
-    await choose();
-    await page.waitForFunction(() => window.xrFixture.selection === '既定（選択中）');
-    assert.equal(await button(lights, '既定').getAttribute('aria-pressed'), 'true');
+    const pressed = lights.locator('[aria-pressed="true"]');
+    for (const [index, label] of ['一括点灯', '一括消灯', '既定'].entries()) {
+      if (index > 0) await step(1, label);
+      await choose();
+      await page.waitForFunction(expected => window.xrFixture.selection === `${expected}（選択中）`, label);
+      await button(lights, label).and(pressed).waitFor({ state: 'attached' });
+    }
     await clickController('left', 4);
     await clickController('left', 4);
     await waitForMenu('ファストトラベル');
