@@ -1,23 +1,10 @@
 # エージェントハーネス
 
-Codex の運用は、アプリで有効な設定と指示に従います。この文書は Lumen 固有の文書の更新先と、GitHub での変更記録の入口です。
+Codex の運用は、アプリで有効な設定と指示に従います。この文書は Lumen 固有の作業記録と検査手順を案内します。文書ごとの責務、更新条件、受け入れ基準は[文書の責務と更新基準](documentation-structure.md)を正本とします。
 
 ## 正本と更新先
 
-変更した内容に応じて、表の文書を更新します。複数の項目にまたがる変更では、それぞれの該当箇所を確認してください。
-
-| 変更した内容 | 正本・更新先 |
-| --- | --- |
-| Node.js の要件、依存の導入、開発サーバーの起動 | [README の起動手順](../README.md#起動と操作) |
-| 画面やキー操作、設定の既定値、散策経路、画面と音の挙動 | [探索ガイド](exploration.md) |
-| 起動と状態の引き継ぎ、入力・地形・描画・音響の実装上の契約 | [設計](architecture.md) |
-| 都心70階の住戸の平面・窓・街区の設計 | [住戸の設計仕様](residence/residence-70f-design.md) · [基本設計PDF](residence/residence-70f-drawings.pdf) |
-| 映画館シアター（大）の平面・座席・光と音 | [基本設計 PDF](cinema/cinema-floor-plan.pdf) · [音響・照明設計 PDF](cinema/cinema-light-sound-design.pdf) |
-| 仮想モニターの共有・配置・音声・WebXR | [探索ガイド](exploration.md#仮想モニター) · [設計](architecture.md#仮想モニターの設計) · [実機確認](verification.md#仮想モニターの実機確認) |
-| 検証コマンド、CI の実行範囲、配布ビルドの確認 | [検証と配布ビルド](verification.md) |
-| 採用素材、加工方法、利用・再配布条件 | [素材の出典](exploration.md#素材の出典) から該当するクレジット |
-| リポジトリ固有の開発・検証ルール | [AGENTS.md](../AGENTS.md) |
-| Codex のワークツリー作成時の依存セットアップ | [Codex のローカル環境設定](../.codex/environments/environment.toml) |
+変更した契約に対応する正本を[文書の責務と更新基準](documentation-structure.md)で確認し、該当ページを更新します。複数の契約に影響する場合は、それぞれの正本を確認し、同じ事実を複数ページへ重ねて書かず、入口から正本へリンクします。
 
 ## Issue・PRの記載
 
@@ -35,4 +22,6 @@ Codex の運用は、アプリで有効な設定と指示に従います。こ�
 
 ## 更新と検証
 
-文書や参照を変更したら `npm run validate:harness` を実行します。[静的検査](../scripts/validate-harness.mjs) は現行文書の Markdown インラインリンクと、記載された npm スクリプト名を確認します。[旧ゲームの計画と進捗](../plans/README.md#旧ゲームの履歴) は作成当時の記録です。
+文書や参照を変更したら `npm run validate:harness` を実行します。[静的検査](../scripts/validate-harness.mjs) は `docs/` 内の現行 Markdown 文書、README とリポジトリ指示、`public/**/ATTRIBUTION.md` のクレジット、既存の計画案内、Skill を確認します。相対リンクと Markdown 見出しアンカー、記載された npm スクリプト、README から現行ページやクレジットへ関連文書を経由して到達できること、Skill frontmatter を検査します。
+
+静的検査の成功は、記述内容の正しさ、利用環境の設定、ブラウザーや OS の実機挙動を証明しません。機能変更に対応する検証は[検証と配布ビルド](verification.md)に従って行い、実施できなかった確認とその影響を記録します。[旧ゲームの計画と進捗](../plans/README.md#旧ゲームの履歴)および[作業計画テンプレート](../plans/TEMPLATE.md)は現在の仕様を定める文書に含めません。
