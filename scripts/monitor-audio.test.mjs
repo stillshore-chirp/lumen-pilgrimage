@@ -81,6 +81,8 @@ function setup(t, { spatial = true, blocked = false } = {}) {
     panners = [];
     splitters = [];
     filters = [];
+    compressors = [];
+    waveshapers = [];
 
     constructor() { contexts.push(this); }
 
@@ -121,6 +123,24 @@ function setup(t, { spatial = true, blocked = false } = {}) {
       this.filters.push(filter);
       return filter;
     }
+
+    createDynamicsCompressor() {
+      const compressor = Object.assign(new MockNode(), {
+        threshold: new MockParam(),
+        knee: new MockParam(),
+        ratio: new MockParam(),
+        attack: new MockParam(),
+        release: new MockParam(),
+      });
+      this.compressors.push(compressor);
+      return compressor;
+    }
+
+    createWaveShaper() {
+      const waveshaper = Object.assign(new MockNode(), { curve: null });
+      this.waveshapers.push(waveshaper);
+      return waveshaper;
+    }
   }
 
   const savedContext = globalThis.AudioContext;
@@ -156,13 +176,19 @@ test('attaches late shared audio to one private graph and frees it on replacemen
   stream.addTrack(first);
   const [source] = context.sources;
   const [master, stereo, spatial] = context.gains;
+  const [limiter] = context.compressors;
+  const [ceiling] = context.waveshapers;
+  const trim = context.gains.at(-1);
   const [panner] = context.panners;
   assert.deepEqual(source.stream.tracks, [first]);
   assert.deepEqual(source.connections, [stereo, panner]);
   assert.deepEqual(panner.connections, [spatial]);
   assert.deepEqual(stereo.connections, [master]);
   assert.deepEqual(spatial.connections, [master]);
-  assert.deepEqual(master.connections, [context.destination]);
+  assert.deepEqual(master.connections, [trim]);
+  assert.deepEqual(trim.connections, [limiter]);
+  assert.deepEqual(limiter.connections, [ceiling]);
+  assert.deepEqual(ceiling.connections, [context.destination]);
   assert.equal(master.gain.value, 0);
   assert.deepEqual(master.gain.events.at(-1), ['ramp', 0.5625, 10.08]);
   assert.equal(stereo.gain.value, 1);
@@ -178,7 +204,7 @@ test('attaches late shared audio to one private graph and frees it on replacemen
   audio.setStream(otherStream);
   assert.equal(first.readyState, 'live');
   assert.equal(context.sources.length, 2);
-  assert.ok([source, master, stereo, panner, spatial].every(node => node.disconnected));
+  assert.ok([source, master, trim, limiter, ceiling, stereo, panner, spatial].every(node => node.disconnected));
   stream.addTrack(new MockTrack('audio'));
   assert.equal(context.sources.length, 2);
 
@@ -207,11 +233,13 @@ test('level, mute and output routing ramp independently of the complementary mod
   const [master, stereo, spatial] = context.gains.map(node => node.gain);
 
   context.currentTime = 11;
+  audio.setMasterVolume(2);
+  near(master.events.at(-1)[1], 1.125);
   audio.setVolume(0.8);
-  near(master.events.at(-1)[1], 0.6);
+  near(master.events.at(-1)[1], 1.2);
   context.currentTime += 0.04;
   audio.setMuted(true);
-  near(master.events.at(-2)[1], (0.5625 + 0.6) / 2);
+  near(master.events.at(-2)[1], (0.5625 + 1.2) / 2);
   assert.equal(master.events.at(-1)[1], 0);
   audio.setVolume(2);
   assert.equal(master.events.at(-1)[1], 0);
@@ -220,6 +248,8 @@ test('level, mute and output routing ramp independently of the complementary mod
   audio.setMuted(false);
   assert.equal(master.events.at(-1)[1], 0);
   audio.setEnabled(true);
+  assert.equal(master.events.at(-1)[1], 1.5);
+  audio.setMasterVolume(1);
   assert.equal(master.events.at(-1)[1], 0.75);
   const masterEvents = master.events.length;
 
@@ -234,6 +264,34 @@ test('level, mute and output routing ramp independently of the complementary mod
   assert.equal(stereo.events.at(-1)[1], 1);
   assert.equal(spatial.events.at(-1)[1], 0);
   assert.equal(master.events.length, masterEvents);
+});
+
+test('master multiplier is clamped, composes with local volume and survives late stream attachment', async t => {
+  const { audio, contexts } = setup(t);
+  audio.setMasterVolume(2);
+  audio.setVolume(0.4);
+  audio.setStream(new MockStream([new MockTrack('audio')]));
+  await audio.start();
+  const [context] = contexts;
+  const master = context.gains[0].gain;
+  near(master.events.at(-1)[1], 0.6);
+
+  audio.setMasterVolume(4);
+  near(master.events.at(-1)[1], 0.9);
+  audio.setEnabled(false);
+  assert.equal(master.events.at(-1)[1], 0);
+  audio.setEnabled(true);
+  near(master.events.at(-1)[1], 0.9);
+  audio.setMuted(true);
+  assert.equal(master.events.at(-1)[1], 0);
+  audio.setMasterVolume(0.5);
+  assert.equal(master.events.at(-1)[1], 0);
+  audio.setMuted(false);
+  near(master.events.at(-1)[1], 0.15);
+  audio.setMasterVolume(Number.POSITIVE_INFINITY);
+  near(master.events.at(-1)[1], 0.15);
+  audio.setMasterVolume(-1);
+  assert.equal(master.events.at(-1)[1], 0);
 });
 
 test('HRTF uses the camera and monitor world positions and their respective viewing axes', async t => {
@@ -279,6 +337,9 @@ test('reports a blocked context and keeps stereo available when HRTF is unavaila
   assert.equal(audio.getStatus(), 'gesture-required');
   assert.equal(audio.supportsSpatial(), false);
   const [context] = contexts;
+  audio.setMasterVolume(2);
+  assert.equal(context.state, 'suspended');
+  assert.equal(audio.getStatus(), 'gesture-required');
   const [master, stereo] = context.gains;
   assert.equal(stereo.gain.value, 1);
   assert.deepEqual(context.sources[0].connections, [stereo]);
@@ -303,7 +364,7 @@ test('routes L, R, C, LFE, SL and SR to the fixed speakers and frees them on dep
   const [screen] = context.panners;
   audio.setTheaterSpeakers(speakers);
   assert.equal(audio.supportsSurround(), true);
-  const [layout, surround] = context.gains.slice(3);
+  const [layout, surround] = context.gains.slice(4);
   const [splitter] = context.splitters;
   const [filter] = context.filters;
   const positions = context.panners.slice(1);
@@ -332,9 +393,13 @@ test('routes L, R, C, LFE, SL and SR to the fixed speakers and frees them on dep
   assert.deepEqual(spatial.gain.events.at(-1), ['ramp', 1, 11.12]);
   assert.deepEqual(surround.gain.events.at(-1), ['ramp', 0, 11.12]);
   audio.setMode('surround');
+  const masterEvents = master.gain.events.length;
+  audio.setMode('stereo', 0);
   audio.setTheaterSpeakers(null);
   assert.equal(audio.supportsSurround(), false);
   assert.ok([layout, splitter, filter, ...positions, surround].every(node => node.disconnected));
   assert.deepEqual(source.connections, [stereo, screen]);
-  assert.deepEqual(stereo.gain.events.at(-1), ['ramp', 1, 11.12]);
+  assert.deepEqual(stereo.gain.events.slice(-2), [['cancel', 11], ['set', 1, 11]]);
+  assert.equal(master.gain.events.length, masterEvents);
+  assert.deepEqual(context.sources, [source]);
 });

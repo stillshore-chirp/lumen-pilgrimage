@@ -152,7 +152,7 @@ class AudioBuffers {
   }
 }
 
-test('room decay and footfalls follow the floor plan and the audio device rate', () => {
+test('room decay and footprint materials follow the floor plan and the audio device rate', () => {
   const bathroom = ear(2, 8);
   const contexts = new AudioBuffers();
   assert.deepEqual([living, bed, core, bathroom, balcony].map(residenceSurfaceAt),
@@ -180,8 +180,12 @@ test('room decay and footfalls follow the floor plan and the audio device rate',
   const livingFirst = firstReflection(livingTail) / contexts.sampleRate;
   const bedroomFirst = firstReflection(bedroomTail) / contexts.sampleRate;
   assert.ok(livingFirst > 0.001 && bedroomFirst > livingFirst && bedroomFirst < 0.02);
-  const wood = createFootfall(contexts, 'oak', 81);
-  const tile = createFootfall(contexts, 'tile', 81);
+});
+
+test('footfalls ease into a quiet brush and retain softer and harder floor textures', () => {
+  const context = new AudioBuffers();
+  const wood = createFootfall(context, 'oak', 81);
+  const tile = createFootfall(context, 'tile', 81);
   assert.equal(tile.sampleRate, 24_000);
   const brilliance = audio => {
     const samples = audio.getChannelData(0);
@@ -194,14 +198,25 @@ test('room decay and footfalls follow the floor plan and the audio device rate',
     return delta / energy;
   };
   assert.ok(brilliance(tile) > brilliance(wood) * 1.3);
-  const power = audio => audio.getChannelData(0).reduce((sum, sample) => sum + sample ** 2, 0);
-  assert.ok(power(createFootfall(contexts, 'tatami', 81)) < power(wood) * .60);
-  assert.ok(power(createFootfall(contexts, 'wool', 81)) < power(wood) * .55);
-  const woodSamples = wood.getChannelData(0);
-  const firstFiveMilliseconds = woodSamples.slice(0, 120);
-  assert.ok(firstFiveMilliseconds.every(value => Math.abs(value) < 0.007));
-  assert.ok(woodSamples.slice(1_000, 2_400).some(value => Math.abs(value) > 0.025));
-  assert.ok(tile.getChannelData(0).every(value => Math.abs(value) < 0.10));
+  assert.ok(brilliance(tile) < 0.3);
+  const energy = samples => samples.reduce((sum, sample) => sum + sample ** 2, 0);
+  const woodEnergy = energy(wood.getChannelData(0));
+  const tatami = createFootfall(context, 'tatami', 81);
+  const wool = createFootfall(context, 'wool', 81);
+  assert.ok(energy(tatami.getChannelData(0)) < woodEnergy * .60);
+  assert.ok(energy(wool.getChannelData(0)) < woodEnergy * .55);
+  assert.ok(brilliance(wool) < brilliance(wood) * .65);
+  for (const surface of ['oak', 'stone', 'tile', 'balcony', 'tatami', 'wool']) {
+    for (const seed of [81, 375, 1019]) {
+      const samples = createFootfall(context, surface, seed).getChannelData(0);
+      const peak = samples.reduce((value, sample) => Math.max(value, Math.abs(sample)), 0);
+      assert.ok(peak > 0.009 && peak < 0.09, `${surface} ${seed}: peak ${peak}`);
+      assert.ok(energy(samples.slice(0, 480)) < energy(samples) * 0.025, `${surface} ${seed}: attack`);
+      assert.equal(Math.abs(samples[0]), 0);
+      assert.ok(Math.abs(samples.at(-1)) < 1e-6);
+    }
+  }
+  assert.notDeepEqual(wood.getChannelData(0), createFootfall(context, 'oak', 375).getChannelData(0));
 });
 
 test('slider rolls and settles without starting or ending in a click', () => {

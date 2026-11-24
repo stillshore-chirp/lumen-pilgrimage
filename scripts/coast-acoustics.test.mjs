@@ -1,15 +1,19 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
+import { connectExplorationOutput } from '../src/coast/explorationOutput.ts';
+import { DEFAULT_EXPLORATION_MIX } from '../src/coast/explorationSound.ts';
 import { COAST_FALLS, COAST_WALKS, SEA_LEVEL, SPAWN, groundHeight } from '../src/coast/terrain.ts';
 
 const acousticsUrl = new URL('../src/coast/coastAcoustics.ts', import.meta.url).href;
 const shoreUrl = new URL('../src/coast/coastShore.ts', import.meta.url).href;
 const birdLifeUrl = new URL('../src/coast/world/coastBirdLife.ts', import.meta.url).href;
 const birdModelsUrl = new URL('../src/coast/world/coastBirdModels.ts', import.meta.url).href;
+const foleyUrl = new URL('../src/coast/CoastFoley.ts', import.meta.url).href;
+const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const internal = [acousticsUrl, shoreUrl, birdLifeUrl, birdModelsUrl].includes(context.parentURL)
+    const internal = [acousticsUrl, shoreUrl, birdLifeUrl, birdModelsUrl, foleyUrl, controlsUrl].includes(context.parentURL)
       && specifier.startsWith('.');
     const path = internal ? `${specifier}.ts` : specifier;
     return nextResolve(path, context);
@@ -22,6 +26,8 @@ const {
   SHORE_VOICE_COUNT, SHORE_REF_DISTANCE, SHORE_ROLLOFF,
 } = await import(shoreUrl);
 const { createCoastBirdLife } = await import(birdLifeUrl);
+const { CoastFoley } = await import(foleyUrl);
+const { groundEyeHeight } = await import(controlsUrl);
 hooks.deregister();
 
 const shore = buildShorePatches();
@@ -184,4 +190,95 @@ test('local calls recur along the beach, ravine, saddle, lake, ridge and vermili
     assert.ok(callCount >= minimumCalls, `fewer than ${minimumCalls} local calls at ${x}, ${z}`);
     assert.ok(Math.max(longestGap, duration - lastCall) <= gapLimit, `call gap exceeds ${gapLimit} s at ${x}, ${z}`);
   }
+});
+
+function mockAudioNode(properties = {}) {
+  return {
+    ...properties,
+    connections: [],
+    connect(target) { this.connections.push(target); return target; },
+    disconnect() { this.connections.length = 0; },
+  };
+}
+
+test('the final peak ceiling preserves normal sample levels and retains output headroom', () => {
+  const compressor = mockAudioNode({ threshold: {}, knee: {}, ratio: {}, attack: {}, release: {} });
+  const trim = mockAudioNode({ gain: {} });
+  const ceiling = mockAudioNode();
+  const destination = mockAudioNode();
+  const master = mockAudioNode();
+  const output = connectExplorationOutput({
+    destination,
+    createDynamicsCompressor: () => compressor,
+    createGain: () => trim,
+    createWaveShaper: () => ceiling,
+  }, master);
+
+  const chain = [master, ...output, destination];
+  assert.deepEqual(chain, [master, trim, compressor, ceiling, destination]);
+  for (let i = 0; i + 1 < chain.length; i++) assert.deepEqual(chain[i].connections, [chain[i + 1]]);
+  const { curve } = ceiling;
+  for (const sample of [-0.75, -0.25, 0, 0.25, 0.75]) {
+    assert.equal(curve[(sample + 1) * (curve.length - 1) / 2], sample);
+  }
+  assert.ok(curve.every((sample, index) => Math.abs(sample) < 0.97 && (index === 0 || sample >= curve[index - 1])));
+});
+
+test('walking and diving contacts follow separate mix controls in direct sound and reflections', () => {
+  const param = () => ({
+    value: 1,
+    setValueAtTime(value) { this.value = value; },
+    setTargetAtTime(value) { this.value = value; },
+  });
+  const sources = [];
+  const context = {
+    currentTime: 0,
+    createGain: () => mockAudioNode({ gain: param() }),
+    createPanner: () => mockAudioNode({ positionX: param(), positionY: param(), positionZ: param() }),
+    createBuffer: (_channels, frames, rate) => ({
+      duration: frames / rate, getChannelData: () => new Float32Array(frames),
+    }),
+    createBufferSource() {
+      const source = mockAudioNode({ playbackRate: param(), start() {}, stop() {} });
+      sources.push(source);
+      return source;
+    },
+  };
+  const direct = mockAudioNode();
+  const reflected = mockAudioNode();
+  const foley = new CoastFoley(context, direct, reflected);
+  const walk = (x, elapsed) => {
+    const z = SPAWN.z;
+    const y = groundHeight(x, z) + groundEyeHeight('walk');
+    foley.update({ x, y, z }, SEA_LEVEL, 'walk', elapsed, elapsed);
+  };
+  walk(SPAWN.x, 0);
+  walk(SPAWN.x + 0.5, 0.16);
+  walk(SPAWN.x + 1, 0.32);
+  assert.equal(sources.length, 1);
+  const dryContact = sources[0].connections[0];
+  const nominalStep = dryContact.gain.value;
+  assert.ok(nominalStep > 0);
+  assert.deepEqual(dryContact.connections.map(branch => branch.connections[0]), [direct, reflected]);
+
+  const footstepsOnly = { ...DEFAULT_EXPLORATION_MIX, environmentOn: false };
+  foley.setMix(footstepsOnly);
+  assert.equal(dryContact.gain.value, nominalStep);
+  const dive = { x: SPAWN.x + 1, y: groundHeight(SPAWN.x + 1, SPAWN.z) + 0.2, z: SPAWN.z };
+  foley.update(dive, SEA_LEVEL, 'dive', 0.48, 0.48);
+  assert.equal(sources.length, 1, 'disabled water channel suppresses the dive bubbles');
+
+  foley.setMix({ ...DEFAULT_EXPLORATION_MIX, footstepsOn: false });
+  assert.equal(dryContact.gain.value, 0);
+  walk(dive.x, 0.64);
+  foley.update(dive, SEA_LEVEL, 'dive', 0.8, 0.8);
+  assert.equal(sources.length, 2);
+  const wetContact = sources[1].connections[0];
+  const nominalSplash = wetContact.gain.value;
+  assert.ok(nominalSplash > 0);
+  assert.deepEqual(wetContact.connections.map(branch => branch.connections[0]), [direct, reflected]);
+  foley.setMix({ ...DEFAULT_EXPLORATION_MIX, levels: { ...DEFAULT_EXPLORATION_MIX.levels, water: 0.25 } });
+  assert.equal(wetContact.gain.value, nominalSplash * 0.25);
+  assert.equal(dryContact.gain.value, nominalStep);
+  foley.dispose();
 });

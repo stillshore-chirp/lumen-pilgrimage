@@ -15,23 +15,16 @@ try {
     const { mountMonitorSender } = await import('./monitor/monitorSender');
     mountMonitorSender(mount);
   } else {
-    const { CoastApp } = await import('./coast/CoastApp');
+    const { CoastApp, loadExplorationScene } = await import('./coast/CoastApp');
     if (name) {
       const loading = document.createElement('main');
       loading.className = 'coast-error';
       loading.setAttribute('role', 'status');
       loading.textContent = `${name}を読み込んでいます。`;
       mount.replaceChildren(loading);
-      const scene = route.worldId === 'residence'
-        ? await (await import('./coast/world/residence/ResidenceWorld')).loadResidenceScene()
-        : route.worldId === 'cinema'
-          ? (await import('./coast/world/cinema/CinemaWorld')).loadCinemaScene()
-          : await (await import('./coast/world/overlook/OverlookWorld')).loadOverlookScene();
-      mount.replaceChildren();
-      new CoastApp(mount, scene);
-    } else {
-      new CoastApp(mount);
     }
+    const scene = await loadExplorationScene(route.worldId);
+    new CoastApp(mount, scene).start();
   }
 } catch {
   console.error('Exploration scene could not start.');

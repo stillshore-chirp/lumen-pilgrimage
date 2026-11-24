@@ -6,10 +6,9 @@ import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
 import { MonitorXR } from './monitorXR';
 import './monitorView.css';
 
-interface MonitorViewOptions {
+export interface MonitorViewBinding {
   entry: HTMLElement;
   toggle: HTMLButtonElement;
-  renderer: WebGLRenderer;
   scene: Scene;
   camera: PerspectiveCamera;
   eyeHeight(): number;
@@ -59,8 +58,12 @@ export class MonitorView {
   private pendingXRSummon = false;
   private theater: MonitorTheater | null = null;
 
-  constructor(private readonly options: MonitorViewOptions) {
-    const { entry, renderer, scene } = options;
+  constructor(
+    private binding: MonitorViewBinding,
+    private readonly renderer: WebGLRenderer,
+    mediaRoot: HTMLElement,
+  ) {
+    const { entry, toggle, scene } = binding;
     this.canvas = renderer.domElement;
     this.panel.id = 'monitor-view-panel';
     this.panel.className = 'coast-panel monitor-view-panel';
@@ -151,9 +154,12 @@ export class MonitorView {
     this.video.muted = true;
     this.video.playsInline = true;
     this.video.setAttribute('data-monitor-video', '');
-    entry.append(this.panel, this.video);
+    entry.append(this.panel);
+    toggle.setAttribute('aria-controls', this.panel.id);
+    // Keep the playing element in the document while replacing world controls.
+    mediaRoot.append(this.video);
 
-    this.xrRenderCamera.copy(options.camera);
+    this.xrRenderCamera.copy(binding.camera);
     this.rig.add(this.xrRenderCamera);
     scene.add(this.rig, this.screen.group);
     this.xr = new MonitorXR(renderer.xr, this.rig, this.screen, {
@@ -175,42 +181,73 @@ export class MonitorView {
     void this.xr.checkSupport();
   }
 
+  get hasActiveConnection(): boolean {
+    return this.state.phase === 'approval' || this.state.phase === 'connecting' || this.state.phase === 'connected';
+  }
+
   get blocksSceneInput(): boolean {
-    return this.editing || this.options.renderer.xr.isPresenting;
+    return this.editing || this.renderer.xr.isPresenting;
   }
 
   get renderCamera(): PerspectiveCamera {
-    return this.options.renderer.xr.isPresenting ? this.xrRenderCamera : this.options.camera;
+    return this.renderer.xr.isPresenting ? this.xrRenderCamera : this.binding.camera;
   }
 
   togglePanel(): void {
     this.setOpen(this.panel.hidden);
   }
 
+  setMasterVolume(multiplier: number): void {
+    this.audio.setMasterVolume(multiplier);
+  }
+
   closePanel(): void {
     this.setOpen(false);
   }
 
-  setTheater(theater: MonitorTheater | null): void {
-    if (this.theater === theater) return;
+  rebind(binding: MonitorViewBinding, theater: MonitorTheater | null): void {
+    this.closePanel();
+    this.xr.release();
+    this.theater?.cinema?.project(null);
+    this.binding = binding;
+    binding.entry.append(this.panel);
+    binding.toggle.setAttribute('aria-controls', this.panel.id);
+    binding.scene.add(this.rig, this.screen.group);
+    this.placed = false;
+    this.setTheater(theater, true);
+    if (this.renderer.xr.isPresenting) {
+      this.anchorXR();
+      this.resizeXRCamera();
+      this.pendingXRSummon = this.screen.isVisible || this.pendingXRSummon;
+      if (this.pendingXRSummon) this.placed = false;
+    }
+  }
+
+  setTheater(theater: MonitorTheater | null, floating = false): void {
     this.theater = theater;
     this.displayTargetRow.hidden = theater === null;
     const cinema = theater?.cinema;
     const screenOption = this.displayTarget.options[1];
     screenOption.textContent = cinema ? '映画館のスクリーン' : 'リビングのテレビ';
-    if (cinema) {
+    if (floating || !theater) this.displayTarget.value = 'floating';
+    if (floating) {
+      if (this.audioMode.value !== 'stereo' && this.audioMode.value !== 'spatial') {
+        this.audioMode.value = 'stereo';
+        // The former room's audio branch is removed immediately below.
+        this.audio.setMode('stereo', 0);
+      }
+    } else if (cinema) {
       this.displayTarget.value = screenOption.value;
       this.audioMode.value = 'cinema';
     }
-    if (!theater) this.displayTarget.value = 'floating';
     this.audio.setTheaterSpeakers(theater?.speakers ?? null);
     this.audio.setCinema(cinema?.createAudio ?? null);
-    this.updateDisplayTarget(Boolean(cinema) || this.screen.isVisible);
-    this.syncSharedAudio();
+    this.updateDisplayTarget(!floating && Boolean(cinema) || this.screen.isVisible);
   }
 
   update(frame?: XRFrame): PerspectiveCamera {
-    const { camera, renderer } = this.options;
+    const { camera } = this.binding;
+    const { renderer } = this;
     const reference = frame && renderer.xr.getReferenceSpace();
     const pose = reference && frame?.getViewerPose(reference);
     let viewer = camera;
@@ -241,13 +278,13 @@ export class MonitorView {
   }
 
   relocateViewer(): void {
-    if (this.options.renderer.xr.isPresenting) this.anchorXR();
+    if (this.renderer.xr.isPresenting) this.anchorXR();
   }
 
   private anchorXR(): void {
-    const { camera } = this.options;
+    const { camera } = this.binding;
     this.rig.position.copy(camera.position);
-    this.rig.position.y -= this.options.eyeHeight();
+    this.rig.position.y -= this.binding.eyeHeight();
     this.rig.rotation.set(0, camera.rotation.y, 0);
   }
 
@@ -257,7 +294,7 @@ export class MonitorView {
     this.audio.stop();
     this.theater?.cinema?.project(null);
     this.xr.release();
-    const session = this.options.renderer.xr.getSession();
+    const session = this.renderer.xr.getSession();
     if (session) void session.end().catch(() => {});
   }
 
@@ -267,19 +304,19 @@ export class MonitorView {
     this.xr.dispose();
     this.audio.dispose();
     this.screen.dispose();
-    this.options.scene.remove(this.rig, this.screen.group);
+    this.binding.scene.remove(this.rig, this.screen.group);
     this.panel.remove();
     this.video.remove();
   }
 
   private setOpen(open: boolean): void {
     this.panel.hidden = !open;
-    this.options.toggle.setAttribute('aria-expanded', String(open));
-    if (open) this.options.releaseInput();
+    this.binding.toggle.setAttribute('aria-expanded', String(open));
+    if (open) this.binding.releaseInput();
     else this.setEditing(false);
   }
 
-  private setScreenVisible(visible: boolean, camera = this.options.camera): void {
+  private setScreenVisible(visible: boolean, camera = this.binding.camera): void {
     if (visible && this.screen.isFloating && !this.placed) {
       this.screen.reset(camera);
       this.placed = true;
@@ -300,6 +337,7 @@ export class MonitorView {
     this.screen.setTarget(target?.screen ?? null, Boolean(target?.cinema));
     this.setScreenVisible(visible);
     this.updateAudioModes();
+    this.syncSharedAudio();
   }
 
   private updateAudioModes(): void {
@@ -328,14 +366,18 @@ export class MonitorView {
     this.audio.setMode(this.audioMode.value as MonitorAudioMode);
   }
 
+  private resizeXRCamera(): void {
+    const { near, far } = this.binding.camera;
+    this.xrRenderCamera.near = near;
+    this.xrRenderCamera.far = far;
+  }
+
   private setXRPresentation(presenting: boolean): void {
-    const { camera } = this.options;
     this.setOpen(!presenting);
     if (presenting) {
-      this.options.releaseInput();
+      this.binding.releaseInput();
       this.anchorXR();
-      this.xrRenderCamera.near = camera.near;
-      this.xrRenderCamera.far = camera.far;
+      this.resizeXRCamera();
       this.pendingXRSummon = !this.screen.isVisible && (this.screen.isFloating || !this.theater?.cinema);
       if (this.pendingXRSummon) this.placed = false;
     } else {
@@ -349,7 +391,7 @@ export class MonitorView {
     this.editButton.setAttribute('aria-pressed', String(editing));
     this.dragControls.hidden = !editing;
     this.canvas.classList.toggle('monitor-editing', editing);
-    this.options.releaseInput();
+    this.binding.releaseInput();
     if (!editing) this.finishDrag();
   }
 
@@ -357,7 +399,7 @@ export class MonitorView {
     this.state = state;
     this.status.textContent = state.detail;
     this.screen.setStatus(state.detail);
-    const active = state.phase === 'approval' || state.phase === 'connecting' || state.phase === 'connected';
+    const active = this.hasActiveConnection;
     this.code.disabled = active;
     this.code.required = !active;
     this.connectButton.textContent = active ? '切断' : '接続';
@@ -373,8 +415,9 @@ export class MonitorView {
   private syncSharedAudio(): void {
     const { available, output } = this.state.audio;
     const cinema = this.theater?.cinema;
+    const usesCinema = !this.screen.isFloating || this.audioMode.value === 'cinema';
     const videoPlaying = this.screen.isVisible && this.screen.projectedTexture !== null;
-    this.audio.setEnabled(available && output !== 'pc' && (!cinema || (!cinema.paused() && videoPlaying)));
+    this.audio.setEnabled(available && output !== 'pc' && (!cinema || !usesCinema || (!cinema.paused() && videoPlaying)));
   }
 
   private setStream(stream: MediaStream | null): void {
@@ -424,7 +467,7 @@ export class MonitorView {
     this.editButton.addEventListener('click', () => this.setEditing(!this.editing), listen);
     this.resetButton.addEventListener('click', () => {
       this.finishDrag();
-      this.screen.reset(this.options.camera);
+      this.screen.reset(this.binding.camera);
     }, listen);
     const modes = this.dragControls.querySelectorAll<HTMLButtonElement>('[data-monitor-mode]');
     for (const button of modes) {
@@ -455,6 +498,7 @@ export class MonitorView {
     }, listen);
     this.audioMode.addEventListener('change', () => {
       this.audio.setMode(this.audioMode.value as MonitorAudioMode);
+      this.syncSharedAudio();
     }, listen);
     this.audioButton.addEventListener('click', async () => {
       this.audioButton.disabled = true;
@@ -468,7 +512,7 @@ export class MonitorView {
         if (this.editing) this.setEditing(false);
         else {
           this.setOpen(false);
-          this.options.toggle.focus();
+          this.binding.toggle.focus();
         }
       }
       event.stopPropagation();
@@ -485,7 +529,7 @@ export class MonitorView {
     };
     canvas.addEventListener('pointerdown', event => {
       if (!this.editing || this.pointerId !== null || event.button !== 0) return;
-      if (!this.desktop.begin(this.options.camera, position(event), this.dragMode,
+      if (!this.desktop.begin(this.binding.camera, position(event), this.dragMode,
         event.pointerId, event.clientX, event.clientY)) return;
       this.pointerId = event.pointerId;
       canvas.setPointerCapture(event.pointerId);
@@ -494,7 +538,7 @@ export class MonitorView {
     }, listen);
     canvas.addEventListener('pointermove', event => {
       if (this.pointerId !== event.pointerId) return;
-      this.desktop.move(this.options.camera, position(event), event.pointerId, event.clientX, event.clientY);
+      this.desktop.move(this.binding.camera, position(event), event.pointerId, event.clientX, event.clientY);
     }, listen);
     const finish = (event: PointerEvent) => {
       if (this.pointerId === event.pointerId) this.finishDrag();

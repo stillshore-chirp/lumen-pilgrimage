@@ -13,6 +13,8 @@ import {
   shorePhase, shoreTransmission, shoreWavePoint, type ShorePatch,
 } from './coastShore';
 import { CoastFoley } from './CoastFoley';
+import { connectExplorationOutput } from './explorationOutput';
+import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } from './explorationSound';
 import type { CoastTimeOfDay } from './world/coastAtmosphere';
 import { COAST_SWELL_PERIOD } from './world/coastSwell';
 import { BIRD_CALL_RANGE, type CoastBirdCue, type CoastBirdSpecies } from './coastBirdCue';
@@ -49,6 +51,7 @@ type SpatialVoice = {
   range: number;
   obstruction: BiquadFilterNode;
   direct: GainNode;
+  mixGain: GainNode;
   atmosphere?: BiquadFilterNode;
   activity?: GainNode;
   shore?: ShoreVoice;
@@ -71,19 +74,21 @@ function grovePosition(grove: { x: number; z: number }, elevation: number): [num
   return [grove.x, groundHeight(grove.x, grove.z) + elevation, grove.z];
 }
 
-const ASSET_FILES: Record<AudioAsset, string> = {
-  waves: 'waves.ogg',
-  surf: 'surf.ogg',
-  waterfall: 'waterfall.ogg',
-  forestBirds: 'forest-birds.ogg',
-  shelterBirds: 'shelter-birds.ogg',
-  insects: 'insects.ogg',
-  rivulet: 'rivulet.ogg',
-  gull: 'gull-calls.ogg',
-  whiteEye: 'white-eye-calls.ogg',
-  bushWarbler: 'bush-warbler-calls.ogg',
-  thrush: 'thrush-calls.ogg',
+const ASSETS: Record<AudioAsset, { file: string; sound: 'water' | 'birds' | 'insects' }> = {
+  waves: { file: 'waves.ogg', sound: 'water' },
+  surf: { file: 'surf.ogg', sound: 'water' },
+  waterfall: { file: 'waterfall.ogg', sound: 'water' },
+  forestBirds: { file: 'forest-birds.ogg', sound: 'birds' },
+  shelterBirds: { file: 'shelter-birds.ogg', sound: 'birds' },
+  insects: { file: 'insects.ogg', sound: 'insects' },
+  rivulet: { file: 'rivulet.ogg', sound: 'water' },
+  gull: { file: 'gull-calls.ogg', sound: 'birds' },
+  whiteEye: { file: 'white-eye-calls.ogg', sound: 'birds' },
+  bushWarbler: { file: 'bush-warbler-calls.ogg', sound: 'birds' },
+  thrush: { file: 'thrush-calls.ogg', sound: 'birds' },
 };
+
+const NOMINAL_MASTER_GAIN = 0.7 * 0.68;
 
 // Each edited excerpt starts on a fixed boundary, with a silent guard between excerpts.
 const BIRD_PHRASE_STRIDE = 3.5;
@@ -426,8 +431,7 @@ export class CoastAudio {
   private pendingStart: Promise<void> | undefined;
   private started = false;
   private disposed = false;
-  private volume = 0.7;
-  private muted = false;
+  private mix = DEFAULT_EXPLORATION_MIX;
   private timeOfDay: CoastTimeOfDay = 'day';
   private airExposure = 1;
   private nextPropagationUpdate = 0;
@@ -435,23 +439,23 @@ export class CoastAudio {
   private lastShoreSelection: CoastPoint | undefined;
   private scheduleTimer: ReturnType<typeof setTimeout> | undefined;
 
-  isOn(): boolean {
-    return this.started && this.context?.state === 'running' && !this.muted;
+  isRunning(): boolean {
+    return this.started && this.context?.state === 'running';
   }
 
   start(): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('CoastAudio has been disposed'));
-    if (this.pendingStart) return this.pendingStart;
 
     try {
       this.context ??= new AudioContext({ latencyHint: 'interactive' });
       const context = this.context;
-      // Calling resume here, before returning the promise, preserves the user's gesture.
+      // A gesture can unlock an earlier start that is still waiting on resume.
       const resume = context.state === 'running' ? Promise.resolve() : context.resume();
+      if (this.pendingStart) return Promise.all([resume, this.pendingStart]).then(() => undefined);
       this.ensureGraph(context);
       const start = this.started ? resume : Promise.all([
         resume,
-        ...(Object.keys(ASSET_FILES) as AudioAsset[]).map(asset => {
+        ...(Object.keys(ASSETS) as AudioAsset[]).map(asset => {
           const load = this.loadAsset(asset, context);
           return asset in BIRD_CALLS ? load.catch(() => undefined) : load;
         }),
@@ -467,10 +471,20 @@ export class CoastAudio {
     }
   }
 
-  setLevel(volume: number, muted: boolean): void {
-    this.volume = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 0;
-    this.muted = muted;
-    this.applyMasterLevel();
+  setMix(mix: ExplorationMix): void {
+    this.mix = mix;
+    const context = this.context;
+    if (!this.master || !context) return;
+    const now = context.currentTime;
+    this.master.gain.setTargetAtTime(mix.master * NOMINAL_MASTER_GAIN, now, 0.035);
+    const applyChannel = (voice: SpatialVoice) => {
+      voice.mixGain.gain.setTargetAtTime(explorationSoundGain(mix, ASSETS[voice.spec.asset].sound), now, 0.035);
+    };
+    for (const voice of this.voices) applyChannel(voice);
+    for (const flock of this.birdVoices.values()) {
+      for (const bird of flock) applyChannel(bird.voice);
+    }
+    this.foley?.setMix(mix);
   }
 
   setTimeOfDay(time: CoastTimeOfDay): void {
@@ -748,8 +762,9 @@ export class CoastAudio {
     compressor.attack.value = 0.004;
     compressor.release.value = 0.24;
     const master = context.createGain();
+    master.gain.value = this.mix.master * NOMINAL_MASTER_GAIN;
     compressor.connect(master);
-    master.connect(context.destination);
+    const output = connectExplorationOutput(context, master);
     this.master = master;
     const medium = context.createBiquadFilter();
     medium.type = 'lowpass';
@@ -766,8 +781,8 @@ export class CoastAudio {
     tail.connect(level).connect(medium);
     this.rockTail = { input: tail, level };
     this.foley = new CoastFoley(context, compressor, tail);
-    this.graphNodes.push(compressor, master, medium, mediumLevel, tail, level);
-    this.applyMasterLevel();
+    this.foley.setMix(this.mix);
+    this.graphNodes.push(compressor, master, ...output, medium, mediumLevel, tail, level);
   }
 
   private createRockImpulse(context: AudioContext): AudioBuffer {
@@ -807,7 +822,7 @@ export class CoastAudio {
     const base = import.meta.env.BASE_URL.endsWith('/')
       ? import.meta.env.BASE_URL
       : `${import.meta.env.BASE_URL}/`;
-    const request = fetch(`${base}coast-audio/${ASSET_FILES[asset]}`, { signal: this.assetRequest.signal })
+    const request = fetch(`${base}coast-audio/${ASSETS[asset].file}`, { signal: this.assetRequest.signal })
       .then(response => {
         if (!response.ok) throw new Error(`Unable to load local ${asset} audio (${response.status})`);
         return response.arrayBuffer();
@@ -934,14 +949,18 @@ export class CoastAudio {
   } {
     const input = context.createGain();
     input.gain.value = spec.gain;
-    let tail: AudioNode = input;
-    this.graphNodes.push(input);
+    const mixGain = context.createGain();
+    mixGain.gain.value = explorationSoundGain(this.mix, ASSETS[spec.asset].sound);
+    input.connect(mixGain);
+    // Direct sound and both reflected paths share the same channel gain.
+    let tail: AudioNode = mixGain;
+    this.graphNodes.push(input, mixGain);
 
     let activity: GainNode | undefined;
     if (spec.activity) {
       activity = context.createGain();
       activity.gain.value = spec.activity[this.timeOfDay];
-      input.connect(activity);
+      tail.connect(activity);
       tail = activity;
       this.graphNodes.push(activity);
     }
@@ -976,7 +995,9 @@ export class CoastAudio {
     obstruction.connect(direct).connect(panner).connect(this.medium!.input);
     this.graphNodes.push(obstruction, direct, panner);
 
-    const voice: SpatialVoice = { spec, point, range: spec.maxDistance, obstruction, direct, atmosphere, activity };
+    const voice: SpatialVoice = {
+      spec, point, range: spec.maxDistance, obstruction, direct, mixGain, atmosphere, activity,
+    };
     if (spec.waterReflection !== undefined) {
       const reflected = this.createPanner(context, spec, { ...point, y: 2 * SEA_LEVEL - point.y });
       voice.reflection = { ...this.createArrival(context, tail, reflected, 3850), strength: spec.waterReflection };
@@ -1017,11 +1038,5 @@ export class CoastAudio {
     panner.positionY.value = point.y;
     panner.positionZ.value = point.z;
     return panner;
-  }
-
-  private applyMasterLevel(): void {
-    if (!this.master || !this.context) return;
-    const target = (this.muted ? 0 : this.volume) * 0.68;
-    this.master.gain.setTargetAtTime(target, this.context.currentTime, 0.035);
   }
 }

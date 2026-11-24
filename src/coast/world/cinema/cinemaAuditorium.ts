@@ -4,7 +4,8 @@ import { CINEMA_COVE_LENS_X, CINEMA_COVE_LENS_Y, CINEMA_EXIT_LAMPS, CINEMA_WALL_
 import { createCinemaExits } from './cinemaFixtures';
 import { createCinemaFloor } from './cinemaFloor';
 import {
-  CINEMA_BOUNDS, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH, CINEMA_EXITS, CINEMA_PROJECTION_Y,
+  CINEMA_BOUNDS, CINEMA_CEILING_BAFFLES, CINEMA_CEILING_COFFERS, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH,
+  CINEMA_EXITS, CINEMA_PROJECTION_Y,
   CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, CINEMA_SIDE_SURROUNDS, cinemaGroundHeight,
 } from './cinemaLayout';
 import { createCinemaSeats } from './cinemaSeats';
@@ -170,27 +171,14 @@ function addScreenSurround(group: Group, finish: CinemaFinishes): void {
 }
 
 function addOverhead(group: Group, finish: CinemaFinishes): void {
-  const baffles: CinemaBox[] = [];
-  const coffers: CinemaBox[] = [];
   const housings: CinemaBox[] = [];
   const cove: CinemaBox[] = [];
   const service: CinemaBox[] = [];
   const emergency: CinemaBox[] = [];
 
-  for (let i = 1; i < 5; i += 1) {
-    const z = ROOM.minZ + i * LENGTH / 5;
-    baffles.push([0, HEIGHT - 0.35, z, SPAN, 0.70, 0.285]);
-    coffers.push([0, HEIGHT - 0.70, z, SPAN, 0.027, 0.338]);
-  }
-
   for (let i = 0; i < 5; i += 1) {
     const z = ROOM.minZ + (i + 0.5) * LENGTH / 5;
     for (const side of [-1, 1]) {
-      coffers.push(
-        [side * 12.99, HEIGHT - 0.20, z, 12.23, 0.33, 11.26],
-        [side * 18.76, 19.21, z, 2.12, 0.24, 11.21],
-        [side * 19.52, 18.77, z, 0.62, 0.28, 11.21],
-      );
       housings.push([side * 19.14, 18.862, z, 0.135, 0.055, 11.12]);
       cove.push([side * CINEMA_COVE_LENS_X, CINEMA_COVE_LENS_Y, z, 0.044, 0.017, 10.96]);
     }
@@ -208,8 +196,8 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
     emergency.push([x, y, z, 0.21, 0.014, 0.12]);
   }
 
-  cinemaBoxes(group, 'Four ceiling smoke baffles', finish.box, finish.protection, baffles);
-  cinemaBoxes(group, 'Ceiling coffers and cove returns', finish.box, finish.bulkhead, coffers);
+  cinemaBoxes(group, 'Four ceiling smoke baffles', finish.box, finish.protection, CINEMA_CEILING_BAFFLES);
+  cinemaBoxes(group, 'Ceiling coffers and cove returns', finish.box, finish.bulkhead, CINEMA_CEILING_COFFERS);
   cinemaBoxes(group, 'Light housings', finish.box, finish.darkSteel, housings);
   for (const [name, color, locations] of [
     ['cove', 0xe4b678, cove], ['service', 0xe1e0d6, service], ['emergency', 0xeeeee5, emergency],

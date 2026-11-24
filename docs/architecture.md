@@ -6,7 +6,7 @@
 
 | 責務 | 主な担当 | 主な受け渡し |
 | --- | --- | --- |
-| 起動とアプリの進行 | [explorationRoute.ts](../src/coast/explorationRoute.ts) が URL から入口・初期状態を読み取り、移動先と時間帯の URL を計算します。[main.ts](../src/main.ts) はワールドを読み込み、[CoastApp](../src/coast/CoastApp.ts) は描画、カメラ、入力、画面、フレーム更新と移動の副作用を接続します。 | URL の `world`・`place`・`time` の判断を、現在のワールドと移動状態へ反映します。 |
+| 起動とアプリの進行 | [explorationRoute.ts](../src/coast/explorationRoute.ts) が URL から入口・初期状態を読み取り、移動先と時間帯の URL を計算します。[main.ts](../src/main.ts) は入口を切り替えます。[CoastApp](../src/coast/CoastApp.ts) はワールドの読込処理を持ち、描画、カメラ、入力、画面、フレーム更新と移動の副作用を接続します。 | URL の `world`・`place`・`time` の判断を、現在のワールドと移動状態へ反映します。 |
 | ワールド固有の環境 | [CoastWorld](../src/coast/CoastWorld.ts)、[OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts)、[ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts)、[CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts) が地形や建物、配置、描画と環境音を組み立てます。 | 各ワールドの地形・配置定義を描画、歩行判定、移動先の計算で共有します。詳細は [ワールド案内](worlds.md) とこの文書の各設計節に記録します。 |
 | 移動と共通状態 | [CoastControls の CoastPose / CoastNavigation](../src/coast/CoastControls.ts) が入力、現在の姿勢、接地を扱います。 | 姿勢、ワールドの支持面、時間帯をフレーム更新へ渡し、描画と音響が同じ位置・昼夜に追従します。 |
 | 仮想モニター | [配信ページ](../src/monitor/monitorSender.ts)、[シグナリング](../server/virtual-monitor-signaling.mjs)、[セッション](../src/monitor/monitorSession.ts) が接続とメディアの受け渡しを担います。 | 視聴側は受け取った映像をワールド内の表示先へ渡し、音を専用のモニター音響へ渡します。シグナリングと直接通信の契約は [仮想モニター仕様](monitor.md) を参照してください。 |
@@ -36,6 +36,7 @@ flowchart LR
 
 - [explorationRoute.ts](../src/coast/explorationRoute.ts) の `parseStartupRoute` が起動入口を選び、`readInitialExplorationState` が読み込み後の初期到着点と時間帯を解釈する。同モジュールの `decideTravel` と `urlForTime` は移動先・時間帯を反映した URL を計算する。[main.ts](../src/main.ts) は `#app`、ワールドの遅延読み込み、起動中・エラー時の表示、配信ページへの振り分けを担当します。`?world=overlook` は丘陵展望台、`?world=residence` は都心の70階住戸、`?world=cinema` は映画館シアター（大）を読み込みます。 [OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts) · [ResidenceWorld](../src/coast/world/residence/ResidenceWorld.ts) · [CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)
 - `CoastApp` は読み込み済みワールドへ初期状態を適用し、レンダラー、カメラ、UI、フレームループ、操作を接続します。ファストトラベルでは [CoastTravelPanel](../src/coast/CoastTravelPanel.ts) から移動先を受け取り、[coastDestinations.ts](../src/coast/coastDestinations.ts) が定義する着地点と到着時の向きを使います。`CoastApp` は移動時の再読み込みや履歴更新、カメラ・ダイアログ・座席の遷移を適用します。
+- [CoastSoundControls](../src/coast/CoastSoundControls.ts) が環境音、歩行音、全体と種類別の音量を各ワールドの音響へ渡します。全体音量は [MonitorView](../src/monitor/monitorView.ts) にも渡し、接続した共有音に反映します。 [音の設定の保存形式](worlds.md#設定の保存)
 
 ## 仮想モニターの設計
 
@@ -81,7 +82,7 @@ flowchart LR
 ## 映画館シアター
 
 - 幕面を `z=0`、客席方向を正とする。室内40 × 57 × 22 m、幕の幅30 m、高さ16.875 m、中心高9.8 m。段床・座席・扉と、照明の受光面・音響の経路は配置データを共有する。588席のうち8席が同伴席で、車いすスペース8か所を含む収容人数は596。座席の背は歩行を止め、縦通路では各列の段を歩行用の支持面でつなぐ。車いす席の前後では、前列の頭上に幕の下端が見えるよう段数を増やし、横通路から扉までは同じ高さを通す。 [平面と断面 PDF](cinema/cinema-floor-plan.pdf) · [配置](../src/coast/world/cinema/cinemaLayout.ts) · [歩行判定](../src/coast/world/cinema/cinemaNavigation.ts)
-- 受信した映像を幕面の縦横比に合わせて投影し、幕を色が場所ごとに変わる拡散面として扱う。幕の各区画から床・壁・天井・座席へ届く光は、受光点の距離と向きから求める。座席の前面と上端は別に計算し、壁のリブと手すりには面の向きに応じた弱い反射を加える。軽量は16×7区画と受光面ごとに4×5点で毎秒最大15回、高品質は32×14区画と7×9点で最大30回更新し、座席の遮蔽と幕への位置別の戻り光も計算する。 [照明](../src/coast/world/cinema/cinemaLighting.ts) · [光の伝達](../src/coast/world/cinema/cinemaLightTransport.ts) · [面光源の放射計算](https://pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Working_with_Radiometric_Integrals)
+- 受信した映像を元の縦横比のまま幕に投影し、幕を色が場所ごとに変わる拡散面として扱う。幕の各区画から床・壁・天井・座席へ届く光は、受光点の距離と向きから求める。座席の前面と上端は別に計算し、壁のリブと手すりには面の向きに応じた弱い反射を加える。軽量は16×7区画と受光面ごとに4×5点で毎秒最大15回、高品質は32×14区画と7×9点で最大30回更新し、座席の遮蔽と幕への位置別の戻り光も計算する。 [照明](../src/coast/world/cinema/cinemaLighting.ts) · [光の伝達](../src/coast/world/cinema/cinemaLightTransport.ts) · [面光源の放射計算](https://pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Working_with_Radiometric_Integrals)
 - 入場時は壁上部の間接灯を起点に壁面を照らし、暗転中は段鼻・壁下の足元灯と出口誘導灯が点灯する。非常点検では映写を停止し、扉上の灯具から出入口と通路を白く照らす。露出は固定し、明るさの履歴は入退場時の照明切替に使う。技術設計PDFの光の分布図と受光点数は初版の記録で、現行の設定は実装に記載する。 [灯具の位置](../src/coast/world/cinema/cinemaFixtureLighting.ts) · [光と音の技術設計 PDF・第3–4ページ](cinema/cinema-light-sound-design.pdf) · [実館の迷光とコントラストの研究](https://journal.smpte.org/periodicals/SMPTE%20Motion%20Imaging%20Journal/125/4/17/)
 - 共有音から直接音、幕の透過、鏡像法の反射、帯域別の後期残響を合成する。直接音には座席までの距離に応じたゲインを使い、反射に経路差の遅れを加える。高品質は頭部伝達関数と最大12本、軽量は等電力パンと最大4本の初期反射を使う。足音、空調、試聴の音声は共有音と独立する。 [音響](../src/coast/world/cinema/cinemaPlayback.ts) · [光と音の技術設計 PDF](cinema/cinema-light-sound-design.pdf)
 - 清掃・非常点検では現行の投影と共有音の出力を一時停止する。出口扉・表示灯は閉じた館内景観として保ち、館外への移動はファストトラベルで行う。実施設計に必要な屋外避難・廊下以降の設備は、基本設計PDFに建物側の条件として記録した。
@@ -90,6 +91,7 @@ flowchart LR
 ## 音響
 
 - 音響は明示操作で開始する。[海岸の発音点](../src/coast/coastShore.ts) は海につながる浅瀬と陸の境界から求め、波が打つ方向へ動かす。再生中の発音点はクロスフェードで入れ替える。[伝播の計算](../src/coast/coastAcoustics.ts) は岩壁による遮蔽と短い反射、開口を経由する到達音を扱う。[足音と水音](../src/coast/CoastFoley.ts) は移動・潜水と地表の材質から選ぶ。カメラが潜ると、水中にいる深さに応じてミックスの高域を下げる。
+- [住戸と映画館の足音](../src/coast/world/residence/residenceAudioSamples.ts) は、靴底が沈む低い接地音と、体重が前へ移るときの短い擦れを帯域の異なるノイズから合成する。石やタイルは擦れの輪郭が残り、木床は落ち着いた音、絨毯はさらにこもった音になる。映画館では足元の位置から絨毯と段鼻を判定し、一歩ごとに移動距離と0.48秒以上の間隔を取る。 [映画館の発音処理](../src/coast/world/cinema/cinemaAmbience.ts)
 - [丘陵展望台の音響](../src/coast/world/overlook/overlookAudio.ts) は幹線の高さを含む中心線を分割し、各区間の距離と丘による遮蔽で音の強さと高域の減衰を求める。道路ごとに合成した音を頭部伝達関数（HRTF）で定位させる。昼は低木に鳥声、夜はデッキ前方の草地と斜面に虫の声を間隔をずらして配置する。虫の音も高低差と地形の遮蔽を反映する。 [録音の出典と伝搬の資料](../public/coast-overlook/ATTRIBUTION.md)
 - `CoastApp` は描画と音響に同じ時間帯を渡す。自然景観では昼の鳥声と夜の虫声をなじませ、丘陵展望台と住戸の夜は交通の発音量を下げる。静穏な昼と弱い夜間逆転層を想定し、伝搬経路の曲がり方を地形遮蔽に反映する。遠方の低域を補正し、近くの波や落水、潜水時の処理は各音源の位置と水深に従う。[大気による吸収と屈折の資料](https://www.fhwa.dot.gov/ENVIRonment/noise/noise_barriers/design_construction/design/design03.cfm)
 - [落水](../src/coast/world/coastWaterfall.ts) は水の加速と岩に沿った流れを描く。泡と霧の起点は海・湖ごとの水位に合わせ、音響は描画と同じ着水点を参照する。
