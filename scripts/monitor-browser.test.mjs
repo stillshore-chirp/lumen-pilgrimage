@@ -409,7 +409,6 @@ test('separate tabs pair with approval, render native WebRTC media and control a
     await setSliderValue(viewer, '全体音量', 100);
     await waitForMix(viewer, { natural: true, monitor: true });
     // Simulate persisted pageshow to observe the master callback on an existing monitor.
-    // A real pagehide releases the WebRTC stream before a cached page is restored.
     await viewer.evaluate(() => {
       const key = 'lumen-pilgrimage:sound';
       const saved = JSON.parse(localStorage.getItem(key));
@@ -1011,5 +1010,199 @@ test('a browser without screen capture presents an unsupported state', { timeout
     await sender.waitForFunction(() => !document.querySelector('[data-monitor-pair-code]')?.textContent);
   } finally {
     await sender.context().close();
+  }
+});
+
+test('residence lighting, display and page state changes preserve the monitor connection', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  viewer.setDefaultTimeout(25_000);
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture),
+      sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers),
+      viewer.addInitScript(observeAudio),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    // Set the visitor's position only. The wall switch is operated by the real scene controls.
+    await viewer.route('**/assets/CoastApp-*.js', async route => {
+      const response = await route.fetch();
+      const source = await response.text();
+      const prepare = 'this.world.prepareRender?.(';
+      assert.ok(source.includes(prepare), 'the wall switch test requires access to the scene position');
+      const hook = 'window.relocateMonitorViewer??=(pose=>this.controls.relocate(pose)),';
+      await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
+    });
+    await viewer.goto(new URL('?world=residence&place=living-theater&time=night', url).href);
+    const panel = viewer.getByRole('region', { name: '仮想モニターの操作' });
+    await button(viewer, '仮想モニター').click();
+    const target = viewer.getByRole('combobox', { name: '表示先' });
+    await target.selectOption('television');
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    await viewer.evaluate(selector => {
+      const video = document.querySelector(selector);
+      const [peer] = window.monitorPeers;
+      const stream = video.srcObject;
+      window.sharedMonitor = { video, peer, stream, tracks: stream.getTracks() };
+    }, videoSelector);
+    await sender.evaluate(() => {
+      const [peer] = window.monitorPeers;
+      const [stream] = window.captureFixture.streams;
+      window.sharedMonitor = { peer, stream, tracks: stream.getTracks() };
+    });
+    const enableAudio = button(viewer, 'モニター音を有効にする');
+    if (await enableAudio.isEnabled()) await enableAudio.click();
+
+    async function assertPlaybackSince(frames) {
+      await viewer.waitForFunction(before =>
+        window.sharedMonitor.video.getVideoPlaybackQuality().totalVideoFrames > before + 1, frames);
+      assert.equal(await viewer.evaluate(selector => {
+        const { peer, stream, video, tracks } = window.sharedMonitor;
+        return window.monitorPeers.length === 1 && window.monitorPeers[0] === peer && peer.connectionState === 'connected'
+          && document.querySelector(selector) === video && video.srcObject === stream
+          && tracks.length === stream.getTracks().length
+          && stream.getTracks().every(track => tracks.includes(track) && track.readyState === 'live');
+      }, videoSelector), true, 'viewer retains the original peer, element, stream and tracks');
+      assert.equal(await sender.evaluate(() => {
+        const { peer, stream, tracks } = window.sharedMonitor;
+        return window.monitorPeers.length === 1 && window.monitorPeers[0] === peer && peer.connectionState === 'connected'
+          && window.captureFixture.streams.length === 1 && window.captureFixture.streams[0] === stream
+          && tracks.every(track => track.readyState === 'live');
+      }), true, 'sender retains the original peer and capture tracks');
+      await viewer.waitForFunction(() => window.monitorSound.read().some(
+        context => context.hasStream && context.state === 'running' && context.peak > .001));
+    }
+
+    const frameCount = () => viewer.locator(videoSelector).evaluate(video => video.getVideoPlaybackQuality().totalVideoFrames);
+    for (const display of ['television', 'floating']) {
+      await target.selectOption(display);
+      const beforeSwitching = await frameCount();
+      await button(viewer, 'メニュー').click();
+      await panel.waitFor({ state: 'hidden' });
+      await button(viewer.getByRole('dialog', { name: 'メニュー' }), '住戸の遠隔操作').click();
+      await button(viewer.getByRole('dialog', { name: '住戸の遠隔操作' }), 'リビング・ダイニング').click();
+      const lights = viewer.getByRole('dialog', { name: 'リビング・ダイニング' });
+      const pendant = button(lights, 'ペンダント灯（東）');
+      await button(lights, '一括消灯').click();
+      assert.equal(await pendant.getAttribute('aria-pressed'), 'false');
+      await assertPlaybackSince(beforeSwitching);
+      const lightOff = await frameCount();
+      await button(lights, '一括点灯').click();
+      assert.equal(await pendant.getAttribute('aria-pressed'), 'true');
+      await viewer.keyboard.press('Escape');
+      await lights.waitFor({ state: 'hidden' });
+      await assertPlaybackSince(lightOff);
+      assert.ok((await screenPixels(viewer)).count > 2_000, 'scene still renders the shared image');
+
+      const atWall = await frameCount();
+      await viewer.evaluate(() => window.relocateMonitorViewer({ x: 11.65, z: -4.78, yaw: Math.PI / 2, pitch: -.35 }));
+      const wallOff = button(viewer, 'リビング・ダイニングの照明を一括消灯');
+      const wallOn = button(viewer, 'リビング・ダイニングの照明を一括点灯');
+      await wallOff.waitFor();
+      await viewer.keyboard.press('e');
+      await wallOn.waitFor();
+      await assertPlaybackSince(atWall);
+      const beforeTurningOn = await frameCount();
+      await wallOn.click();
+      await wallOff.waitFor();
+      await assertPlaybackSince(beforeTurningOn);
+      await viewer.evaluate(() => window.relocateMonitorViewer({ x: 19.99, z: -3.06, yaw: 0, pitch: -.115 }));
+      assert.ok((await screenPixels(viewer)).count > 2_000, 'the image is visible after using the wall switch');
+
+      await button(viewer, '仮想モニター').click();
+      await panel.waitFor();
+    }
+    const beforeDisplay = await frameCount();
+    await button(viewer, 'モニターを隠す').click();
+    assert.equal((await screenPixels(viewer)).count, 0);
+    await assertPlaybackSince(beforeDisplay);
+    await button(viewer, 'モニターを表示').click();
+    await button(viewer, '仮想モニター').click();
+    const beforeSettings = await frameCount();
+    await button(viewer, '昼').press('Enter');
+    await viewer.waitForURL(address => address.searchParams.get('time') === 'day');
+    await button(viewer, '高品質').click();
+    assert.equal(await button(viewer, '高品質').getAttribute('aria-pressed'), 'true');
+    await assertPlaybackSince(beforeSettings);
+    assert.ok((await screenPixels(viewer)).count > 2_000, 'the new scene quality still displays the video');
+
+    await button(viewer, '軽量').click();
+    // Exercise the app's persisted events with native WebRTC; the browser's cache eligibility is independent.
+    const beforeHide = await frameCount();
+    await viewer.evaluate(() => {
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    await assertPlaybackSince(beforeHide);
+  } finally {
+    await Promise.all([sender.context().close(), viewer.context().close()]);
+  }
+});
+
+test('a transient signaling poll failure leaves one established WebRTC session running', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  const pollPath = '**/api/virtual-monitor/poll';
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture),
+      sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers),
+      viewer.addInitScript(observeAudio),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    await viewer.goto(url.href);
+    await button(viewer, '仮想モニター').click();
+    await button(viewer, 'モニターを表示').click();
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    const enableAudio = button(viewer, 'モニター音を有効にする');
+    if (await enableAudio.isEnabled()) await enableAudio.click();
+    const video = viewer.locator(videoSelector);
+    const beforePoll = await video.evaluate(element => {
+      window.originalMonitorStream = element.srcObject;
+      return element.getVideoPlaybackQuality().totalVideoFrames;
+    });
+
+    const isPoll = message => message.url().endsWith('/virtual-monitor/poll');
+    const pollRecovered = (page, interrupted) => interrupted.then(() =>
+      page.waitForResponse(response => isPoll(response) && response.ok(), { timeout: 25_000 }));
+
+    const viewerRecovered = pollRecovered(viewer, viewer.waitForEvent('requestfailed', isPoll));
+    const senderRecovered = pollRecovered(sender,
+      sender.waitForResponse(response => isPoll(response) && response.status() === 503));
+    await Promise.all([
+      viewer.route(pollPath, route => route.abort('failed'), { times: 1 }),
+      sender.route(pollPath, route => route.fulfill({ status: 503 }), { times: 1 }),
+    ]);
+    await Promise.all([viewerRecovered, senderRecovered]);
+    assert.equal(await video.evaluate(element => element.srcObject === window.originalMonitorStream
+      && element.srcObject.getTracks().every(track => track.readyState === 'live')), true);
+    assert.ok(await sender.evaluate(() => window.captureFixture.streams.length === 1
+      && window.captureFixture.streams[0].getTracks().every(track => track.readyState === 'live')));
+    assert.deepEqual(await viewer.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['connected']);
+    assert.deepEqual(await sender.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['connected']);
+    assert.ok(await video.evaluate((element, before) =>
+      element.getVideoPlaybackQuality().totalVideoFrames > before, beforePoll));
+    await viewer.waitForFunction(() => window.monitorSound.read().some(
+      context => context.hasStream && context.state === 'running' && context.peak > .001));
+
+    await button(sender, '共有を停止').click();
+    await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
+    await sender.waitForFunction(() => window.captureFixture.streams[0].getTracks().every(track => track.readyState === 'ended'));
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    assert.deepEqual(await viewer.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['closed', 'connected']);
+    assert.deepEqual(await sender.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['closed', 'connected']);
+    await button(viewer, '切断').click();
+    await viewer.waitForFunction(selector => document.querySelector(selector)?.srcObject === null, videoSelector);
+    await sender.waitForFunction(() => window.captureFixture.streams[1].getTracks().every(track => track.readyState === 'ended'));
+  } finally {
+    await Promise.all([sender.context().close(), viewer.context().close()]);
   }
 });

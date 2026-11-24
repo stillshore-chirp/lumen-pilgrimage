@@ -628,7 +628,7 @@ export class CoastApp {
     ++this.travelRequest;
     if (event.persisted) {
       this.showTravelStatus('');
-      this.monitor?.release();
+      // A cached document can resume with its existing receiver and media.
       return;
     }
     this.renderer.setAnimationLoop(null);

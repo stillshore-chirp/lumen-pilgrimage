@@ -100,7 +100,10 @@ function installSignaling(t, initial = {}) {
     const action = url.split('/').pop();
     const payload = JSON.parse(options.body);
     calls.push({ action, payload, options });
-    if (overrides[action]) await overrides[action](payload);
+    if (overrides[action]) {
+      const result = await overrides[action](payload);
+      if (result) return result;
+    }
     switch (action) {
       case 'create':
         return Response.json({ sessionId: 'session', token: 'sender-token', code: 'AAAA-BBBB-CCCC', snapshot });
@@ -275,3 +278,67 @@ test('late pairing responses are closed without publishing stale state', async (
   assert.equal(calls.at(-1).options.headers.Authorization, 'Bearer viewer-token');
   assert.equal(peers.length, 0);
 });
+
+for (const { name, terminalStatus, delays, phase } of [
+  {
+    name: 'session expiry ends playback after repeated transient poll failures',
+    terminalStatus: 404, delays: [1_000, 2_000, 4_000, 8_000, 8_000], phase: 'ended',
+  },
+  { name: 'authorization failure ends playback immediately', terminalStatus: 403, delays: [], phase: 'failed' },
+  { name: 'explicit disconnect cancels the scheduled poll retry', terminalStatus: 503, delays: [1_000], phase: 'ended' },
+]) {
+  test(name, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const peers = installTransport(t);
+    const { calls, overrides, publish } = installSignaling(t, { phase: 'approved', offer: { type: 'offer', sdp: 'v=0' } });
+    const states = [];
+    const streams = [];
+    const receiver = new MonitorReceiver({ onState: state => states.push(state), onStream: stream => streams.push(stream) });
+    t.after(() => receiver.disconnect());
+
+    await receiver.connect('AAAA-BBBB-CCCC');
+    await until(() => peers[0]?.iceGatheringState === 'gathering', 'receiver did not start ICE gathering');
+    const [peer] = peers;
+    peer.finishIce();
+    const video = new Track('video');
+    peer.receive(video);
+    peer.setConnectionState('connected');
+    await until(() => calls.filter(call => call.action === 'poll').length >= 2, 'receiver did not start polling');
+    const [stream] = streams;
+
+    const revisions = [];
+    overrides.poll = ({ revision }) => {
+      revisions.push(revision);
+      return new Response(null, { status: revisions.length <= delays.length ? 503 : terminalStatus });
+    };
+    publish({ audio: { available: true, output: 'viewer' } });
+    await until(() => revisions.length === 1, 'receiver did not poll after update');
+
+    for (const [index, delay] of delays.entries()) {
+      assert.equal(states.at(-1).phase, 'connected');
+      assert.deepEqual(peers, [peer]);
+      assert.deepEqual(streams, [stream]);
+      assert.equal(video.readyState, 'live');
+      t.mock.timers.tick(delay - 1);
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(revisions.length, index + 1, 'receiver should wait before polling again');
+      t.mock.timers.tick(1);
+      await until(() => revisions.length === index + 2, 'receiver did not retry the poll');
+    }
+
+    if (terminalStatus === 503) {
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(states.at(-1).phase, 'connected');
+      receiver.disconnect();
+    }
+    await until(() => states.at(-1).phase === phase, 'receiver did not end playback');
+    t.mock.timers.tick(16_000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(revisions.length, delays.length + 1, 'no retry remains after teardown');
+    assert.equal(new Set(revisions).size, 1, 'retrying a poll uses the last received revision');
+    assert.equal(peer.connectionState, 'closed');
+    assert.equal(video.readyState, 'ended');
+    assert.deepEqual(streams, [stream, null]);
+    assert.equal(calls.filter(call => call.action === 'close').length, terminalStatus === 404 ? 0 : 1);
+  });
+}

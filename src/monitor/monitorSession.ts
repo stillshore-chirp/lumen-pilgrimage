@@ -33,11 +33,14 @@ type Connection = {
   state: MonitorConnectionState;
   credentials?: Credentials;
   peer?: RTCPeerConnection;
+  video?: MediaStreamTrack;
   connectionTimer?: ReturnType<typeof setTimeout>;
   disconnectTimer?: ReturnType<typeof setTimeout>;
 };
 
 const SIGNAL_TIMEOUT = 15_000;
+const INITIAL_POLL_RETRY_DELAY = 1_000;
+const MAX_POLL_RETRY_DELAY = 8_000;
 const ICE_TIMEOUT = 8_000;
 const CONNECTION_TIMEOUT = 30_000;
 const DISCONNECT_GRACE = 5_000;
@@ -53,6 +56,26 @@ class SignalError extends Error {
 }
 
 class MonitorFailure extends Error {}
+
+function canRetryPoll(error: unknown): boolean {
+  if (error instanceof SignalError) {
+    return [408, 409, 429].includes(error.status) || (error.status >= 500 && error.status <= 599);
+  }
+  return error instanceof TypeError || (error instanceof DOMException && error.name === 'TimeoutError');
+}
+
+function waitForPollRetry(delay: number, abort: AbortSignal): Promise<void> {
+  abort.throwIfAborted();
+  return new Promise(resolve => {
+    const timer = setTimeout(finish, delay);
+    function finish() {
+      clearTimeout(timer);
+      abort.removeEventListener('abort', finish);
+      resolve();
+    }
+    abort.addEventListener('abort', finish, { once: true });
+  });
+}
 
 async function signal<T>(
   endpoint: Endpoint,
@@ -188,8 +211,7 @@ abstract class MonitorSession<Active extends Connection> {
       while (this.current === connection) {
         await apply(snapshot);
         if (this.current !== connection) return;
-        const response = await this.request<SnapshotResult>(connection, 'poll', { revision: snapshot.revision });
-        snapshot = response.snapshot;
+        snapshot = await this.pollSnapshot(connection, snapshot.revision);
       }
     } catch (error) {
       if (error instanceof SignalError && error.status === 404) {
@@ -197,6 +219,25 @@ abstract class MonitorSession<Active extends Connection> {
         return;
       }
       this.fail(connection, error);
+    }
+  }
+
+  private async pollSnapshot(connection: Active, revision: number): Promise<Snapshot> {
+    const abort = connection.controller.signal;
+    let delay = INITIAL_POLL_RETRY_DELAY;
+    while (true) {
+      try {
+        const { snapshot } = await this.request(connection, 'poll', { revision });
+        return snapshot;
+      } catch (error) {
+        abort.throwIfAborted();
+        // An established peer can keep carrying media during a signaling outage.
+        if (connection.state.phase !== 'connected' || connection.video?.readyState !== 'live' || !canRetryPoll(error)) {
+          throw error;
+        }
+        await waitForPollRetry(delay, abort);
+        delay = Math.min(delay * 2, MAX_POLL_RETRY_DELAY);
+      }
     }
   }
 
@@ -266,7 +307,6 @@ abstract class MonitorSession<Active extends Connection> {
 
 type SenderConnection = Connection & {
   stream: MediaStream;
-  video?: MediaStreamTrack;
   audioTrack?: MediaStreamTrack;
   audioWrite: Promise<void>;
   announcedAudio?: MonitorSharedAudio;
@@ -514,7 +554,9 @@ export class MonitorReceiver extends MonitorSession<ReceiverConnection> {
 
   private publishStream(connection: ReceiverConnection): void {
     const { peer, stream } = connection;
-    if (peer?.connectionState !== 'connected' || !stream || !liveTrack(stream.getVideoTracks())) return;
+    const video = stream && liveTrack(stream.getVideoTracks());
+    if (peer?.connectionState !== 'connected' || !stream || !video) return;
+    connection.video = video;
     this.clearConnectionTimer(connection);
     if (!connection.streamPublished) {
       connection.streamPublished = true;
