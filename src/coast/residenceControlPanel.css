@@ -11,9 +11,44 @@
   outline-offset: 2px;
 }
 
+.residence-control-dialog[open]:has(.residence-control-directory),
+.residence-control-body:has(.residence-control-directory) {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.residence-control-dialog:has(.residence-control-directory) .coast-travel-content,
+.residence-control-directory {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .residence-control-directory {
   display: grid;
   gap: 0.75rem;
+}
+
+.residence-control-directory .residence-control-actions > button[aria-pressed] {
+  font-weight: 600;
+}
+
+.residence-control-lists {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+/* Each list sizes the shared row, then scrolls within it if the dialog is capped. */
+.residence-control-list-viewport {
+  grid-area: 1 / 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.residence-control-list-viewport[inert] {
+  visibility: hidden;
+}
+
+.residence-control-dialog .residence-control-list-viewport button:focus-visible {
+  outline-offset: -4px;
 }
 
 .residence-control-actions,

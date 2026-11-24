@@ -881,19 +881,26 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
   }
 });
 
-function observeCinemaArrivalLamp() {
+function observeCinemaLighting() {
   const gl = WebGL2RenderingContext.prototype;
   const locate = gl.getUniformLocation;
   const setVector = gl.uniform3f;
+  const setFloat = gl.uniform1f;
   const lampLocations = new WeakSet();
+  const projectionLocations = new WeakSet();
   gl.getUniformLocation = function (program, name) {
     const location = locate.call(this, program, name);
     if (location && name === 'cinemaLamps') lampLocations.add(location);
+    if (location && name === 'cinemaLive') projectionLocations.add(location);
     return location;
   };
   gl.uniform3f = function (location, arrival, service, emergency) {
     if (lampLocations.has(location)) window.cinemaArrivalLamp = arrival;
     setVector.call(this, location, arrival, service, emergency);
+  };
+  gl.uniform1f = function (location, value) {
+    if (projectionLocations.has(location)) window.cinemaProjectionLive = value;
+    setFloat.call(this, location, value);
   };
 }
 
@@ -914,7 +921,12 @@ async function sampleCinemaCarpet(sender, viewer, frame) {
   }, { selector: videoSelector, frame });
   // Wait past one 15 Hz light sample and its 33 ms interpolation window.
   await viewer.waitForTimeout(140);
-  const screenshot = await viewer.screenshot({ style: '.coast-ui { visibility: hidden !important }' });
+  return measureCinemaCarpet(viewer);
+}
+
+async function measureCinemaCarpet(viewer, file) {
+  const path = screenshotDirectory && file ? join(screenshotDirectory, `${file}.png`) : undefined;
+  const screenshot = await viewer.screenshot({ path, style: '.coast-ui { visibility: hidden !important }' });
   return viewer.evaluate(async encoded => {
     const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
     const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
@@ -950,7 +962,7 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
       sender.addInitScript(observePeers),
       viewer.addInitScript(observePeers),
       viewer.addInitScript(observeAudio),
-      viewer.addInitScript(observeCinemaArrivalLamp),
+      viewer.addInitScript(observeCinemaLighting),
     ]);
     await sender.goto(new URL('?monitor=sender', url).href);
     await viewer.goto(new URL('?world=cinema', url).href);
@@ -988,6 +1000,18 @@ test('cinema projects one native WebRTC stream and pauses its own output during 
     await viewer.waitForFunction(() => window.cinemaArrivalLamp === 0);
     const warmLeft = await sampleCinemaCarpet(sender, viewer, 'warm-left');
     const warmRight = await sampleCinemaCarpet(sender, viewer, 'warm-right');
+
+    await button(viewer, '投影を止める').click();
+    await viewer.waitForFunction(() => window.cinemaProjectionLive === 0);
+    const hidden = await measureCinemaCarpet(viewer, 'cinema-hidden-after-warm-frame');
+    assert.ok(hidden.flat().every(channel => channel < 1), 'hiding the monitor clears the prior reflection');
+    assert.deepEqual(await viewer.evaluate(() => window.monitorPeers.map(peer => peer.connectionState)), ['connected']);
+    await button(viewer, 'スクリーンに映す').click();
+    await viewer.waitForFunction(() => window.cinemaProjectionLive === 1);
+    const resumed = await measureCinemaCarpet(viewer, 'cinema-restored-warm-frame');
+    assert.ok(resumed[1][0] - resumed[1][2] > hidden[1][0] - hidden[1][2] + 4,
+      'showing the same stream restores its reflected color');
+
     const black = await sampleCinemaCarpet(sender, viewer, 'black');
     for (const side of [0, 1]) {
       const warm = side === 0 ? warmLeft[side] : warmRight[side];
