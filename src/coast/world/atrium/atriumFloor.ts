@@ -58,7 +58,7 @@ const floorFragment = /* glsl */`
     vec3 warm = vec3(2.23, 1.65, 1.02);
     float slope = max(0.045, ray.y);
     float strips = 0.0;
-    const vec3 soffits = vec3(4.035, ${(ATRIUM_LEVELS[1] - .48).toFixed(2)}, ${(ATRIUM_LEVELS[2] - .48).toFixed(2)});
+    const vec3 soffits = vec3(4.033, ${(ATRIUM_LEVELS[1] - .51).toFixed(2)}, ${(ATRIUM_LEVELS[2] - .51).toFixed(2)});
     for (int i = 0; i < 3; ++i) {
       float t = soffits[i] / slope;
       vec2 hit = point.xz + ray.xz * t;
@@ -90,14 +90,15 @@ const floorFragment = /* glsl */`
     vec2 skyCenter = skylight - vec2(${ATRIUM_SKYLIGHT.x.toFixed(3)}, ${ATRIUM_SKYLIGHT.z.toFixed(2)});
     const float apertureSin = ${Math.sin(ATRIUM_SKYLIGHT.yaw).toFixed(6)};
     const float apertureCos = ${Math.cos(ATRIUM_SKYLIGHT.yaw).toFixed(6)};
-    vec2 ellipse = vec2(skyCenter.x * apertureCos - skyCenter.y * apertureSin,
-      skyCenter.x * apertureSin + skyCenter.y * apertureCos)
-      / vec2(${ATRIUM_SKYLIGHT.radiusX.toFixed(2)}, ${ATRIUM_SKYLIGHT.radiusZ.toFixed(2)});
-    float radial = length(ellipse);
-    float rim = atriumBand(radial - 1.0, 0.045);
+    vec2 localSky = vec2(skyCenter.x * apertureCos - skyCenter.y * apertureSin,
+      skyCenter.x * apertureSin + skyCenter.y * apertureCos);
+    const vec2 rimRadius = vec2(${ATRIUM_SKYLIGHT.radiusX.toFixed(2)}, ${ATRIUM_SKYLIGHT.radiusZ.toFixed(2)});
+    const vec2 apertureRadius = rimRadius - ${ATRIUM_SKYLIGHT.wallInset.toFixed(2)};
+    float rim = atriumBand(length(localSky / rimRadius) - 1.0, 0.045);
+    float opening = 1.0 - smoothstep(0.87, 1.0, length(localSky / apertureRadius));
     float skylightGrid = 1.0 - 0.57 * max(atriumBand(fract(skylight.x / 1.4) - 0.50, 0.083),
       atriumBand(fract(skylight.y / 1.7) - 0.50, 0.081));
-    vec3 cool = vec3(0.29, 0.58, 0.98) * (1.0 - smoothstep(0.88, 0.98, radial)) * skylightGrid;
+    vec3 cool = vec3(0.29, 0.58, 0.98) * opening * skylightGrid;
     return (strips * 0.75 + glazing + 0.6 * rim) * warm * atriumFixtureLight + cool * atriumDaylight;
   }
 

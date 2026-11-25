@@ -1,6 +1,7 @@
 import {
-  BoxGeometry, BufferGeometry, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, InstancedMesh, Mesh,
-  MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, Object3D, type Texture,
+  BoxGeometry, BufferGeometry, CylinderGeometry, DataTexture, DoubleSide, Float32BufferAttribute, Group,
+  InstancedMesh, LinearFilter, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, Object3D,
+  type Texture,
 } from 'three';
 import {
   ATRIUM_BOUNDS, ATRIUM_FIRST_BRIDGE, ATRIUM_FIRST_LEVEL_FORECOURT, ATRIUM_GALLERY_EDGE, ATRIUM_GALLERY_FRONTS,
@@ -25,6 +26,7 @@ type AtriumMaterials = {
   limestone: MeshStandardMaterial;
   plaster: MeshStandardMaterial;
   plasterLight: MeshStandardMaterial;
+  coveReturn: MeshStandardMaterial;
   bronze: MeshStandardMaterial;
   bronzeLight: MeshStandardMaterial;
   darkBronze: MeshStandardMaterial;
@@ -32,8 +34,7 @@ type AtriumMaterials = {
   glass: MeshPhysicalMaterial;
   screen: MeshPhysicalMaterial;
   cove: MeshBasicMaterial;
-  soffitWash: MeshBasicMaterial;
-  soffitWashSoft: MeshBasicMaterial;
+  pierWash: MeshBasicMaterial;
   spot: MeshBasicMaterial;
   displayWarm: MeshBasicMaterial;
   displayCool: MeshBasicMaterial;
@@ -51,30 +52,44 @@ const FRONT_Z = ATRIUM_BOUNDS.maxZ;
 const REAR_Z = ATRIUM_BOUNDS.minZ;
 const STORY_TOPS = [8.75, 13.28, 17.20] as const;
 const GALLERY_FRONT = ATRIUM_GALLERY_FRONTS;
+
+// Offset toward the shops, drop below the slab and received cove light.
+const COVE_PROFILE = [
+  [.018, .006, .06], [.075, -.006, .34], [.131, -.027, 1], [.205, -.050, .86],
+  [.325, -.074, .64], [.57, -.10, .43], [.84, -.14, .27], [1.13, -.19, .16],
+  [1.42, -.229, .11], [1.70, -.238, .09], [1.83, -.23, .20], [1.90, -.199, .43],
+  [1.96, -.149, .31], [2.02, -.067, .11], [2.07, .006, .02],
+] as const;
+
 function makeMaterials(): AtriumMaterials {
   const solid = (name: string, color: number, roughness: number, metalness = 0): MeshStandardMaterial =>
     new MeshStandardMaterial({ name, color, roughness, metalness });
   const glass = (name: string, color: number, opacity: number, roughness: number): MeshPhysicalMaterial =>
     new MeshPhysicalMaterial({
       name, color, opacity, transparent: true, depthWrite: false, side: DoubleSide, forceSinglePass: true,
-      roughness, metalness: 0.08, ior: 1.48, specularIntensity: 0.42,
+      roughness, metalness: 0.06, ior: 1.48, specularIntensity: 0.72,
     });
+  const coveFalloff = new DataTexture(new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]), 2, 1);
+  coveFalloff.name = 'Cove reflected-light intensity';
+  coveFalloff.minFilter = coveFalloff.magFilter = LinearFilter;
+  coveFalloff.needsUpdate = true;
   return {
     ceiling: solid('Commercial atrium microtextured ceiling', 0xf0e6d8, .91),
     limestone: solid('Warm honed limestone atrium stone', 0xbba890, .77),
     plaster: solid('Warm mineral atrium plaster', 0xd9c6ae, .84),
     plasterLight: solid('Cream limestone light reveals', 0xefe1cc, .74),
-    bronze: solid('Ribbed dark bronze fascia', 0x4c3930, .49, .48),
-    bronzeLight: solid('Warm bronze fascia highlights', 0x755846, .43, .42),
-    darkBronze: solid('Shadow gap dark bronze', 0x272324, .52, .36),
-    champagne: solid('Pale champagne titanium slim profiles', 0xbab4a8, .38, .58),
-    glass: glass('Low reflection upper gallery glazing', 0x9ab5b6, .15, .19),
+    coveReturn: new MeshStandardMaterial({ name: 'Rounded plaster cove with reflected light',
+      color: 0xe9dcc8, roughness: .83, emissive: 0xffdfb9, emissiveMap: coveFalloff }),
+    bronze: solid('Taupe bronze fascia', 0x796752, .51, .38),
+    bronzeLight: solid('Fine fluted bronze fascia', 0x83715e, .48, .37),
+    darkBronze: solid('Shadow gap dark bronze', 0x342b27, .49, .35),
+    champagne: solid('Pale champagne titanium slim profiles', 0xc1b4a0, .22, .66),
+    glass: glass('Low-iron upper gallery glazing', 0xb9bfb5, .19, .13),
     screen: glass('Transparent architectural screen', 0x74c0d9, .33, .13),
     cove: new MeshBasicMaterial({ name: 'Warm concealed cove diffuser', color: 0xffc27f, toneMapped: false }),
-    soffitWash: new MeshBasicMaterial({ name: 'Pale warm soffit indirect wash', color: 0xffd7ac,
-      transparent: true, opacity: .62, depthWrite: false, toneMapped: false }),
-    soffitWashSoft: new MeshBasicMaterial({ name: 'Soft warm soffit gradient wash', color: 0xffead0,
-      transparent: true, opacity: .24, depthWrite: false, toneMapped: false }),
+    pierWash: new MeshBasicMaterial({ name: 'Grazing warm light on limestone piers', color: 0xffe6c1,
+      vertexColors: true, transparent: true, depthWrite: false, side: DoubleSide, forceSinglePass: true,
+      toneMapped: false }),
     spot: new MeshBasicMaterial({ name: 'Warm recessed spot face', color: 0xffd09b, toneMapped: false }),
     displayWarm: new MeshBasicMaterial({ name: 'Warm upper retail display panel', color: 0xe8c08f,
       transparent: true, opacity: .78, depthWrite: false, toneMapped: false }),
@@ -99,7 +114,7 @@ function addBox(group: Group, material: MeshStandardMaterial | MeshPhysicalMater
   return mesh;
 }
 
-function addInstancedBoxes(group: Group, material: MeshStandardMaterial, name: string,
+function addInstancedBoxes(group: Group, material: MeshStandardMaterial | MeshBasicMaterial, name: string,
   boxes: readonly BoxSpec[]): InstancedMesh {
   const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), material, boxes.length);
   mesh.name = name;
@@ -112,8 +127,7 @@ function addInstancedBoxes(group: Group, material: MeshStandardMaterial, name: s
     mesh.setMatrixAt(index, transform.matrix);
   });
   mesh.instanceMatrix.needsUpdate = true;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+  mesh.castShadow = mesh.receiveShadow = !material.transparent && !(material instanceof MeshBasicMaterial);
   group.add(mesh);
   return mesh;
 }
@@ -161,6 +175,34 @@ function addEdgeRibbon(group: Group, material: MeshStandardMaterial | MeshBasicM
     length, height, depth, yaw], name);
 }
 
+function addCoveReturn(group: Group, material: MeshStandardMaterial, segment: EdgeSegment,
+  inward: PlanPoint, underside: number, widthScale: number, dropScale: number, name: string): void {
+  const [[x0, z0], [x1, z1]] = segment;
+  const positions: number[] = [];
+  const uv: number[] = [];
+  const indices: number[] = [];
+  const facesDown = (z1 - z0) * inward[0] - (x1 - x0) * inward[1] < 0;
+  for (const [index, [offset, drop, light]] of COVE_PROFILE.entries()) {
+    const shiftX = inward[0] * offset * widthScale;
+    const shiftZ = inward[1] * offset * widthScale;
+    const y = underside + drop * dropScale;
+    positions.push(x0 + shiftX, y, z0 + shiftZ, x1 + shiftX, y, z1 + shiftZ);
+    uv.push(.25 + .5 * light, .5, .25 + .5 * light, .5);
+    if (index === 0) continue;
+    const a = (index - 1) * 2;
+    indices.push(...(facesDown ? [a, a + 1, a + 3, a, a + 3, a + 2] : [a, a + 3, a + 1, a, a + 2, a + 3]));
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const mesh = new Mesh(geometry, material);
+  mesh.name = name;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+}
+
 function firstLevelPlanSections(side: number, front: number, back: number): PlanPoint[][] {
   const { taperZ, galleryEdge } = ATRIUM_FIRST_LEVEL_FORECOURT;
   const innerFront: PlanPoint = [atriumFirstLevelInnerEdge(front, side < 0 ? -1 : 1), front];
@@ -200,14 +242,12 @@ function addFirstLevelGallery(group: Group, materials: AtriumMaterials, side: nu
   for (const [index, segment] of segments.entries()) {
     addEdgeRibbon(group, materials.bronze, segment, floor + .34, 1.60, .16,
       `Level 4.55 tapered bronze fluted fascia ${index + 1}`);
-    addEdgeRibbon(group, materials.darkBronze, segment, floor - .425, .070, .18,
+    addEdgeRibbon(group, materials.darkBronze, segment, floor - .427, .040, .18,
       `Level 4.55 lower brown metal reveal ${index + 1}`);
-    addEdgeRibbon(group, materials.darkBronze, segment, floor + 1.105, .070, .18,
+    addEdgeRibbon(group, materials.darkBronze, segment, floor + 1.105, .042, .18,
       `Level 4.55 upper brown metal reveal ${index + 1}`);
-    addEdgeRibbon(group, materials.cove, segment, floor - .515, .030, .085,
-      `Level 4.55 continuous warm cove ${index + 1}`);
-    addEdgeRibbon(group, materials.soffitWash, segment, floor - .545, .020, .115,
-      `Level 4.55 pale cove wash ${index + 1}`);
+    addCoveReturn(group, materials.coveReturn, segment, [side, 0], slabBottom, 1, 1,
+      `Level 4.55 tapered cove and plaster return ${index + 1}`);
   }
 
   const ribs: BoxSpec[] = [];
@@ -216,12 +256,12 @@ function addFirstLevelGallery(group: Group, materials: AtriumMaterials, side: nu
     const dx = endX - startX, dz = endZ - startZ;
     const length = Math.hypot(dx, dz);
     const yaw = Math.atan2(-dz, dx);
-    const count = Math.ceil(length / .34);
-    for (let index = 0; index <= count; index += 1) {
-      const t = index / count;
-      const x = startX + dx * t - side * .092;
-      const z = startZ + dz * t;
-      ribs.push([x, floor + .34, z, .055, 1.46, .050, yaw]);
+    const count = Math.ceil(length / .123);
+    for (let index = 0; index < count; index += 1) {
+      const t = (index + .5) / count;
+      const x = startX + dx * t - side * .082 * Math.abs(dz) / length;
+      const z = startZ + dz * t + side * .082 * dx * Math.sign(dz) / length;
+      ribs.push([x, floor + .34, z, .022, 1.46, .026, yaw]);
     }
   }
   addInstancedBoxes(group, materials.bronzeLight, 'Level 4.55 tapered fascia ribs', ribs);
@@ -252,32 +292,25 @@ function addFirstLevelGallery(group: Group, materials: AtriumMaterials, side: nu
 function addGalleryFascia(group: Group, materials: AtriumMaterials, side: number,
   level: number, front: number, back: number): void {
   const centerZ = (front + back) * .5;
-  const depth = Math.abs(front - back) + .12;
   const edgeX = side * (INNER_EDGE + .065);
-  addBox(group, materials.plasterLight, [side * (INNER_EDGE + .01), level - .047, centerZ, .12, .09, depth + .10],
-    `Level ${level.toFixed(2)} cream soffit return`);
-  addBox(group, materials.cove, [side * (INNER_EDGE + .16), level - .48, centerZ, .13, .08, depth - .04],
-    `Level ${level.toFixed(2)} concealed cove`);
-  // A broad cream soffit wash keeps the underside legible from the ground. The
-  // two overlapping strips fade toward the outer shop side while the dark
-  // bronze remains limited to the narrow edge fascia above.
-  addBox(group, materials.soffitWash, [side * (INNER_EDGE + .76), level - .498, centerZ,
-    1.12, .015, depth - .14], `Level ${level.toFixed(2)} pale inner soffit wash`);
-  addBox(group, materials.soffitWashSoft, [side * (INNER_EDGE + 1.75), level - .497, centerZ,
-    .90, .014, depth - .20], `Level ${level.toFixed(2)} soft outer soffit gradient`);
+  addBox(group, materials.plasterLight, [side * (INNER_EDGE + .01), level - .047, centerZ, .12, .09,
+    front - back + .22], `Level ${level.toFixed(2)} cream soffit return`);
+  addCoveReturn(group, materials.coveReturn, [[side * (INNER_EDGE - .095), front],
+    [side * (INNER_EDGE - .095), back]], [side, 0], level - .489, .73, .70,
+  `Level ${level.toFixed(2)} recessed cream cove`);
 
   const fins: BoxSpec[] = [];
   for (const [start, end] of galleryRailRuns(side, level, front, back)) {
     const length = Math.abs(start - end);
-    addBox(group, materials.darkBronze, [edgeX, level + .34, (start + end) * .5, .16, .68, length],
+    addBox(group, materials.bronze, [edgeX, level + .30, (start + end) * .5, .16, .68, length],
       `Level ${level.toFixed(2)} inner shadow fascia`);
-    const count = Math.ceil(length / .32);
-    for (let index = 0; index <= count; index += 1) {
-      const z = start + (end - start) * index / count;
-      fins.push([side * (INNER_EDGE + .15), level + .34, z, .075, .76, .050]);
+    const count = Math.ceil(length / .145);
+    for (let index = 0; index < count; index += 1) {
+      const z = start + (end - start) * (index + .5) / count;
+      fins.push([side * (INNER_EDGE - .015), level + .30, z, .027, .61, .023]);
     }
   }
-  addInstancedBoxes(group, materials.bronze, `Level ${level.toFixed(2)} repeated bronze ribs`, fins);
+  addInstancedBoxes(group, materials.bronzeLight, `Level ${level.toFixed(2)} repeated bronze ribs`, fins);
 }
 
 function galleryRailRuns(side: number, floor: number, front: number, back: number): [number, number][] {
@@ -311,6 +344,43 @@ function addGuardRail(group: Group, materials: AtriumMaterials, side: number,
   }
 }
 
+function addPierWash(group: Group, materials: AtriumMaterials, side: number, piers: readonly BoxSpec[]): void {
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indices: number[] = [];
+  const spread = [[.02, .22, .42], [.09, .32, .86], [.28, .49, .60], [.52, .65, .27], [.80, .81, 0]];
+  const acrossBeam = [[-1, 0], [-.52, .58], [0, 1], [.52, .58], [1, 0]];
+  const sources: BoxSpec[] = [];
+  for (const [x, y, z, width, height, depth] of piers) {
+    const face = x - side * (width * .5 + .003);
+    const top = y + height * .5;
+    for (const center of [z - depth * .215, z + depth * .215]) {
+      const base = positions.length / 3;
+      for (const [row, [drop, radius, intensity]] of spread.entries()) {
+        for (const [column, [offset, light]] of acrossBeam.entries()) {
+          positions.push(face, top - drop * height, center + offset * radius * depth * .49);
+          colors.push(1, 1, 1, light * intensity);
+          if (row === 0 || column === 0) continue;
+          const a = base + (row - 1) * acrossBeam.length + column - 1;
+          const b = a + acrossBeam.length;
+          indices.push(a, a + 1, b + 1, a, b + 1, b);
+        }
+      }
+      sources.push([face - side * .16, top - .06, center, .087, .022, .085]);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 4));
+  geometry.setIndex(indices);
+  const wash = new Mesh(geometry, materials.pierWash);
+  wash.name = 'Paired downlight pools on upper limestone piers';
+  // The wash sits on the stone underneath the transparent balcony guards.
+  wash.renderOrder = -1;
+  group.add(wash);
+  addInstancedBoxes(group, materials.spot, 'Upper limestone pier downlights', sources);
+}
+
 function addUpperGallery(group: Group, materials: AtriumMaterials, side: number,
   levelIndex: number, floor: number, front: number, back: number): void {
   const centerZ = (front + back) * .5;
@@ -337,38 +407,57 @@ function addUpperGallery(group: Group, materials: AtriumMaterials, side: number,
   addBox(group, materials.ceiling, [side * 11.6, upper - .07, centerZ, 6.45, .14, depth],
     `Level ${floor.toFixed(2)} recessed ceiling`);
 
-  // Repeated upper shop fronts, set behind the guard line so the balcony reads
-  // as a real circulation band rather than a floating ribbon.
-  const bays = Math.ceil(depth / 3.05);
+  // Shop windows sit behind the outer piers. The first gallery is visible from
+  // below and its closer frontage brings the lit stone into the concourse view.
+  const bays = Math.ceil(depth / 4.65);
   const bayDepth = depth / bays;
+  const frontage = levelIndex === 0 ? 10.22 : 12.82;
   const bayGlass: BoxSpec[] = [];
   const bayFrames: BoxSpec[] = [];
+  const piers: BoxSpec[] = [];
+  const pierJoints: BoxSpec[] = [];
+  const windowDisplays: BoxSpec[][] = [[], [], []];
+  const displayMaterials = [materials.displayWarm, materials.displayCool, materials.displayNeutral];
   for (let index = 0; index < bays; index += 1) {
     const z = front - bayDepth * (index + .5);
-    const display = [materials.displayWarm, materials.displayCool, materials.displayNeutral][index % 3];
-    bayGlass.push([side * 14.60, roomBottom + roomHeight * .54, z, .030, roomHeight * .57, bayDepth - .12]);
-    bayFrames.push([side * 14.46, roomBottom + roomHeight * .54, z - bayDepth * .5 + .07, .095, roomHeight * .67, .095]);
-    bayFrames.push([side * 14.46, roomBottom + roomHeight * .54, z + bayDepth * .5 - .07, .095, roomHeight * .67, .095]);
-    addBox(group, materials.darkBronze, [side * 14.72, roomBottom + roomHeight * .45, z,
-      .08, roomHeight * .80, bayDepth - .24], `Level ${floor.toFixed(2)} recessed shop bay`);
-    addBox(group, display, [side * 14.55, roomBottom + roomHeight * .48, z,
-      .035, roomHeight * .43, bayDepth - .34], `Level ${floor.toFixed(2)} varied luminous display panel`);
-    addBox(group, display, [side * 14.52, upper - .56, z, .027, .050, bayDepth - .45],
-      `Level ${floor.toFixed(2)} varied display header strip`);
-    addBox(group, materials.plasterLight, [side * 14.52, upper - .32, z, .12, .10, bayDepth - .16],
-      `Level ${floor.toFixed(2)} shop bay cove`);
-  }
-  const glassMesh = addInstancedBoxes(group, materials.glass, `Level ${floor.toFixed(2)} upper shop glazing`, bayGlass);
-  glassMesh.castShadow = false;
-  addInstancedBoxes(group, materials.champagne, `Level ${floor.toFixed(2)} shop mullions`, bayFrames);
+    const pattern = (index + levelIndex + (side > 0 ? 2 : 0)) % 4;
+    const window = frontage + [.48, 1.24, .80, 1.58][pattern];
+    const sill = roomBottom + [.21, .36, .10, .31][pattern];
+    const head = upper - [.56, .88, .44, .69][pattern];
+    const span = bayDepth - [.69, .92, .56, .74][pattern];
+    const centerY = (sill + head) * .5;
+    bayGlass.push([side * window, centerY, z, .024, head - sill, span]);
+    for (const edge of [-1, 1]) {
+      bayFrames.push([side * (window - .035), centerY, z + edge * span * .5, .073, head - sill, .064]);
+      bayFrames.push([side * (window - .035), centerY, z + edge * span * .165, .046, head - sill, .037]);
+    }
+    addBox(group, materials.darkBronze, [side * (window + .66), roomBottom + roomHeight * .5, z,
+      .095, roomHeight, bayDepth + .02], `Level ${floor.toFixed(2)} recessed shop backing`);
+    addBox(group, materials.darkBronze, [side * (window - .025), head + .10, z, .24, .22, span + .13],
+      `Level ${floor.toFixed(2)} recessed shop transom`);
+    addBox(group, materials.limestone, [side * (window + .28), sill + .055, z, .69, .14, span],
+      `Level ${floor.toFixed(2)} limestone window sill`);
+    const displays = windowDisplays[(index + 2 * levelIndex + (side > 0 ? 1 : 0)) % 3];
+    displays.push([side * (window - .16), head + .09, z - span * .073, .025, .055, span * .46]);
+    displays.push([side * (window + .57), sill + (head - sill) * .43, z - span * .18,
+      .028, (head - sill) * .55, span * .30]);
+    displays.push([side * (window + .58), sill + (head - sill) * .34, z + span * .19,
+      .028, (head - sill) * .38, span * .25]);
 
-  // An architectural pier rhythm at the outer edge carries the repeated slabs.
-  const piers: BoxSpec[] = [];
-  for (let index = 0; index <= bays; index += 1) {
-    const z = front - bayDepth * index;
-    piers.push([side * 14.31, roomBottom + roomHeight * .5, z, .34, roomHeight + .04, .15]);
+    const pierZ = z + bayDepth * .5;
+    const pierWidth = pattern === 1 ? 1.04 : .73;
+    piers.push([side * (frontage + .12), roomBottom + roomHeight * .5, pierZ, .54, roomHeight, pierWidth]);
+    for (let y = roomBottom + .64; y < upper - .26; y += .65) {
+      pierJoints.push([side * (frontage - .151), y, pierZ, .012, .010, pierWidth - .02]);
+    }
   }
-  addInstancedBoxes(group, materials.plasterLight, `Level ${floor.toFixed(2)} upper volume piers`, piers);
+  addInstancedBoxes(group, materials.glass, `Level ${floor.toFixed(2)} upper shop glazing`, bayGlass);
+  addInstancedBoxes(group, materials.champagne, `Level ${floor.toFixed(2)} shop mullions`, bayFrames);
+  addInstancedBoxes(group, materials.limestone, `Level ${floor.toFixed(2)} honed limestone piers`, piers);
+  addInstancedBoxes(group, materials.plaster, `Level ${floor.toFixed(2)} limestone course joints`, pierJoints);
+  windowDisplays.forEach((boxes, index) => addInstancedBoxes(group, displayMaterials[index],
+    `Level ${floor.toFixed(2)} upper shop display highlights`, boxes));
+  addPierWash(group, materials, side, piers);
 }
 
 function addCrossRail(group: Group, materials: AtriumMaterials,
@@ -384,15 +473,20 @@ function addCrossRail(group: Group, materials: AtriumMaterials,
 }
 
 function addCrossDeck(group: Group, materials: AtriumMaterials, floor: number,
-  area: { minX: number; maxX: number; minZ: number; maxZ: number }, label: string, hasParapet = true): void {
+  area: { minX: number; maxX: number; minZ: number; maxZ: number }, label: string,
+  hasParapet = true, beamSetback = 0): void {
   const { minX, maxX, minZ, maxZ } = area;
   const x = (minX + maxX) * .5, z = (minZ + maxZ) * .5;
   const width = maxX - minX, depth = maxZ - minZ;
-  addBox(group, materials.plasterLight, [x, floor - .253, z, width, .478, depth], `${label} deep cream soffit`);
-  addBox(group, materials.limestone, [x, floor - .041, z, width + .015, .070, depth + .015], `${label} limestone deck`);
+  addBox(group, materials.plasterLight, [x, floor - .272, z - beamSetback * .5, width, .44, depth - beamSetback],
+    `${label} deep cream soffit`);
+  addBox(group, materials.limestone, [x, floor - .055, z, width + .015, .107, depth + .015],
+    `${label} limestone deck`);
+  if (beamSetback > 0) return;
   const fasciaY = hasParapet ? floor + .19 : floor - .197;
   addBox(group, materials.bronze, [x, fasciaY, maxZ - .035, width, .38, .095], `${label} near fascia`);
-  addBox(group, materials.cove, [x, floor - .455, maxZ - .14, width - .07, .071, .105], `${label} warm cove`);
+  addCoveReturn(group, materials.coveReturn, [[minX, maxZ - .035], [maxX, maxZ - .035]],
+    [0, -1], floor - .496, .66, .64, `${label} warm cove`);
 }
 
 function addRearBridges(group: Group, materials: AtriumMaterials): void {
@@ -400,7 +494,7 @@ function addRearBridges(group: Group, materials: AtriumMaterials): void {
   addCrossRail(group, materials, ATRIUM_FIRST_BRIDGE.minX, ATRIUM_FIRST_BRIDGE.maxX - .15,
     ATRIUM_FIRST_BRIDGE.maxZ - .035, ATRIUM_LEVELS[0]);
   addCrossDeck(group, materials, ATRIUM_LEVELS[1], ATRIUM_STAIR_WEST_LINK, 'West curved stair receiving wing', false);
-  addCrossDeck(group, materials, ATRIUM_LEVELS[2], ATRIUM_UPPER_LANDING, 'Upper diagonal stair head');
+  addCrossDeck(group, materials, ATRIUM_LEVELS[2], ATRIUM_UPPER_LANDING, 'Upper diagonal stair head', false, 1.34);
   addCrossRail(group, materials, ATRIUM_UPPER_LANDING.minX, INNER_EDGE - .04,
     ATRIUM_UPPER_LANDING.maxZ - .035, ATRIUM_LEVELS[2]);
   addCrossRail(group, materials, ATRIUM_UPPER_LANDING.minX, INNER_EDGE - .04,
@@ -487,15 +581,24 @@ function addPedestrianTermini(group: Group, materials: AtriumMaterials): void {
 
 function addRecessedSpots(group: Group, materials: AtriumMaterials): void {
   const spots: BoxSpec[] = [];
-  const levels = ATRIUM_LEVELS.map(floor => floor - .53);
-  for (const y of levels) {
-    for (const side of [-1, 1]) {
-      for (let index = 0; index < 10; index += 1) {
-        const z = FRONT_Z - 2.2 - index * 4.55;
-        spots.push([side * (INNER_EDGE + 1.18), y, z, .13, .030, .13]);
+  const vents: BoxSpec[] = [];
+  for (const [levelIndex, floor] of ATRIUM_LEVELS.entries()) {
+    for (const side of [-1, 1] as const) {
+      for (let index = 0; index < 12; index += 1) {
+        const z = GALLERY_FRONT[levelIndex] - 2.2 - index * 4.55;
+        const edge = levelIndex === 0 ? atriumFirstLevelInnerEdge(z, side) : side * INNER_EDGE;
+        const x = edge + side * (levelIndex === 0 ? 2.57 : 2.13);
+        spots.push([x, floor - .505, z, .12, .024, .12]);
+        spots.push([x + side * .16, floor - .505, z - .20, .12, .024, .12]);
+        if (levelIndex === 0) {
+          for (const offset of [-.071, -.035, 0, .035, .071]) {
+            vents.push([x + side * (.38 + offset), floor - .495, z - 1.55, .014, .011, 1.73]);
+          }
+        }
       }
     }
   }
+  addInstancedBoxes(group, materials.bronze, 'Fine soffit return ventilation slots', vents);
   addInstancedBoxes(group, materials.darkBronze, 'Repeated recessed spot housings', spots);
   const diffusers = new InstancedMesh(new CylinderGeometry(.045, .045, .009, 10), materials.spot, spots.length);
   const transform = new Object3D();
@@ -574,14 +677,10 @@ export function buildAtriumShell(root: Group, stoneMap: Texture | null): Lightin
       const spotColor = artificialOn
         ? night ? 0xffad67 : 0xffd8a2
         : 0x51463d;
-      const washColor = artificialOn
-        ? night ? 0xffb67e : 0xffd7ad
-        : 0x67584c;
       materials.cove.color.setHex(fixtureColor);
-      materials.soffitWash.color.setHex(washColor);
-      materials.soffitWashSoft.color.setHex(artificialOn ? 0xffead0 : 0x756456);
-      materials.soffitWash.opacity = artificialOn ? (night ? .50 : .62) : .10;
-      materials.soffitWashSoft.opacity = artificialOn ? (night ? .16 : .24) : .045;
+      materials.coveReturn.emissive.setHex(night ? 0xffc797 : 0xffebd2);
+      materials.coveReturn.emissiveIntensity = artificialOn ? (night ? .98 : 1.20) : 0;
+      materials.pierWash.opacity = artificialOn ? (night ? .68 : .78) : 0;
       materials.spot.color.setHex(spotColor);
       materials.displayWarm.opacity = artificialOn ? (night ? .72 : .78) : .18;
       materials.displayCool.opacity = artificialOn ? (night ? .52 : .65) : .16;
