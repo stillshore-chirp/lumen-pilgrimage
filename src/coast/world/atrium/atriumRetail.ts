@@ -1,7 +1,6 @@
 import {
   BoxGeometry, CylinderGeometry, DoubleSide, Group, InstancedMesh, Mesh,
-  MeshPhysicalMaterial, MeshStandardMaterial, Object3D, PointLight, SphereGeometry,
-  TorusGeometry, Vector3, type Material,
+  MeshPhysicalMaterial, MeshStandardMaterial, Object3D, PointLight, TorusGeometry, type Material,
 } from 'three';
 import { ATRIUM_BOUNDS } from './atriumLayout';
 
@@ -51,7 +50,6 @@ const BLACK_BRONZE = 0x17171b;
 const CHAMPAGNE = 0xb99463;
 const CREAM_STONE = 0xc7ad8d;
 const MATTE_BLACK = 0x111217;
-const MANNEQUIN = 0xd8cec1;
 const CLOTHING = [0x2e3546, 0x5b2430, 0x7d6a4c, 0xb9a48c, 0x263a38] as const;
 
 function makeStandard(name: string, color: number, roughness: number, metalness = 0): MeshStandardMaterial {
@@ -113,28 +111,6 @@ function addCylinder(
   return mesh;
 }
 
-function addSphere(
-  parent: Object3D,
-  geometry: SphereGeometry,
-  material: Material,
-  x: number,
-  y: number,
-  z: number,
-  radiusX: number,
-  radiusY: number,
-  radiusZ: number,
-  name: string,
-): Mesh {
-  const mesh = new Mesh(geometry, material);
-  mesh.name = name;
-  mesh.position.set(x, y, z);
-  mesh.scale.set(radiusX, radiusY, radiusZ);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  parent.add(mesh);
-  return mesh;
-}
-
 function addInstancedBoxes(
   parent: Object3D,
   geometry: BoxGeometry,
@@ -177,27 +153,6 @@ function addInstancedCylinders(
     mesh.setMatrixAt(index, transform.matrix);
   });
   mesh.instanceMatrix.needsUpdate = true;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  parent.add(mesh);
-  return mesh;
-}
-
-function addCylinderBetween(
-  parent: Object3D,
-  geometry: CylinderGeometry,
-  material: Material,
-  start: Vector3,
-  end: Vector3,
-  radius: number,
-  name: string,
-): Mesh {
-  const direction = new Vector3().subVectors(end, start);
-  const mesh = new Mesh(geometry, material);
-  mesh.name = name;
-  mesh.position.copy(start).add(end).multiplyScalar(0.5);
-  mesh.scale.set(radius, direction.length(), radius);
-  mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), direction.normalize());
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   parent.add(mesh);
@@ -273,33 +228,6 @@ function createBay(
   return { side, centerZ, span, depth, frontX, backX, group };
 }
 
-function addMannequin(
-  bay: RetailBay,
-  boxes: BoxGeometry,
-  cylinders: CylinderGeometry,
-  spheres: SphereGeometry,
-  skin: MeshStandardMaterial,
-  garment: MeshStandardMaterial,
-  xOffset: number,
-  z: number,
-  scale = 1,
-): void {
-  const x = bay.frontX + bay.side * xOffset;
-  const torso = addCylinder(bay.group, cylinders, garment, x, 1.20 * scale, z, 0.17 * scale, 0.72 * scale, 0.13 * scale,
-    'original faceless mannequin garment torso', (z - bay.centerZ) * 0.06);
-  torso.rotation.z = bay.side * 0.025;
-  addCylinder(bay.group, cylinders, skin, x - bay.side * 0.072 * scale, 0.49 * scale, z, 0.052 * scale, 0.74 * scale,
-    0.052 * scale, 'mannequin left leg');
-  addCylinder(bay.group, cylinders, skin, x + bay.side * 0.072 * scale, 0.49 * scale, z, 0.052 * scale, 0.74 * scale,
-    0.052 * scale, 'mannequin right leg');
-  addSphere(bay.group, spheres, skin, x, 1.79 * scale, z, 0.13 * scale, 0.15 * scale, 0.12 * scale,
-    'original faceless mannequin head');
-  addBox(bay.group, boxes, skin, [x, 0.075 * scale, z, 0.34 * scale, 0.15 * scale, 0.34 * scale], 'mannequin display plinth');
-  const shoulder = new Vector3(x - bay.side * 0.12 * scale, 1.47 * scale, z);
-  addCylinderBetween(bay.group, cylinders, skin, shoulder, new Vector3(x - bay.side * 0.23 * scale, 1.11 * scale, z + 0.025 * scale),
-    0.024 * scale, 'mannequin articulated arm');
-}
-
 function addHanger(
   bay: RetailBay,
   torus: TorusGeometry,
@@ -322,7 +250,6 @@ function addHoneyFashion(
   bay: RetailBay,
   boxes: BoxGeometry,
   cylinders: CylinderGeometry,
-  spheres: SphereGeometry,
   torus: TorusGeometry,
   wood: MeshStandardMaterial,
   woodLight: MeshStandardMaterial,
@@ -373,16 +300,11 @@ function addHoneyFashion(
         'honey fashion hanging garments');
     });
   });
-
-  addMannequin(bay, boxes, cylinders, spheres, makeStandard('soft mannequin neutral finish', MANNEQUIN, 0.64), clothingMaterials[3], 2.95, centerZ - 1.72, 1.02);
-  addMannequin(bay, boxes, cylinders, spheres, makeStandard('warm mannequin neutral finish', 0xc1b7ac, 0.67), clothingMaterials[3], 2.86, centerZ + 1.71, 0.96);
 }
 
 function addBronzeBoutique(
   bay: RetailBay,
   boxes: BoxGeometry,
-  cylinders: CylinderGeometry,
-  spheres: SphereGeometry,
   frame: MeshStandardMaterial,
   shelf: MeshStandardMaterial,
   backdrop: MeshStandardMaterial,
@@ -403,10 +325,6 @@ function addBronzeBoutique(
   addBox(group, boxes, warmGlow, [back - side * 0.12, 2.92, centerZ, 0.026, 0.18, span - 0.44], 'black bronze concealed back wash');
   addBox(group, boxes, frame, [frontX + side * 0.72, 0.60, centerZ, 0.84, 1.10, span - 1.30], 'black bronze low display island');
   addBox(group, boxes, warmGlow, [frontX + side * 0.72, 1.16, centerZ, 0.026, 0.045, span - 1.48], 'black bronze island edge light');
-  addMannequin(bay, boxes, cylinders, spheres, makeStandard('bronze boutique mannequin ivory', 0xd9d1c8, 0.59),
-    makeStandard('bronze boutique mannequin charcoal garment', 0x1b1d23, 0.69), 1.50, centerZ - 1.12, 1.12);
-  addMannequin(bay, boxes, cylinders, spheres, makeStandard('bronze boutique mannequin stone', 0xb4a89e, 0.63),
-    makeStandard('bronze boutique mannequin deep green garment', 0x233c37, 0.69), 2.16, centerZ + 1.26, 0.98);
   const sculpture = new CylinderGeometry(1, 1, 1, 10);
   addCylinder(group, sculpture, warmGlow, frontX + side * 1.14, 1.63, centerZ - 0.02, 0.10, 0.16, 0.10, 'small abstract bronze display object');
 }
@@ -601,7 +519,6 @@ function addRearBridgeDisplays(
   root: Group,
   boxes: BoxGeometry,
   cylinders: CylinderGeometry,
-  spheres: SphereGeometry,
   glass: MeshPhysicalMaterial,
   frame: MeshStandardMaterial,
   backdrop: MeshStandardMaterial,
@@ -642,15 +559,6 @@ function addRearBridgeDisplays(
       }
     }
     addInstancedCylinders(group, cylinders, trim, objects, `${label} small display vessels`);
-
-    for (const offset of [-0.74, 0.74]) {
-      const mannequinX = centerX + offset;
-      addCylinder(group, cylinders, trim, mannequinX, 1.72, frontZ + 0.16, 0.14, 0.70, 0.12,
-        `${label} mannequin torso`);
-      addSphere(group, spheres, frame, mannequinX, 2.30, frontZ + 0.16, 0.115, 0.13, 0.105,
-        `${label} mannequin head`);
-      addBox(group, boxes, trim, [mannequinX, 0.11, frontZ + 0.16, 0.28, 0.18, 0.28], `${label} mannequin plinth`);
-    }
   });
 }
 
@@ -667,7 +575,6 @@ export function buildAtriumRetail(root: Group): { setLighting(artificialOn: bool
   const boxes = new BoxGeometry(1, 1, 1);
   const cylinders = new CylinderGeometry(1, 1, 1, 12);
   const smallCylinder = new CylinderGeometry(1, 1, 1, 8);
-  const spheres = new SphereGeometry(1, 20, 12);
   const hangerTorus = new TorusGeometry(0.14, 0.012, 6, 16, Math.PI * 1.55);
 
   const wood = makeStandard('honey oak display timber', WOOD_HONEY, 0.66);
@@ -699,19 +606,19 @@ export function buildAtriumRetail(root: Group): { setLighting(artificialOn: bool
   const clothingMaterials = CLOTHING.map((color, index) => makeStandard(`unbranded garment colour ${index + 1}`, color, 0.81));
 
   const leftFar = createBay(group, -1, -3.9, 5.80, 3.12, blackBronze, bronzeBackdrop, warmLine, glass, boxes, 'left black bronze boutique');
-  addBronzeBoutique(leftFar, boxes, cylinders, spheres, darkBronze, matteBlack, bronzeBackdrop, bronzeWash);
+  addBronzeBoutique(leftFar, boxes, darkBronze, matteBlack, bronzeBackdrop, bronzeWash);
   addStoreReflectionStreaks(leftFar, boxes, warmLine);
 
   const leftNear = createBay(group, -1, -10.10, 5.45, 3.38, paleFrame, honeyBackdrop, warmLine, glass, boxes, 'left near honey continuation');
-  addHoneyFashion(leftNear, boxes, cylinders, spheres, hangerTorus, wood, woodLight, darkBronze, honeyWash, clothingMaterials);
+  addHoneyFashion(leftNear, boxes, cylinders, hangerTorus, wood, woodLight, darkBronze, honeyWash, clothingMaterials);
   addStoreReflectionStreaks(leftNear, boxes, warmLine);
 
   const leftHoney = createBay(group, -1, -17.50, 9.00, 3.62, paleFrame, honeyBackdrop, warmLine, glass, boxes, 'left honey oak fashion');
-  addHoneyFashion(leftHoney, boxes, cylinders, spheres, hangerTorus, wood, woodLight, darkBronze, honeyWash, clothingMaterials);
+  addHoneyFashion(leftHoney, boxes, cylinders, hangerTorus, wood, woodLight, darkBronze, honeyWash, clothingMaterials);
   addStoreReflectionStreaks(leftHoney, boxes, warmLine);
 
   const leftBoutique = createBay(group, -1, -26.30, 6.55, 3.48, blackBronze, bronzeBackdrop, warmLine, glass, boxes, 'left dark frame boutique');
-  addBronzeBoutique(leftBoutique, boxes, cylinders, spheres, darkBronze, matteBlack, bronzeBackdrop, bronzeWash);
+  addBronzeBoutique(leftBoutique, boxes, darkBronze, matteBlack, bronzeBackdrop, bronzeWash);
   addStoreReflectionStreaks(leftBoutique, boxes, warmLine);
 
   const leftFarBack = createBay(group, -1, -40.80, 5.65, 3.22, darkBronze, warmBackdrop, warmLine, glass, boxes, 'left far bronze unit');
@@ -740,7 +647,7 @@ export function buildAtriumRetail(root: Group): { setLighting(artificialOn: bool
 
   const allBays = [leftFar, leftNear, leftHoney, leftBoutique, leftFarBack, rightFar, rightNear, rightPerfume, rightBack, rightFarBack];
   addGapFillers(group, allBays, boxes, fillerStone, fillerStoneLight, fillerMetal, fillerBackdrop, amberWash);
-  addRearBridgeDisplays(group, boxes, cylinders, spheres, glass, paleFrame, warmBackdrop, champagne, amberWash);
+  addRearBridgeDisplays(group, boxes, cylinders, glass, paleFrame, warmBackdrop, champagne, amberWash);
 
   // A single extra restrained point at each prominent window gives the cases a
   // believable local bounce without competing with the atrium's own room light.
