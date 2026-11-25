@@ -1,41 +1,40 @@
 import type { CoastNavigation } from '../../CoastControls';
 import {
-  ATRIUM_BOUNDS, ATRIUM_CAFE, ATRIUM_DESTINATIONS, ATRIUM_ELEVATOR, ATRIUM_GALLERY_EDGE, ATRIUM_LEVELS,
-  ATRIUM_REAR_GALLERY, ATRIUM_SCULPTURE, ATRIUM_SOFA, ATRIUM_WALK_LEVEL, atriumStairAngle, atriumStairHeight,
+  ATRIUM_BOUNDS, ATRIUM_CAFE, ATRIUM_CAFE_CHAIRS, ATRIUM_CAFE_COUNTER, ATRIUM_CAFE_PLANTERS, ATRIUM_CAFE_TABLES,
+  ATRIUM_DESTINATIONS, ATRIUM_ELEVATOR, ATRIUM_LEVELS, ATRIUM_SCULPTURE, ATRIUM_SOFA, ATRIUM_WALK_LEVEL,
+  atriumDeckContains, atriumStairDistance, atriumStairHeight, atriumUpperStairHeight,
 } from './atriumLayout';
 
 const railClearance = 0.20;
 const slabDepth = 0.49;
-const stairDepth = 0.55;
-const roofY = 17.4;
-
-function onGallery(x: number, z: number, inset = 0): boolean {
-  return Math.abs(x) >= ATRIUM_GALLERY_EDGE + inset || z <= ATRIUM_REAR_GALLERY - inset;
-}
+const stairDepth = 1.15;
+const roofY = 17.1;
 
 function stairFloor(x: number, z: number, inset = 0): number {
-  const angle = atriumStairAngle(x, z, inset);
-  return angle === undefined ? -Infinity : atriumStairHeight(angle);
+  const along = atriumStairDistance(x, z, inset);
+  return along === undefined ? -Infinity : atriumStairHeight(along);
 }
 
 export function atriumSupportAt(x: number, z: number, footLimit: number): number {
   const stair = stairFloor(x, z, railClearance);
-  const gallery = footLimit >= ATRIUM_WALK_LEVEL - 1e-6 && onGallery(x, z, railClearance) ? ATRIUM_WALK_LEVEL : 0;
-  return Math.max(gallery, stair <= footLimit ? stair : 0);
+  const upperStair = atriumUpperStairHeight(x, z, railClearance);
+  const gallery = footLimit >= ATRIUM_LEVELS[2] - 1e-6 && atriumDeckContains(x, z, 2, railClearance) ? ATRIUM_LEVELS[2]
+    : footLimit >= ATRIUM_WALK_LEVEL - 1e-6 && atriumDeckContains(x, z, 1, railClearance) ? ATRIUM_WALK_LEVEL : 0;
+  return Math.max(gallery, stair <= footLimit ? stair : 0, upperStair <= footLimit ? upperStair : 0);
 }
 
 export function atriumCeilingHeight(x: number, z: number, foot = 0): number {
   let ceiling = roofY;
-  if (onGallery(x, z)) {
-    for (const level of ATRIUM_LEVELS) {
-      if (level - slabDepth > foot) {
-        ceiling = level - slabDepth;
-        break;
-      }
+  for (const [index, level] of ATRIUM_LEVELS.entries()) {
+    if (level - slabDepth > foot && atriumDeckContains(x, z, index)) {
+      ceiling = level - slabDepth;
+      break;
     }
   }
   const stair = stairFloor(x, z);
   if (stair - foot > 0.12) ceiling = Math.min(ceiling, stair - stairDepth);
+  const upperStair = atriumUpperStairHeight(x, z);
+  if (upperStair - foot > 0.12) ceiling = Math.min(ceiling, upperStair - 0.63);
   return ceiling;
 }
 
@@ -51,7 +50,15 @@ function hitsGroundFurnishing(x: number, z: number): boolean {
     && ((alongSofa < -0.30 && alongSofa > -0.78) || (acrossSofa > ATRIUM_SOFA.width / 2 - 0.28
       && alongSofa > -0.50 && alongSofa < 0.53));
   const sculpture = Math.hypot(x - ATRIUM_SCULPTURE.x, z - ATRIUM_SCULPTURE.z) < ATRIUM_SCULPTURE.radius + 0.17;
-  const cafe = ((x - ATRIUM_CAFE.x) / 1.81) ** 2 + ((z - ATRIUM_CAFE.z) / 2.7) ** 2 < 1;
+  const cafeX = x - ATRIUM_CAFE.x;
+  const cafeZ = z - ATRIUM_CAFE.z;
+  const counter = ATRIUM_CAFE_COUNTER;
+  const cafe = (Math.abs(cafeX - counter.x) < counter.width / 2 + .16
+    && Math.abs(cafeZ - counter.z) < counter.depth / 2 + .16)
+    || ATRIUM_CAFE_TABLES.some(table =>
+      ((cafeX - table.x) / (table.width / 2 + .16)) ** 2 + ((cafeZ - table.z) / (table.depth / 2 + .16)) ** 2 < 1)
+    || ATRIUM_CAFE_CHAIRS.some(chair => Math.hypot(cafeX - chair.x, cafeZ - chair.z) < .44)
+    || ATRIUM_CAFE_PLANTERS.some(planter => Math.hypot(cafeX - planter.x, cafeZ - planter.z) < .52);
   return sofa || sculpture || cafe;
 }
 

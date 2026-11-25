@@ -17,9 +17,11 @@ Vite が表示したローカル URL を Chrome で開くと、入り江の砂�
 
 映画館はファストトラベルから選ぶか、ローカル URL に `?world=cinema` を付けます。「上映設定」から場内灯を切り替え、「試映を再生」で幕と場内音を体験できます。 [映画館の操作](docs/exploration.md#映画館シアター)
 
+商業アトリウムは `?world=atrium` で奥のソファから始まります。ショーウィンドウ沿いの通路と曲階段からつながる上階を散策できます。 [商業アトリウムの操作](docs/exploration.md#商業アトリウム)
+
 右上の「仮想モニター」から「配信画面を開く」を押すと、同じ Chrome の別タブに画面共有を開始するページが開きます。元の景観でコードを入力し、確認番号を照合して配信元で許可すると映像が浮かぶ面に映ります。[共有・配置・音声の操作](docs/exploration.md#仮想モニター)
 
-Meta Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、「VRを開始」を押すと、Touch Plus で4つのワールドを探索できます。 [Quest 3 の接続と操作](docs/exploration.md#meta-quest-3-で探索する)
+Meta Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、「VRを開始」を押すと、Touch Plus で5つのワールドを探索できます。 [Quest 3 の接続と操作](docs/exploration.md#meta-quest-3-で探索する)
 
 ## 文書案内
 
