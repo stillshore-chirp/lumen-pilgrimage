@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { seededDetail } from '../overlook/overlookModel';
 import {
   ATRIUM_CAFE,
   ATRIUM_CAFE_CHAIRS,
@@ -32,20 +34,19 @@ interface AtriumFurnishMaterials {
   readonly glass: THREE.MeshPhysicalMaterial;
   readonly porcelain: THREE.MeshStandardMaterial;
   readonly wicker: THREE.MeshStandardMaterial;
-  readonly wickerDark: THREE.MeshStandardMaterial;
+  readonly wickerBinding: THREE.MeshStandardMaterial;
   readonly planter: THREE.MeshStandardMaterial;
   readonly soil: THREE.MeshStandardMaterial;
   readonly leaves: THREE.MeshStandardMaterial;
+  readonly petiole: THREE.MeshStandardMaterial;
   readonly ivory: THREE.MeshStandardMaterial;
   readonly ramification: THREE.MeshStandardMaterial;
-  readonly bulb: THREE.MeshStandardMaterial;
+  readonly bulbs: readonly THREE.MeshStandardMaterial[];
   readonly amber: THREE.MeshStandardMaterial;
   readonly controls: EmissiveControl[];
 }
 
-const SOFA_DEPTH = 1.08;
 const SOFA_SEAT_DEPTH = .67;
-const SOFA_BACK_DEPTH = .27;
 const SOFA_WIDTH = ATRIUM_SOFA.width;
 const SOFA_FRONT_Z = ATRIUM_SOFA.z;
 const SOFA_SEAT_Z = SOFA_FRONT_Z - .23;
@@ -66,31 +67,77 @@ function material(
   return new THREE.MeshStandardMaterial({ name, color, roughness, metalness });
 }
 
+function weaveTexture(coarse: boolean): THREE.DataTexture {
+  const size = 64;
+  const data = new Uint8Array(size * size * 4);
+  const random = seededDetail(coarse ? 179 : 271);
+  const thread = coarse ? 8 : 4;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const cross = (Math.floor(x / thread) + Math.floor(y / thread)) % 2 === 0;
+      const across = cross ? x : y;
+      const along = cross ? y : x;
+      const strand = Math.sin(Math.PI * ((across % thread) + .5) / thread);
+      const fiber = Math.cos(along * 2 * Math.PI / (2 * thread));
+      const value = coarse
+        ? 154 + 79 * strand + 7 * fiber + 9 * random()
+        : 216 + 25 * strand + 4 * fiber + 10 * random();
+      const index = (y * size + x) * 4;
+      data.set([value, value, value, 255], index);
+    }
+  }
+  const weave = new THREE.DataTexture(data, size, size);
+  weave.colorSpace = THREE.SRGBColorSpace;
+  weave.wrapS = weave.wrapT = THREE.RepeatWrapping;
+  weave.magFilter = THREE.LinearFilter;
+  weave.minFilter = THREE.LinearMipmapLinearFilter;
+  weave.generateMipmaps = true;
+  weave.anisotropy = 4;
+  weave.needsUpdate = true;
+  return weave;
+}
+
 function createMaterials(): AtriumFurnishMaterials {
   const controls: EmissiveControl[] = [];
-  const ivory = material('Atrium sculpture ivory', 0xe7ddce, .52, .03);
+  const ivory = material('Atrium sculpture satin silver stems', 0xc8c7c3, .36, .52);
   ivory.emissive.setHex(0xffe8c6);
-  controls.push({ material: ivory, artificial: .62, daylight: .09 });
+  controls.push({ material: ivory, artificial: .22, daylight: .015 });
 
   const amber = material('Atrium cafe warm trim', 0xffb86f, .42, .06);
   amber.emissive.setHex(0xffa34b);
   controls.push({ material: amber, artificial: .92, daylight: .07 });
 
-  const ramification = material('Atrium sculpture silver ramification', 0xd9d8d4, .38, .16);
+  const ramification = material('Atrium sculpture pale silver twigs', 0xe0dbd0, .41, .25);
   ramification.emissive.setHex(0xffeed8);
-  controls.push({ material: ramification, artificial: .76, daylight: .10 });
+  controls.push({ material: ramification, artificial: .39, daylight: .028 });
 
-  const bulb = material('Atrium sculpture warm pin lights', 0xffd59b, .30, .04);
-  bulb.emissive.setHex(0xff9b4b);
-  controls.push({ material: bulb, artificial: 2.10, daylight: .08 });
+  const bulbs = [
+    { tint: 0xffb67e, intensity: 2.2 },
+    { tint: 0xffdaa5, intensity: 3.9 },
+    { tint: 0xfff0ce, intensity: 6.2 },
+  ].map(({ tint, intensity }) => {
+    const bulb = material('Atrium sculpture warm pin lights', 0xbc9d81, .32);
+    bulb.emissive.setHex(tint);
+    controls.push({ material: bulb, artificial: intensity, daylight: 0 });
+    return bulb;
+  });
+  const upholstery = weaveTexture(false);
+  const sofa = new THREE.MeshStandardMaterial({
+    name: 'Greige basket-weave upholstery', color: 0xaaa191, roughness: .92,
+    map: upholstery, bumpMap: upholstery, bumpScale: .0014,
+  });
+  const caning = weaveTexture(true);
 
   return {
-    sofa: material('Greige upholstered sofa', 0x9a968d, .96),
-    sofaShadow: material('Sofa inset and seam shadow', 0x68655f, .88),
-    sofaFrame: material('Sofa charcoal oak frame', 0x3e3d39, .62, .05),
-    seam: material('Sofa double piping', 0x5d5b55, .82),
-    rug: material('Low-pile greige lounge rug', 0x908b82, .98),
-    rugBorder: material('Lounge rug stitched border', 0x6e6a62, .93),
+    sofa,
+    sofaShadow: material('Sofa recessed upholstery', 0x71695e, .91),
+    sofaFrame: material('Sofa dark bronze frame', 0x4a4135, .41, .49),
+    seam: material('Sofa greige welt cord', 0x82776a, .93),
+    rug: new THREE.MeshStandardMaterial({
+      name: 'Low-pile greige lounge rug', color: 0xada18d, roughness: .98,
+      map: upholstery, bumpMap: upholstery, bumpScale: .0009,
+    }),
+    rugBorder: material('Lounge rug stitched border', 0x908171, .93),
     stone: material('Atrium limestone display stone', 0xc8c1b5, .78),
     stoneEdge: material('Atrium display warm edge', 0x9a7e60, .47, .38),
     darkMetal: material('Cafe charcoal metal', 0x282a29, .48, .43),
@@ -100,14 +147,21 @@ function createMaterials(): AtriumFurnishMaterials {
       transparent: true, opacity: .42,
     }),
     porcelain: material('Warm white table porcelain', 0xe6ddd0, .32),
-    wicker: material('Natural wicker loop chair', 0xb3895d, .86),
-    wickerDark: material('Wicker chair shadow weave', 0x6d4f38, .92),
-    planter: material('Tall planter clay', 0x776958, .89),
+    wicker: new THREE.MeshStandardMaterial({
+      name: 'Over-under cane weave', color: 0x95714d, roughness: .81, side: THREE.DoubleSide,
+      map: caning, bumpMap: caning, bumpScale: .0018,
+    }),
+    wickerBinding: material('Basket chair bound edges', 0x906b49, .77),
+    planter: material('Dark glazed ceramic planter', 0x3a3428, .53),
     soil: material('Planter soil', 0x302a24, 1),
-    leaves: material('Planter olive foliage', 0x4d5c4a, .96),
+    leaves: new THREE.MeshStandardMaterial({
+      name: 'Broad tropical foliage', color: 0x45623a, roughness: .57,
+      side: THREE.DoubleSide, vertexColors: true,
+    }),
+    petiole: material('Planter olive green stems', 0x526143, .85),
     ivory,
     ramification,
-    bulb,
+    bulbs,
     amber,
     controls,
   };
@@ -218,14 +272,31 @@ function horizontalRing(
 ): THREE.Mesh {
   const geometry = new THREE.TorusGeometry(radius, tubeRadius, 8, 48);
   geometry.rotateX(Math.PI / 2);
-  // TorusGeometry starts in the XY plane; after the quarter-turn its local Y is world Z.
-  geometry.scale(scaleX, scaleZ, 1);
+  geometry.scale(scaleX, 1, scaleZ);
   return placeMesh(parent, new THREE.Mesh(geometry, material), name, position);
 }
 
-function registerEmissive(materials: AtriumFurnishMaterials, material: THREE.MeshStandardMaterial): void {
-  if (!materials.controls.some(control => control.material === material)) {
-    materials.controls.push({ material, artificial: material.emissiveIntensity, daylight: 0 });
+function upholsteredBox(
+  parent: THREE.Object3D,
+  name: string,
+  finish: THREE.Material,
+  width: number,
+  height: number,
+  depth: number,
+  position: Point3,
+  radius: number,
+  rotation?: Point3,
+): void {
+  const cushion = roundedBox(parent, name, finish, width, height, depth, position, radius, rotation);
+  const uv = cushion.geometry.getAttribute('uv');
+  const faces = [[depth, height], [depth, height], [width, depth], [width, depth],
+    [width, height], [width, height]];
+  // Keep the thread pitch consistent across short vertical panels and the broader seat.
+  for (const [face, { start, count }] of cushion.geometry.groups.entries()) {
+    const [u, v] = faces[face];
+    for (let index = start; index < start + count; index += 1) {
+      uv.setXY(index, uv.getX(index) * u / .066, uv.getY(index) * v / .066);
+    }
   }
 }
 
@@ -235,71 +306,67 @@ function addSofa(parent: THREE.Group, materials: AtriumFurnishMaterials): void {
   sofa.position.set(ATRIUM_SOFA.x, 0, 0);
   parent.add(sofa);
 
-  roundedBox(sofa, 'Sofa lower shadow plinth', materials.sofaFrame, SOFA_WIDTH + .12, .18, SOFA_DEPTH,
-    [0, .20, SOFA_FRONT_Z], .075);
-  roundedBox(sofa, 'Sofa front apron', materials.sofaShadow, SOFA_WIDTH - .10, .19, .16,
-    [0, .37, SOFA_FRONT_Z + .02], .045);
-  roundedBox(sofa, 'Sofa rear rail', materials.sofaFrame, SOFA_WIDTH + .03, .13, .20,
-    [0, .64, SOFA_BACK_Z - .10], .035);
+  const frameZ = SOFA_FRONT_Z - .25;
+  roundedBox(sofa, 'Sofa inset dark bronze perimeter frame', materials.sofaFrame, SOFA_WIDTH - .18, .065, .81,
+    [0, .233, frameZ], .023);
+  roundedBox(sofa, 'Sofa shallow upholstered platform', materials.sofaShadow, SOFA_WIDTH + .02, .171, .90,
+    [0, .342, frameZ], .062);
+  upholsteredBox(sofa, 'Sofa tailored apron', materials.sofa, SOFA_WIDTH - .15, .086, .075,
+    [0, .368, frameZ + .427], .031);
+  roundedBox(sofa, 'Sofa rear upholstered rail', materials.sofaShadow, SOFA_WIDTH - .04, .32, .20,
+    [0, .574, SOFA_BACK_Z + .025], .065);
 
-  const moduleGap = .026;
-  const moduleWidths = [1.49, 1.49, SOFA_WIDTH - 2 * 1.49 - moduleGap * 2];
-  let moduleX = -SOFA_WIDTH / 2 + moduleWidths[0] / 2;
-  for (const [index, width] of moduleWidths.entries()) {
-    const lean = index === 0 ? -.007 : index === 2 ? .007 : 0;
-    roundedBox(sofa, `Sofa contoured seat ${index + 1}`, materials.sofa, width - .012, .24, SOFA_SEAT_DEPTH,
-      [moduleX, .50, SOFA_SEAT_Z], .10, [0, 0, lean]);
-    // Two narrow insets preserve the visual split between sewn modules at the front edge.
-    roundedBox(sofa, `Sofa seat shadow ${index + 1}`, materials.sofaShadow, width - .05, .022, .055,
-      [moduleX, .626, SOFA_FRONT_Z - .026], .018);
-    moduleX += width / 2 + moduleGap + (index < moduleWidths.length - 1 ? moduleWidths[index + 1] / 2 : 0);
+  const gap = .024;
+  const widths = [1.47, 1.53, SOFA_WIDTH - 1.47 - 1.53 - gap * 2];
+  let edge = -SOFA_WIDTH / 2;
+  for (const [index, width] of widths.entries()) {
+    const seatX = edge + width / 2;
+    const seatWidth = width - .012;
+    upholsteredBox(sofa, 'Sofa rounded seat cushion', materials.sofa, seatWidth, .22, SOFA_SEAT_DEPTH,
+      [seatX, .504, SOFA_SEAT_Z], .108);
+    const cornerX = seatWidth / 2 - .108;
+    const cushionFront = SOFA_SEAT_Z + SOFA_SEAT_DEPTH / 2;
+    tube(sofa, 'Sofa seat welt cord', materials.seam, [
+      [seatX - cornerX - .077, .48, cushionFront - .035],
+      [seatX - cornerX, .48, cushionFront + .002],
+      [seatX - cornerX * .81, .48, cushionFront + .002],
+      [seatX + cornerX * .81, .48, cushionFront + .002],
+      [seatX + cornerX, .48, cushionFront + .002],
+      [seatX + cornerX + .077, .48, cushionFront - .035],
+    ], .0036, false, 16, false);
+
+    const backTilt = [0.11, 0.13, 0.12][index];
+    upholsteredBox(sofa, 'Sofa gently reclined back cushion', materials.sofa, width - .032, .51, .27,
+      [seatX, .815, SOFA_BACK_Z + .052], .109, [-backTilt, 0, 0]);
+    edge += width + gap;
   }
 
-  const backWidths = moduleWidths.map(width => width - .025);
-  moduleX = -SOFA_WIDTH / 2 + backWidths[0] / 2;
-  for (const [index, width] of backWidths.entries()) {
-    roundedBox(sofa, `Sofa back cushion ${index + 1}`, materials.sofa, width, .57, SOFA_BACK_DEPTH,
-      [moduleX, .94, SOFA_BACK_Z], .11, [0, 0, index === 0 ? -.009 : index === 2 ? .009 : 0]);
-    tube(sofa, `Sofa back seam ${index + 1}`, materials.seam, [
-      [moduleX - width / 2 + .075, .69, SOFA_FRONT_Z - .112],
-      [moduleX + width / 2 - .075, .69, SOFA_FRONT_Z - .112],
-    ], .007, false, 16);
-    moduleX += width / 2 + moduleGap + (index < backWidths.length - 1 ? backWidths[index + 1] / 2 : 0);
-  }
-
-  // Low broad arms keep the 4.55 m silhouette while leaving a clear central exit from the cushion.
   for (const side of [-1, 1]) {
-    const armX = side * (SOFA_WIDTH / 2 - .115);
-    roundedBox(sofa, `Sofa ${side < 0 ? 'left' : 'right'} beveled arm`, materials.sofa, .31, .58, .88,
-      [armX, .64, SOFA_FRONT_Z - .34], .095, [0, 0, side * .012]);
-    roundedBox(sofa, `Sofa ${side < 0 ? 'left' : 'right'} arm cap`, materials.sofaShadow, .26, .046, .74,
-      [armX, .944, SOFA_FRONT_Z - .34], .018, [0, 0, side * .012]);
+    const armX = side * (SOFA_WIDTH / 2 - .126);
+    upholsteredBox(sofa, 'Sofa padded arm', materials.sofa, .30, .51, .90,
+      [armX, .603, frameZ - .044], .109, [0, 0, side * .010]);
   }
 
-  const legGeometry = new THREE.CylinderGeometry(.045, .056, .17, 10);
-  const legs = new THREE.InstancedMesh(legGeometry, materials.sofaFrame, 4);
-  legs.name = 'Sofa four inset feet';
-  const legTransform = new THREE.Object3D();
-  for (const [index, [x, z]] of ([
-    [-SOFA_WIDTH / 2 + .29, SOFA_FRONT_Z - .16],
-    [SOFA_WIDTH / 2 - .29, SOFA_FRONT_Z - .16],
-    [-SOFA_WIDTH / 2 + .29, SOFA_BACK_Z - .38],
-    [SOFA_WIDTH / 2 - .29, SOFA_BACK_Z - .38],
-  ] as const).entries()) {
-    legTransform.position.set(x, .105, z);
-    legTransform.updateMatrix();
-    legs.setMatrixAt(index, legTransform.matrix);
+  const legs = new THREE.InstancedMesh(new THREE.CylinderGeometry(.026, .020, .197, 8), materials.sofaFrame, 6);
+  legs.name = 'Sofa inset, floor-standing bronze feet';
+  const transform = new THREE.Object3D();
+  const end = SOFA_WIDTH / 2 - .26;
+  for (const [index, position] of ([[-end, .133, .335], [0, .133, .335], [end, .133, .335],
+    [-end, .133, -.335], [0, .133, -.335], [end, .133, -.335]] as const).entries()) {
+    const [x, y, z] = position;
+    transform.position.set(x, y, frameZ + z);
+    transform.updateMatrix();
+    legs.setMatrixAt(index, transform.matrix);
   }
   legs.instanceMatrix.needsUpdate = true;
   legs.castShadow = true;
   legs.receiveShadow = true;
   sofa.add(legs);
 
-  // Two small lumbar cushions soften the otherwise architectural modular geometry.
-  roundedBox(sofa, 'Sofa left lumbar cushion', materials.sofaShadow, .69, .25, .16,
-    [-1.16, .84, SOFA_FRONT_Z - .17], .065, [0, 0, -.06]);
-  roundedBox(sofa, 'Sofa right lumbar cushion', materials.sofaShadow, .69, .25, .16,
-    [.94, .84, SOFA_FRONT_Z - .17], .065, [0, 0, .06]);
+  upholsteredBox(sofa, 'Sofa loose left lumbar cushion', materials.sofa, .50, .284, .145,
+    [-1.47, .741, SOFA_FRONT_Z - .429], .070, [-.20, -.06, -.16]);
+  upholsteredBox(sofa, 'Sofa loose right lumbar cushion', materials.sofa, .53, .287, .15,
+    [1.34, .749, SOFA_FRONT_Z - .428], .070, [-.19, .045, .095]);
 }
 
 function addLoungeRugAndTables(parent: THREE.Group, materials: AtriumFurnishMaterials): void {
@@ -308,12 +375,14 @@ function addLoungeRugAndTables(parent: THREE.Group, materials: AtriumFurnishMate
   lounge.position.set(ATRIUM_LOUNGE.x, 0, ATRIUM_LOUNGE.z);
   parent.add(lounge);
 
-  cylinder(lounge, 'Lounge rug low pile', materials.rug, 1, .028, [0, .018, 0], 64,
+  const rug = cylinder(lounge, 'Lounge rug low pile', materials.rug, 1, .028, [0, .018, 0], 64,
     ATRIUM_LOUNGE.radiusX, ATRIUM_LOUNGE.radiusZ);
-  horizontalRing(lounge, 'Lounge rug outer stitched edge', materials.rugBorder, .96, .019,
-    [0, .038, 0], ATRIUM_LOUNGE.radiusX, ATRIUM_LOUNGE.radiusZ);
-  horizontalRing(lounge, 'Lounge rug inner stitched edge', materials.rugBorder, .68, .011,
-    [0, .041, 0], ATRIUM_LOUNGE.radiusX, ATRIUM_LOUNGE.radiusZ);
+  const rugUv = rug.geometry.getAttribute('uv');
+  for (let index = 0; index < rugUv.count; index += 1) {
+    rugUv.setXY(index, 96 * rugUv.getX(index), 66 * rugUv.getY(index));
+  }
+  horizontalRing(lounge, 'Lounge rug stitched edge', materials.rugBorder, .991, .0014,
+    [0, .032, 0], ATRIUM_LOUNGE.radiusX, ATRIUM_LOUNGE.radiusZ);
 
   const tablePositions = [
     { x: -.75, z: -.06, width: 1.22, depth: .63, height: .36 },
@@ -356,164 +425,148 @@ function addDisplayIslands(parent: THREE.Group, materials: AtriumFurnishMaterial
   }
 }
 
+function taperedTube(
+  curve: THREE.CatmullRomCurve3, radius: number, tipRadius: number, segments: number, sides: number,
+): THREE.BufferGeometry {
+  const geometry = new THREE.TubeGeometry(curve, segments, radius, sides, false);
+  const vertices = geometry.getAttribute('position');
+  const point = new THREE.Vector3();
+  for (let ring = 1; ring <= segments; ring += 1) {
+    const t = ring / segments;
+    const center = curve.getPointAt(t);
+    const scale = THREE.MathUtils.lerp(1, tipRadius / radius, t);
+    for (let side = 0; side <= sides; side += 1) {
+      const index = ring * (sides + 1) + side;
+      point.fromBufferAttribute(vertices, index).sub(center).multiplyScalar(scale).add(center);
+      vertices.setXYZ(index, point.x, point.y, point.z);
+    }
+  }
+  return geometry;
+}
+
 function addSculpture(parent: THREE.Group, materials: AtriumFurnishMaterials): void {
   const sculpture = new THREE.Group();
-  sculpture.name = 'Luminous ivory interlaced branching sculpture';
+  sculpture.name = 'Luminous silver branching sculpture';
   sculpture.position.set(ATRIUM_SCULPTURE.x, 0, ATRIUM_SCULPTURE.z);
   parent.add(sculpture);
-  registerEmissive(materials, materials.ivory);
 
   cylinder(sculpture, 'Sculpture limestone plinth', materials.stone, ATRIUM_SCULPTURE.radius, .24,
     [0, .12, 0], 48);
   horizontalRing(sculpture, 'Sculpture plinth brass inset', materials.stoneEdge, ATRIUM_SCULPTURE.radius * .82,
     .012, [0, .245, 0]);
 
-  const branch = (name: string, points: readonly Point3[], radius: number): void => {
-    tube(sculpture, name, materials.ivory, points, radius, false, Math.max(18, points.length * 5), false);
-  };
-  branch('Sculpture central rising stem', [
-    [0, .24, 0], [.06, 1.08, -.02], [-.10, 2.05, .04], [.14, 2.95, .02], [-.02, 3.90, .01],
-    [.10, 4.72, -.02], [0, ATRIUM_SCULPTURE.height, 0],
-  ], .029);
-  branch('Sculpture left outer sweep', [
-    [-.02, .86, 0], [-.38, 1.55, -.02], [-.62, 2.31, .04], [-.86, 2.98, -.04], [-1.02, 3.59, .08],
-  ], .019);
-  branch('Sculpture left high returning sweep', [
-    [-.09, 2.16, .03], [-.52, 2.70, .18], [-.84, 3.42, .24], [-.39, 4.10, .18], [-.02, 4.46, .05],
-  ], .016);
-  branch('Sculpture right outer sweep', [
-    [.02, .67, .01], [.38, 1.31, -.04], [.62, 2.04, -.12], [.86, 2.68, -.04], [1.02, 3.31, .09],
-  ], .019);
-  branch('Sculpture right high returning sweep', [
-    [.11, 2.55, -.05], [.52, 3.00, .12], [.84, 3.70, .19], [.41, 4.33, .13], [.06, 4.69, .04],
-  ], .016);
-  branch('Sculpture front interlace', [
-    [-.14, 1.48, .10], [.24, 2.11, .28], [.36, 2.86, .24], [-.16, 3.49, .22], [-.39, 4.00, .09],
-  ], .013);
-  branch('Sculpture rear interlace', [
-    [.15, 1.18, -.08], [-.26, 1.90, -.22], [-.30, 2.65, -.26], [.25, 3.30, -.22], [.48, 3.98, -.04],
-  ], .013);
+  const stems: THREE.BufferGeometry[] = [];
+  const twigs: THREE.BufferGeometry[] = [];
+  const lights: { center: THREE.Vector3; radius: number }[][] = [[], [], []];
+  const random = seededDetail(2209);
+  const curve = (points: readonly Point3[]): THREE.CatmullRomCurve3 =>
+    new THREE.CatmullRomCurve3(points.map(point => new THREE.Vector3(...point)));
 
-  // Fine ramification fills the canopy while keeping the roots deliberately sparse.
-  const fineBranch = (name: string, points: readonly Point3[], radius: number): void => {
-    tube(sculpture, name, materials.ramification, points, radius, false, Math.max(14, points.length * 4), false);
+  // Each light is mounted along a branch. Varied intensity leaves warm half-lit spaces
+  // in the crown and keeps the strongest highlights small.
+  const branchWithLights = (parts: THREE.BufferGeometry[], path: THREE.CatmullRomCurve3,
+    baseRadius: number, tipRadius: number, segments: number, sides: number, count: number): void => {
+    parts.push(taperedTube(path, baseRadius, tipRadius, segments, sides));
+    const side = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3(1, 0, 0);
+    for (let index = 0; index < count; index += 1) {
+      const t = .10 + .89 * (index + .21 + .55 * random()) / count;
+      const brightness = random();
+      const tier = brightness < .25 ? 0 : brightness < .88 ? 1 : 2;
+      const radius = .012 + .019 * random() ** 1.5 + (tier === 2 ? .004 : 0);
+      const tangent = path.getTangentAt(t);
+      side.crossVectors(tangent, Math.abs(tangent.y) > .92 ? right : up).normalize();
+      side.applyAxisAngle(tangent, index * 2.399963 + brightness * 2 * Math.PI);
+      const branchRadius = THREE.MathUtils.lerp(baseRadius, tipRadius, t);
+      lights[tier].push({ center: path.getPointAt(t).addScaledVector(side, branchRadius), radius });
+    }
   };
-  const finePaths: readonly (readonly Point3[])[] = [
-    [[-.04, 1.03, .02], [-.32, 1.41, .12], [-.68, 1.72, .10], [-1.04, 1.95, .04]],
-    [[.02, 1.16, -.02], [.35, 1.50, -.12], [.72, 1.75, -.16], [1.05, 2.06, -.08]],
-    [[-.10, 1.74, .02], [-.43, 2.02, .13], [-.76, 2.30, .17], [-1.12, 2.42, .10]],
-    [[.12, 1.92, .01], [.46, 2.21, -.11], [.77, 2.46, -.18], [1.12, 2.64, -.05]],
-    [[-.10, 2.36, .03], [-.38, 2.63, .21], [-.72, 2.86, .27], [-1.06, 2.94, .16]],
-    [[.13, 2.61, -.03], [.45, 2.88, .13], [.80, 3.12, .18], [1.08, 3.22, .09]],
-    [[-.08, 2.91, .02], [-.34, 3.18, -.10], [-.57, 3.52, -.04], [-.92, 3.67, .08]],
-    [[.13, 3.17, .02], [.40, 3.39, -.13], [.68, 3.68, -.16], [.98, 3.82, -.04]],
-    [[-.04, 3.52, .00], [-.32, 3.78, .16], [-.57, 4.04, .17], [-.87, 4.17, .07]],
-    [[.08, 3.77, -.01], [.35, 4.00, -.15], [.66, 4.22, -.12], [.94, 4.38, -.02]],
-    [[-.03, 4.08, .01], [-.29, 4.34, .11], [-.56, 4.57, .14], [-.83, 4.76, .07]],
-    [[.06, 4.28, .00], [.30, 4.51, -.13], [.58, 4.73, -.11], [.82, 4.94, -.02]],
-    [[-.02, 4.53, .02], [-.22, 4.75, .13], [-.43, 4.97, .11], [-.60, 5.18, .04]],
-    [[.03, 4.67, -.01], [.21, 4.84, -.12], [.42, 5.02, -.10], [.61, 5.17, -.02]],
-    [[-.18, 1.42, -.09], [-.40, 1.72, -.22], [-.64, 1.88, -.25], [-.82, 2.10, -.18]],
-    [[.18, 1.56, .08], [.43, 1.86, .21], [.66, 2.04, .23], [.85, 2.28, .15]],
-    [[-.22, 2.55, .10], [-.49, 2.79, .27], [-.72, 3.04, .25], [-.89, 3.28, .15]],
-    [[.21, 2.75, -.10], [.49, 3.03, -.25], [.73, 3.27, -.24], [.92, 3.49, -.13]],
+
+  const trunks = [
+    curve([[-.118, .24, .055], [-.14, 1.14, .027], [-.22, 2.20, .075], [-.13, 3.18, .042],
+      [.06, 4.26, .105], [.27, 5.22, .192]]),
+    curve([[.080, .24, -.075], [.075, 1.06, -.11], [.21, 2.11, -.08], [.16, 3.30, -.015],
+      [.05, 4.36, -.09], [-.09, ATRIUM_SCULPTURE.height, -.17]]),
+    curve([[.015, .24, .128], [.028, 1.27, .17], [.11, 2.05, .28], [-.071, 3.14, .30],
+      [-.28, 4.10, .25], [-.56, 4.87, .15]]),
   ];
-  finePaths.forEach((points, index) => fineBranch(`Sculpture fine ivory twig ${index + 1}`, points, index < 4 ? .009 : .006));
+  for (const [index, trunk] of trunks.entries()) {
+    branchWithLights(stems, trunk, [.051, .041, .027][index], .0032, 28, 8, 12);
+  }
 
-  // Replace the two smooth crown loops with irregular fork families. Each side has six
-  // small leading twigs and six secondary forks; short paths keep the mesh bounded while
-  // the varied offsets prevent a mirrored oval silhouette at the entrance camera.
-  const crownTipPoints: Point3[] = [];
-  for (const side of [-1, 1] as const) {
-    for (let level = 0; level < 6; level += 1) {
-      const phase = level * 1.17 + (side < 0 ? .22 : 1.03);
-      const y = 2.62 + level * .39 + .06 * Math.sin(phase * 1.8);
-      const z = .16 * Math.sin(phase);
-      const midX = side * (.23 + (level % 2) * .055);
-      const endX = side * (.53 + (level % 3) * .075);
-      const tipX = side * (.77 + (level % 2) * .13);
-      const tipY = Math.min(5.31, y + .70 + .05 * Math.cos(phase));
-      const lead: readonly Point3[] = [
-        [side * .055, y - .18, z * .55],
-        [midX, y + .16, z + .07 * Math.cos(phase * 1.4)],
-        [endX, y + .43, z - .08 * Math.sin(phase)],
-        [tipX, tipY, z + .10 * Math.cos(phase * .7)],
-      ];
-      fineBranch(`Sculpture organic crown lead ${side < 0 ? 'left' : 'right'} ${level + 1}`, lead, .0063);
-      crownTipPoints.push(lead[lead.length - 1]);
+  const crownPoint = (root: THREE.Vector3, azimuth: number, distance: number, rise: number): THREE.Vector3 =>
+    new THREE.Vector3(root.x + Math.cos(azimuth) * distance,
+      Math.min(root.y + rise, ATRIUM_SCULPTURE.height - .045),
+      root.z + Math.sin(azimuth) * distance * .68);
 
-      const forkStart = lead[1];
-      const forkTipX = side * (.87 + (level % 3) * .065);
-      const forkTipY = Math.min(5.34, y + .47 + .09 * Math.sin(phase + 1.2));
-      const fork: readonly Point3[] = [
-        forkStart,
-        [side * (.43 + (level % 2) * .06), y + .28, z + .14 * Math.sin(phase + 1.1)],
-        [side * (.65 + (level % 3) * .06), y + .42, z + .17 * Math.cos(phase)],
-        [forkTipX, forkTipY, z - .13 * Math.sin(phase * .9)],
-      ];
-      fineBranch(`Sculpture organic crown fork ${side < 0 ? 'left' : 'right'} ${level + 1}`, fork, .0048);
-      crownTipPoints.push(fork[fork.length - 1]);
+  const limbCount = 26;
+  for (let index = 0; index < limbCount; index += 1) {
+    const height = index / (limbCount - 1);
+    const trunk = trunks[index % trunks.length];
+    const start = trunk.getPointAt(.15 + .72 * height + (random() - .5) * .032);
+    const direction = index * 2.399963 + (random() - .5) * .51;
+    const crownRadius = .33 + 1.53 * Math.sin(Math.PI * (.06 + height * .88)) ** .65;
+    const clearHeadroom = THREE.MathUtils.smoothstep(start.y, 1.05, 2.15);
+    const reach = THREE.MathUtils.lerp(.36, crownRadius, clearHeadroom) * (.78 + .32 * random());
+    const lift = .20 + .48 * random();
+    const limb = new THREE.CatmullRomCurve3([
+      start,
+      crownPoint(start, direction - .13, reach * .27, lift * .39),
+      crownPoint(start, direction + .14 * (random() - .5), reach * .66, lift * .71),
+      crownPoint(start, direction + .38 * (random() - .5), reach, lift),
+    ]);
+    branchWithLights(stems, limb, .015 + .006 * Math.sin(index * .82), .003, 10, 6, 4 + Math.round(reach * 2));
+
+    const twigCount = index < 5 ? 3 : 5;
+    for (let twigIndex = 0; twigIndex < twigCount; twigIndex += 1) {
+      const junction = limb.getPointAt(.28 + .63 * (twigIndex + random() * .65) / twigCount);
+      const outward = direction + (twigIndex % 2 === 0 ? 1 : -1) * (.37 + .83 * random());
+      const distance = (.24 + .35 * random()) * (.48 + .52 * clearHeadroom);
+      const rise = .11 + .34 * random();
+      const twig = new THREE.CatmullRomCurve3([
+        junction,
+        crownPoint(junction, outward - .14, distance * .46, rise * .30),
+        crownPoint(junction, outward + .16, distance, rise),
+      ]);
+      branchWithLights(twigs, twig, .007 + .002 * random(), .0019, 6, 5, 2 + Math.round(distance * 3));
+
+      const fork = twig.getPointAt(.45 + .30 * random());
+      const forkDirection = outward + (twigIndex % 2 === 0 ? -.72 : .81) + (random() - .5) * .34;
+      const forkLength = (.12 + .23 * random()) * (.50 + .50 * clearHeadroom);
+      const tip = new THREE.CatmullRomCurve3([
+        fork,
+        crownPoint(fork, forkDirection, forkLength * .52, .055 + .09 * random()),
+        crownPoint(fork, forkDirection + .24, forkLength, .13 + .19 * random()),
+      ]);
+      branchWithLights(twigs, tip, .0036, .0011, 4, 4, 1 + Math.round(forkLength * 3));
     }
   }
 
-  const tipGeometry = new THREE.SphereGeometry(1, 8, 6);
-  const tips = new THREE.InstancedMesh(tipGeometry, materials.ivory, 10 + crownTipPoints.length);
-  tips.name = 'Sculpture repeated luminous branch tips';
-  const transform = new THREE.Object3D();
-  const tipPoints: readonly Point3[] = [
-    [-1.02, 3.59, .08], [-.39, 4.10, .18], [1.02, 3.31, .09], [.41, 4.33, .13],
-    [-.36, 5.14, .07], [.47, 5.08, -.02], [.10, 4.72, -.02], [-.02, 4.46, .05],
-    [.48, 3.98, -.04], [-.39, 4.00, .09],
-    ...crownTipPoints,
-  ];
-  tipPoints.forEach(([x, y, z], index) => {
-    transform.position.set(x, y, z);
-    const size = index < 4 ? .056 : .044;
-    transform.scale.set(size, size, size);
-    transform.updateMatrix();
-    tips.setMatrixAt(index, transform.matrix);
-  });
-  tips.instanceMatrix.needsUpdate = true;
-  tips.castShadow = true;
-  tips.receiveShadow = true;
-  sculpture.add(tips);
-
-  // Forty small warm points are instanced once so the canopy reads as an airy luminous mass
-  // from the entrance camera without adding a point-light per ornament.
-  const bulbCount = 40;
-  const bulbGeometry = new THREE.SphereGeometry(1, 8, 6);
-  const bulbs = new THREE.InstancedMesh(bulbGeometry, materials.bulb, bulbCount);
-  bulbs.name = 'Sculpture forty warm pin lights';
-  const capGeometry = new THREE.CylinderGeometry(.65, .82, 1, 6);
-  const caps = new THREE.InstancedMesh(capGeometry, materials.ramification, bulbCount);
-  caps.name = 'Sculpture forty silver bulb caps';
-  const bulbTransform = new THREE.Object3D();
-  const capTransform = new THREE.Object3D();
-  for (let index = 0; index < bulbCount; index += 1) {
-    const level = index / (bulbCount - 1);
-    const angle = index * 2.399963;
-    const spread = .14 + .91 * Math.sin(Math.PI * Math.min(1, level * 1.06)) ** .68;
-    const x = Math.cos(angle) * spread * (.78 + .22 * Math.sin(index * 1.31) ** 2);
-    const z = Math.sin(angle) * spread * .30 + .055 * Math.sin(index * 2.17);
-    const y = .88 + level * 4.36 + .10 * Math.sin(index * 1.71);
-    const size = .034 + .016 * (index % 4) / 3;
-    bulbTransform.position.set(x, y, z);
-    bulbTransform.scale.setScalar(size);
-    bulbTransform.updateMatrix();
-    bulbs.setMatrixAt(index, bulbTransform.matrix);
-    capTransform.position.set(x, y - size * 1.25, z);
-    capTransform.scale.set(size * .68, size * .45, size * .68);
-    capTransform.updateMatrix();
-    caps.setMatrixAt(index, capTransform.matrix);
+  // The intersecting stems and filigree stay in two opaque draws, even in the floor reflection.
+  for (const [parts, finish] of [[stems, materials.ivory], [twigs, materials.ramification]] as const) {
+    const geometry = mergeGeometries(parts);
+    for (const part of parts) part.dispose();
+    if (!geometry) continue;
+    const mesh = new THREE.Mesh(geometry, finish);
+    mesh.name = finish.name;
+    sculpture.add(mesh);
   }
-  bulbs.instanceMatrix.needsUpdate = true;
-  caps.instanceMatrix.needsUpdate = true;
-  // These are self-lit pin points, so shadow-map passes would cost more than they add visually.
-  bulbs.castShadow = false;
-  bulbs.receiveShadow = false;
-  caps.castShadow = false;
-  caps.receiveShadow = false;
-  sculpture.add(caps, bulbs);
+
+  const geometry = new THREE.IcosahedronGeometry(1);
+  const transform = new THREE.Object3D();
+  for (const [tier, pins] of lights.entries()) {
+    const bulbs = new THREE.InstancedMesh(geometry, materials.bulbs[tier], pins.length);
+    bulbs.name = 'Sculpture branch-mounted pin lights';
+    pins.forEach(({ center, radius }, index) => {
+      transform.position.copy(center);
+      transform.scale.setScalar(radius);
+      transform.updateMatrix();
+      bulbs.setMatrixAt(index, transform.matrix);
+    });
+    bulbs.instanceMatrix.needsUpdate = true;
+    sculpture.add(bulbs);
+  }
 }
 
 function addCafeCounter(parent: THREE.Group, materials: AtriumFurnishMaterials): void {
@@ -530,7 +583,6 @@ function addCafeCounter(parent: THREE.Group, materials: AtriumFurnishMaterials):
     [counterX, .80, counterZ + .37]);
   box(cafe, 'Cafe under-counter warm reveal', materials.amber, 2.48, .025, .023,
     [counterX, .73, counterZ + .313]);
-  registerEmissive(materials, materials.amber);
   for (const x of [-.52, .19, .90]) {
     roundedBox(cafe, 'Cafe cabinet front', materials.sofaShadow, .57, .61, .025,
       [x, .43, counterZ + .30], .018);
@@ -555,15 +607,14 @@ function addCafeTable(parent: THREE.Group, materials: AtriumFurnishMaterials,
   const topY = .76;
   cylinder(table, `${name} porcelain top`, materials.porcelain, .5, .072, [0, topY, 0], 36,
     width / 1.0, depth / 1.0);
-  horizontalRing(table, `${name} warm rim`, materials.amber, .47, .012, [0, topY + .042, 0],
-    width / 1.0, depth / 1.0);
+  horizontalRing(table, `${name} inset brass rim`, materials.brass, .485, .006, [0, topY + .036, 0],
+    width, depth);
   cylinder(table, `${name} pedestal`, materials.darkMetal, .13, topY - .07, [0, (topY - .07) / 2, 0], 24);
   cylinder(table, `${name} foot`, materials.brass, .31, .032, [0, .045, 0], 32, width / .92, depth / .92);
   cylinder(table, `${name} porcelain centerpiece`, materials.porcelain, .095, .13,
     [.04, .865, -.02], 24);
   cylinder(table, `${name} center trim`, materials.amber, .098, .010,
     [.04, .931, -.02], 24);
-  registerEmissive(materials, materials.amber);
 }
 
 function addWickerChair(parent: THREE.Group, materials: AtriumFurnishMaterials,
@@ -573,58 +624,157 @@ function addWickerChair(parent: THREE.Group, materials: AtriumFurnishMaterials,
   chair.position.set(x, 0, z);
   chair.rotation.y = yaw;
   parent.add(chair);
-  roundedBox(chair, `${name} woven seat`, materials.wicker, .60, .13, .55, [0, .43, 0], .085);
-  roundedBox(chair, `${name} seat shadow`, materials.wickerDark, .48, .032, .41, [0, .506, 0], .055);
-  const loop = [
-    [-.27, .49, .05], [-.31, .74, .06], [-.28, 1.05, .04], [-.16, 1.27, .01],
-    [0, 1.35, -.01], [.16, 1.27, .01], [.28, 1.05, .04], [.31, .74, .06], [.27, .49, .05],
-  ] as const;
-  tube(chair, `${name} continuous wicker back loop`, materials.wicker, loop, .024, false, 30);
-  tube(chair, `${name} inner wicker loop`, materials.wickerDark, [
-    [-.20, .56, .05], [-.23, .79, .07], [-.17, 1.00, .06], [0, 1.10, .03],
-    [.17, 1.00, .06], [.23, .79, .07], [.20, .56, .05],
-  ], .010, false, 24);
-  for (const [legX, legZ] of [[-.21, -.18], [.21, -.18], [-.21, .18], [.21, .18]] as const) {
-    tube(chair, `${name} tapered leg`, materials.wickerDark, [
-      [legX, .40, legZ], [legX * .80, .08, legZ * .80],
-    ], .019, false, 10);
+
+  const basketPoint = (u: number, height: number): Point3 => {
+    const angle = (2 * u - 1) * 1.46;
+    const rim = .973 - .235 * (Math.abs(angle) / 1.46) ** 1.7;
+    return [
+      (.257 + .088 * height) * Math.sin(angle),
+      THREE.MathUtils.lerp(.443, rim, height),
+      .012 - (.238 + .075 * height) * Math.cos(angle),
+    ];
+  };
+
+  const columns = 28;
+  const rows = 8;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const height = row / rows;
+    for (let column = 0; column <= columns; column += 1) {
+      const u = column / columns;
+      const point = basketPoint(u, height);
+      positions.push(...point);
+      uvs.push(16 * u, (point[1] - .443) * 18);
+      if (row === rows || column === columns) continue;
+      const a = row * (columns + 1) + column;
+      const b = a + columns + 1;
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
+    }
   }
-  tube(chair, `${name} left arm`, materials.wicker, [[-.30, .50, .02], [-.38, .76, .02], [-.27, .91, .03]], .018, false, 16);
-  tube(chair, `${name} right arm`, materials.wicker, [[.30, .50, .02], [.38, .76, .02], [.27, .91, .03]], .018, false, 16);
+  const cane = new THREE.BufferGeometry();
+  cane.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  cane.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  cane.setIndex(indices);
+  cane.computeVertexNormals();
+  placeMesh(chair, new THREE.Mesh(cane, materials.wicker), 'Cafe curved cane back and arms', [0, 0, 0]);
+  for (const height of [0, 1]) {
+    const rim = Array.from({ length: 13 }, (_, index) => basketPoint(index / 12, height));
+    tube(chair, 'Cafe bound cane rim', materials.wickerBinding, rim, .014, false, 24);
+  }
+  for (const side of [0, 1]) {
+    const arm = [basketPoint(side, 0), basketPoint(side, .5), basketPoint(side, 1)];
+    tube(chair, 'Cafe bound arm end', materials.wickerBinding, arm, .014, false, 10);
+  }
+
+  upholsteredBox(chair, 'Cafe upholstered seat pad', materials.sofa, .513, .103, .505,
+    [0, .472, .025], .051);
+  tube(chair, 'Cafe seat support ring', materials.darkMetal,
+    [[-.23, .409, -.18], [-.24, .408, .19], [.24, .408, .19], [.23, .409, -.18]],
+    .013, true, 16);
+  for (const [legX, legZ] of [[-.20, -.177], [.20, -.177], [-.20, .19], [.20, .19]] as const) {
+    tube(chair, 'Cafe fine splayed metal leg', materials.darkMetal, [
+      [legX, .434, legZ], [legX * 1.19, .014, legZ * 1.19],
+    ], .014, false, 4);
+  }
+}
+
+function leafBlade(): THREE.BufferGeometry {
+  const rows = 10;
+  const columns = 6;
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const indices: number[] = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const along = row / rows;
+    const span = Math.max(.006, Math.sin(Math.PI * along) ** .88 * (1.15 - .34 * along));
+    for (let column = 0; column <= columns; column += 1) {
+      const across = column / columns * 2 - 1;
+      const fold = (1 - Math.abs(across)) * .17 * span;
+      const bend = .44 * along ** 2 - .74 * along ** 4;
+      positions.push(.50 * across * span, along, fold + bend);
+      const midrib = 1 - Math.min(1, Math.abs(across) * 3);
+      const tint = .74 + .14 * (1 - Math.abs(across)) + .055 * across;
+      colors.push(tint + .09 * midrib, tint + .11 * midrib, tint + .05 * midrib);
+      if (row === rows || column === columns) continue;
+      const a = row * (columns + 1) + column;
+      const b = a + columns + 1;
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function addCafePlanter(parent: THREE.Group, materials: AtriumFurnishMaterials,
-  name: string, x: number, z: number, scale: number): void {
+  name: string, x: number, z: number, scale: number, geometry: THREE.BufferGeometry): void {
   const planter = new THREE.Group();
   planter.name = name;
   planter.position.set(x, 0, z);
   parent.add(planter);
-  cylinder(planter, `${name} tall clay vessel`, materials.planter, .39, .72, [0, .36, 0], 32, 1, .84);
-  cylinder(planter, `${name} dark soil`, materials.soil, .30, .018, [0, .725, 0], 32, 1, .84);
-  horizontalRing(planter, `${name} clay rim`, materials.brass, .36, .016, [0, .745, 0], 1, .84);
-  const stemPoints: readonly Point3[] = [
-    [0, .72, 0], [-.18, 1.31 * scale, .02], [-.28, 2.02 * scale, .06], [-.14, 2.65 * scale, .02],
-    [.06, 3.10 * scale, -.01], [.27, 2.35 * scale, .05], [.37, 1.64 * scale, -.02],
+
+  const vessel = new THREE.CylinderGeometry(.386, .287, .70, 36);
+  vessel.scale(1, 1, .89);
+  placeMesh(planter, new THREE.Mesh(vessel, materials.planter), 'Cafe glazed tapered vessel', [0, .35, 0]);
+  cylinder(planter, 'Cafe dark potting soil', materials.soil, .345, .018, [0, .704, 0], 32, 1, .89);
+  horizontalRing(planter, 'Cafe turned ceramic lip', materials.planter, .362, .024, [0, .714, 0], 1, .89);
+
+  const layers = [
+    { count: 6, y: 1.24, spread: .18, length: .49, width: .236, rise: .48 },
+    { count: 8, y: 1.72, spread: .29, length: .76, width: .315, rise: .52 },
+    { count: 7, y: 2.27, spread: .29, length: .76, width: .304, rise: .94 },
   ];
-  tube(planter, `${name} branched stems`, materials.wickerDark, stemPoints, .020, false, 24);
-  const leafGeometry = new THREE.SphereGeometry(1, 8, 5);
-  leafGeometry.scale(.19, .046, .095);
-  const leafPoints: readonly [number, number, number, number, number][] = [
-    [-.28, 1.62, .08, -.37, 1.2], [-.17, 2.02, .09, -.20, .9], [-.36, 2.42, .12, .37, 1.1],
-    [-.06, 2.78, .03, -.12, 1.0], [.18, 2.45, .11, .32, 1.2], [.38, 2.08, .08, -.18, .9],
-    [.27, 1.53, .10, .34, 1.1], [.07, 3.06, .02, -.30, .8], [-.39, 1.98, -.03, .17, .8],
-    [.43, 2.53, -.06, -.12, .95],
-  ];
-  const leaves = new THREE.InstancedMesh(leafGeometry, materials.leaves, leafPoints.length);
-  leaves.name = `${name} repeated olive leaves`;
+  const leaves = new THREE.InstancedMesh(geometry, materials.leaves,
+    layers.reduce((count, layer) => count + layer.count, 0));
+  leaves.name = 'Cafe staggered cupped leaf blades';
+  const random = seededDetail(Math.round(scale * 1000));
   const transform = new THREE.Object3D();
-  leafPoints.forEach(([leafX, leafY, leafZ, yaw, size], index) => {
-    transform.position.set(leafX, leafY * scale, leafZ);
-    transform.rotation.set(.18, yaw, .24);
-    transform.scale.setScalar(size * scale);
-    transform.updateMatrix();
-    leaves.setMatrixAt(index, transform.matrix);
-  });
+  const basis = new THREE.Matrix4();
+  const across = new THREE.Vector3();
+  const direction = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const color = new THREE.Color();
+  let index = 0;
+  for (const [layerIndex, layer] of layers.entries()) {
+    for (let offset = 0; offset < layer.count; offset += 1) {
+      const turn = offset * 2 * Math.PI / layer.count + layerIndex * 1.34 + (random() - .5) * .46;
+      const nx = Math.cos(turn);
+      const nz = Math.sin(turn);
+      const baseX = (random() - .5) * .13;
+      const baseZ = (random() - .5) * .13;
+      const y = layer.y * scale + (random() - .38) * .40;
+      const tipX = baseX + nx * layer.spread * (.68 + .5 * random());
+      const tipZ = baseZ + nz * layer.spread * (.68 + .5 * random());
+      tube(planter, 'Cafe rising petiole', materials.petiole, [
+        [baseX, .711, baseZ],
+        [baseX + (tipX - baseX) * .36, .711 + (y - .711) * .57, baseZ + (tipZ - baseZ) * .34],
+        [tipX, y, tipZ],
+      ], .008 + random() * .006, false, 6, false);
+
+      across.set(-nz, 0, nx);
+      direction.set(nx * (.55 + .34 * random()), layer.rise + .28 * random(),
+        nz * (.58 + .30 * random())).normalize();
+      // Orthogonalize the blade across its cupped surface before instancing.
+      normal.crossVectors(across, direction).normalize();
+      across.crossVectors(direction, normal).normalize();
+      basis.makeBasis(across, direction, normal);
+      transform.position.set(tipX, y, tipZ);
+      transform.quaternion.setFromRotationMatrix(basis);
+      const length = layer.length * scale * (.84 + .31 * random());
+      const width = layer.width * scale * (.81 + .36 * random());
+      transform.scale.set(width, length, .21 * length);
+      transform.updateMatrix();
+      leaves.setMatrixAt(index, transform.matrix);
+      color.setRGB(.66 + .31 * random(), .76 + .24 * random(), .56 + .27 * random());
+      leaves.setColorAt(index, color);
+      index += 1;
+    }
+  }
   leaves.instanceMatrix.needsUpdate = true;
   leaves.castShadow = true;
   leaves.receiveShadow = true;
@@ -642,8 +792,9 @@ function addCafe(parent: THREE.Group, materials: AtriumFurnishMaterials): void {
     addCafeTable(cafe, materials, `Cafe table ${index + 1}`, x, z, width, depth));
   ATRIUM_CAFE_CHAIRS.forEach(({ x, z, yaw }, index) =>
     addWickerChair(cafe, materials, `Cafe chair ${index + 1}`, x, z, yaw));
+  const leafGeometry = leafBlade();
   ATRIUM_CAFE_PLANTERS.forEach(({ x, z, scale }, index) =>
-    addCafePlanter(cafe, materials, `Cafe tall planter ${index + 1}`, x, z, scale));
+    addCafePlanter(cafe, materials, `Cafe tall planter ${index + 1}`, x, z, scale, leafGeometry));
 }
 
 /** Build the human-scale furnishings inside the commercial atrium.
