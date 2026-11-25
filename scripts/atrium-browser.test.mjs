@@ -343,6 +343,8 @@ test('atrium audio reaches the output at the seated listener and keeps footsteps
     assert.equal(await page.evaluate(() => window.atriumAudioProbe.contexts), 1);
 
     await page.locator('.coast-sound-details > summary').click();
+    assert.equal(await page.getByRole('slider', { name: '店舗の設備音', exact: true }).isVisible(), true);
+    assert.equal(await page.getByRole('slider', { name: '共用部の換気音', exact: true }).isVisible(), true);
     await button(page, '歩行音をオフ').click();
     await page.waitForFunction(() => window.atriumAudioProbe.peak() > 0.0001);
     await button(page, '環境音をオフ').click();

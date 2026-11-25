@@ -46,7 +46,7 @@ export function bindCoastSoundControls(
 ) {
   const adjustableSounds = ['footsteps', ...worldSounds[world]] as const;
   const labels: Partial<Record<ExplorationSound, string>> = world === 'cinema' ? { wind: '換気音' }
-    : world === 'atrium' ? { appliances: '換気・設備音' } : {};
+    : world === 'atrium' ? { crowd: '店舗の設備音', appliances: '共用部の換気音' } : {};
   panel.insertAdjacentHTML('beforeend', `
     <div class="coast-sound">
       ${volumeRow('coast-volume', '全体音量', 300, '<button type="button" class="coast-audio"></button>')}
