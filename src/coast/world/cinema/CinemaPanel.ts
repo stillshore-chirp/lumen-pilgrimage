@@ -102,7 +102,7 @@ export function createCinemaPanel(
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.multiple = true;
-  fileInput.accept = '.json,application/json,video/*,audio/*';
+  fileInput.accept = '.json,.mp4,.wav,.wave,.rf64,.bw64,application/json,video/*,audio/*';
   fileInput.setAttribute('aria-label', '上映素材');
   fileInput.hidden = true;
   const openScreening = button('上映素材を開く');
