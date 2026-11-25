@@ -38,7 +38,8 @@ test('cinema render table has the 57 documented positions and normalized aims', 
   for (const speaker of CINEMA_RENDER_SPEAKERS) {
     const length = Math.hypot(...speaker.aim);
     assert.ok(Math.abs(length - 1) < 1e-12, `${speaker.id}: aim length ${length}`);
-    assert.equal(speaker.delaySamples, 0);
+    assert.ok(Number.isSafeInteger(speaker.delaySamples) && speaker.delaySamples >= 0);
+    if (speaker.kind !== 'screen') assert.equal(speaker.delaySamples, 0);
     assert.equal(speaker.gain, 1);
   }
   assert.deepEqual(CINEMA_RENDER_SPEAKERS.slice(0, 5).map(({ position }) => position), [
@@ -48,6 +49,16 @@ test('cinema render table has the 57 documented positions and normalized aims', 
   assert.deepEqual(CINEMA_RENDER_SPEAKERS.slice(-4).map(({ position }) => position), [
     [-4, 1, -1.4], [4, 1, -1.4], [-13, 11, 53], [13, 11, 53],
   ]);
+});
+
+test('screen channels reach the R11 reference at the same modeled sample', () => {
+  const arrivals = CINEMA_RENDER_SPEAKERS
+    .filter(({ kind }) => kind === 'screen')
+    .map(({ position: [x, y, z], delaySamples }) =>
+      Math.hypot(x, y - 5, z - 35.85) * 48_000 / 343 + delaySamples);
+  assert.ok(Math.max(...arrivals) - Math.min(...arrivals) < 1);
+  const center = CINEMA_RENDER_SPEAKERS[indexOf('screen-C')];
+  assert.ok(Math.abs(center.delaySamples / 48 - 6.6) < .1);
 });
 
 test('bed routing follows mono, stereo, 5.1, 7.1, 7.1.4 and LC/RC layouts', () => {

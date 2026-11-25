@@ -1,6 +1,6 @@
 import { CINEMA_SCREEN, CINEMA_SIDE_SURROUNDS } from './cinemaLayout';
 import {
-  type CinemaChannel, type CinemaObjectKey, type CinemaPoint, type CinemaProgram,
+  CINEMA_SAMPLE_RATE, type CinemaChannel, type CinemaObjectKey, type CinemaPoint, type CinemaProgram,
 } from './cinemaProgram';
 
 export type CinemaRenderSpeakerKind = 'screen' | 'side' | 'rear' | 'top' | 'screenSub' | 'surroundSub';
@@ -18,6 +18,7 @@ export interface CinemaRenderSpeaker {
 }
 
 const REFERENCE_LISTENER: CinemaPoint = [0, 5.00, 35.85];
+const SOUND_SPEED_METRES_PER_SECOND = 343;
 const FRONT_SCREEN_X = [-13.31, -6.655, 0, 6.655, 13.31] as const;
 const REAR_COUNT = 12;
 const TOP_COUNT = 8;
@@ -46,17 +47,24 @@ function renderSpeaker(
     kind,
     position,
     aim: normalizedAim(position, target),
-    // The design document calls for measured alignment values. Keep the initial
-    // unmeasured state neutral so this table cannot add an unverified time shift.
     delaySamples: 0,
     gain: 1,
   };
 }
 
+const screenCenterY = CINEMA_SCREEN.bottom + CINEMA_SCREEN.height * 2 / 3;
+const screenDepth = -1.4;
+const distanceToReference = (x: number) => Math.hypot(
+  x - REFERENCE_LISTENER[0], screenCenterY - REFERENCE_LISTENER[1], screenDepth - REFERENCE_LISTENER[2],
+);
+const furthestScreen = Math.max(...FRONT_SCREEN_X.map(distanceToReference));
 const screenSpeakers = FRONT_SCREEN_X.map((x, index) => {
   const id = ['L', 'LC', 'C', 'RC', 'R'][index];
-  const position = point(x, CINEMA_SCREEN.bottom + CINEMA_SCREEN.height * 2 / 3, -1.4);
-  return renderSpeaker(`screen-${id}`, 'screen', position);
+  const speaker = renderSpeaker(`screen-${id}`, 'screen', point(x, screenCenterY, screenDepth));
+  // Align the five modeled first arrivals at R11. Device latency is measured separately.
+  const delaySamples = Math.round((furthestScreen - distanceToReference(x))
+    * CINEMA_SAMPLE_RATE / SOUND_SPEED_METRES_PER_SECOND);
+  return { ...speaker, delaySamples };
 });
 
 const sideSpeakers = ([-1, 1] as const).flatMap(sign => CINEMA_SIDE_SURROUNDS.map(({ x, y, z }, index) => {
