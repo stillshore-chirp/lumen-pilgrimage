@@ -21,6 +21,8 @@ const HRTF_DIRECT_TAPS = 48;
 const HRTF_REFLECTION_TAPS = 24;
 const HRTF_SAMPLE_SCALE = 1 / 32768;
 const MAX_REFLECTION_PATHS = 48;
+const HRTF_REFLECTION_LIMIT = 24;
+const SPATIAL_SETTLE_SAMPLES = 4096;
 const EARLY_DELAYS = [317, 541, 809, 1151, 1613, 2203];
 const EARLY_WEIGHTS = [0.18, 0.15, 0.12, 0.09, 0.065, 0.04];
 const BAND_CUTOFFS = [125, 250, 500, 1000, 2000, 4000];
@@ -69,7 +71,8 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     this.targetSpatial = new Float32Array(this.speakerCount * SPATIAL_STRIDE);
     this.hrtf = null;
     this.directKernels = new Float32Array(this.speakerCount * HRTF_DIRECT_TAPS * 2);
-    this.reflectionKernels = new Float32Array(MAX_REFLECTION_PATHS * HRTF_REFLECTION_TAPS * 2);
+    this.reflectionKernels = new Float32Array(HRTF_REFLECTION_LIMIT * HRTF_REFLECTION_TAPS * 2);
+    this.spatialRemaining = 0;
     this.reflectionCount = 0;
     this.reflectionSpeaker = new Uint16Array(MAX_REFLECTION_PATHS);
     this.reflectionDelay = new Float32Array(MAX_REFLECTION_PATHS);
@@ -214,9 +217,12 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
 
   receiveSpatial(value, reflections) {
     const spatial = asFloat32Array(value);
-    const length = Math.min(spatial.length, this.targetSpatial.length);
-    this.targetSpatial.fill(0);
-    this.targetSpatial.set(spatial.subarray(0, length));
+    for (let index = 0; index < this.targetSpatial.length; index += 1) {
+      const next = spatial[index] || 0;
+      if (next === this.targetSpatial[index]) continue;
+      this.targetSpatial[index] = next;
+      this.spatialRemaining = SPATIAL_SETTLE_SAMPLES;
+    }
     const paths = Array.isArray(reflections) ? reflections : [];
     this.reflectionCount = Math.min(MAX_REFLECTION_PATHS, paths.length);
     for (let i = 0; i < this.reflectionCount; i += 1) {
@@ -271,9 +277,11 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
   }
 
   smoothSpatial() {
+    if (this.spatialRemaining === 0) return;
     for (let i = 0; i < this.spatial.length; i += 1) {
       this.spatial[i] += (this.targetSpatial[i] - this.spatial[i]) * 0.002;
     }
+    if (--this.spatialRemaining === 0) this.spatial.set(this.targetSpatial);
   }
 
   updateKernels(frames) {
@@ -282,7 +290,8 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       this.blendKernel(this.directKernels, speaker * HRTF_DIRECT_TAPS * 2, HRTF_DIRECT_TAPS,
         this.targetSpatial[speaker * SPATIAL_STRIDE + 6], amount);
     }
-    for (let path = 0; path < this.reflectionCount; path += 1) {
+    const measuredPaths = Math.min(this.reflectionCount, HRTF_REFLECTION_LIMIT);
+    for (let path = 0; path < measuredPaths; path += 1) {
       this.blendKernel(this.reflectionKernels, path * HRTF_REFLECTION_TAPS * 2, HRTF_REFLECTION_TAPS,
         this.reflectionDirection[path], amount);
     }
@@ -412,7 +421,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         * (0.12 + 0.18 * this.reflectionHighGain[pathIndex]);
       let pathLeft;
       let pathRight;
-      if (this.hrtf) {
+      if (this.hrtf && pathIndex < HRTF_REFLECTION_LIMIT) {
         this.convolveHrtf(ring, write, this.reflectionDelay[pathIndex], this.reflectionKernels,
           pathIndex * HRTF_REFLECTION_TAPS * 2, HRTF_REFLECTION_TAPS);
         pathLeft = this.hrtfLeft * pathGain;
@@ -435,7 +444,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       ring[write] = this.bandState[band];
       let bandEarly = 0;
       for (let tap = 0; tap < EARLY_DELAYS.length; tap += 1) {
-        bandEarly += readRing(ring, write, EARLY_DELAYS[tap]) * EARLY_WEIGHTS[tap];
+        bandEarly += ring[(write - EARLY_DELAYS[tap]) & RING_MASK] * EARLY_WEIGHTS[tap];
       }
       early += bandEarly * BAND_MIX[band];
     }
