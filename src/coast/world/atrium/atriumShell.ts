@@ -254,9 +254,7 @@ function addGalleryFascia(group: Group, materials: AtriumMaterials, side: number
   const centerZ = (front + back) * .5;
   const depth = Math.abs(front - back) + .12;
   const edgeX = side * (INNER_EDGE + .065);
-  addBox(group, materials.darkBronze, [edgeX, level + .34, centerZ, .16, .68, depth],
-    `Level ${level.toFixed(2)} inner shadow fascia`);
-  addBox(group, materials.plasterLight, [side * (INNER_EDGE + .01), level + .02, centerZ, .12, .09, depth + .10],
+  addBox(group, materials.plasterLight, [side * (INNER_EDGE + .01), level - .047, centerZ, .12, .09, depth + .10],
     `Level ${level.toFixed(2)} cream soffit return`);
   addBox(group, materials.cove, [side * (INNER_EDGE + .16), level - .48, centerZ, .13, .08, depth - .04],
     `Level ${level.toFixed(2)} concealed cove`);
@@ -269,26 +267,33 @@ function addGalleryFascia(group: Group, materials: AtriumMaterials, side: number
     .90, .014, depth - .20], `Level ${level.toFixed(2)} soft outer soffit gradient`);
 
   const fins: BoxSpec[] = [];
-  const count = Math.ceil(depth / .32);
-  for (let index = 0; index <= count; index += 1) {
-    const z = front + (back - front) * index / count;
-    fins.push([side * (INNER_EDGE + .15), level + .34, z, .075, .76, .050]);
+  for (const [start, end] of galleryRailRuns(side, level, front, back)) {
+    const length = Math.abs(start - end);
+    addBox(group, materials.darkBronze, [edgeX, level + .34, (start + end) * .5, .16, .68, length],
+      `Level ${level.toFixed(2)} inner shadow fascia`);
+    const count = Math.ceil(length / .32);
+    for (let index = 0; index <= count; index += 1) {
+      const z = start + (end - start) * index / count;
+      fins.push([side * (INNER_EDGE + .15), level + .34, z, .075, .76, .050]);
+    }
   }
   addInstancedBoxes(group, materials.bronze, `Level ${level.toFixed(2)} repeated bronze ribs`, fins);
 }
 
-function addGuardRail(group: Group, materials: AtriumMaterials, side: number,
-  floor: number, front: number, back: number, skipStairGap: boolean): void {
-  const segments: [number, number][] = [];
-  if (skipStairGap && side < 0 && floor === ATRIUM_LEVELS[1]) {
+function galleryRailRuns(side: number, floor: number, front: number, back: number): [number, number][] {
+  if (side < 0 && floor === ATRIUM_LEVELS[1]) {
     const upper = ATRIUM_UPPER_STAIR.start.z;
-    segments.push([front, -36.78], [-43.34, upper + 1.36], [upper - 1.36, back]);
-  } else if (skipStairGap && side > 0 && floor === ATRIUM_LEVELS[2]) {
-    segments.push([front, ATRIUM_UPPER_LANDING.maxZ], [ATRIUM_UPPER_LANDING.minZ, back]);
-  } else {
-    segments.push([front, back]);
+    return [[front, -36.78], [-43.34, upper + 1.36], [upper - 1.36, back]];
   }
-  for (const [start, end] of segments) {
+  if (side > 0 && floor === ATRIUM_LEVELS[2]) {
+    return [[front, ATRIUM_UPPER_LANDING.maxZ], [ATRIUM_UPPER_LANDING.minZ, back]];
+  }
+  return [[front, back]];
+}
+
+function addGuardRail(group: Group, materials: AtriumMaterials, side: number,
+  floor: number, front: number, back: number): void {
+  for (const [start, end] of galleryRailRuns(side, floor, front, back)) {
     const zMin = Math.min(start, end), zMax = Math.max(start, end);
     const depth = zMax - zMin;
     if (depth < .2) continue;
@@ -321,7 +326,7 @@ function addUpperGallery(group: Group, materials: AtriumMaterials, side: number,
     addBox(group, materials.limestone, [centerX, floor - .045, centerZ, OUTER_EDGE - INNER_EDGE + .22, .10, depth + .22],
       `Level ${floor.toFixed(2)} structural slab limestone edge`);
     addGalleryFascia(group, materials, side, floor, front, back);
-    addGuardRail(group, materials, side, floor, front, back, true);
+    addGuardRail(group, materials, side, floor, front, back);
   }
 
   const upper = STORY_TOPS[levelIndex];
@@ -379,13 +384,14 @@ function addCrossRail(group: Group, materials: AtriumMaterials,
 }
 
 function addCrossDeck(group: Group, materials: AtriumMaterials, floor: number,
-  area: { minX: number; maxX: number; minZ: number; maxZ: number }, label: string): void {
+  area: { minX: number; maxX: number; minZ: number; maxZ: number }, label: string, hasParapet = true): void {
   const { minX, maxX, minZ, maxZ } = area;
   const x = (minX + maxX) * .5, z = (minZ + maxZ) * .5;
   const width = maxX - minX, depth = maxZ - minZ;
-  addBox(group, materials.plasterLight, [x, floor - .25, z, width, .49, depth], `${label} deep cream soffit`);
-  addBox(group, materials.limestone, [x, floor - .035, z, width + .015, .070, depth + .015], `${label} limestone deck`);
-  addBox(group, materials.bronze, [x, floor + .19, maxZ - .035, width, .38, .095], `${label} near fascia`);
+  addBox(group, materials.plasterLight, [x, floor - .253, z, width, .478, depth], `${label} deep cream soffit`);
+  addBox(group, materials.limestone, [x, floor - .041, z, width + .015, .070, depth + .015], `${label} limestone deck`);
+  const fasciaY = hasParapet ? floor + .19 : floor - .197;
+  addBox(group, materials.bronze, [x, fasciaY, maxZ - .035, width, .38, .095], `${label} near fascia`);
   addBox(group, materials.cove, [x, floor - .455, maxZ - .14, width - .07, .071, .105], `${label} warm cove`);
 }
 
@@ -393,7 +399,7 @@ function addRearBridges(group: Group, materials: AtriumMaterials): void {
   addCrossDeck(group, materials, ATRIUM_LEVELS[0], ATRIUM_FIRST_BRIDGE, 'First gallery projecting return');
   addCrossRail(group, materials, ATRIUM_FIRST_BRIDGE.minX, ATRIUM_FIRST_BRIDGE.maxX - .15,
     ATRIUM_FIRST_BRIDGE.maxZ - .035, ATRIUM_LEVELS[0]);
-  addCrossDeck(group, materials, ATRIUM_LEVELS[1], ATRIUM_STAIR_WEST_LINK, 'West curved stair receiving wing');
+  addCrossDeck(group, materials, ATRIUM_LEVELS[1], ATRIUM_STAIR_WEST_LINK, 'West curved stair receiving wing', false);
   addCrossDeck(group, materials, ATRIUM_LEVELS[2], ATRIUM_UPPER_LANDING, 'Upper diagonal stair head');
   addCrossRail(group, materials, ATRIUM_UPPER_LANDING.minX, INNER_EDGE - .04,
     ATRIUM_UPPER_LANDING.maxZ - .035, ATRIUM_LEVELS[2]);

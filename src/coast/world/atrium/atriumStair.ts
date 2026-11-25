@@ -13,10 +13,12 @@ import {
   Vector3,
 } from 'three';
 import {
+  ATRIUM_GALLERY_EDGE,
   ATRIUM_STAIR_LENGTH,
   ATRIUM_STAIR_STEPS,
   ATRIUM_UPPER_STAIR,
   ATRIUM_UPPER_STAIR_LENGTH,
+  ATRIUM_WALK_LEVEL,
   atriumStairFrame,
   atriumStairPoint,
   atriumUpperStairPoint,
@@ -73,15 +75,32 @@ function sideAcross(width: number, side: number, inset: number): number {
   return side * (width * 0.5 - inset);
 }
 
+function galleryJoin(side: number, inset: number): number {
+  let start = ATRIUM_STAIR_LENGTH - 6;
+  let end = ATRIUM_STAIR_LENGTH;
+  while (end - start > 0.003) {
+    const middle = (start + end) * 0.5;
+    const frame = atriumStairFrame(middle);
+    const point = atriumStairPoint(middle, sideAcross(frame.width, side, inset));
+    if (point.x > -ATRIUM_GALLERY_EDGE) start = middle;
+    else end = middle;
+  }
+  return end;
+}
+
 function addTreadTop(builder: QuadBuilder, step: AtriumStairStep): void {
-  const startFrame = atriumStairFrame(step.start);
-  const endFrame = atriumStairFrame(step.end);
-  builder.addQuad(
-    mainPoint(step.start, -startFrame.width * 0.5, step.y),
-    mainPoint(step.start, startFrame.width * 0.5, step.y),
-    mainPoint(step.end, endFrame.width * 0.5, step.y),
-    mainPoint(step.end, -endFrame.width * 0.5, step.y),
-  );
+  const length = step.end - step.start;
+  const segments = Math.max(1, Math.ceil(length / 0.42));
+  // The gallery finish covers the last landing wherever the two plans overlap.
+  const y = step.y === ATRIUM_WALK_LEVEL ? step.y - 0.012 : step.y;
+  for (let index = 0; index < segments; index++) {
+    const start = step.start + length * index / segments;
+    const end = step.start + length * (index + 1) / segments;
+    const a = atriumStairFrame(start).width * 0.5;
+    const b = atriumStairFrame(end).width * 0.5;
+    builder.addQuad(mainPoint(start, -a, y), mainPoint(start, a, y),
+      mainPoint(end, b, y), mainPoint(end, -b, y));
+  }
 }
 
 function addTreadRiser(builder: QuadBuilder, step: AtriumStairStep, lowY: number): void {
@@ -138,9 +157,10 @@ function addMainUnderbody(builder: QuadBuilder): void {
 }
 
 function addSideFascia(builder: QuadBuilder, side: number, depthScale: number): void {
+  const stop = galleryJoin(side, -0.11);
   for (let index = 0; index < MAIN_SAMPLE_COUNT; index += 1) {
-    const along0 = ATRIUM_STAIR_LENGTH * index / MAIN_SAMPLE_COUNT;
-    const along1 = ATRIUM_STAIR_LENGTH * (index + 1) / MAIN_SAMPLE_COUNT;
+    const along0 = stop * index / MAIN_SAMPLE_COUNT;
+    const along1 = stop * (index + 1) / MAIN_SAMPLE_COUNT;
     const frame0 = atriumStairFrame(along0);
     const frame1 = atriumStairFrame(along1);
     const outer0 = sideAcross(frame0.width, side, -0.11);
@@ -175,9 +195,10 @@ function addSideFascia(builder: QuadBuilder, side: number, depthScale: number): 
 
 function addFasciaLight(builder: QuadBuilder): void {
   const stripInset = -0.115;
+  const stop = galleryJoin(FASCIA_SIDE, stripInset);
   for (let index = 0; index < MAIN_SAMPLE_COUNT; index += 1) {
-    const along0 = ATRIUM_STAIR_LENGTH * index / MAIN_SAMPLE_COUNT;
-    const along1 = ATRIUM_STAIR_LENGTH * (index + 1) / MAIN_SAMPLE_COUNT;
+    const along0 = stop * index / MAIN_SAMPLE_COUNT;
+    const along1 = stop * (index + 1) / MAIN_SAMPLE_COUNT;
     const frame0 = atriumStairFrame(along0);
     const frame1 = atriumStairFrame(along1);
     const across0 = sideAcross(frame0.width, FASCIA_SIDE, stripInset);
@@ -196,9 +217,10 @@ function addFasciaLight(builder: QuadBuilder): void {
 }
 
 function addFasciaWash(builder: QuadBuilder): void {
+  const stop = galleryJoin(FASCIA_SIDE, -0.12);
   for (let index = 0; index < MAIN_SAMPLE_COUNT; index += 1) {
-    const along0 = ATRIUM_STAIR_LENGTH * index / MAIN_SAMPLE_COUNT;
-    const along1 = ATRIUM_STAIR_LENGTH * (index + 1) / MAIN_SAMPLE_COUNT;
+    const along0 = stop * index / MAIN_SAMPLE_COUNT;
+    const along1 = stop * (index + 1) / MAIN_SAMPLE_COUNT;
     const frame0 = atriumStairFrame(along0);
     const frame1 = atriumStairFrame(along1);
     const across0 = sideAcross(frame0.width, FASCIA_SIDE, -0.12);
@@ -217,24 +239,27 @@ function addFasciaWash(builder: QuadBuilder): void {
 }
 
 function addMainGlass(builder: QuadBuilder, side: number): void {
+  const stop = galleryJoin(side, 0.085);
   for (const step of ATRIUM_STAIR_STEPS) {
-    const startFrame = atriumStairFrame(step.start);
-    const endFrame = atriumStairFrame(step.end);
-    const across0 = sideAcross(startFrame.width, side, 0.085);
-    const across1 = sideAcross(endFrame.width, side, 0.085);
+    if (step.start >= stop) break;
+    const end = Math.min(step.end, stop);
     const bottom = step.y + 0.035;
-    builder.addQuad(
-      mainPoint(step.start, across0, bottom), mainPoint(step.end, across1, bottom),
-      mainPoint(step.end, across1, bottom + 1.12), mainPoint(step.start, across0, bottom + 1.12),
-    );
+    for (let start = step.start; start < end; start += 0.45) {
+      const next = Math.min(end, start + 0.45);
+      const across0 = sideAcross(atriumStairFrame(start).width, side, 0.085);
+      const across1 = sideAcross(atriumStairFrame(next).width, side, 0.085);
+      builder.addQuad(mainPoint(start, across0, bottom), mainPoint(next, across1, bottom),
+        mainPoint(next, across1, bottom + 1.12), mainPoint(start, across0, bottom + 1.12));
+    }
   }
 }
 
 function createMainRail(side: number, lower: boolean, material: MeshStandardMaterial): Mesh {
   const points: Vector3[] = [];
   const offset = lower ? -0.31 : 0;
+  const stop = galleryJoin(side, 0.085);
   for (let index = 0; index <= MAIN_SAMPLE_COUNT; index += 1) {
-    const along = ATRIUM_STAIR_LENGTH * index / MAIN_SAMPLE_COUNT;
+    const along = stop * index / MAIN_SAMPLE_COUNT;
     const frame = atriumStairFrame(along);
     const across = sideAcross(frame.width, side, 0.085);
     const { x, z } = atriumStairPoint(along, across);
@@ -263,13 +288,14 @@ function addMainPost(group: Group, side: number, along: number, material: MeshSt
   group.add(post);
 }
 
-function mainPostAlongs(): readonly number[] {
+function mainPostAlongs(stop: number): readonly number[] {
   const result: number[] = [0];
   for (let index = 0; index < ATRIUM_STAIR_STEPS.length; index += 1) {
     const step = ATRIUM_STAIR_STEPS[index];
+    if (step.start >= stop) break;
     if (index % 3 === 0 || step.y !== ATRIUM_STAIR_STEPS[index - 1]?.y) result.push(step.start);
   }
-  result.push(ATRIUM_STAIR_LENGTH);
+  result.push(stop);
   return result.filter((along, index) => index === 0 || Math.abs(along - result[index - 1]) > EPSILON);
 }
 
@@ -458,9 +484,8 @@ export function buildAtriumStair(root: Group): { setLighting: (artificialOn: boo
   addMainGlass(glassPanels, 1);
   addMesh(group, glassPanels.geometry('Main stair brushed glass balustrades'), glass,
     'Main stair brushed glass balustrades', false, false);
-  for (const along of mainPostAlongs()) {
-    addMainPost(group, -1, along, rail);
-    addMainPost(group, 1, along, rail);
+  for (const side of [-1, 1] as const) {
+    for (const along of mainPostAlongs(galleryJoin(side, 0.085))) addMainPost(group, side, along, rail);
   }
   group.add(createMainRail(-1, false, rail));
   group.add(createMainRail(1, false, rail));
