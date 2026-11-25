@@ -120,6 +120,11 @@ export class CinemaAmbience {
     return Boolean(this.graph && this.context?.state === 'running');
   }
 
+  screeningGain(preview: boolean): number {
+    const level = preview ? explorationSoundGain(this.mix, 'preview') : this.mix.levels.preview;
+    return this.mix.master * 0.7 * level;
+  }
+
   start(): Promise<void> {
     if (this.disposed) return Promise.reject(new Error('CinemaAmbience has been disposed'));
     try {

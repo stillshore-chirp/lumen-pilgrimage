@@ -109,6 +109,7 @@ export class CoastApp {
   private readonly cinemaControls?: CinemaControls;
   private readonly residenceControls: readonly ResidenceControlSection[];
   private loadingTravel = false;
+  private hasRetainedCinemaScreening = false;
   private showTravelStatusUntil = 0;
   private monitor?: MonitorView;
   private readonly seatTransition?: ReturnType<typeof createCinemaSeatTransition>;
@@ -487,6 +488,12 @@ export class CoastApp {
             }
           },
         },
+        {
+          label: () => cinema.localScreening.playing ? '本編を一時停止' : '本編を再生',
+          enabled: () => cinema.localScreening.playing || (cinema.localScreening.available
+            && !cinema.localScreening.blocked && !cinema.localScreening.loading),
+          invoke: () => { void cinema.toggleScreening(); this.xr.closeMenu(); },
+        },
         { label: '設定に戻る', invoke: () => this.openXRSettings() },
       ]),
     });
@@ -537,8 +544,9 @@ export class CoastApp {
     });
     if (decision.kind === 'invalid') return;
     if (decision.kind === 'navigate') {
-      if (this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection) void this.changeWorld(decision.url);
-      else {
+      if (this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection || this.shouldKeepCinemaFiles) {
+        void this.changeWorld(decision.url);
+      } else {
         ++this.travelRequest;
         location.assign(decision.url);
       }
@@ -589,6 +597,10 @@ export class CoastApp {
     this.currentUrl = url;
   };
 
+  private get shouldKeepCinemaFiles(): boolean {
+    return this.cinemaControls?.localScreening.available ?? this.hasRetainedCinemaScreening;
+  }
+
   private async changeWorld(url: URL, historyIndex?: number): Promise<void> {
     const request = ++this.travelRequest;
     const { worldId } = parseStartupRoute(url.search);
@@ -610,6 +622,8 @@ export class CoastApp {
       }
       targetHistoryIndex = historyIndex ?? readHistoryIndex(history.state) + 1;
       next = new CoastApp(this.mount, loaded, url, this.renderer, targetHistoryIndex, this.xr);
+      // Keep the document and its local File handles alive on both legs of the trip.
+      next.hasRetainedCinemaScreening = this.shouldKeepCinemaFiles;
     } catch {
       loaded?.audio.dispose();
       loaded?.world.dispose();
