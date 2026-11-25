@@ -125,9 +125,11 @@
 
 主階段は下端の幅約5 mから絞り、初めに右へ寄り、昇降塔の手前で左へ回り込んで西回廊の9.15 mへ着きます。西回廊の奥に続く階段でもう一層上がり、13.55 mの回廊へ渡れます。高さ4.55 mの回廊は手前で吹抜け側に張り出し、奥に向かって開きます。この回廊と奥の張り出しは景観と音の遮蔽に使います。[支持面](../src/coast/world/atrium/atriumNavigation.ts)は、踏面と同じ経路を連続した高さでたどります。地上の通路と回廊が上下に重なる場所では、現在の足元から到達できる支持面を選びます。店先、昇降塔、家具と手すりが探索の境界です。
 
-[回廊と建築](../src/coast/world/atrium/atriumShell.ts)、[天窓の立ち上がりと昇降塔](../src/coast/world/atrium/atriumRoof.ts)、[階段](../src/coast/world/atrium/atriumStair.ts)、[店先](../src/coast/world/atrium/atriumRetail.ts)、[家具](../src/coast/world/atrium/atriumFurnishings.ts)を個別に編集できます。暖色の間接光と青い天窓を異なる光源として扱います。地上の磨き石は色・法線・粗さのマップに1.35 m角の目地と帯状の石割りを重ねます。通常画面ではカメラを床に鏡映して描画し、石の粗さで照明の輪郭を広げます。WebXRでは各眼から石面を経由する反射方向を求め、コーブ、店先、天窓などの主要な光を評価します。どちらも一括点消灯を映り込みへ反映します。 [床の実装](../src/coast/world/atrium/atriumFloor.ts) · [素材の出典](../public/atrium-materials/ATTRIBUTION.md) · [WebXRのビュー](https://www.w3.org/TR/webxr/#xrview)
+[回廊と建築](../src/coast/world/atrium/atriumShell.ts)、[天窓の立ち上がりと昇降塔](../src/coast/world/atrium/atriumRoof.ts)、[階段](../src/coast/world/atrium/atriumStair.ts)、[店先](../src/coast/world/atrium/atriumRetail.ts)、[家具](../src/coast/world/atrium/atriumFurnishings.ts)を個別に編集できます。天窓には青い縦窓と上面の桟を置き、手前に昇降塔の上端を重ねます。回廊の庇と階段の側板は、光が器具から離れるにつれて弱くなる勾配を持ちます。店舗の照明は正面のケース、側面の木壁、奥の棚で光る位置を変えます。 [壁や天井を使う間接照明](https://www.erco.com/en/knowledge/fundamentals/indirect-lighting/)
 
-[音響の実装](../src/coast/world/atrium/atriumAudio.ts)はカフェ、遠方、上階、設備を別の発音位置に置きます。[伝搬の計算](../src/coast/world/atrium/atriumAcoustics.ts)は、回廊の床板を横切る経路の高域を抑え、有限な面での初期反射に経路差の遅れを加えます。中央の吹抜けでは後期残響の設計値を1.86秒とし、ソファ、階段下、上階で直接音と残響の比率を変えます。これは仮想空間用の値です。 [商業施設の残響実測](https://www.mdpi.com/2076-3417/10/3/1170) · [鏡像法](https://pubs.aip.org/asa/jasa/article/65/4/943/765693/Image-method-for-efficiently-simulating-small-room)
+床は石板の中央から色・法線・粗さを取り、1.35 m角の板と通路沿いの淡い帯を割り付けます。通常画面ではカメラを床に鏡映し、粗さに応じて反射の輪郭を広げます。WebXRでは各眼の反射方向から庇、店先、天窓の光を求めます。両方の反射に一括点消灯が反映されます。 [床の実装](../src/coast/world/atrium/atriumFloor.ts) · [素材の出典](../public/atrium-materials/ATTRIBUTION.md) · [WebXRのビュー](https://www.w3.org/TR/webxr/#xrview)
+
+[音響の実装](../src/coast/world/atrium/atriumAudio.ts)は、左右と上階の換気、カフェ奥と店舗の設備を別の位置から鳴らします。[伝搬の計算](../src/coast/world/atrium/atriumAcoustics.ts)は、回廊の床板を挟む経路の高域を抑え、石床、ガラス側の壁、回廊の床面と軒裏からの初期反射に経路差の遅れを加えます。初期反射は位置を持ち、左右の聞こえ方が視線の向きに従います。後期残響の設計値は吹抜け側1.86秒、低い天井の周辺0.95秒です。ソファの敷物や回廊の下に近づくと短い応答の比率が増え、歩行音にも反映されます。類似施設の測定を参考にした仮想空間の設定です。 [商業施設の残響実測](https://www.mdpi.com/2076-3417/10/3/1170) · [音源の生成と出典](../public/atrium-audio/ATTRIBUTION.md) · [鏡像法](https://pubs.aip.org/asa/jasa/article/65/4/943/765693/Image-method-for-efficiently-simulating-small-room)
 
 ## 共通の変更経路
 

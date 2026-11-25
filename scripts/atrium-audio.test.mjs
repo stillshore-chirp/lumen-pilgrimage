@@ -10,66 +10,83 @@ const hooks = registerHooks({
   },
 });
 const {
-  atriumSoundPath,
-  atriumCafeSource,
-  atriumGallerySources,
-  atriumSurfaceAt,
+  ATRIUM_REFLECTION_MAX_DELAY,
+  ATRIUM_SERVICE_SOURCES,
   ATRIUM_SOUND_SPEED,
+  atriumLocalTailMix,
+  atriumSoundPath,
+  atriumSurfaceAt,
+  createAtriumSoundPath,
 } = await import('../src/coast/world/atrium/atriumAcoustics.ts');
+const { createAtriumEquipmentLoop, createAtriumFootfall, createAtriumRoomTail } =
+  await import('../src/coast/world/atrium/atriumAudioSamples.ts');
 const {
-  createAtriumAirLoop,
-  createAtriumCrowdLoop,
-  createAtriumDishEvent,
-  createAtriumFootfall,
-  createAtriumGalleryEvent,
-  createAtriumGalleryLoop,
-  createAtriumRoomTail,
-} = await import('../src/coast/world/atrium/atriumAudioSamples.ts');
-const { ATRIUM_CAFE, ATRIUM_GALLERY_EDGE, ATRIUM_LEVELS, ATRIUM_SOFA, atriumStairFrame, atriumUpperStairPoint } =
-  await import('../src/coast/world/atrium/atriumLayout.ts');
+  ATRIUM_BOUNDS, ATRIUM_CAFE, ATRIUM_CAFE_COUNTER, ATRIUM_GALLERY_EDGE,
+  ATRIUM_LEVELS, ATRIUM_LOUNGE, ATRIUM_SOFA, ATRIUM_WALK_LEVEL, atriumStairFrame, atriumUpperStairPoint,
+} = await import('../src/coast/world/atrium/atriumLayout.ts');
 hooks.deregister();
 
-test('atrium early arrivals use the shared layout and physical image excess', () => {
-  const cafe = atriumCafeSource();
-  const listener = { x: ATRIUM_SOFA.x, y: ATRIUM_SOFA.seatedEyeHeight, z: ATRIUM_SOFA.z };
-  const path = atriumSoundPath(listener, cafe);
-  assert.ok(path.directDistance > 11 && path.directDistance < 12);
-  assert.ok(path.reflections.length <= 2);
-  assert.ok(path.reflections.some(reflection => reflection.surface === 'floor'));
-  const imageDistance = Math.hypot(
-    listener.x - cafe.x,
-    listener.y + cafe.y,
-    listener.z - cafe.z,
-  );
-  const floor = path.reflections.find(reflection => reflection.surface === 'floor');
-  assert.ok(floor);
-  assert.ok(Math.abs(floor.delay - (imageDistance - path.directDistance) / ATRIUM_SOUND_SPEED) < 1e-9);
-  assert.ok(floor.gain > 0 && floor.gain < 0.4);
-  assert.ok(path.lateSend > 0.18 && path.lateSend < 0.72);
+const open = { x: 0, y: 1.65, z: -19 };
+const underGallery = { x: ATRIUM_BOUNDS.maxX - 1.7, y: 1.65, z: -19 };
+const sofa = { x: ATRIUM_SOFA.x, y: ATRIUM_SOFA.seatedEyeHeight, z: ATRIUM_SOFA.z };
+const upperGallery = { x: ATRIUM_BOUNDS.minX + 2.2, y: ATRIUM_WALK_LEVEL + 1.65, z: -44.1 };
+
+function checkHorizontalArrival(listener, source, surface) {
+  const path = atriumSoundPath(listener, source);
+  const reflection = path.reflections.find(arrival => arrival.surface === surface && arrival.gain > 0);
+  assert.ok(reflection, `${surface} should produce an early reflection`);
+  const { y } = reflection.point;
+  const imageDistance = Math.hypot(listener.x - source.x, listener.y - (2 * y - source.y), listener.z - source.z);
+  assert.ok(reflection.delay <= ATRIUM_REFLECTION_MAX_DELAY);
+  assert.ok(Math.abs(reflection.delay - (imageDistance - path.directDistance) / ATRIUM_SOUND_SPEED) < 1e-9);
+  return reflection;
+}
+
+test('stone floor, soffit and gallery deck provide different finite image paths', () => {
+  const floor = checkHorizontalArrival(open, { x: -1.2, y: 1.25, z: -19.6 }, 'floor');
+  assert.equal(floor.point.y, 0);
+  const underSource = { x: ATRIUM_GALLERY_EDGE - 0.25, y: 1.31, z: -17 };
+  const soffit = checkHorizontalArrival(underGallery, underSource, 'soffit');
+  assert.ok(soffit.point.y < ATRIUM_LEVELS[0] && soffit.point.y > ATRIUM_LEVELS[0] - 0.6);
+  const gallery = checkHorizontalArrival(upperGallery,
+    { x: ATRIUM_BOUNDS.minX + 1.2, y: ATRIUM_WALK_LEVEL + 1.15, z: -42.2 }, 'gallery-floor');
+  assert.equal(gallery.point.y, ATRIUM_WALK_LEVEL);
+
+  const path = createAtriumSoundPath();
+  const arrivals = [...path.reflections];
+  assert.equal(atriumSoundPath(underGallery, underSource, path), path);
+  atriumSoundPath(open, underSource, path);
+  for (const arrival of arrivals) assert.ok(path.reflections.includes(arrival));
 });
 
-test('gallery slab shelter removes high frequencies while the open void remains live', () => {
-  const [, gallery] = atriumGallerySources();
-  const underGallery = { x: 9.25, y: 1.65, z: -16.8 };
-  const openVoid = { x: 0, y: 1.65, z: -16.8 };
-  const sheltered = atriumSoundPath(underGallery, gallery);
-  const open = atriumSoundPath(openVoid, gallery);
-  assert.ok(sheltered.shelter > 0.2);
-  assert.equal(open.shelter, 0);
-  assert.ok(sheltered.cutoff < open.cutoff * 0.64);
-  assert.ok(sheltered.lateSend > open.lateSend);
+test('a finite gallery slab shelters an elevated source and the lounge softens the floor arrival', () => {
+  const upperSource = { x: ATRIUM_GALLERY_EDGE + 0.48, y: ATRIUM_LEVELS[0] + 2.85, z: -18.6 };
+  const sheltered = atriumSoundPath(underGallery, upperSource);
+  const exposed = atriumSoundPath(open, upperSource);
+  assert.ok(sheltered.shelter > 0.7);
+  assert.equal(exposed.shelter, 0);
+  assert.ok(sheltered.cutoff < exposed.cutoff * 0.45);
+  assert.ok(sheltered.gain < exposed.gain, 'obstruction offsets the shorter distance to the elevated source');
+  assert.ok(sheltered.lateSend / sheltered.gain > exposed.lateSend / exposed.gain);
+
+  const rugSource = { x: ATRIUM_LOUNGE.x, y: 0.8, z: ATRIUM_LOUNGE.z };
+  const rug = checkHorizontalArrival(sofa, rugSource, 'floor');
+  const stone = checkHorizontalArrival({ ...sofa, z: sofa.z + 13 }, { ...rugSource, z: rugSource.z + 13 }, 'floor');
+  assert.ok(rug.gain < stone.gain * 0.3);
+  assert.ok(rug.cutoff < stone.cutoff * 0.4);
+  assert.equal(ATRIUM_SERVICE_SOURCES[0].z, ATRIUM_CAFE.z + ATRIUM_CAFE_COUNTER.z);
 });
 
 test('atrium floor levels and footstep materials follow the shared plan', () => {
   assert.equal(atriumSurfaceAt(0, -24, 0), 'stone');
-  assert.equal(atriumSurfaceAt(-2.1, -32, 0), 'rug');
+  assert.equal(atriumSurfaceAt(ATRIUM_LOUNGE.x, ATRIUM_LOUNGE.z, 0), 'rug');
   assert.equal(atriumSurfaceAt(ATRIUM_GALLERY_EDGE + 0.2, -20, 0), 'stone');
-  assert.equal(atriumSurfaceAt(ATRIUM_GALLERY_EDGE + 0.2, -20, ATRIUM_LEVELS[1]), 'gallery');
+  for (const level of ATRIUM_LEVELS) {
+    assert.equal(atriumSurfaceAt(ATRIUM_GALLERY_EDGE + 0.2, -20, level), 'gallery');
+  }
   for (const point of [atriumStairFrame(8.2), atriumUpperStairPoint(4.5, 0)]) {
     assert.equal(atriumSurfaceAt(point.x, point.z, point.y), 'stair');
   }
-  assert.equal(ATRIUM_CAFE.x, 8.9);
-  assert.equal(ATRIUM_CAFE.z, -30.7);
 });
 
 class AudioBuffers {
@@ -90,34 +107,83 @@ function energy(samples) {
   return samples.reduce((sum, value) => sum + value * value, 0);
 }
 
-test('procedural source loops and void tail are deterministic, bounded, and seam-safe', () => {
+function relativeDerivativeEnergy(samples) {
+  let differences = 0;
+  for (let index = 1; index < samples.length; index += 1) {
+    differences += (samples[index] - samples[index - 1]) ** 2;
+  }
+  return differences / energy(samples);
+}
+
+test('equipment loops have steady, distinct spectra through their loop seams', () => {
   const context = new AudioBuffers();
-  const crowdA = createAtriumCrowdLoop(context, 1_731).getChannelData(0);
-  const crowdB = createAtriumCrowdLoop(context, 1_731).getChannelData(0);
-  assert.deepEqual(crowdA, crowdB);
-  for (const samples of [
-    crowdA,
-    createAtriumGalleryLoop(context, 2_417).getChannelData(0),
-    createAtriumAirLoop(context, 3_811).getChannelData(0),
-    createAtriumDishEvent(context, 4_771).getChannelData(0),
-    createAtriumGalleryEvent(context, 5_311).getChannelData(0),
-  ]) {
+  const air = createAtriumEquipmentLoop(context, 3_811, 'air').getChannelData(0);
+  const service = createAtriumEquipmentLoop(context, 1_731, 'service').getChannelData(0);
+  assert.deepEqual(air, createAtriumEquipmentLoop(context, 3_811, 'air').getChannelData(0));
+  for (const samples of [air, service]) {
+    const meanSquare = energy(samples) / samples.length;
+    const seamFrames = Math.round(context.sampleRate * 0.075);
+    const seamEnergy = energy(samples.subarray(0, seamFrames)) / seamFrames;
+    assert.ok(seamEnergy > meanSquare * 0.65 && seamEnergy < meanSquare * 1.35);
+    const jump = samples[0] - samples.at(-1);
+    assert.ok(jump * jump < meanSquare * relativeDerivativeEnergy(samples) * 9);
+    assert.ok(samples.every(sample => Math.abs(sample) < 0.32));
+  }
+  assert.ok(relativeDerivativeEnergy(service) < relativeDerivativeEnergy(air) * 0.65);
+});
+
+function decayTime(samples, sampleRate, fromDb, toDb) {
+  const total = energy(samples);
+  const from = total * 10 ** (fromDb / 10);
+  const to = total * 10 ** (toDb / 10);
+  let remaining = 0;
+  let end = -1;
+  // Backward integration estimates the decay of the generated impulse response.
+  for (let i = samples.length - 1; i >= 0; i -= 1) {
+    remaining += samples[i] ** 2;
+    if (end < 0 && remaining >= to) end = i;
+    if (fromDb < 0 && remaining >= from) return (end - i) * 60 / (sampleRate * (fromDb - toDb));
+  }
+  if (fromDb === 0 && end >= 0) {
+    const start = samples.findIndex(value => value !== 0);
+    return (end - start) * 60 / (-sampleRate * toDb);
+  }
+  throw new Error('decay levels not reached');
+}
+
+test('late impulse responses shorten beneath a soffit, on galleries and near the upholstered lounge', () => {
+  const context = new AudioBuffers();
+  const openResponse = createAtriumRoomTail(context, 10_731, 'void');
+  const shelteredResponse = createAtriumRoomTail(context, 10_893, 'sheltered');
+  const long = openResponse.getChannelData(0);
+  const short = shelteredResponse.getChannelData(0);
+  assert.notDeepEqual(long, openResponse.getChannelData(1));
+  assert.notDeepEqual(short, shelteredResponse.getChannelData(1));
+  const longT20 = decayTime(long, context.sampleRate, -5, -25);
+  const shortT20 = decayTime(short, context.sampleRate, -5, -25);
+  assert.ok(longT20 > 1.55 && longT20 < 1.95, `open T20 estimate ${longT20}`);
+  assert.ok(shortT20 > 0.78 && shortT20 < 1.02, `sheltered T20 estimate ${shortT20}`);
+  const localDecay = point => {
+    const local = atriumLocalTailMix(point);
+    const mixed = long.map((value, index) => value * Math.sqrt(1 - local) + (short[index] ?? 0) * Math.sqrt(local));
+    return decayTime(mixed, context.sampleRate, 0, -10);
+  };
+  const decays = [open, sofa, upperGallery, underGallery].map(localDecay);
+  for (let index = 1; index < decays.length; index += 1) {
+    assert.ok(decays[index] < decays[index - 1] - 0.07, `estimated early decay ${decays}`);
+  }
+});
+
+test('rug contact is softer and less bright than polished stone and stair treads', () => {
+  const context = new AudioBuffers();
+  const createFootfall = surface => createAtriumFootfall(context, surface, 81).getChannelData(0);
+  const stone = createFootfall('stone');
+  const rug = createFootfall('rug');
+  for (const samples of [stone, rug, createFootfall('stair'), createFootfall('gallery')]) {
     assert.equal(samples[0], 0);
     assert.equal(samples.at(-1), 0);
     assert.ok(energy(samples) > 0);
-    assert.ok(samples.every(sample => Math.abs(sample) < 1));
   }
-  const tail = createAtriumRoomTail(context, 10_731);
-  assert.equal(tail.numberOfChannels, 2);
-  assert.ok(tail.duration > 1.9 && tail.duration < 2.01);
-  assert.notDeepEqual(tail.getChannelData(0), tail.getChannelData(1));
-  const tailEnergy = energy(tail.getChannelData(0));
-  const lateEnergy = energy(tail.getChannelData(0).slice(Math.round(context.sampleRate * 1.55)));
-  assert.ok(tailEnergy > 0 && lateEnergy > 0);
-  for (const surface of ['stone', 'rug', 'stair', 'gallery']) {
-    const hard = createAtriumFootfall(context, surface, 81).getChannelData(0);
-    assert.equal(hard[0], 0);
-    assert.equal(hard.at(-1), 0);
-    assert.ok(energy(hard) > 0);
-  }
+  assert.ok(energy(rug) < energy(stone) * 0.2);
+  assert.ok(relativeDerivativeEnergy(rug) < relativeDerivativeEnergy(stone) * 0.4);
 });

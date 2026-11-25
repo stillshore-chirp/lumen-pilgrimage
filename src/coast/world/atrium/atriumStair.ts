@@ -2,11 +2,12 @@ import {
   BufferGeometry,
   CatmullRomCurve3,
   CylinderGeometry,
+  DataTexture,
   DoubleSide,
   Float32BufferAttribute,
   Group,
+  LinearFilter,
   Mesh,
-  MeshBasicMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   TubeGeometry,
@@ -30,18 +31,29 @@ type Point = readonly [number, number, number];
 const EPSILON = 1e-6;
 const MAIN_SAMPLE_COUNT = Math.max(160, Math.ceil(ATRIUM_STAIR_LENGTH * 10));
 const FASCIA_SIDE = -1;
+const FASCIA_FALLOFF = [
+  [0, .09], [.055, .56], [.115, 1], [.182, .85], [.285, .52], [.43, .25], [.63, .11], [1, .035],
+] as const;
 
 class QuadBuilder {
   private readonly positions: number[] = [];
+  private readonly uv: number[] = [];
 
-  addQuad(a: Point, b: Point, c: Point, d: Point): void {
-    for (const corner of [a, b, c, a, c, d]) this.positions.push(...corner);
+  constructor(private readonly coveLit = false) {}
+
+  addQuad(a: Point, b: Point, c: Point, d: Point, light: readonly [number, number, number, number] = [0, 0, 0, 0]): void {
+    const corners = [a, b, c, d];
+    for (const index of [0, 1, 2, 0, 2, 3]) {
+      this.positions.push(...corners[index]);
+      if (this.coveLit) this.uv.push(.25 + .5 * light[index], .5);
+    }
   }
 
   geometry(name: string): BufferGeometry {
     const geometry = new BufferGeometry();
     geometry.name = name;
     geometry.setAttribute('position', new Float32BufferAttribute(this.positions, 3));
+    if (this.coveLit) geometry.setAttribute('uv', new Float32BufferAttribute(this.uv, 2));
     geometry.computeVertexNormals();
     return geometry;
   }
@@ -64,11 +76,11 @@ function smoothStep(value: number): number {
 function fasciaDepth(along: number): number {
   const progress = clampAlong(along) / ATRIUM_STAIR_LENGTH;
   const onset = smoothStep((progress - 0.055) / 0.22);
-  const termination = smoothStep((progress - 0.80) / 0.19);
+  const termination = smoothStep((progress - 0.88) / 0.12);
   // The lower landing begins as a modest apron. The west/front side grows
   // into the 1.1–1.5m architectural fascia seen across the upper sweep, then
   // eases down before the gallery landing instead of ending abruptly.
-  return 0.22 + 1.28 * onset * (1 - 0.82 * termination);
+  return 0.22 + 1.27 * onset * (1 - 0.68 * termination);
 }
 
 function sideAcross(width: number, side: number, inset: number): number {
@@ -133,13 +145,13 @@ function addMainUnderbody(builder: QuadBuilder): void {
     // Leave space for the lowest horizontal tread at each end of the curved wedge.
     const top0 = Math.max(0.035, frame0.y - 0.19);
     const top1 = Math.max(0.035, frame1.y - 0.19);
-    const bottom0 = Math.max(0, top0 - 0.38);
-    const bottom1 = Math.max(0, top1 - 0.38);
+    const bottom0 = Math.max(0, top0 - 0.34 - .11 * fasciaDepth(along0));
+    const bottom1 = Math.max(0, top1 - 0.34 - .11 * fasciaDepth(along1));
     builder.addQuad(
-      mainPoint(along0, -frame0.width * 0.5 + 0.08, top0),
-      mainPoint(along1, -frame1.width * 0.5 + 0.08, top1),
-      mainPoint(along1, frame1.width * 0.5 - 0.08, top1),
-      mainPoint(along0, frame0.width * 0.5 - 0.08, top0),
+      mainPoint(along0, -frame0.width * 0.5 + 0.08, bottom0),
+      mainPoint(along0, frame0.width * 0.5 - 0.08, bottom0),
+      mainPoint(along1, frame1.width * 0.5 - 0.08, bottom1),
+      mainPoint(along1, -frame1.width * 0.5 + 0.08, bottom1),
     );
     builder.addQuad(
       mainPoint(along0, -frame0.width * 0.5 + 0.08, bottom0),
@@ -156,6 +168,28 @@ function addMainUnderbody(builder: QuadBuilder): void {
   }
 }
 
+function addFasciaFace(builder: QuadBuilder, bottom0: Point, bottom1: Point, top1: Point, top0: Point): void {
+  const interpolate = (bottom: Point, top: Point, fraction: number): Point =>
+    [bottom[0], bottom[1] + (top[1] - bottom[1]) * fraction, bottom[2]];
+  for (let row = 1; row < FASCIA_FALLOFF.length; row += 1) {
+    const [lower, dim] = FASCIA_FALLOFF[row - 1];
+    const [upper, bright] = FASCIA_FALLOFF[row];
+    builder.addQuad(interpolate(bottom0, top0, lower), interpolate(bottom1, top1, lower),
+      interpolate(bottom1, top1, upper), interpolate(bottom0, top0, upper), [dim, dim, bright, bright]);
+  }
+}
+
+function roundedFasciaTop(along: number, stop: number): number {
+  // Blend across the break in pitch at each intermediate landing, keeping
+  // the fascia attached at the first tread and at the upper gallery.
+  const radius = Math.max(0, Math.min(1.65, along, stop - along));
+  let height = 0;
+  for (let sample = -4; sample <= 4; sample += 1) {
+    height += atriumStairFrame(along + sample * radius * .25).y * (5 - Math.abs(sample));
+  }
+  return height / 25 + .045;
+}
+
 function addSideFascia(builder: QuadBuilder, side: number, depthScale: number): void {
   const stop = galleryJoin(side, -0.11);
   for (let index = 0; index < MAIN_SAMPLE_COUNT; index += 1) {
@@ -167,17 +201,20 @@ function addSideFascia(builder: QuadBuilder, side: number, depthScale: number): 
     const outer1 = sideAcross(frame1.width, side, -0.11);
     const inner0 = sideAcross(frame0.width, side, 0.29);
     const inner1 = sideAcross(frame1.width, side, 0.29);
-    const top0 = frame0.y + 0.035;
-    const top1 = frame1.y + 0.035;
+    const top0 = side === FASCIA_SIDE ? roundedFasciaTop(along0, stop) : frame0.y + .035;
+    const top1 = side === FASCIA_SIDE ? roundedFasciaTop(along1, stop) : frame1.y + .035;
     const bottom0 = Math.max(0.025, top0 - fasciaDepth(along0) * depthScale);
     const bottom1 = Math.max(0.025, top1 - fasciaDepth(along1) * depthScale);
 
     // Side, top, underside and return faces make this a continuous structural
     // fascia rather than a thin diagonal ribbon.
-    builder.addQuad(
-      mainPoint(along0, outer0, top0), mainPoint(along1, outer1, top1),
-      mainPoint(along1, outer1, bottom1), mainPoint(along0, outer0, bottom0),
-    );
+    if (side === FASCIA_SIDE) {
+      addFasciaFace(builder, mainPoint(along0, outer0, bottom0), mainPoint(along1, outer1, bottom1),
+        mainPoint(along1, outer1, top1), mainPoint(along0, outer0, top0));
+    } else {
+      builder.addQuad(mainPoint(along0, outer0, top0), mainPoint(along1, outer1, top1),
+        mainPoint(along1, outer1, bottom1), mainPoint(along0, outer0, bottom0));
+    }
     builder.addQuad(
       mainPoint(along0, inner0, bottom0), mainPoint(along1, inner1, bottom1),
       mainPoint(along1, inner1, top1), mainPoint(along0, inner0, top0),
@@ -189,51 +226,7 @@ function addSideFascia(builder: QuadBuilder, side: number, depthScale: number): 
     builder.addQuad(
       mainPoint(along0, inner0, bottom0), mainPoint(along1, inner1, bottom1),
       mainPoint(along1, outer1, bottom1), mainPoint(along0, outer0, bottom0),
-    );
-  }
-}
-
-function addFasciaLight(builder: QuadBuilder): void {
-  const stripInset = -0.115;
-  const stop = galleryJoin(FASCIA_SIDE, stripInset);
-  for (let index = 0; index < MAIN_SAMPLE_COUNT; index += 1) {
-    const along0 = stop * index / MAIN_SAMPLE_COUNT;
-    const along1 = stop * (index + 1) / MAIN_SAMPLE_COUNT;
-    const frame0 = atriumStairFrame(along0);
-    const frame1 = atriumStairFrame(along1);
-    const across0 = sideAcross(frame0.width, FASCIA_SIDE, stripInset);
-    const across1 = sideAcross(frame1.width, FASCIA_SIDE, stripInset);
-    const depth0 = fasciaDepth(along0);
-    const depth1 = fasciaDepth(along1);
-    const bottom0 = Math.max(0.05, frame0.y + 0.035 - depth0);
-    const bottom1 = Math.max(0.05, frame1.y + 0.035 - depth1);
-    builder.addQuad(
-      mainPoint(along0, across0, bottom0 + 0.035),
-      mainPoint(along1, across1, bottom1 + 0.035),
-      mainPoint(along1, across1, bottom1 + 0.105),
-      mainPoint(along0, across0, bottom0 + 0.105),
-    );
-  }
-}
-
-function addFasciaWash(builder: QuadBuilder): void {
-  const stop = galleryJoin(FASCIA_SIDE, -0.12);
-  for (let index = 0; index < MAIN_SAMPLE_COUNT; index += 1) {
-    const along0 = stop * index / MAIN_SAMPLE_COUNT;
-    const along1 = stop * (index + 1) / MAIN_SAMPLE_COUNT;
-    const frame0 = atriumStairFrame(along0);
-    const frame1 = atriumStairFrame(along1);
-    const across0 = sideAcross(frame0.width, FASCIA_SIDE, -0.12);
-    const across1 = sideAcross(frame1.width, FASCIA_SIDE, -0.12);
-    const depth0 = fasciaDepth(along0);
-    const depth1 = fasciaDepth(along1);
-    const bottom0 = Math.max(0.05, frame0.y + 0.035 - depth0);
-    const bottom1 = Math.max(0.05, frame1.y + 0.035 - depth1);
-    builder.addQuad(
-      mainPoint(along0, across0, bottom0 + 0.13),
-      mainPoint(along1, across1, bottom1 + 0.13),
-      mainPoint(along1, across1, bottom1 + 0.42),
-      mainPoint(along0, across0, bottom0 + 0.42),
+      [.035, .035, .13, .13],
     );
   }
 }
@@ -266,7 +259,7 @@ function createMainRail(side: number, lower: boolean, material: MeshStandardMate
     points.push(new Vector3(x, frame.y + 1.17 + offset, z));
   }
   const curve = new CatmullRomCurve3(points, false, 'centripetal');
-  const geometry = new TubeGeometry(curve, MAIN_SAMPLE_COUNT, lower ? 0.034 : 0.047, 8, false);
+  const geometry = new TubeGeometry(curve, MAIN_SAMPLE_COUNT, lower ? 0.026 : 0.041, 8, false);
   geometry.name = lower ? 'Lower brushed stair rail' : 'Upper brushed stair rail';
   const mesh = new Mesh(geometry, material);
   mesh.name = geometry.name;
@@ -340,7 +333,8 @@ function addUpperFascia(builder: QuadBuilder, side: number): void {
     const bottom1 = Math.max(0.02, top1 - depth);
     builder.addQuad([p0.x, top0, p0.z], [p1.x, top1, p1.z], [q1.x, top1, q1.z], [q0.x, top0, q0.z]);
     builder.addQuad([p0.x, bottom0, p0.z], [q0.x, bottom0, q0.z], [q1.x, bottom1, q1.z], [p1.x, bottom1, p1.z]);
-    builder.addQuad([p0.x, top0, p0.z], [p1.x, top1, p1.z], [p1.x, bottom1, p1.z], [p0.x, bottom0, p0.z]);
+    addFasciaFace(builder, [p0.x, bottom0, p0.z], [p1.x, bottom1, p1.z],
+      [p1.x, top1, p1.z], [p0.x, top0, p0.z]);
     builder.addQuad([q0.x, bottom0, q0.z], [q1.x, bottom1, q1.z], [q1.x, top1, q1.z], [q0.x, top0, q0.z]);
   }
 }
@@ -389,7 +383,7 @@ function addUpperPost(group: Group, side: number, along: number, material: MeshS
 }
 
 function addMesh(group: Group, geometry: BufferGeometry,
-  material: MeshStandardMaterial | MeshBasicMaterial | MeshPhysicalMaterial,
+  material: MeshStandardMaterial | MeshPhysicalMaterial,
   name: string, castShadow = true, receiveShadow = true): Mesh {
   const mesh = new Mesh(geometry, material);
   mesh.name = name;
@@ -412,38 +406,30 @@ export function buildAtriumStair(root: Group): { setLighting: (artificialOn: boo
     name: 'Warm honed ivory stair stone', color: 0xe9dbca, roughness: 0.72, metalness: 0.02,
   });
   const riser = new MeshStandardMaterial({
-    name: 'Warm stone tread risers', color: 0xc3af97, roughness: 0.84, metalness: 0.02,
+    name: 'Warm stone tread risers', color: 0xcbb69c, roughness: 0.81, metalness: 0.02,
   });
+  const fasciaFalloff = new DataTexture(new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]), 2, 1);
+  fasciaFalloff.name = 'Stair fascia reflected-light intensity';
+  fasciaFalloff.minFilter = fasciaFalloff.magFilter = LinearFilter;
+  fasciaFalloff.needsUpdate = true;
   const fascia = new MeshStandardMaterial({
-    name: 'Continuous light ivory architectural fascia', color: 0xe6d9c3,
-    roughness: 0.58, metalness: 0.01, side: DoubleSide, emissive: 0x785135, emissiveIntensity: .25,
+    name: 'Ivory stair fascia with concealed cove', color: 0xe6d9c3,
+    roughness: 0.65, metalness: 0.02, side: DoubleSide, emissive: 0xffe3c4, emissiveMap: fasciaFalloff,
   });
   const fasciaShadow = new MeshStandardMaterial({
-    name: 'Warm stone fascia underside', color: 0xc8b69e, roughness: 0.72,
-    side: DoubleSide,
+    name: 'Warm stone fascia underside', color: 0xd0bfa7, roughness: 0.76,
+    side: DoubleSide, emissive: 0xe3c6a5,
   });
   const nosing = new MeshStandardMaterial({
-    name: 'Recessed warm gray tread nosing', color: 0x68584e, roughness: 0.71, metalness: 0.04,
+    name: 'Recessed warm gray tread nosing', color: 0x7a6b5d, roughness: 0.71, metalness: 0.04,
   });
   const rail = new MeshStandardMaterial({
-    name: 'Muted brushed graphite stair rail', color: 0x646761, roughness: 0.46, metalness: 0.28,
+    name: 'Reflective brushed champagne stair rail', color: 0xb0a68e, roughness: 0.22, metalness: 0.63,
   });
   const glass = new MeshPhysicalMaterial({
-    name: 'Brushed low-iron stair glass', color: 0x9cb0af, roughness: 0.16, metalness: 0.03,
-    transparent: true, opacity: 0.16, depthWrite: false, side: DoubleSide, forceSinglePass: true,
-    ior: 1.46, clearcoat: 0.26,
-  });
-  const fasciaGlow = new MeshBasicMaterial({
-    name: 'Tucked lower-edge stair glow', color: 0xffd39a, toneMapped: false,
-    transparent: true, opacity: 0.95, side: DoubleSide, forceSinglePass: true,
-  });
-  const fasciaWash = new MeshBasicMaterial({
-    name: 'Soft fascia light wash', color: 0xffbd7b, toneMapped: false,
-    transparent: true, opacity: 0.16, side: DoubleSide, forceSinglePass: true,
-  });
-  const upperGlow = new MeshBasicMaterial({
-    name: 'Upper connector lower-edge glow', color: 0xffcc8f, toneMapped: false,
-    transparent: true, opacity: 0.56, side: DoubleSide,
+    name: 'Reflective low-iron stair glass', color: 0xaab7b1, roughness: 0.13, metalness: 0.04,
+    transparent: true, opacity: 0.22, depthWrite: false, side: DoubleSide, forceSinglePass: true,
+    ior: 1.47, clearcoat: 0.27, specularIntensity: 0.73,
   });
 
   const tops = new QuadBuilder();
@@ -470,7 +456,7 @@ export function buildAtriumStair(root: Group): { setLighting: (artificialOn: boo
   addMesh(group, underbody.geometry('Continuous sweeping stair underbody'), fasciaShadow,
     'Continuous sweeping stair underbody');
 
-  const frontFascia = new QuadBuilder();
+  const frontFascia = new QuadBuilder(true);
   addSideFascia(frontFascia, FASCIA_SIDE, 1);
   addMesh(group, frontFascia.geometry('Continuous thick west front ivory fascia'), fascia,
     'Continuous thick west front ivory fascia');
@@ -491,15 +477,6 @@ export function buildAtriumStair(root: Group): { setLighting: (artificialOn: boo
   group.add(createMainRail(1, false, rail));
   group.add(createMainRail(-1, true, rail));
   group.add(createMainRail(1, true, rail));
-
-  const lowerEdge = new QuadBuilder();
-  const wash = new QuadBuilder();
-  addFasciaLight(lowerEdge);
-  addFasciaWash(wash);
-  addMesh(group, lowerEdge.geometry('Tucked linear light under west fascia'), fasciaGlow,
-    'Tucked linear light under west fascia', false, false);
-  addMesh(group, wash.geometry('Soft grazing wash across west fascia'), fasciaWash,
-    'Soft grazing wash across west fascia', false, false);
 
   const upperTreads = new QuadBuilder();
   const upperRisers = new QuadBuilder();
@@ -523,7 +500,7 @@ export function buildAtriumStair(root: Group): { setLighting: (artificialOn: boo
     'Upper connector tapered ivory treads');
   addMesh(group, upperRisers.geometry('Upper connector stone risers'), riser,
     'Upper connector stone risers');
-  const upperFascia = new QuadBuilder();
+  const upperFascia = new QuadBuilder(true);
   addUpperFascia(upperFascia, -1);
   addUpperFascia(upperFascia, 1);
   addMesh(group, upperFascia.geometry('Upper connector light ivory fascias'), fascia,
@@ -536,33 +513,10 @@ export function buildAtriumStair(root: Group): { setLighting: (artificialOn: boo
       addUpperPost(group, side, ATRIUM_UPPER_STAIR_LENGTH * index / 7, rail);
     }
   }
-  const upperLight = new QuadBuilder();
-  const upperLightSamples = Math.max(72, Math.ceil(ATRIUM_UPPER_STAIR_LENGTH * 8));
-  for (let index = 0; index < upperLightSamples; index += 1) {
-    const along0 = ATRIUM_UPPER_STAIR_LENGTH * index / upperLightSamples;
-    const along1 = ATRIUM_UPPER_STAIR_LENGTH * (index + 1) / upperLightSamples;
-    const p0 = atriumUpperStairPoint(along0, -(ATRIUM_UPPER_STAIR.width * 0.5 + 0.085));
-    const p1 = atriumUpperStairPoint(along1, -(ATRIUM_UPPER_STAIR.width * 0.5 + 0.085));
-    upperLight.addQuad(
-      [p0.x, p0.y - 0.46, p0.z], [p1.x, p1.y - 0.46, p1.z],
-      [p1.x, p1.y - 0.39, p1.z], [p0.x, p0.y - 0.39, p0.z],
-    );
-  }
-  addMesh(group, upperLight.geometry('Upper connector tucked light'), upperGlow,
-    'Upper connector tucked light', false, false);
-
   return {
     setLighting(artificialOn: boolean): void {
-      fascia.emissiveIntensity = artificialOn ? .25 : 0;
-      fasciaGlow.color.setHex(artificialOn ? 0xffd39a : 0x4d4035);
-      fasciaGlow.opacity = artificialOn ? 0.95 : 0.10;
-      fasciaWash.color.setHex(artificialOn ? 0xffbd7b : 0x514238);
-      fasciaWash.opacity = artificialOn ? 0.16 : 0.025;
-      upperGlow.color.setHex(artificialOn ? 0xffcc8f : 0x534337);
-      upperGlow.opacity = artificialOn ? 0.56 : 0.06;
-      fasciaGlow.needsUpdate = true;
-      fasciaWash.needsUpdate = true;
-      upperGlow.needsUpdate = true;
+      fascia.emissiveIntensity = artificialOn ? 1.28 : 0;
+      fasciaShadow.emissiveIntensity = artificialOn ? .105 : 0;
     },
   };
 }

@@ -267,13 +267,16 @@ test('atrium starts seated, toggles posture, travels between levels, and walks o
     assert.deepEqual(errors, []);
   });
 
-test('simulated WebXR preserves the upper gallery height while walking and ends on the desktop renderer',
+test('simulated WebXR follows the headset in view and sound and returns to the desktop renderer',
   { timeout }, async t => {
     const { page, errors } = await newPage(t);
     page.setDefaultTimeout(25_000);
     await page.addInitScript(installSimulatedXR);
+    await page.addInitScript(observeAtriumAudio);
     await page.goto(`${origin}/?world=atrium&place=upper-gallery&time=night`, { waitUntil: 'commit' });
     await waitForAtrium(page);
+    await button(page, '環境音をオン').click();
+    await page.waitForFunction(() => window.atriumAudioProbe.peak() > 0.0001);
     await page.evaluate(() => { window.xrFixture.head.yaw = -2.4; });
 
     await button(page, 'VRを開始').click();
@@ -307,12 +310,26 @@ test('simulated WebXR preserves the upper gallery height while walking and ends 
     assert.ok(Math.abs(start.y - 10.80) < 0.03, `XR eye height: ${start.y}`);
     assert.ok(Math.abs(start.eyeSpacing - 0.064) < 0.002);
 
+    const listener = () => page.evaluate(() => window.atriumAudioProbe.listener());
+    const originalListener = await listener();
+    assert.ok(Math.hypot(originalListener.x - start.x, originalListener.y - start.y,
+      originalListener.z - start.z) < 0.03, 'audio originates from the headset position');
+    await page.evaluate(() => window.xrFixture.mutate({ head: { yaw: -1.55 } }));
+    const turnedListener = await listener();
+    const headingDot = originalListener.fx * turnedListener.fx + originalListener.fz * turnedListener.fz;
+    assert.ok(Math.abs(headingDot - Math.cos(0.85)) < 0.04, 'the audio listener turns with the headset');
+    await page.evaluate(() => window.xrFixture.mutate({ head: { yaw: -2.4 } }));
+
     await page.evaluate(() => window.xrFixture.mutate({ side: 'left', axes: [0, -1], frames: 8 }));
     await page.evaluate(() => window.xrFixture.mutate({ side: 'left', axes: [0, 0] }));
     const moved = await headsetPose();
     assert.ok(Math.hypot(moved.x - start.x, moved.z - start.z) > 0.25,
       'the left XR stick advances along the upper gallery');
     assert.ok(Math.abs(moved.y - 10.80) < 0.03, `XR movement stays on the upper support: ${moved.y}`);
+    const movedListener = await listener();
+    assert.ok(Math.hypot(movedListener.x - moved.x, movedListener.y - moved.y,
+      movedListener.z - moved.z) < 0.03, 'the moving listener stays at the position of the headset');
+    assert.equal(await page.evaluate(() => window.atriumAudioProbe.contexts), 1);
 
     const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
     await button(page, 'VRを終了').click();
@@ -343,6 +360,8 @@ test('atrium audio reaches the output at the seated listener and keeps footsteps
     assert.equal(await page.evaluate(() => window.atriumAudioProbe.contexts), 1);
 
     await page.locator('.coast-sound-details > summary').click();
+    assert.equal(await page.getByRole('slider', { name: '店舗の設備音', exact: true }).isVisible(), true);
+    assert.equal(await page.getByRole('slider', { name: '共用部の換気音', exact: true }).isVisible(), true);
     await button(page, '歩行音をオフ').click();
     await page.waitForFunction(() => window.atriumAudioProbe.peak() > 0.0001);
     await button(page, '環境音をオフ').click();

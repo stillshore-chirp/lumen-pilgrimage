@@ -30,15 +30,17 @@ function atriumRoomRadiance() {
       const azimuth = (column + 0.5) / width * Math.PI * 2;
       const x = Math.cos(azimuth) * horizontal;
       const z = Math.sin(azimuth) * horizontal;
-      const wall = 0.15 + 0.17 * Math.max(0, up);
-      const bands = Math.exp(-((up - 0.25) ** 2) * 335) + 0.8 * Math.exp(-((up - 0.61) ** 2) * 165);
-      const brightWall = bands * (0.36 + 1.34 * x ** 2);
-      const roof = Math.max(0, up) ** 5 * Math.max(0.16, 0.6 - 0.35 * z);
-      const ceiling = Math.max(0, up) * (0.32 + 0.1 * Math.cos(3 * azimuth));
+      const paleSurfaces = 0.105 + 0.15 * Math.max(0, up);
+      const sideWeight = 0.28 + 1.58 * Math.abs(x) ** 1.5;
+      const railHeight = Math.exp(-((up - 0.28) ** 2) * 980) + 0.72 * Math.exp(-((up - 0.53) ** 2) * 450);
+      const coveWash = 0.44 * Math.exp(-((up - 0.35) ** 2) * 45) + 0.27 * Math.exp(-((up - 0.68) ** 2) * 64);
+      const warmShelves = Math.exp(-((up + 0.07) ** 2) * 48) * 0.30;
+      const warm = (railHeight + coveWash + warmShelves) * sideWeight;
+      const roofOpening = Math.exp(-((up - 0.65) ** 2) * 18 - (x * x) * 6) * Math.max(0, -z) ** 2;
       const index = (row * width + column) * 4;
-      data[index] = DataUtils.toHalfFloat(wall + brightWall * 1.45 + roof * 0.58 + ceiling);
-      data[index + 1] = DataUtils.toHalfFloat(wall * 0.79 + brightWall * 1.02 + roof * 1.30 + ceiling * 0.83);
-      data[index + 2] = DataUtils.toHalfFloat(wall * 0.57 + brightWall * 0.64 + roof * 1.90 + ceiling * 0.68);
+      data[index] = DataUtils.toHalfFloat(paleSurfaces + warm * 1.62 + roofOpening * 0.37);
+      data[index + 1] = DataUtils.toHalfFloat(paleSurfaces * 0.81 + warm * 1.23 + roofOpening * 0.74);
+      data[index + 2] = DataUtils.toHalfFloat(paleSurfaces * 0.67 + warm * 0.76 + roofOpening * 1.12);
       data[index + 3] = DataUtils.toHalfFloat(1);
     }
   }
@@ -57,17 +59,17 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
   scene.add(room);
   scene.background = new Color(0x283348);
   scene.environment = radiance;
-  const fill = new AmbientLight(0xfff3e2, 0.53);
-  const bounce = new HemisphereLight(0xe3ecff, 0xb79c7d, 1.02);
-  const coveBounce = new DirectionalLight(0xffdec0, 1.32);
-  coveBounce.position.set(-4, 13, 8);
-  const shopBounce = new DirectionalLight(0xffdfbd, 0.58);
-  shopBounce.position.set(9, 6, -34);
+  const fill = new AmbientLight(0xffe7cf);
+  const bounce = new HemisphereLight(0xe4eeff, 0xb39476);
+  const coveBounce = new DirectionalLight(0xffd5a8);
+  coveBounce.position.set(-8, 12, -4);
+  const shopBounce = new DirectionalLight(0xffe1be);
+  shopBounce.position.set(11, 5, -34);
   shopBounce.target.position.set(0, 0, -25);
-  const roofLight = new DirectionalLight(0xb9daff, 0.81);
-  roofLight.position.set(4, 20, -30);
-  roofLight.target.position.set(-1, 0, -19);
-  const floorBounce = new DirectionalLight(0xffe4c9, 0.55);
+  const roofLight = new DirectionalLight(0xbcd9ff);
+  roofLight.position.set(2, 20, -43);
+  roofLight.target.position.set(-1, 0, -30);
+  const floorBounce = new DirectionalLight(0xffd7ad);
   floorBounce.position.set(0, -9, -22);
   floorBounce.target.position.set(0, 8, -21);
   scene.add(fill, bounce, coveBounce, shopBounce, shopBounce.target, roofLight, roofLight.target,
@@ -87,13 +89,13 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
   function updateLighting() {
     const artificialOn = mode !== 'off';
     const daytime = time === 'day';
-    scene.environmentIntensity = artificialOn ? (daytime ? 0.64 : 0.56) : (daytime ? 0.25 : 0.08);
-    fill.intensity = artificialOn ? 0.56 : 0.15;
-    bounce.intensity = daytime ? 0.90 : 0.35;
-    coveBounce.intensity = artificialOn ? 1.28 : 0;
-    shopBounce.intensity = artificialOn ? 0.69 : 0;
-    roofLight.intensity = daytime ? 0.86 : 0.14;
-    floorBounce.intensity = artificialOn ? 0.62 : (daytime ? 0.18 : 0.04);
+    scene.environmentIntensity = artificialOn ? (daytime ? 0.69 : 0.53) : (daytime ? 0.22 : 0.07);
+    fill.intensity = artificialOn ? 0.39 : 0.125;
+    bounce.intensity = daytime ? 0.82 : 0.33;
+    coveBounce.intensity = artificialOn ? 1.20 : 0;
+    shopBounce.intensity = artificialOn ? 0.74 : 0;
+    roofLight.intensity = daytime ? 0.75 : 0.10;
+    floorBounce.intensity = artificialOn ? 0.54 : (daytime ? 0.16 : 0.035);
     shell.setLighting(artificialOn, time);
     roof.setLighting(artificialOn, time);
     stair.setLighting(artificialOn);
