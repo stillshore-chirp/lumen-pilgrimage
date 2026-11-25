@@ -22,7 +22,7 @@ const soundLabels: Record<ExplorationSound, string> = {
   traffic: '交通音',
   doors: '戸の開閉音',
   appliances: '設備音',
-  preview: '試映音',
+  preview: '上映音',
   footsteps: '歩行音',
 };
 

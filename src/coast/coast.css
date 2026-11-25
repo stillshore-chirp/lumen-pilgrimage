@@ -464,6 +464,23 @@
   cursor: default;
 }
 
+.cinema-local-screening-seek input[type="range"] {
+  flex: 1;
+  min-inline-size: 8rem;
+  accent-color: #bfe2dc;
+}
+
+.cinema-local-screening-time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cinema-local-screening-status {
+  margin: 0;
+  color: #d9e9e4;
+  line-height: 1.5;
+}
+
 .coast-travel-dialog section {
   padding-top: 0.75rem;
   border-top: 1px solid #bfe2dc40;
