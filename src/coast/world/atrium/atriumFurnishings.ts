@@ -10,7 +10,6 @@ import {
   ATRIUM_SCULPTURE,
   ATRIUM_SOFA,
 } from './atriumLayout';
-import { addAtriumFurnishPeople } from './atriumFurnishPeople';
 
 type Point3 = readonly [x: number, y: number, z: number];
 
@@ -662,7 +661,6 @@ export function buildAtriumFurnishings(root: THREE.Group): { setLighting(artific
   addDisplayIslands(furnishings, materials);
   addSculpture(furnishings, materials);
   addCafe(furnishings, materials);
-  addAtriumFurnishPeople(furnishings);
 
   const setLighting = (artificialOn: boolean): void => {
     for (const control of materials.controls) {

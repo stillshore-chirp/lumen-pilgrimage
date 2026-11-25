@@ -121,6 +121,8 @@
 
 [配置定義](../src/coast/world/atrium/atriumLayout.ts) を建築、支持面、環境音と共有します。地上共用部は幅22.8 m、奥行き63 m。ソファ `(-2.70, -29.70)` の眼高は1.20 mで、通路側を向きます。「正面通路」は原点、立位、仰角約7°、縦視野角42°です。写真の消失方向、ソファ、曲階段下端、立面の縦線から制作寸法を求めました。天窓の輪郭は、高さ17.10 mの仮定面に写真上の点を逆投影して楕円を近似しました。実装値は中心 `(0.565, -44.92)` m、半径9.56 mと13.17 m、Y軸回り約22°です。 [単視点からの寸法推定](https://www.robots.ox.ac.uk/~vgg/publications/1999/Criminisi99/) · [吹抜けの設計章](https://github.com/stillshore-chirp/lumen-pilgrimage/blob/af73e65/docs/learning/atrium-case.md)
 
+共用部は一人で散策する空間です。店先は衣服のラック、商品棚、展示ケースで構成します。
+
 主階段は下端の幅約5 mから絞り、初めに右へ寄り、昇降塔の手前で左へ回り込んで西回廊の9.15 mへ着きます。西回廊の奥に続く階段でもう一層上がり、13.55 mの回廊へ渡れます。高さ4.55 mの回廊は手前で吹抜け側に張り出し、奥に向かって開きます。この回廊と奥の張り出しは景観と音の遮蔽に使います。[支持面](../src/coast/world/atrium/atriumNavigation.ts)は、踏面と同じ経路を連続した高さでたどります。地上の通路と回廊が上下に重なる場所では、現在の足元から到達できる支持面を選びます。店先、昇降塔、家具と手すりが探索の境界です。
 
 [回廊と建築](../src/coast/world/atrium/atriumShell.ts)、[天窓の立ち上がりと昇降塔](../src/coast/world/atrium/atriumRoof.ts)、[階段](../src/coast/world/atrium/atriumStair.ts)、[店先](../src/coast/world/atrium/atriumRetail.ts)、[家具](../src/coast/world/atrium/atriumFurnishings.ts)を個別に編集できます。暖色の間接光と青い天窓を異なる光源として扱います。地上の磨き石は色・法線・粗さのマップに1.35 m角の目地と帯状の石割りを重ねます。通常画面ではカメラを床に鏡映して描画し、石の粗さで照明の輪郭を広げます。WebXRでは各眼から石面を経由する反射方向を求め、コーブ、店先、天窓などの主要な光を評価します。どちらも一括点消灯を映り込みへ反映します。 [床の実装](../src/coast/world/atrium/atriumFloor.ts) · [素材の出典](../public/atrium-materials/ATTRIBUTION.md) · [WebXRのビュー](https://www.w3.org/TR/webxr/#xrview)
