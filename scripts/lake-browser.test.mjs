@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
@@ -48,6 +48,35 @@ function observeView() {
   gl.uniform3f = function (location, x, y, z) {
     if (cameraUniforms.has(location)) probe.camera = { x, y, z };
     return setPosition.call(this, location, x, y, z);
+  };
+}
+
+function observeWindowView() {
+  const gl = WebGL2RenderingContext.prototype;
+  const locate = gl.getUniformLocation;
+  const setMatrix = gl.uniformMatrix4fv;
+  const bindFramebuffer = gl.bindFramebuffer;
+  const viewMatrices = new WeakSet();
+  let onScreen = true;
+  gl.getUniformLocation = function (program, name) {
+    const location = locate.call(this, program, name);
+    if (location && name === 'viewMatrix') viewMatrices.add(location);
+    return location;
+  };
+  gl.bindFramebuffer = function (target, framebuffer) {
+    if (target !== this.READ_FRAMEBUFFER) onScreen = framebuffer === null;
+    return bindFramebuffer.call(this, target, framebuffer);
+  };
+  gl.uniformMatrix4fv = function (location, transpose, matrix, ...rest) {
+    if (onScreen && viewMatrices.has(location)) {
+      // Invert the rigid view transform. Reflection passes can upload a different cameraPosition.
+      const worldCoordinate = i => -(matrix[i] * matrix[12] + matrix[i + 1] * matrix[13] + matrix[i + 2] * matrix[14]);
+      window.lakeProbe.windowView = {
+        position: { x: worldCoordinate(0), y: worldCoordinate(4), z: worldCoordinate(8) },
+        direction: { x: -matrix[2], y: -matrix[6], z: -matrix[10] },
+      };
+    }
+    return setMatrix.call(this, location, transpose, matrix, ...rest);
   };
 }
 
@@ -220,17 +249,19 @@ async function withPointerLock(page, inspect) {
 }
 
 async function walk(page, key, condition, holdAfterArrival = false) {
-  await withPointerLock(page, async () => {
-    await page.keyboard.down(key);
-    try {
-      await page.waitForFunction(condition);
-      if (holdAfterArrival) {
-        await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 1_000)));
-      }
-    } finally {
-      await page.keyboard.up(key);
+  await withPointerLock(page, () => holdWalkKey(page, key, condition, undefined, holdAfterArrival));
+}
+
+async function holdWalkKey(page, key, condition, target, holdAfterArrival = false) {
+  await page.keyboard.down(key);
+  try {
+    await page.waitForFunction(condition, target);
+    if (holdAfterArrival) {
+      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 1_000)));
     }
-  });
+  } finally {
+    await page.keyboard.up(key);
+  }
 }
 
 async function turn(page, movementX, movementY = 0) {
@@ -238,6 +269,18 @@ async function turn(page, movementX, movementY = 0) {
     document.pointerLockElement.dispatchEvent(new MouseEvent('mousemove', { movementX: x, movementY: y }));
     return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }, [movementX, movementY]);
+}
+
+async function lookAtAngles(page, yaw, pitch = 0) {
+  const { x, y, z } = await page.evaluate(() => window.lakeProbe.windowView.direction);
+  const yawDelta = yaw - Math.atan2(-x, -z);
+  const pitchDelta = pitch - Math.atan2(y, Math.hypot(x, z));
+  const mouseSensitivity = 0.0022;
+  await turn(page, -Math.atan2(Math.sin(yawDelta), Math.cos(yawDelta)) / mouseSensitivity,
+    -pitchDelta / mouseSensitivity);
+  const actual = await page.evaluate(() => window.lakeProbe.windowView.direction);
+  const expected = new Vector3(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+  assert.ok(expected.distanceTo(new Vector3(actual.x, actual.y, actual.z)) < 0.004, 'mouse look sets the rendered direction');
 }
 
 async function captureHallViews(page) {
@@ -412,25 +455,27 @@ test('a failed lake scene load has a world-specific message and a recovery link'
 test('the indoor window bays and back wall bound walking, with time retained across worlds',
   { timeout }, async t => {
     const { page, errors } = await newPage(t);
+    await page.addInitScript(observeWindowView);
     await goToLake(page);
-    await walk(page, 'w', () => window.lakeProbe.camera.z < -1.1);
-    assert.ok(Math.abs((await page.evaluate(() => window.lakeProbe.camera)).y - 1.65) < 0.04);
+    await page.waitForFunction(() => Boolean(window.lakeProbe.windowView));
+    await walk(page, 'w', () => window.lakeProbe.windowView.position.z < -1.1);
+    assert.ok(Math.abs(await page.evaluate(() => window.lakeProbe.windowView.position.y) - 1.65) < 0.04);
     for (const side of [
-      { label: '西の窓辺', id: 'west-window', x: -18.7, key: 'a', wall: () => window.lakeProbe.camera.x < -21.2 },
-      { label: '東の窓辺', id: 'east-window', x: 18.7, key: 'd', wall: () => window.lakeProbe.camera.x > 21.2 },
+      { label: '西の窓辺', id: 'west-window', x: -18.7, key: 'a', wall: () => window.lakeProbe.windowView.position.x < -21.2 },
+      { label: '東の窓辺', id: 'east-window', x: 18.7, key: 'd', wall: () => window.lakeProbe.windowView.position.x > 21.2 },
     ]) {
       await travel(page, '湖畔の広間', '広間の中央');
       await walk(page, side.key, side.wall, true);
-      assert.ok(Math.abs(await page.evaluate(() => window.lakeProbe.camera.x)) <= 21.401);
+      assert.ok(Math.abs(await page.evaluate(() => window.lakeProbe.windowView.position.x)) <= 21.401);
       await travel(page, '湖畔の広間', side.label);
       await page.waitForURL(url => url.searchParams.get('place') === side.id);
       await page.waitForFunction(x => {
-        const p = window.lakeProbe.camera;
+        const p = window.lakeProbe.windowView.position;
         return Math.hypot(p.x - x, p.y - 1.65, p.z + 5.1) < 0.05;
       }, side.x);
       if (screenshots) await capture(page, `lake-${side.id}-day`);
-      await walk(page, 'w', () => window.lakeProbe.camera.z < -5.83, true);
-      assert.ok((await page.evaluate(() => window.lakeProbe.camera.z)) >= -6.001);
+      await walk(page, 'w', () => window.lakeProbe.windowView.position.z < -5.83, true);
+      assert.ok((await page.evaluate(() => window.lakeProbe.windowView.position.z)) >= -6.001);
       if (screenshots) {
         await withPointerLock(page, async () => {
           await turn(page, 1428, -186);
@@ -438,14 +483,14 @@ test('the indoor window bays and back wall bound walking, with time retained acr
           await turn(page, -1428, 186);
         });
       }
-      await walk(page, 's', () => window.lakeProbe.camera.z > -3.9);
-      const inside = await page.evaluate(() => window.lakeProbe.camera);
+      await walk(page, 's', () => window.lakeProbe.windowView.position.z > -3.9);
+      const inside = await page.evaluate(() => window.lakeProbe.windowView.position);
       assert.ok(Math.abs(inside.y - 1.65) < 0.04);
     }
 
     await travel(page, '湖畔の広間', '広間の中央');
-    await walk(page, 's', () => window.lakeProbe.camera.z > 15.92, true);
-    assert.ok((await page.evaluate(() => window.lakeProbe.camera.z)) <= 16.201);
+    await walk(page, 's', () => window.lakeProbe.windowView.position.z > 15.92, true);
+    assert.ok((await page.evaluate(() => window.lakeProbe.windowView.position.z)) <= 16.201);
     if (screenshots) {
       await capture(page, 'lake-hall-from-rear');
       await withPointerLock(page, async () => {
@@ -464,6 +509,78 @@ test('the indoor window bays and back wall bound walking, with time retained acr
     assert.match(page.url(), /time=night/);
     assert.deepEqual(errors, []);
   });
+
+test('lake window edge viewpoints can be reached on foot', { timeout, skip: !screenshots }, async t => {
+  const { page, errors } = await newPage(t);
+  await page.addInitScript(observeWindowView);
+  await goToLake(page);
+  await page.waitForLoadState('networkidle');
+  await page.waitForFunction(() => Boolean(window.lakeProbe.windowView));
+  assert.equal(await action(page, '昼').getAttribute('aria-pressed'), 'true');
+  assert.equal(await action(page, '軽量').getAttribute('aria-pressed'), 'true');
+  const verticalFovDegrees = Number(await page.locator('#coast-fov').inputValue());
+  assert.equal(verticalFovDegrees, LAKE_VIEW_FOV);
+  const frames = [];
+  const record = async name => {
+    const view = await page.evaluate(() => window.lakeProbe.windowView);
+    assert.ok(Math.abs(view.position.y - 1.65) < 0.04, `the view stays at standing eye height (y=${view.position.y})`);
+    const image = `lake-window-review-${name}`;
+    await capture(page, image);
+    frames.push({ image: `${image}.png`, ...view });
+    return view.position;
+  };
+  const front = await record('front');
+  assert.ok(Math.hypot(front.x - LAKE_SPAWN.x, front.z - LAKE_SPAWN.z) < 0.04);
+
+  for (const side of [
+    { id: 'west-window', strafe: 'a', sign: -1, x: 2.5, yaw: 1.225, pitch: 0.25 },
+    { id: 'east-window', strafe: 'd', sign: 1, x: 6.0, yaw: -1.155, pitch: 0.12 },
+  ]) {
+    await travel(page, '湖畔の広間', '広間の中央');
+    await page.waitForFunction(({ x, z }) => {
+      const camera = window.lakeProbe.windowView.position;
+      return Math.hypot(camera.x - x, camera.z - z) < 0.04;
+    }, LAKE_SPAWN);
+    await withPointerLock(page, async () => {
+      await lookAtAngles(page, 0);
+      await holdWalkKey(page, 'd', x => window.lakeProbe.windowView.position.x >= x, side.x);
+      for (const stage of [
+        { name: 'approach', z: -0.2 },
+        { name: 'opening', z: -3.0 },
+        { name: 'oblique', z: -5.53 },
+      ]) {
+        await lookAtAngles(page, 0);
+        await holdWalkKey(page, 'w', z => window.lakeProbe.windowView.position.z <= z, stage.z);
+        await lookAtAngles(page, side.yaw, side.pitch);
+        const position = await record(`${side.id}-${stage.name}`);
+        assert.ok(position.z <= stage.z && position.z >= stage.z - 0.28, 'the window approach reaches the intended depth');
+        assert.ok(Math.abs(position.x - side.x) < 0.28, 'the approach stays on the intended line');
+      }
+
+      await lookAtAngles(page, 0);
+      await holdWalkKey(page, side.strafe, sign => sign * window.lakeProbe.windowView.position.x >= 20.25, side.sign);
+      await holdWalkKey(page, 'w', () => window.lakeProbe.windowView.position.z < -5.83, undefined, true);
+      await lookAtAngles(page, -side.sign * 0.5, -0.48);
+      const glass = await record(`${side.id}-glass-look-down`);
+      assert.ok(side.sign * glass.x > 20.22 && side.sign * glass.x < 20.53, 'the view is before the jamb at the end of the glazing');
+      assert.ok(glass.z < -5.83 && glass.z >= -6.001, `walking stops at the glazing (z=${glass.z})`);
+
+      await lookAtAngles(page, 0);
+      await holdWalkKey(page, side.strafe, sign => sign * window.lakeProbe.windowView.position.x > 21.22, side.sign, true);
+      await holdWalkKey(page, 'w', () => window.lakeProbe.windowView.position.z < -5.83, undefined, true);
+      await lookAtAngles(page, side.sign * 2.6);
+      const edge = await record(`${side.id}-edge-look-back`);
+      assert.ok(side.sign * edge.x > 21.22 && side.sign * edge.x <= 21.401, `walking stops at the side wall (x=${edge.x})`);
+      assert.ok(edge.z < -5.83 && edge.z >= -6.001, `the side wall stop stays at the glazing (z=${edge.z})`);
+    });
+  }
+
+  await writeFile(join(screenshots, 'lake-window-review.json'), JSON.stringify({
+    viewport, time: 'day', quality: 'lightweight', verticalFovDegrees,
+    verticalViewOffset: LAKE_VIEW_VERTICAL_OFFSET, frames,
+  }, null, 2) + '\n');
+  assert.deepEqual(errors, []);
+});
 
 test('a simulated XR viewer crosses the table footprint at standing height', { timeout }, async t => {
   const { page, errors } = await newPage(t);
