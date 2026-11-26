@@ -7,16 +7,28 @@ import { LAKE_TERRAIN, LAKE_WATER_Y } from './lakeLayout';
 
 type BankSide = -1 | 1;
 type BankPoint = readonly [distance: number, edge: number];
+type BankSpur = readonly [
+  x: number, distance: number, across: number, along: number, rise: number, drift: number, toWater?: boolean,
+];
 
 // The mouths of both coves lie outside the shallow water used by the fish.
 const westEdge: readonly BankPoint[] = [
-  [25, 38], [35, 29], [49, 28], [65, 28], [86, 36], [114, 43],
+  [-40, 53], [-13, 47], [6, 42], [19, 40], [31, 33], [43, 28], [55, 29], [65, 28], [86, 36], [114, 43],
   [153, 52], [185, 52], [221, 41], [257, 54], [330, 101], [382, 147],
 ];
 const eastEdge: readonly BankPoint[] = [
-  [25, 34], [35, 29], [40, 30], [50, 26], [63, 28], [78, 41], [100, 61],
+  [-40, 58], [-12, 51], [7, 45], [18, 43], [28, 35], [38, 30], [44, 32], [53, 26], [63, 28], [78, 41], [100, 61],
   [150, 103], [187, 149], [240, 183], [280, 199], [335, 214], [382, 188],
 ];
+
+// The spurs grow into the same ground as the cliffs and descend between shallow gullies.
+// Centres and radii are measured in metres. Drift skews the ridge sideways along the bank.
+const bankSpurs: Readonly<Record<BankSide, readonly BankSpur[]>> = {
+  [-1]: [[59, 29, 20, 24, 6.8, -0.23], [75, 48, 33, 34, 11.4, 0.35],
+    [100, 7, 52, 57, 16.6, 0.32], [96, 80, 42, 36, 10.2, -0.37], [31.8, 42, 5.4, 7.2, 1.35, 0.19, true]],
+  [1]: [[60, 37, 24, 20, 4.2, 0.43], [89, 20, 41, 41, 7.9, 0.27],
+    [115, 62, 55, 51, 10.8, -0.35], [148, 104, 52, 47, 11.3, 0.29]],
+};
 
 function bankEdge(side: BankSide, distance: number): number {
   const curve = side === -1 ? westEdge : eastEdge;
@@ -31,43 +43,50 @@ function bankEdge(side: BankSide, distance: number): number {
   return curve[curve.length - 1][1];
 }
 
-function bankHeight(side: BankSide, offset: number, distance: number): number {
-  const folded = offset + 1.65 * Math.sin(distance * 0.19 + side * 2) + 0.8 * Math.sin(distance * 0.53 + offset * 0.29);
-  const bedding = MathUtils.smoothstep(folded, -3.8, 1.8) * 1.67
-    + MathUtils.smoothstep(folded, 3.1, 5.0) * 1.22
-    + MathUtils.smoothstep(folded, 9.4, 11.3) * 1.1
-    + MathUtils.smoothstep(folded, 15.1, 17.4) * 1.4;
-  const debris = MathUtils.smoothstep(folded, -2.5, 18) * 5.39;
-  const brokenBedding = 0.30 + 0.36 * Math.sin(distance * 0.29 - offset * 0.086) ** 2;
-  const exposed = MathUtils.lerp(bedding, debris, brokenBedding);
-  const inland = MathUtils.smoothstep(offset, 6, 40) * (side === -1 ? 5.1 : 3.5)
-    + 5.5 * MathUtils.smoothstep(offset, 22, 91) * MathUtils.smoothstep(distance, 43, 111);
-  const stones = Math.sin(distance * 0.47 + offset * 0.32) * 0.28
-    + Math.sin(distance * 0.17 - offset * 0.91) * 0.34
-    + Math.cos(distance * 1.38 + offset * 1.49) * 0.16;
-  const nearTaper = MathUtils.smoothstep(distance, 22, 36);
-  return LAKE_WATER_Y - 1.76 + nearTaper * (exposed + inland + stones * MathUtils.smoothstep(offset, -4, 5));
+function bankHeight(side: BankSide, x: number, offset: number, distance: number): number {
+  const toe = MathUtils.lerp(-2.05, 1.36, MathUtils.smoothstep(offset, -8, 6));
+  const runout = 18 + 4.1 * Math.sin(distance * 0.079 + side) + 3.3 * Math.sin(distance * 0.142 - side);
+  const shoulder = MathUtils.smoothstep(offset, 1.5, runout) * (2.7 + 0.76 * Math.cos(distance * 0.15 + side));
+  const upland = 7.2 * MathUtils.smoothstep(offset, 10, 75)
+    + 3.3 * MathUtils.smoothstep(offset, 24, 104) * MathUtils.smoothstep(distance, 72, 145);
+  const lowerSlope = MathUtils.smoothstep(offset, 0.5, 14);
+  let spurs = 0;
+  for (const [centreX, centreDistance, across, along, rise, drift, toWater] of bankSpurs[side]) {
+    const run = distance - centreDistance;
+    const radius = Math.hypot((x - centreX - run * drift) / across, run / along);
+    const exposure = toWater ? MathUtils.smoothstep(offset, -2, 3.5) : lowerSlope;
+    spurs += rise * exposure * (1 - MathUtils.smoothstep(radius, 0.03, 1));
+  }
+  const strike = offset * 0.40 + distance * 0.29 + 0.88 * Math.sin(distance * 0.24 + offset * 0.12);
+  const exposed = MathUtils.smoothstep(Math.sin(strike), 0.14, 0.84)
+    * MathUtils.smoothstep(Math.cos(distance * 0.18 - offset * 0.23 + side), -0.35, 1);
+  const stones = 0.34 * Math.sin(distance * 0.45 + offset * 0.32)
+    + 0.27 * Math.sin(distance * 0.17 - offset * 0.74)
+    + 0.11 * Math.cos(distance * 1.38 + offset * 1.49);
+  return LAKE_WATER_Y + toe + shoulder + upland + spurs + lowerSlope * (0.73 * exposed + stones);
 }
 
-function addBank(surface: PlantSurface, side: BankSide): void {
+export function addLakeBank(surface: PlantSurface, side: BankSide): void {
   const point = new Vector3();
   const tint = new Color();
   const rock = new Color(0x666c6c);
   const turf = new Color(0x58613d);
   const random = coastRandom(side < 0 ? 4932 : 8549);
-  const offsets = [-8, -5, -2.8, -1.8, -0.7, 0.6, 1.8, 2.8, 3.9, 5, 6.4, 8, 9.8, 11.6,
-    13.5, 15, 17, 19.3, 23.6, 28, 33.5, 42, 66, 112, 175, 234];
+  const offsets = [-10, -7.8, -5.4, -3.6, -2.35, -1.2, -0.15, 0.94, 2.05, 3.4, 4.8, 6.5, 8.4, 10.5,
+    13, 16, 19, 22, 26, 31, 37, 44, 53, 63, 75, 91, 112, 142, 181, 234];
   let previous: number[] | undefined;
-  for (let distance = 22; distance < 392; distance += distance < 101 ? 0.86 : 3.6) {
+  // The near end runs behind the glazing so the oblique views meet the shoreline along its length.
+  for (let distance = -36; distance < 392; distance += distance < 101 ? 0.95 : 3.6) {
     const edge = bankEdge(side, distance);
     const row = offsets.map(offset => {
-      const jitter = (random() - 0.5) * 0.49;
-      const y = bankHeight(side, offset + jitter, distance);
-      const patch = Math.sin(distance * 0.67 + offset * 0.69) * Math.sin(distance * 0.23 - offset * 0.51);
+      const perturbed = offset + (random() - 0.5) * 0.30;
+      const x = edge + perturbed;
+      const y = bankHeight(side, x, perturbed, distance);
+      const patch = Math.sin(distance * 0.41 + offset * 0.47) * Math.sin(distance * 0.18 - offset * 0.39);
       const moss = MathUtils.smoothstep(y, LAKE_WATER_Y + 0.18, LAKE_WATER_Y + 0.81)
         * MathUtils.smoothstep(patch + random() * 0.55, 0.03, 0.88);
       tint.copy(rock).lerp(turf, moss);
-      return surface.point(point.set(side * (edge + offset + jitter), y, -distance), tint, 0.83 + random() * 0.30);
+      return surface.point(point.set(side * x, y, -distance), tint, 0.86 + random() * 0.24);
     });
     if (previous) stitchRows(surface, previous, row, side > 0);
     previous = row;
@@ -110,13 +129,7 @@ const basinCliffs: readonly RockMass[] = [
   { x: -30.4, z: -53.0, radiusX: 1.7, radiusZ: 4.5, height: 13.0, yaw: 0.21, seed: 38, color: 0x8c958f, taper: 0.19, lean: 0.32 },
   { x: -30.9, z: -54.7, radiusX: 2.7, radiusZ: 3.9, height: 17.2, yaw: 0.38, seed: 52, color: 0x8c9a9b, taper: 0.30 },
   { x: -33.8, z: -42.9, radiusX: 2.8, radiusZ: 4.1, height: 6.5, yaw: 0.35, seed: 28, color: 0x7c9089, taper: 0.31 },
-  // Low sheets extend down to the matching banks under the foremost pines.
-  { x: -29.3, z: -42.9, bottom: -1.8, radiusX: 6, radiusZ: 8.4, height: 2.7, yaw: -0.51, seed: 128, color: 0x758083, detail: 0.73 },
-  { x: -30.2, z: -50.7, bottom: -1.5, radiusX: 7.2, radiusZ: 7.5, height: 2.15, yaw: 0.13, seed: 132, color: 0x727b7e, detail: 0.72 },
   { x: -45.5, z: -177, bottom: -1.9, radiusX: 7.7, radiusZ: 13, height: 2.7, yaw: -0.67, seed: 133, color: 0x6d7979, detail: 0.70 },
-  { x: 29.3, z: -51.9, bottom: -1.8, radiusX: 5.1, radiusZ: 13.2, height: 2.4, yaw: 0.63, seed: 231, color: 0x657986, detail: 0.8 },
-  { x: 35.4, z: -45.8, bottom: -1.9, radiusX: 7.5, radiusZ: 11.3, height: 3.6, yaw: 0.56, seed: 357, color: 0x758588, detail: 0.89 },
-  { x: 44.1, z: -56.0, bottom: -0.6, radiusX: 8.2, radiusZ: 10.6, height: 4.0, yaw: 0.58, seed: 92, color: 0x657a82, detail: 0.87 },
   // A coherent summit on the west, with smaller spires descending the same ridge.
   { x: -118, z: -333, radiusX: 17.4, radiusZ: 19.5, height: 129, yaw: 0.23, seed: 84, color: 0x687e92, taper: 0.23, lean: 0.04, detail: 1.13 },
   { x: -117, z: -316, radiusX: 4.8, radiusZ: 6.5, height: 116, yaw: 0.58, seed: 71, color: 0x71889b, taper: 0.36, detail: 0.73 },
@@ -141,49 +154,78 @@ const basinCliffs: readonly RockMass[] = [
   { x: 183, z: -556, radiusX: 72, radiusZ: 55, height: 45, yaw: 0.88, seed: 193, color: 0xa5b6c0, taper: 0.58, detail: 0.62 },
 ];
 
-const pines: readonly LakePine[] = [
+const pines: readonly (Omit<LakePine, 'y'> & { y?: number })[] = [
   { x: -33.2, y: 15.6, z: -50.8, height: 7.1, spread: 7.1, yaw: 0.51, seed: 90, form: 'broad' },
   { x: -34.2, y: 7.9, z: -44.1, height: 5.4, spread: 4.98, yaw: 0.31, seed: 23 },
   { x: -51.8, y: 16.8, z: -76.4, height: 5.1, spread: 5.26, yaw: 0.55, seed: 67 },
-  { x: -28.7, y: 0.1, z: -41.8, height: 5.9, spread: 5.4, yaw: 0.98, seed: 73 },
-  { x: 46.9, y: 4.0, z: -54, height: 9.1, spread: 7.5, yaw: 1.91, seed: 11, form: 'broad', windYaw: 2.84 },
-  { x: 41.5, y: 2.7, z: -52.5, height: 6.1, spread: 5.5, yaw: -2.80, seed: 41, windYaw: 2.65 },
-  { x: 52, y: 5.1, z: -67, height: 8.4, spread: 7.45, yaw: -0.61, seed: 42 },
+  { x: -30.4, z: -41.8, height: 5.9, spread: 5.4, yaw: 0.98, seed: 73 },
+  { x: 46.9, z: -54, height: 9.1, spread: 7.5, yaw: 1.91, seed: 11, form: 'broad', windYaw: 2.84 },
+  { x: 41.5, z: -52.5, height: 6.1, spread: 5.5, yaw: -2.80, seed: 41, windYaw: 2.65 },
+  { x: 52, z: -67, height: 8.4, spread: 7.45, yaw: -0.61, seed: 42 },
   { x: 250, y: 50, z: -322, height: 10.8, spread: 9.4, yaw: 3.86, seed: 9 },
   { x: -58.6, y: 8.2, z: -180.8, height: 10.4, spread: 11.8, yaw: -0.88, seed: 14 },
   { x: -62.7, y: 4.1, z: -215.8, height: 9.3, spread: 8.2, yaw: 1.09, seed: 16 },
 ];
 
+function insideCliffFootprint(x: number, z: number): boolean {
+  return basinCliffs.some(mass => {
+    if (mass.height < 6) return false;
+    const across = x - mass.x;
+    const along = z - mass.z;
+    const cos = Math.cos(mass.yaw);
+    const sin = Math.sin(mass.yaw);
+    const localX = across * cos + along * sin;
+    const localZ = along * cos - across * sin;
+    // Allow for the spread of the base and the crown of a sapling planted next to it.
+    return Math.hypot(localX / mass.radiusX, localZ / mass.radiusZ) < 1.22;
+  });
+}
+
 function addShoreDetails(ledges: Readonly<Record<BankSide, PlantSurface>>): LakePine[] {
   const random = coastRandom(81557);
-  const trees = [...pines];
+  const trees = pines.map(pine => {
+    const side = pine.x < 0 ? -1 : 1;
+    const distance = -pine.z;
+    const x = Math.abs(pine.x);
+    return { ...pine, y: pine.y ?? bankHeight(side, x, x - bankEdge(side, distance), distance) - 0.13 };
+  });
   for (const side of [-1, 1] as const) {
     for (let piece = 0; piece < 94; piece += 1) {
-      const distance = 34 + random() ** 1.67 * (side < 0 ? 209 : 135);
+      const sample = random();
+      const distance = piece < 17 ? 7 + sample * 31 : 34 + sample ** 1.67 * (side < 0 ? 209 : 135);
       const offset = 0.9 + random() * 25;
+      const x = bankEdge(side, distance) + offset;
       const nearby = distance < 99;
       const radius = (nearby ? 0.48 : 1.08) + random() ** 1.8 * (nearby ? 4.5 : 5.7);
-      const bottom = bankHeight(side, offset, distance) - radius * 0.28 - 0.53;
+      const bottom = bankHeight(side, x, offset, distance) - radius * 0.28 - 0.53;
       addRockMass(ledges[side], {
-        x: side * (bankEdge(side, distance) + offset), z: -distance, bottom, radiusX: radius,
+        x: side * x, z: -distance, bottom, radiusX: radius,
         radiusZ: radius * (0.75 + random() * 0.72), height: radius * (0.19 + random() * 0.44),
         yaw: side * 0.52 + (random() - 0.5) * 1.89, taper: 0.32, lean: 0.14, seed: random() * 100,
         color: [0x677273, 0x727e84, 0x6e746b, 0x66705b][Math.floor(random() * 4)], detail: nearby ? 0.64 : 0.38,
       });
     }
     for (let grove = 0; grove < (side < 0 ? 27 : 12); grove += 1) {
-      const distance = side < 0 ? 41 + random() ** 1.4 * 169 : 55 + random() ** 1.8 * 51;
+      const sample = random();
+      const distance = grove < 4 ? 10 + sample * 28 : side < 0 ? 41 + sample ** 1.4 * 169 : 55 + sample ** 1.8 * 51;
       const offset = 3 + random() * 24;
+      const x = bankEdge(side, distance) + offset;
       const height = 2.2 + random() ** 1.45 * (side < 0 ? 6.2 : 4.6);
-      trees.push({ x: side * (bankEdge(side, distance) + offset), y: bankHeight(side, offset, distance) - 0.06,
-        z: -distance, height, spread: height * (0.69 + random() * 0.47), yaw: random() * 6.28, seed: 450 + grove * 11 + side });
+      const spread = height * (0.69 + random() * 0.47);
+      const yaw = random() * 6.28;
+      if (insideCliffFootprint(side * x, -distance)) continue;
+      trees.push({ x: side * x, y: bankHeight(side, x, offset, distance) - 0.13,
+        z: -distance, height, spread, yaw, seed: 450 + grove * 11 + side });
     }
     for (let scrub = 0; scrub < 9; scrub += 1) {
-      const distance = 37 + random() * 48;
+      const distance = 13 + random() * 72;
       const offset = 5.5 + random() * 7.1;
+      const x = bankEdge(side, distance) + offset;
       const height = 0.62 + random() * 1.4;
-      trees.push({ x: side * (bankEdge(side, distance) + offset), y: bankHeight(side, offset, distance) - 0.09,
-        z: -distance, height, spread: height * 1.31, yaw: random() * 6.28, seed: 823 + scrub * 19 + side });
+      const yaw = random() * 6.28;
+      if (insideCliffFootprint(side * x, -distance)) continue;
+      trees.push({ x: side * x, y: bankHeight(side, x, offset, distance) - 0.13,
+        z: -distance, height, spread: height * 1.31, yaw, seed: 823 + scrub * 19 + side });
     }
   }
   return trees;
@@ -324,7 +366,7 @@ export async function buildLakeBasin(root: Group): Promise<void> {
   for (const side of [-1, 1] as const) {
     const direction = side === -1 ? 'West' : 'East';
     const slope = new PlantSurface();
-    addBank(slope, side);
+    addLakeBank(slope, side);
     addMesh(root, slope, stone.bedrock, `${direction} bank mossy slopes`);
     addMesh(root, ledges[side], stone.bedrock, `${direction} bank fractured cliffs and ledges`);
     addMesh(root, distantPeaks[side], stone.bedrock, `${direction} distant cirque summits`);
