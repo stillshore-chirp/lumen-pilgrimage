@@ -119,8 +119,10 @@ export function createCoastAtmosphere(daySunDirection: THREE.Vector3, options: C
   return {
     sun,
     sky: { value: createSkyTexture(daytime) },
+    skyBakedSunY: { value: daytime.y },
     solarColor,
     night,
+    moonVisible: { value: 1 },
     surfaceLight,
     nightHorizon: { value: new THREE.Color(options.nightHorizon ?? 0x293a55) },
     nightZenith: { value: new THREE.Color(options.nightZenith ?? new THREE.Color(0.006, 0.011, 0.026)) },
@@ -146,7 +148,7 @@ export const coastSkyGlsl = /* glsl */`
   uniform sampler2D uCoastSky;
   uniform vec3 uCoastSunDirection, uCoastSolarColor, uCoastNightHorizon, uCoastSurfaceLight;
   uniform vec3 uCoastNightZenith, uCoastNightGlow, uCoastNightGlowDirection;
-  uniform float uCoastNight;
+  uniform float uCoastNight, uCoastMoonVisible, uCoastSkyBakedSunY;
 
   vec3 coastNightSky(vec3 direction) {
     float elevation = max(0.0, direction.y);
@@ -156,15 +158,23 @@ export const coastSkyGlsl = /* glsl */`
     float glowAzimuth = max(0.0, dot(direction.xz, uCoastNightGlowDirection.xz));
     float glow = pow(glowAzimuth, 5.0) * exp(-elevation * 18.0);
     return mix(uCoastNightZenith, uCoastNightHorizon, airMass)
-      + vec3(0.62, 0.76, 1.0) * halo + uCoastNightGlow * glow;
+      + vec3(0.62, 0.76, 1.0) * halo * uCoastMoonVisible + uCoastNightGlow * glow;
   }
 
   vec3 coastSkyRadiance(vec3 direction) {
     if (uCoastNight > 0.5) return coastNightSky(direction);
-    vec2 horizontalSun = normalize(uCoastSunDirection.xz);
+    vec2 horizontalSun = uCoastSunDirection.xz / max(length(uCoastSunDirection.xz), 0.0001);
     float azimuthCosine = dot(direction.xz, horizontalSun) / max(length(direction.xz), 0.0001);
     float solarAzimuth = acos(clamp(azimuthCosine, -1.0, 1.0)) / 3.14159265;
-    vec2 coordinate = vec2(solarAzimuth, sqrt(max(0.0, direction.y)));
+    float elevation = max(0.0, direction.y);
+    // Move the baked scattering lobe with the sun while keeping the horizon and zenith fixed.
+    // This approximation retains the baked daylight color without rebuilding the texture.
+    if (abs(uCoastSunDirection.y - uCoastSkyBakedSunY) > 0.000001) {
+      float sunY = clamp(uCoastSunDirection.y, 0.001, 0.999);
+      if (elevation < sunY) elevation *= uCoastSkyBakedSunY / sunY;
+      else elevation = mix(uCoastSkyBakedSunY, 1.0, (elevation - sunY) / (1.0 - sunY));
+    }
+    vec2 coordinate = vec2(solarAzimuth, sqrt(elevation));
     vec2 size = vec2(${skyWidth}.0, ${skyHeight}.0);
     return texture2D(uCoastSky, (0.5 + coordinate * (size - 1.0)) / size).rgb;
   }
@@ -176,8 +186,9 @@ export const coastSkyGlsl = /* glsl */`
     float disc = 1.0 - smoothstep(radius - feather, radius + feather, chord);
     float limb = sqrt(max(0.0, 1.0 - (chord / radius) * (chord / radius)));
     if (uCoastNight > 0.5) {
-      if (disc <= 0.0) return vec3(0.0);
-      vec3 east = normalize(cross(vec3(0.0, 1.0, 0.0), uCoastSunDirection));
+      if (uCoastMoonVisible < 0.5 || disc <= 0.0) return vec3(0.0);
+      vec3 tangent = cross(vec3(0.0, 1.0, 0.0), uCoastSunDirection);
+      vec3 east = dot(tangent, tangent) < 0.00000001 ? vec3(1.0, 0.0, 0.0) : normalize(tangent);
       vec3 north = cross(uCoastSunDirection, east);
       vec2 face = vec2(dot(direction, east), dot(direction, north)) / radius;
       // The larger dark plains remain discernible on the small lunar disc.
@@ -193,8 +204,10 @@ export const coastSkyGlsl = /* glsl */`
 export function bindCoastSky(uniforms: Record<string, THREE.IUniform>, atmosphere: CoastAtmosphere): void {
   uniforms.uCoastSunDirection = atmosphere.sun;
   uniforms.uCoastSky = atmosphere.sky;
+  uniforms.uCoastSkyBakedSunY = atmosphere.skyBakedSunY;
   uniforms.uCoastSolarColor = atmosphere.solarColor;
   uniforms.uCoastNight = atmosphere.night;
+  uniforms.uCoastMoonVisible = atmosphere.moonVisible;
   uniforms.uCoastNightHorizon = atmosphere.nightHorizon;
   uniforms.uCoastNightZenith = atmosphere.nightZenith;
   uniforms.uCoastNightGlow = atmosphere.nightGlow;

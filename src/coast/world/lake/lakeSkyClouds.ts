@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { bindCoastSky, coastSkyGlsl, type CoastAtmosphere } from '../coastAtmosphere';
 import { coastNoise } from '../coastNoise';
+import { LAKE_SPAWN } from './lakeLayout';
 import { lakeSkyRadianceGlsl } from './lakeSkyRadiance';
 
 // Pixel bounds measured from the upper-left corner of the 1254 px square atlas.
@@ -17,7 +18,7 @@ type CloudBank = {
   center: readonly [x: number, y: number, z: number];
   size: readonly [width: number, height: number];
   opacity: number;
-  wind: number;
+  wind?: number;
 };
 
 // Metres and metres per second. Depth testing lets the distant banks show
@@ -27,12 +28,19 @@ const banks: readonly CloudBank[] = [
   { tile: 'cluster', center: [-67, 27, -382], size: [106, 53], opacity: 0.74, wind: 1.27 },
   { tile: 'bank', center: [74, 29, -403], size: [144, 44], opacity: 0.95, wind: 1.54 },
   { tile: 'chain', center: [221, 48, -365], size: [108, 69], opacity: 0.76, wind: 1.38 },
-  { tile: 'chain', center: [-185, 106, -610], size: [210, 119], opacity: 0.94, wind: 2.06 },
-  { tile: 'cluster', center: [-59, 92, -686], size: [174, 111], opacity: 0.98, wind: 2.23 },
-  { tile: 'bank', center: [81, 84, -914], size: [240, 90], opacity: 0.87, wind: 2.52 },
-  { tile: 'tower', center: [264, 148, -800], size: [212, 181], opacity: 0.99, wind: 2.46 },
-  { tile: 'chain', center: [611, 127, -1095], size: [290, 138], opacity: 0.83, wind: 2.94 },
+  // The distant cloud banks advance together in horizontal view coordinates.
+  // The two upwind banks start behind the western cliffs. Their phases fill
+  // the long gap between the clouds at the opposite ends of the valley.
+  { tile: 'cluster', center: [-708, 94, -770], size: [179, 98], opacity: 0.88 },
+  { tile: 'chain', center: [-514, 115, -788], size: [222, 121], opacity: 0.94 },
+  { tile: 'chain', center: [-185, 106, -610], size: [210, 119], opacity: 0.94 },
+  { tile: 'cluster', center: [-59, 92, -686], size: [174, 111], opacity: 0.98 },
+  { tile: 'bank', center: [81, 84, -914], size: [240, 90], opacity: 0.87 },
+  { tile: 'tower', center: [264, 148, -800], size: [212, 181], opacity: 0.99 },
+  { tile: 'chain', center: [611, 127, -1095], size: [290, 138], opacity: 0.83 },
 ];
+const distantDrift = 0.0032;
+const distantHalfSpan = 0.95;
 
 const cloudVertexShader = /* glsl */`
   varying vec2 vUv;
@@ -74,7 +82,7 @@ const cumulusFragmentShader = /* glsl */`
     float luma = dot(cloud.rgb, vec3(0.2126, 0.7152, 0.0722));
     float moonlight = pow(max(0.0, dot(direction, uCoastSunDirection)), 12.0);
     vec3 nightLight = sky * (0.40 + 0.51 * luma + 0.20 * aerial)
-      + vec3(0.014, 0.019, 0.029) * luma * moonlight;
+      + vec3(0.014, 0.019, 0.029) * luma * moonlight * uCoastMoonVisible;
     gl_FragColor = vec4(mix(daylight, nightLight, uCoastNight), alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -173,7 +181,10 @@ export function buildLakeSkyClouds(sky: THREE.Group, atmosphere: CoastAtmosphere
     mesh.position.set(...bank.center);
     mesh.scale.set(...bank.size, 1);
     sky.add(mesh);
-    return { bank, mesh, opacity };
+    const distance = LAKE_SPAWN.z - bank.center[2];
+    const halfSpan = bank.wind === undefined ? distance * distantHalfSpan : Math.abs(bank.center[2]) * 1.55;
+    const speed = bank.wind ?? distance * distantDrift;
+    return { bank, mesh, opacity, halfSpan, speed };
   });
 
   const elapsedTime = { value: 0 };
@@ -207,13 +218,12 @@ export function buildLakeSkyClouds(sky: THREE.Group, atmosphere: CoastAtmosphere
 
   function update(elapsed: number): void {
     elapsedTime.value = elapsed;
-    for (const { bank, mesh, opacity } of cumulus) {
-      const [startX, y, z] = bank.center;
-      const halfSpan = Math.abs(z) * 1.55;
-      mesh.position.x = THREE.MathUtils.euclideanModulo(startX + elapsed * bank.wind + halfSpan, 2 * halfSpan) - halfSpan;
+    for (const { bank, mesh, opacity, halfSpan, speed } of cumulus) {
+      const [startX, y] = bank.center;
+      mesh.position.x = THREE.MathUtils.euclideanModulo(startX + elapsed * speed + halfSpan, 2 * halfSpan) - halfSpan;
       // The cloud fades beyond the main valley before returning upwind.
       opacity.value = bank.opacity * (1 - THREE.MathUtils.smoothstep(Math.abs(mesh.position.x) / halfSpan, 0.80, 1));
-      mesh.lookAt(0, y, 7);
+      mesh.lookAt(LAKE_SPAWN.x, y, LAKE_SPAWN.z);
     }
   }
   update(0);

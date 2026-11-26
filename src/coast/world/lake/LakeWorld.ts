@@ -1,4 +1,4 @@
-import { AmbientLight, Color, DirectionalLight, FogExp2, Group, HemisphereLight, PointLight, Scene, Vector3 } from 'three';
+import { AmbientLight, Color, DirectionalLight, FogExp2, Group, HemisphereLight, PointLight, Scene } from 'three';
 import type { ExplorationScene } from '../../CoastApp';
 import { disposeSceneDrawables } from '../../disposeSceneDrawables';
 import type { WorldLightingMode } from '../../WorldLightingControl';
@@ -6,8 +6,11 @@ import { createCoastAtmosphere, type CoastTimeOfDay } from '../coastAtmosphere';
 import { buildLakeAndon } from './lakeAndon';
 import { LakeAudio } from './lakeAudio';
 import { buildLakeBasin } from './lakeBasin';
+import { buildLakeFloatingLanterns } from './lakeFloatingLanterns';
+import { buildLakeFuton } from './lakeFuton';
 import { buildLakeHall } from './lakeHall';
 import { lakeNavigation } from './lakeNavigation';
+import { createLakeSettings, LAKE_DEFAULT_MOON, LAKE_DEFAULT_SUN, setLakeLightDirection } from './lakeSettings';
 import { buildLakeSky } from './lakeSky';
 import { buildLakeWater } from './lakeWater';
 import { buildLakeWildlife } from './lakeWildlife';
@@ -24,8 +27,8 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   const fog = new FogExp2(0x9cb3ca, 0.00162);
   scene.fog = fog;
   scene.background = new Color(0x96bad8);
-  const atmosphere = createCoastAtmosphere(new Vector3(0.89, 0.20, -0.37), {
-    moonDirection: new Vector3(-0.67, 0.31, 0.67),
+  const atmosphere = createCoastAtmosphere(LAKE_DEFAULT_SUN, {
+    moonDirection: LAKE_DEFAULT_MOON,
     nightHorizon: 0x111b2e,
     nightZenith: 0x070d1a,
   });
@@ -47,7 +50,6 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   scene.add(ambient, daylight, sun, sun.target);
 
   const hallGroup = sceneGroup(scene, 'Lakeside hall');
-  const andon = buildLakeAndon(hallGroup);
   const basinGroup = sceneGroup(scene, 'Rock basin and stone ring');
   const wildlifeGroup = sceneGroup(scene, 'Birds and shallow-water fish');
   const lampMounts = [
@@ -61,6 +63,9 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   });
 
   const [hall] = await Promise.all([buildLakeHall(hallGroup), buildLakeBasin(basinGroup)]);
+  const andon = buildLakeAndon(hallGroup, hall.arrangementBounds);
+  const futon = buildLakeFuton(hallGroup);
+  const lanterns = buildLakeFloatingLanterns(sceneGroup(scene, 'Lake lantern display'), atmosphere.sun);
   const sky = buildLakeSky(scene, atmosphere);
   const wildlife = buildLakeWildlife(wildlifeGroup);
   const elapsed = { value: 0 };
@@ -68,6 +73,21 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   let time: CoastTimeOfDay = 'day';
   let mode: WorldLightingMode = 'auto';
   let disposed = false;
+  const lakeSettings = createLakeSettings((next, previous) => {
+    if (next.futon !== previous.futon) {
+      futon.setVisible(next.futon);
+      sun.shadow.needsUpdate = true;
+    }
+    if (next.lanterns !== previous.lanterns) lanterns.setVisible(next.lanterns);
+    if (next.moonVisible !== previous.moonVisible) sky.setMoonVisible(next.moonVisible);
+    const activeLightMoved = time === 'day'
+      ? next.sunAzimuth !== previous.sunAzimuth || next.sunElevation !== previous.sunElevation
+      : next.moonAzimuth !== previous.moonAzimuth || next.moonElevation !== previous.moonElevation;
+    if (activeLightMoved) {
+      setLakeLightDirection(atmosphere.sun.value, next, time);
+      updateLighting();
+    }
+  });
 
   function updateLighting(): void {
     const night = time === 'night';
@@ -88,11 +108,16 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
     andon.setLighting(night, lampsOn);
   }
 
+  futon.setVisible(lakeSettings.state.futon);
+  lanterns.setVisible(lakeSettings.state.lanterns);
+  sky.setMoonVisible(lakeSettings.state.moonVisible);
+  setLakeLightDirection(atmosphere.sun.value, lakeSettings.state, time);
   updateLighting();
   return {
     id: 'lake',
     navigation: lakeNavigation,
     audio: new LakeAudio(),
+    lakeSettings,
     world: {
       scene,
       grabTargets: [andon.grabTarget],
@@ -104,8 +129,10 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
       setTimeOfDay(value) {
         time = value;
         atmosphere.setTimeOfDay(value);
+        setLakeLightDirection(atmosphere.sun.value, lakeSettings.state, time);
         sky.setTimeOfDay(value);
         wildlife.setTimeOfDay(value);
+        lanterns.setTimeOfDay(value);
         updateLighting();
       },
       setQuality(quality) {
@@ -121,6 +148,7 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
       update(seconds) {
         elapsed.value = seconds;
         sky.update(seconds);
+        lanterns.update(seconds);
         return wildlife.update(seconds);
       },
       prepareRender(renderer, camera) { water.prepareRender?.(renderer, camera); },
