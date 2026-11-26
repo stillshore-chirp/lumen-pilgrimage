@@ -63,8 +63,8 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   });
 
   const [hall] = await Promise.all([buildLakeHall(hallGroup), buildLakeBasin(basinGroup)]);
-  const andon = buildLakeAndon(hallGroup, hall.arrangementBounds);
   const futon = buildLakeFuton(hallGroup);
+  const andon = buildLakeAndon(hallGroup, hall.arrangementBounds, () => futon.visibleBounds);
   const lanterns = buildLakeFloatingLanterns(sceneGroup(scene, 'Lake lantern display'), atmosphere.sun);
   const sky = buildLakeSky(scene, atmosphere);
   const wildlife = buildLakeWildlife(wildlifeGroup);
@@ -76,6 +76,7 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   const lakeSettings = createLakeSettings((next, previous) => {
     if (next.futon !== previous.futon) {
       futon.setVisible(next.futon);
+      if (next.futon) andon.makeRoomForFuton();
       sun.shadow.needsUpdate = true;
     }
     if (next.lanterns !== previous.lanterns) lanterns.setVisible(next.lanterns);

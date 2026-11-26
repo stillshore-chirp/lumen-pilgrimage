@@ -339,6 +339,7 @@ export class CoastApp {
     if (loaded.lakeSettings) {
       this.lakePanel = createLakeEnvironmentPanel(loaded.lakeSettings, () => {
         this.monitor?.closePanel();
+        this.desktopGrab.release();
         this.controls.releaseInput();
       });
       this.openLakeXRSettings = createLakeEnvironmentXRItems(loaded.lakeSettings,
@@ -899,7 +900,9 @@ export class CoastApp {
   };
 
   private readonly onPageShow = (event: PageTransitionEvent): void => {
-    if (event.persisted && location.href !== this.currentUrl.href) this.onPopState();
+    if (!event.persisted) return;
+    this.lakePanel?.refresh();
+    if (location.href !== this.currentUrl.href) this.onPopState();
   };
 
   private readonly onPageHide = (event: PageTransitionEvent): void => {

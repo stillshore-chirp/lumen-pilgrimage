@@ -947,6 +947,20 @@ test('lake environment settings update the scene, persist, and fit a short lands
   assert.equal(await lanterns.getAttribute('aria-pressed'), 'true');
   assert.equal(await moon.getAttribute('aria-pressed'), 'false');
   assert.equal(Number(await azimuth('月').inputValue()), 20);
+  await page.evaluate(() => {
+    const key = 'lumen-pilgrimage:lake-settings';
+    const saved = JSON.parse(localStorage.getItem(key));
+    localStorage.setItem(key, JSON.stringify({ ...saved, moonAzimuth: 40 }));
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  });
+  assert.equal(Number(await azimuth('月').inputValue()), 40);
+  await page.evaluate(() => {
+    const key = 'lumen-pilgrimage:lake-settings';
+    const saved = JSON.parse(localStorage.getItem(key));
+    localStorage.setItem(key, JSON.stringify({ ...saved, sunAzimuth: 90 }));
+  });
+  await moon.click();
+  assert.equal(Number(await azimuth('太陽').inputValue()), 90);
   const close = dialog.getByRole('button', { name: '閉じる', exact: true });
   const box = await close.boundingBox();
   assert.ok(box && box.y >= 0 && box.y + box.height <= 375 && box.x + box.width <= 667);
