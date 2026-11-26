@@ -4,17 +4,17 @@ import type { PlantSurface } from '../coastTreeMeshes';
 type Volume = readonly [left: number, right: number, front: number, back: number, bottom: number, top: number];
 type AddVolume = (volume: Volume, color: Color, shade?: number) => void;
 type Vertex = readonly [x: number, y: number, z: number];
-type Course = readonly [belowRoof: number, projection: number, thickness: number, shade?: number];
 
-const blueGrey = new Color(0x91a9c0);
-const weatheredGrey = new Color(0x929ea9);
-const paleMasonry = new Color(0xbfb1a0);
-const paleEave = new Color(0xe3c9b2);
-const coolMasonry = new Color(0x929aa3);
-const roofEdge = new Color(0x919caa);
-const shoreBounce = new Color(0xb0c0cb);
+const stone = new Color(0x8c98a3);
+const darkStone = new Color(0x667786);
+const upright = new Color(0x8b9dad);
+const glazing = new Color(0x687f95);
+const roof = new Color(0x9babba);
+const paleStone = new Color(0xcfb9a0);
+const paleCoping = new Color(0xffdebb);
+const gravelBounce = new Color(0x9caebd);
 
-function volumeBuilder(surface: PlantSurface, pivotX = 0, pivotZ = 0, yaw = 0, reflectedGroundLight = 0): AddVolume {
+function volumeBuilder(surface: PlantSurface, pivotX = 0, pivotZ = 0, yaw = 0): AddVolume {
   const point = new Vector3();
   const tint = new Color();
   const cos = Math.cos(yaw);
@@ -25,175 +25,247 @@ function volumeBuilder(surface: PlantSurface, pivotX = 0, pivotZ = 0, yaw = 0, r
         const across = x - pivotX;
         const along = z - pivotZ;
         point.set(pivotX + across * cos + along * sin, y, pivotZ - across * sin + along * cos);
-        // At the foot of the tall walls, the pale gravel and its skylight lessen the contrast.
-        const bounce = reflectedGroundLight * (1 - MathUtils.smoothstep(y, 17, 73));
-        return surface.point(point, tint.copy(color).lerp(shoreBounce, bounce), shade * light);
+        const bounce = 0.20 * (1 - MathUtils.smoothstep(y, 11, 34));
+        return surface.point(point, tint.copy(color).lerp(gravelBounce, bounce), shade * light);
       });
       surface.triangle(ia, ib, ic);
       surface.triangle(ib, id, ic);
     };
     face([left, bottom, front], [right, bottom, front], [left, top, front], [right, top, front], 1);
-    face([right, bottom, front], [right, bottom, back], [right, top, front], [right, top, back], 0.78);
-    face([left, bottom, back], [left, bottom, front], [left, top, back], [left, top, front], 0.76);
-    face([right, bottom, back], [left, bottom, back], [right, top, back], [left, top, back], 0.79);
-    face([left, top, front], [right, top, front], [left, top, back], [right, top, back], 1.07);
-    face([left, bottom, back], [right, bottom, back], [left, bottom, front], [right, bottom, front], 0.67);
+    face([right, bottom, front], [right, bottom, back], [right, top, front], [right, top, back], 0.84);
+    face([left, bottom, back], [left, bottom, front], [left, top, back], [left, top, front], 0.72);
+    face([right, bottom, back], [left, bottom, back], [right, top, back], [left, top, back], 0.81);
+    face([left, top, front], [right, top, front], [left, top, back], [right, top, back], 1.09);
+    face([left, bottom, back], [right, bottom, back], [left, bottom, front], [right, bottom, front], 0.61);
   };
 }
 
-function addTerrace(add: AddVolume, volume: Volume, color: Color, courses: readonly [Course, ...Course[]]): void {
+function addPlinth(add: AddVolume, volume: Volume, color: Color = stone): void {
   const [left, right, front, back, bottom, top] = volume;
-  const [, , capThickness] = courses[0];
-  add([left, right, front, back, bottom, top - capThickness * 0.5], color);
-  for (const [belowRoof, projection, thickness, shade = 1.15] of courses) {
-    const edgeHeight = top - belowRoof;
-    add([left - projection * 0.55, right + projection * 0.55, front + projection, back - 0.3,
-      edgeHeight - thickness, edgeHeight], color, shade);
-  }
+  add([left, right, front, back, bottom, top - 0.92], color, 0.84);
+  add([left - 0.45, right + 0.38, front + 0.36, back - 0.33, top - 0.92, top - 0.52], color, 0.69);
+  add([left - 0.62, right + 0.52, front + 0.58, back - 0.52, top - 0.52, top], color, 1.13);
 }
 
-type GriddedWall = {
-  readonly volume: Volume;
-  readonly sill: number;
-  readonly pierStops: readonly number[];
-  readonly strongPiers: readonly number[];
-  readonly returns: readonly number[];
-  readonly levelSpacing: number;
-  readonly setback: number;
+type Shaft = {
+  volume: Volume;
+  sill: number;
+  bays: number;
+  spacing: number;
+  setBack: number;
+  pierStops: readonly number[];
 };
 
-// Piers and crosspieces stand in front of a recessed field. The returns and lower sill stay solid.
-function addGriddedWall(add: AddVolume, wall: GriddedWall): void {
-  const { volume, sill, pierStops, strongPiers, returns, levelSpacing, setback } = wall;
+// The jambs turn around the corners. The window field and its mullions are set inside the shell.
+function addShaft(add: AddVolume, shaft: Shaft): void {
+  const { volume, sill, bays, spacing, setBack, pierStops } = shaft;
   const [left, right, front, back, bottom, top] = volume;
   const width = right - left;
-  const inset = front - setback;
-  add([left, right, inset, back, bottom, top], blueGrey, 0.96);
-  add([left, right, front - 0.05, inset, bottom, sill], weatheredGrey, 0.89);
-  add([left - 0.04, left + width * 0.047, front, back, sill - 0.15, top], weatheredGrey, 1.04);
-  add([right - width * 0.050, right + 0.04, front, back, sill - 0.15, top], weatheredGrey, 1.04);
-  for (const stop of pierStops) {
-    const x = left + width * stop;
-    const strong = strongPiers.includes(stop);
-    const radius = strong ? 0.21 : 0.10;
-    add([x - radius, x + radius, strong ? front : front - 0.15, inset - 0.23,
-      sill - 0.1, top - 0.25], weatheredGrey, strong ? 1 : 0.87);
+  const inset = front - setBack;
+  const jamb = Math.min(0.85, width * 0.067);
+  add([left + jamb, right - jamb, inset, back + 0.27, bottom, top - 0.54], glazing);
+  add([left, right, front + 0.12, back - 0.15, bottom, sill], darkStone);
+  add([left - 0.15, right + 0.15, front + 0.19, back - 0.19, sill - 0.46, sill + 0.09], stone, 1.06);
+  add([left, left + jamb, front, back, sill, top - 0.46], upright);
+  add([right - jamb, right, front, front - 1.43, sill, top - 0.46], stone);
+  for (let index = 1; index < bays; index += 1) {
+    const x = left + width * index / bays;
+    const main = pierStops.includes(index);
+    const radius = main ? 0.19 : 0.081;
+    const tip = main ? front + 0.04 : front - 0.46;
+    add([x - radius, x + radius, tip, inset - 0.10, sill, top - 0.47], upright, main ? 1 : 0.90);
   }
-  for (let height = sill + levelSpacing; height < top - 0.5; height += levelSpacing) {
-    add([left + 0.25, right - 0.25, front - 0.19, inset - 0.15, height - 0.30, height],
-      weatheredGrey, 0.96);
+  for (let level = sill + spacing; level < top - 0.8; level += spacing) {
+    add([left + jamb, right - jamb, front - 0.51, inset - 0.07, level - 0.18, level], upright, 0.94);
   }
-  for (const t of returns) {
-    const z = front + (back - front) * t;
-    add([right - 0.16, right + 0.32, z + 0.31, z - 0.31, sill - 0.1, top - 0.45], blueGrey, 0.92);
-    add([left - 0.27, left + 0.13, z + 0.29, z - 0.29, sill - 0.1, top - 0.45], blueGrey, 0.92);
+  // A return gallery wraps behind the front corner. Its bays expose depth as the view moves sideways.
+  add([right - jamb - 0.11, right - jamb + 0.08, front - 1.45, back + 0.5, sill, top - 0.54], glazing, 0.88);
+  for (const fraction of [0.24, 0.49, 0.72, 0.91]) {
+    const z = front + (back - front) * fraction;
+    add([right - jamb + 0.08, right + 0.13, z + 0.26, z - 0.26, sill, top - 0.44], stone);
   }
-  add([left - 0.065, right + 0.065, front - 0.07, back - 0.08, top - 0.36, top + 0.01], roofEdge);
+  add([left + 0.18, right - 0.16, front - 0.22, back + 0.22, top - 0.46, top], darkStone);
+  add([left - 0.29, right + 0.26, front + 0.33, back - 0.24, top, top + 0.42], roof);
 }
 
-// Dimensions are in metres, from the camera-facing edge to the rear. Floors start inside the ground,
-// while the separate front and rear sections overlap in plan to form banks of terraces and courts.
-export function addLakeFarArchitecture(surface: PlantSurface): void {
-  const add = volumeBuilder(surface);
-  // Each gridded face addresses the valley at its own angle. Narrow returns sit beside the openings.
-  const westFace = volumeBuilder(surface, -108.25, -296, 0.37, 0.68);
-  const westRecess = volumeBuilder(surface, -96.4, -313, 0.28, 0.38);
-  const westWing = volumeBuilder(surface, -94.6, -306, 0.30, 0.55);
-  const detachedFace = volumeBuilder(surface, -82.5, -394.7, 0.18, 0.36);
-  const eastFace = volumeBuilder(surface, 201.8, -359, -0.40, 0.45);
+type Range = {
+  x: number;
+  front: number;
+  width: number;
+  depth: number;
+  sill: number;
+  top: number;
+  divisions: number;
+  openings?: number;
+  raisedWing?: number;
+  yaw: number;
+  color?: Color;
+};
 
-  // Western face with both tall planes overlapping the rocky peak and its lower shoulder.
-  addTerrace(add, [-121, -75, -294, -333, -1, 12], coolMasonry, [[0, 0.8, 0.65]]);
-  addGriddedWall(westFace, {
-    volume: [-112.9, -103.6, -296, -320, 9, 82.4], sill: 16.4,
-    pierStops: [0.13, 0.25, 0.37, 0.51, 0.65, 0.76, 0.88], strongPiers: [0.37, 0.76],
-    returns: [0.24, 0.47, 0.70], levelSpacing: 2.44, setback: 0.52,
-  });
-  addGriddedWall(westRecess, {
-    volume: [-101, -91.8, -313, -333, 9, 73], sill: 18.4,
-    pierStops: [0.19, 0.35, 0.52, 0.74, 0.88], strongPiers: [0.52],
-    returns: [0.36, 0.76], levelSpacing: 2.81, setback: 0.44,
-  });
-  addGriddedWall(westWing, {
-    volume: [-112.9, -77.2, -306, -341, 9.4, 50.8], sill: 16.6,
-    pierStops: [0.08, 0.15, 0.21, 0.31, 0.37, 0.46, 0.53, 0.58, 0.68, 0.77, 0.85, 0.92],
-    strongPiers: [0.15, 0.31, 0.53, 0.77, 0.92], returns: [0.27, 0.53, 0.74], levelSpacing: 2.57, setback: 0.62,
-  });
-  addGriddedWall(westWing, {
-    volume: [-86.5, -77.9, -304.5, -329, 8, 51.75], sill: 16.4,
-    pierStops: [0.23, 0.43, 0.68, 0.85], strongPiers: [0.43],
-    returns: [0.36, 0.69], levelSpacing: 2.56, setback: 0.44,
-  });
-  addTerrace(add, [-114, -85, -373, -415, -1, 25.8], paleMasonry,
-    [[0, 1.1, 0.62], [1.45, 0.64, 0.44], [2.9, 0.52, 0.33], [5.7, 0.45, 0.37]]);
-  addTerrace(add, [-111.5, -86.6, -369.5, -391, 1, 16.8], paleMasonry, [[0, 0.95, 0.74]]);
-
-  // Across the cut, the narrow silhouette has a plain end wall and a second setback at the crown.
-  addTerrace(add, [-95.3, -71.5, -401, -438, -1, 12.8], coolMasonry, [[0, 0.6, 0.57]]);
-  addGriddedWall(detachedFace, {
-    volume: [-89.9, -75.2, -394.7, -416.3, 8, 59.6], sill: 13.5,
-    pierStops: [0.14, 0.24, 0.34, 0.5, 0.65, 0.75, 0.85], strongPiers: [0.24, 0.5, 0.75],
-    returns: [0.32, 0.71], levelSpacing: 2.75, setback: 1.04,
-  });
-  detachedFace([-89.1, -75.9, -395.2, -414.2, 59.55, 61.65], weatheredGrey);
-  detachedFace([-75.7, -73.9, -397.6, -411.7, 5, 53.3], blueGrey, 0.89);
-
-  // Along the rear of the gravel, long courses overlap at several different distances.
-  addTerrace(add, [-71, -22.15, -442, -481, -1, 37.5], coolMasonry,
-    [[0, 0.64, 0.41, 1.40], [1.6, 0.43, 0.44, 0.70], [3.4, 0.5, 0.31, 1.38], [5, 0.3, 0.5, 0.77], [7.1, 0.4, 0.32, 1.29]]);
-  addTerrace(add, [-27, 27, -449, -492, -1, 34.8], coolMasonry,
-    [[0, 0.9, 0.66, 1.35], [1.7, 0.55, 0.46, 0.76], [3.8, 0.6, 0.38, 1.37], [6.1, 0.46, 0.43, 0.77]]);
-  addTerrace(add, [17, 69, -467, -512, -1, 31.3], coolMasonry, [[0, 0.65, 0.4]]);
-  addTerrace(add, [61, 113, -450, -495, -1, 27], weatheredGrey, [[0, 0.46, 0.35], [4.5, 0.24, 0.45]]);
-  addTerrace(add, [104, 169, -438, -480, -1, 32.2], coolMasonry, [[0, 1.0, 0.54], [3.2, 0.75, 0.36]]);
-  addTerrace(add, [164, 201, -423, -464, -1, 29.1], coolMasonry, [[0, 0.88, 0.78]]);
-
-  addTerrace(add, [-66, -22, -416, -454, -1, 26.4], weatheredGrey,
-    [[0, 0.9, 0.74, 1.29], [1.7, 0.45, 0.48, 0.68], [2.8, 0.72, 0.54, 1.43], [5.5, 0.68, 0.52, 0.74]]);
-  addTerrace(add, [-17, 37, -423, -461, -1, 25], coolMasonry, [[0, 1.8, 0.82], [3.2, 0.92, 0.49], [5.7, 0.5, 0.68]]);
-  addTerrace(add, [26, 85, -407, -448, -1, 22.2], coolMasonry, [[0, 1.1, 0.72], [2.2, 0.76, 0.63]]);
-  addTerrace(add, [77, 121, -416, -456, -1, 24.6], weatheredGrey, [[0, 1.18, 0.64], [2.9, 0.7, 0.57], [5.7, 0.63, 0.62]]);
-  addTerrace(add, [110, 162, -402, -442, -1, 23.5], coolMasonry, [[0, 1.21, 0.63], [3.1, 0.75, 0.55]]);
-  addTerrace(add, [150, 200, -402.2, -438, -1, 25.1], weatheredGrey, [[0, 1.05, 0.64], [5.8, 0.84, 0.66]]);
-
-  // Lower front ranges are offset around the next low roof, leaving their end walls visible.
-  addTerrace(add, [-34, 8, -391, -426, -1, 23.6], coolMasonry,
-    [[0, 0.67, 0.71, 1.35], [1.8, 0.39, 0.46, 0.71], [3.2, 0.75, 0.44, 1.44], [5.2, 0.4, 0.42, 0.72]]);
-  addTerrace(add, [3, 26, -399, -425, -1, 25.5], weatheredGrey,
-    [[0, 0.87, 0.84, 1.40], [1.9, 0.45, 0.37, 0.70], [3.9, 0.60, 0.47, 1.37], [5.7, 0.42, 0.40, 0.75]]);
-  addTerrace(add, [12, 56, -387, -416, -1, 18.9], weatheredGrey,
-    [[0, 1.22, 0.81, 1.39], [1.6, 0.63, 0.40, 0.70], [3.5, 0.70, 0.48, 1.37]]);
-  addTerrace(add, [47, 78, -395, -430, -1, 23.2], coolMasonry,
-    [[0, 0.68, 0.62, 1.39], [1.5, 0.43, 0.42, 0.71], [3.1, 0.71, 0.60, 1.38], [5, 0.50, 0.39, 0.75]]);
-  addTerrace(add, [75, 96, -404, -432, -1, 21.0], weatheredGrey, [[0, 0.68, 0.81, 1.34], [1.9, 0.44, 0.49, 0.76]]);
-  addTerrace(add, [9, 22, -384, -401, -1, 17.3], paleMasonry, [[0, 0.78, 0.68]]);
-
-  // The nearer pale roof has deep eaves over its smaller, solid base.
-  addTerrace(add, [-53.7, -34.2, -373.5, -395.6, -1, 22.7], paleEave,
-    [[0, 0.5, 0.7, 1.14], [1.8, 0.31, 0.33, 0.68], [3.3, 0.36, 0.34, 1.25],
-      [4.6, 0.26, 0.28, 0.76], [6.2, 0.35, 0.38, 1.22], [7.8, 0.29, 0.32, 0.78], [9.1, 0.41, 0.42, 1.17]]);
-  add([-54.7, -33.3, -372.65, -396.8, 22.5, 23.5], paleMasonry, 0.78);
-  add([-55.6, -32.5, -372.1, -397.3, 23.5, 24.3], paleMasonry, 0.68);
-  add([-57.9, -30.5, -370.3, -399.5, 24.3, 24.83], paleMasonry, 0.74);
-  add([-57.8, -30.6, -370.4, -399.4, 24.83, 25.9], paleEave, 1.08);
-  add([-57.5, -30.9, -370.7, -399.1, 25.9, 26.25], paleEave, 1.18);
-  addTerrace(add, [-36.3, -26.2, -377.7, -399.5, -1, 19.3], coolMasonry, [[0, 0.57, 0.72], [2.8, 0.36, 0.43]]);
-
-  // The eastern silhouette meets the upslope ranges. A lifted cap leaves a narrow shadow at the rim.
-  addTerrace(add, [184, 221, -368, -410, -1, 19.8], coolMasonry, [[0, 1.25, 0.71], [3.2, 0.63, 0.53]]);
-  addTerrace(eastFace, [192.4, 211.2, -358.9, -390.8, -2, 14.4], coolMasonry, [[0, 0.68, 0.75]]);
-  addGriddedWall(eastFace, {
-    volume: [193, 210.6, -359, -388, 7.3, 44.2], sill: 19.1,
-    pierStops: [0.13, 0.21, 0.34, 0.46, 0.67, 0.74, 0.86], strongPiers: [0.21, 0.46, 0.74],
-    returns: [0.20, 0.44, 0.68, 0.89], levelSpacing: 2.22, setback: 0.68,
-  });
-  for (const x of [193.3, 196.2, 204.1, 209.9]) {
-    eastFace([x, x + 0.43, -359.5, -364, 44.18, 45.42], roofEdge);
+function addRange(surface: PlantSurface, range: Range): void {
+  const { x, front, width, depth, sill, top, divisions, openings = 3, raisedWing, yaw, color = stone } = range;
+  const left = x - width * 0.5;
+  const right = x + width * 0.5;
+  const back = front - depth;
+  const add = volumeBuilder(surface, x, front, yaw);
+  const roofBottom = top - 1.69;
+  const floor = Math.min(sill, roofBottom - 1.5);
+  const recess = front - 2.6;
+  addPlinth(add, [left, right, front, back, -1.2, floor], color);
+  add([left + 1.5, right - 1.15, front + 0.14, front - 0.20, floor - 2.85, floor - 2.54], color, 1.06);
+  add([left + 0.34, right - 0.28, front + 0.10, front - 0.16, floor - 4.56, floor - 4.44], color, 0.78);
+  add([left + 0.65, right - 0.65, recess, back + 1.5, floor, roofBottom], darkStone, 0.77);
+  add([left, left + 0.91, front + 0.07, back, floor, roofBottom], color, 0.85);
+  add([right - 1.17, right, front, back, floor, roofBottom], color);
+  const openBays = Math.min(divisions, openings);
+  const firstOpen = Math.floor((divisions - openBays) * 0.5);
+  for (let index = 0; index < divisions; index += 1) {
+    const pierX = left + index * width / divisions;
+    const end = left + (index + 1) * width / divisions;
+    if (index >= firstOpen && index < firstOpen + openBays) {
+      add([pierX - 0.30, pierX + 0.45, front, recess - 0.1, floor, roofBottom], color, 0.81);
+    } else {
+      add([pierX + 0.04, end - 0.06, front - 0.92, recess - 0.07, floor, roofBottom], color, 0.83);
+    }
   }
-  eastFace([193.6, 210.1, -366, -387, 44.18, 45.42], blueGrey);
-  eastFace([192.3, 211.3, -357.8, -388.6, 45.42, 45.95], roofEdge);
-  addTerrace(add, [185.7, 190.5, -364.4, -385, 3.8, 23.3], paleMasonry, [[0, 0.3, 0.51]]);
-  addTerrace(add, [207, 252, -372, -421, -1, 29.6], weatheredGrey, [[0, 0.85, 0.60], [6.2, 0.6, 0.41]]);
-  addTerrace(add, [237, 283, -409, -449, -1, 38.0], coolMasonry, [[0, 0.55, 0.4], [3.8, 0.48, 0.44]]);
-  addTerrace(add, [259, 306, -425, -470, -1, 43.0], coolMasonry, [[0, 0.61, 0.39]]);
+  if (roofBottom - floor > 5.5) {
+    const floorBand = floor + (roofBottom - floor) * 0.49;
+    add([left + 0.3, right - 0.3, front - 0.24, back, floorBand - 0.34, floorBand], color, 0.96);
+    add([left + 0.27, right - 0.24, front - 0.44, back, floorBand + 0.57, floorBand + 0.75], color, 0.83);
+  }
+  // A narrow shadow between the upper slab and the fascia ties the opening to its roof.
+  add([left - 0.66, right + 0.68, front + 0.82, back - 0.46, roofBottom, top - 0.91], darkStone, 0.78);
+  add([left - 1.03, right + 1.17, front + 1.39, back - 0.9, top - 0.91, top - 0.31], color, 1.12);
+  add([left - 0.77, right + 0.85, front + 0.99, back - 0.68, top - 0.31, top], roof, 1.12);
+  if (raisedWing) {
+    const shoulder = left + width * 0.36;
+    add([shoulder, right - 2.0, front - 4.9, back + 2.1, top, top + raisedWing - 0.54], color, 0.88);
+    add([shoulder - 0.36, right - 1.6, front - 4.52, back + 1.8, top + raisedWing - 0.54, top + raisedWing], roof);
+  }
+}
+
+const rearRanges: readonly Range[] = [
+  // The two uphill rows leave angled cuts through to the next courtyard.
+  { x: -48, front: -451, width: 44, depth: 35, sill: 22, top: 35.8, divisions: 7, openings: 2, raisedWing: 2.7, yaw: 0.19 },
+  { x: 2, front: -478, width: 53, depth: 35, sill: 23, top: 35.7, divisions: 9, openings: 3, yaw: -0.06 },
+  { x: 56, front: -465, width: 52, depth: 36, sill: 24, top: 32.1, divisions: 8, openings: 2, raisedWing: 2.05, yaw: 0.09 },
+  { x: 104, front: -451, width: 47, depth: 33, sill: 22.5, top: 31.2, divisions: 8, yaw: -0.17 },
+  { x: 151, front: -444, width: 43, depth: 28, sill: 23.6, top: 34.6, divisions: 5, openings: 1, raisedWing: 3.4, yaw: -0.28 },
+  { x: 186, front: -427, width: 30, depth: 30, sill: 25, top: 33.2, divisions: 4, yaw: -0.23 },
+  { x: 235, front: -403, width: 51, depth: 46, sill: 25, top: 38.5, divisions: 7, openings: 2, yaw: -0.14 },
+  { x: 273, front: -429, width: 45, depth: 41, sill: 29, top: 45.4, divisions: 5, yaw: -0.25 },
+  { x: -42, front: -417, width: 45, depth: 33, sill: 17.2, top: 27.1, divisions: 6, openings: 1, yaw: 0.16 },
+  { x: 10, front: -432, width: 50, depth: 31, sill: 16.6, top: 27.3, divisions: 9, openings: 4, yaw: -0.10 },
+  { x: 67, front: -423, width: 50, depth: 23, sill: 18.8, top: 26.8, divisions: 8, yaw: 0.1 },
+  { x: 119, front: -419, width: 46, depth: 23, sill: 19.6, top: 27.7, divisions: 7, openings: 2, yaw: -0.14 },
+  { x: 166, front: -407, width: 53, depth: 30, sill: 20.1, top: 28.4, divisions: 9, raisedWing: 1.5, yaw: 0.10 },
+  // Low, offset foreground ranges reveal their ends from different parts of the hall.
+  { x: -3, front: -402, width: 36, depth: 29, sill: 13.8, top: 22.7, divisions: 7, openings: 3, yaw: -0.23 },
+  { x: 42, front: -394, width: 36, depth: 22, sill: 11.9, top: 20.8, divisions: 6, openings: 2, raisedWing: 1.6, yaw: 0.19 },
+  { x: 75, front: -404, width: 28, depth: 20, sill: 13, top: 22.8, divisions: 5, openings: 1, yaw: -0.18 },
+  { x: 127, front: -393, width: 58, depth: 26, sill: 15.8, top: 24.7, divisions: 8, openings: 3, raisedWing: 2.1, yaw: -0.06 },
+];
+
+function addPaleEave(surface: PlantSurface): void {
+  const add = volumeBuilder(surface, -44, -374.6, 0.17);
+  // The broader lower courses disappear into the gravel bank beside the pavilion.
+  addPlinth(add, [-61.4, -27, -375.35, -402.8, -1, 6.1], paleStone);
+  addPlinth(add, [-58.2, -31.2, -374, -402, -1, 8.9], paleStone);
+  add([-50.4, -42.1, -372.05, -376.2, 5.8, 7.05], paleStone, 1.02);
+  add([-50.45, -42.05, -371.26, -375.3, 4.5, 5.8], paleStone, 0.96);
+  add([-53.75, -34.6, -376.25, -398.1, 7.7, 20.6], paleStone, 0.92);
+  add([-54.45, -52.05, -374.56, -397.9, 10.14, 22.7], paleStone, 1.04);
+  add([-36.2, -33.83, -374.7, -397.9, 10.14, 22.7], paleStone, 1.06);
+  for (const x of [-49.5, -45.2, -41.0, -37.3]) {
+    add([x - 0.25, x + 0.25, -375.61, -397.5, 11.15, 21.4], paleStone);
+  }
+  add([-54.45, -33.83, -375.17, -398.3, 13.3, 13.71], paleStone, 1.13);
+  add([-54.8, -33.4, -375.1, -398.45, 20.6, 23.75], paleStone, 0.57);
+  // Corbels support a deep, pale rim. The shadow under the rim turns around both sides.
+  for (const x of [-53.75, -49.1, -44.5, -39.9, -35.25]) {
+    add([x - 0.42, x + 0.42, -373.54, -377.17, 21.13, 23.75], paleStone, 0.86);
+  }
+  add([-55.25, -32.95, -373.95, -399.1, 22.6, 23.4], paleStone, 0.78);
+  add([-56.3, -31.83, -372.81, -399.85, 23.4, 24.36], paleStone, 0.93);
+  add([-58.42, -29.8, -370.95, -401.4, 24.36, 24.91], paleStone, 0.78);
+  add([-58.3, -29.91, -371.01, -401.31, 24.91, 25.72], paleCoping, 1.09);
+  add([-58.02, -30.09, -371.27, -401.02, 25.72, 26.04], paleCoping, 1.17);
+  add([-53.9, -36.18, -377.92, -398.05, 26.04, 26.56], paleStone, 0.90);
+}
+
+// All ranges and the plinths share the same ground datum. Their lower courses
+// extend into the slope, and the narrower upper volumes leave exposed returns.
+export function addLakeFarArchitecture(surface: PlantSurface): void {
+  const westFace = volumeBuilder(surface, -108.25, -296, 0.37);
+  const westRecess = volumeBuilder(surface, -96.4, -313, 0.28);
+  const westWing = volumeBuilder(surface, -94.6, -306, 0.30);
+  const detachedFace = volumeBuilder(surface, -82.5, -394.7, 0.18);
+  const eastFace = volumeBuilder(surface, 201.8, -359, -0.40);
+  const add = volumeBuilder(surface);
+  addPlinth(westWing, [-124, -75.2, -296, -343, -1.5, 13.2]);
+  addPlinth(westWing, [-123, -101, -293, -319, -1.6, 9.4]);
+  addPlinth(westFace, [-117, -102.2, -295.2, -328, 8.5, 17.4]);
+  addPlinth(westWing, [-104, -77.4, -301, -342, 6.2, 16.7]);
+  addShaft(westFace, {
+    volume: [-112.9, -103.6, -296, -320, 16.4, 82.1], sill: 20.1, bays: 8, spacing: 2.43, setBack: 1.0,
+    pierStops: [2, 5, 7],
+  });
+  addShaft(westRecess, {
+    volume: [-101, -91.8, -313, -333, 12.9, 72.3], sill: 18.1, bays: 7, spacing: 2.72, setBack: 0.93,
+    pierStops: [2, 5],
+  });
+  addShaft(westWing, {
+    volume: [-113.2, -99.8, -305.6, -338, 13.1, 47.8], sill: 18.7, bays: 8, spacing: 2.48, setBack: 1.19,
+    pierStops: [2, 4, 7],
+  });
+  addShaft(westWing, {
+    volume: [-100.5, -85.45, -309, -341.6, 12.1, 49.4], sill: 18.9, bays: 10, spacing: 2.54, setBack: 1.14,
+    pierStops: [2, 5, 8],
+  });
+  addShaft(westWing, {
+    volume: [-85.8, -77.9, -303.4, -329, 14.7, 51.1], sill: 17.1, bays: 5, spacing: 2.62, setBack: 1.16,
+    pierStops: [1, 3],
+  });
+  addRange(surface, { x: -105, front: -367.8, width: 37, depth: 28, sill: 10.8, top: 17.5,
+    divisions: 5, yaw: 0.12, color: paleStone });
+  addRange(surface, { x: -101, front: -382.4, width: 31, depth: 26, sill: 16.2, top: 23.7,
+    divisions: 5, yaw: 0.15, color: paleStone });
+  addPlinth(add, [-113, -95.8, -358, -378.3, -1.2, 11.1], paleStone);
+
+  addPlinth(detachedFace, [-94, -72.9, -392.1, -422, -1.3, 13.9]);
+  addShaft(detachedFace, {
+    volume: [-89.9, -75.2, -394.7, -416.3, 12.2, 59.8], sill: 16.1, bays: 8, spacing: 2.5, setBack: 1.2,
+    pierStops: [1, 4, 6],
+  });
+  detachedFace([-87.8, -76.2, -396.1, -414.2, 60.22, 61.55], stone);
+  detachedFace([-75.7, -73.0, -398.7, -412.2, 12.8, 53.6], darkStone);
+  addRange(surface, { x: -66.5, front: -408.4, width: 14.2, depth: 28, sill: 13.1, top: 24,
+    divisions: 3, yaw: 0.19 });
+
+  rearRanges.forEach(range => addRange(surface, range));
+  addPaleEave(surface);
+  addRange(surface, { x: -23.6, front: -387.1, width: 16, depth: 25, sill: 10.3, top: 16.1,
+    divisions: 3, openings: 2, yaw: -0.18 });
+
+  addPlinth(eastFace, [187.6, 218.8, -363.1, -391, -1.2, 14.2]);
+  addPlinth(eastFace, [190.7, 213.9, -360.5, -390, 10.7, 18.9]);
+  addShaft(eastFace, {
+    volume: [193, 210.6, -359, -388, 17.3, 44.4], sill: 21.4, bays: 12, spacing: 2.27, setBack: 1.14,
+    pierStops: [1, 4, 7, 10],
+  });
+  for (const x of [193.45, 197.55, 202.1, 209.85]) {
+    eastFace([x, x + 0.45, -359.39, -365.6, 44.82, 45.85], upright);
+  }
+  eastFace([193.65, 209.9, -365.5, -387.4, 44.82, 45.85], darkStone);
+  eastFace([191.95, 211.5, -357.68, -388.9, 45.85, 46.31], roof);
+  addRange(surface, { x: 184.8, front: -366.2, width: 11.3, depth: 23, sill: 11.6, top: 23.6,
+    divisions: 3, openings: 1, yaw: -0.19, color: paleStone });
+  const eastRetaining = volumeBuilder(surface, 222, -379.6, -0.18);
+  addPlinth(eastRetaining, [207.3, 241.5, -372.4, -419.2, -1.4, 12.1]);
+  addPlinth(eastRetaining, [216.6, 252.7, -377.7, -429.4, 8.9, 16.0]);
+  add([227, 251, -382.6, -398, 14.91, 17.3], darkStone);
+  addRange(surface, { x: 224.5, front: -375.4, width: 39, depth: 32, sill: 17.1, top: 28.1,
+    divisions: 6, raisedWing: 2.7, yaw: -0.18 });
+  addRange(surface, { x: 255, front: -390, width: 45, depth: 29, sill: 20.9, top: 31,
+    divisions: 7, yaw: -0.12 });
 }

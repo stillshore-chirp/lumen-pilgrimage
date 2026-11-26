@@ -134,7 +134,7 @@ const shoreMistFragmentShader = /* glsl */`
     float side = 1.0 - smoothstep(0.39, 1.0, abs(vUv.x * 2.0 - 1.0));
     float ground = smoothstep(0.03, 0.20, vUv.y);
     float ceiling = 1.0 - smoothstep(0.21, 0.92, vUv.y + 0.20 * (folds - 0.5));
-    float alpha = side * ground * ceiling * (0.57 + 0.43 * folds) * mix(0.65, 0.34, uCoastNight);
+    float alpha = side * ground * ceiling * (0.57 + 0.43 * folds) * mix(0.20, 0.19, uCoastNight);
     if (alpha <= 0.004) discard;
 
     vec3 sky = lakeSkyRadiance(normalize(vWorldPosition - cameraPosition));

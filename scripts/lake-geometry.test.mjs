@@ -13,12 +13,14 @@ const hooks = registerHooks({
 });
 const [
   { buildLakeStoneRing }, { LAKE_TERRAIN, LAKE_WATER_Y }, { addLakeBank }, { PlantSurface }, { addLakeFarArchitecture },
+  { buildFarShoreSurface },
 ] = await Promise.all([
   import('../src/coast/world/lake/lakeBasinStone.ts'),
   import('../src/coast/world/lake/lakeLayout.ts'),
   import('../src/coast/world/lake/lakeBasin.ts'),
   import('../src/coast/world/coastTreeMeshes.ts'),
   import('../src/coast/world/lake/lakeFarArchitecture.ts'),
+  import('../src/coast/world/lake/lakeFarShore.ts'),
 ]);
 hooks.deregister();
 
@@ -93,14 +95,46 @@ test('the far shore has recessed grid bays and free roof overhangs', () => {
     return ray.intersectObject(mesh, false)[0]?.point.z;
   };
   try {
-    const pier = frontAt(-109.38, 73.7, -275);
-    const bay = frontAt(-108.92, 73.7, -275);
-    assert.ok(pier - bay > 0.4, 'the western grid stands forward of the recessed bays');
+    const pier = frontAt(-110.4, 73.7, -275);
+    const bay = frontAt(-110.18, 73.7, -275);
+    assert.ok(pier - bay > 0.8, 'the western grid stands forward of the recessed bays');
     const eave = frontAt(-51.5, 25.3, -355);
     const wall = frontAt(-51.5, 20, -355);
-    assert.ok(eave - wall > 2, 'the pale roof projects over its lower wall');
+    assert.ok(eave - wall > 4, 'the pale roof projects over its lower wall');
+    const arcadePier = frontAt(42.1, 18.4, -370);
+    const arcadeBack = frontAt(39, 18.4, -370);
+    assert.ok(arcadePier - arcadeBack > 1.8, 'the lower range has standing piers in front of a deeper gallery');
   } finally {
     mesh.geometry.dispose();
+    material.dispose();
+  }
+});
+
+test('the far gravel connects submerged slope to the base of the pale pavilion and the east wing', () => {
+  const material = new MeshStandardMaterial();
+  const ground = new Mesh(buildFarShoreSurface().geometry(), material);
+  const architecture = new PlantSurface();
+  addLakeFarArchitecture(architecture);
+  const buildings = new Mesh(architecture.geometry(), material);
+  const down = new Raycaster(undefined, new Vector3(0, -1, 0));
+  const inland = new Raycaster(undefined, new Vector3(0, 0, -1));
+  const heightAt = (x, z) => {
+    down.ray.origin.set(x, 75, z);
+    return down.intersectObject(ground, false)[0]?.point.y;
+  };
+  try {
+    for (const [name, x] of [['pale pavilion', -44], ['east retaining wall', 198]]) {
+      assert.ok(heightAt(x, -344) < LAKE_WATER_Y, `${name}: gravel extends below the waterline`);
+      inland.ray.origin.set(x, LAKE_WATER_Y + 1, -345);
+      const [footing] = inland.intersectObject(buildings, false);
+      assert.ok(footing, `${name}: an opaque foundation reaches the base of the slope`);
+      const baseHeight = heightAt(x, footing.point.z + 0.25);
+      assert.ok(baseHeight > footing.point.y + 1, `${name}: the foundation intersects rising gravel`);
+      assert.ok(heightAt(x, footing.point.z - 12) > baseHeight, `${name}: gravel continues to rise inland`);
+    }
+  } finally {
+    ground.geometry.dispose();
+    buildings.geometry.dispose();
     material.dispose();
   }
 });
