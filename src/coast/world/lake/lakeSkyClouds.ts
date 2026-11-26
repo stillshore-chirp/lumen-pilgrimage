@@ -1,37 +1,37 @@
 import * as THREE from 'three';
-import { bindCoastSky, coastAerialGlsl, coastSkyGlsl, type CoastAtmosphere } from '../coastAtmosphere';
+import { bindCoastSky, coastSkyGlsl, type CoastAtmosphere } from '../coastAtmosphere';
 import { coastNoise } from '../coastNoise';
-import { loadCoastTexture } from '../coastSurface';
+import { lakeSkyRadianceGlsl } from './lakeSkyRadiance';
 
-// Crops of the project's cumulus atlas, normalized from its upper-left corner.
-const atlasTiles = [
-  [0, 0, 0.49, 0.49],
-  [0.50, 0.134, 0.50, 0.305],
-  [0, 0.56, 0.50, 0.38],
-  [0.50, 0.59, 0.50, 0.34],
-] as const;
+// Pixel bounds measured from the upper-left corner of the 1254 px square atlas.
+// Each crop includes the low-opacity fringe around its cloud.
+const atlasTiles = {
+  tower: [9, 88, 620, 683],
+  chain: [627, 164, 1250, 618],
+  bank: [5, 794, 621, 1094],
+  cluster: [633, 738, 1249, 1130],
+} as const;
 
 type CloudBank = {
-  tile: 0 | 1 | 2 | 3;
+  tile: keyof typeof atlasTiles;
   center: readonly [x: number, y: number, z: number];
   size: readonly [width: number, height: number];
   opacity: number;
   wind: number;
-  featherBase?: boolean;
 };
 
-// Each distance is in metres and wind is in m/s. The near banks pass in front
-// of the ring's feet while the farther banks are seen through the opening.
+// Metres and metres per second. Depth testing lets the distant banks show
+// through the ring while the lower, nearer clouds break up its feet.
 const banks: readonly CloudBank[] = [
-  { tile: 1, center: [9, 36, -382], size: [164, 53], opacity: 0.86, wind: 1.75, featherBase: true },
-  { tile: 2, center: [-36, 89, -522], size: [144, 84], opacity: 0.95, wind: 2.25 },
-  { tile: 1, center: [76, 70, -575], size: [150, 61], opacity: 0.86, wind: 2.50 },
-  { tile: 2, center: [-187, 103, -590], size: [191, 87], opacity: 0.92, wind: 2.15 },
-  { tile: 3, center: [-318, 104, -709], size: [232, 92], opacity: 0.82, wind: 2.80 },
-  { tile: 0, center: [346, 164, -900], size: [294, 212], opacity: 0.99, wind: 3.15 },
-  { tile: 2, center: [514, 136, -972], size: [264, 128], opacity: 0.93, wind: 3.45 },
-  { tile: 1, center: [251, 56, -811], size: [309, 91], opacity: 0.88, wind: 2.75 },
-  { tile: 3, center: [611, 96, -1040], size: [316, 67], opacity: 0.79, wind: 3.60 },
+  { tile: 'bank', center: [-125, 44, -344], size: [91, 54], opacity: 0.82, wind: 1.13 },
+  { tile: 'cluster', center: [-67, 27, -382], size: [106, 53], opacity: 0.74, wind: 1.27 },
+  { tile: 'bank', center: [74, 29, -403], size: [144, 44], opacity: 0.95, wind: 1.54 },
+  { tile: 'chain', center: [221, 48, -365], size: [108, 69], opacity: 0.76, wind: 1.38 },
+  { tile: 'chain', center: [-185, 106, -610], size: [210, 119], opacity: 0.94, wind: 2.06 },
+  { tile: 'cluster', center: [-59, 92, -686], size: [174, 111], opacity: 0.98, wind: 2.23 },
+  { tile: 'bank', center: [81, 84, -914], size: [240, 90], opacity: 0.87, wind: 2.52 },
+  { tile: 'tower', center: [264, 148, -800], size: [212, 181], opacity: 0.99, wind: 2.46 },
+  { tile: 'chain', center: [611, 127, -1095], size: [290, 138], opacity: 0.83, wind: 2.94 },
 ];
 
 const cloudVertexShader = /* glsl */`
@@ -48,26 +48,34 @@ const cloudVertexShader = /* glsl */`
 const cumulusFragmentShader = /* glsl */`
   uniform sampler2D uCumulus;
   uniform vec4 uAtlasTile;
-  uniform float uOpacity, uFeatherBase;
+  uniform float uOpacity;
   varying vec2 vUv;
   varying vec3 vWorldPosition;
   ${coastSkyGlsl}
-  ${coastAerialGlsl}
+  ${lakeSkyRadianceGlsl}
 
   void main() {
     vec4 cloud = texture2D(uCumulus, uAtlasTile.xy + vUv * uAtlasTile.zw);
-    float underside = mix(1.0, smoothstep(0.015, 0.55, vUv.y), uFeatherBase);
-    float alpha = smoothstep(0.04, 0.96, cloud.a) * uOpacity * underside;
-    if (alpha <= 0.008) discard;
+    // Keep the asset's semi-transparent wisps and remove only residual atlas fringe.
+    float baseFade = mix(0.63, 1.0, smoothstep(2.0, 31.0, vWorldPosition.y));
+    float alpha = cloud.a * smoothstep(0.020, 0.047, cloud.a) * uOpacity * baseFade;
+    if (alpha <= 0.004) discard;
 
-    vec3 direction = normalize(vWorldPosition - cameraPosition);
-    float moonlight = pow(max(0.0, dot(direction, uCoastSunDirection)), 12.0);
+    vec3 viewRay = vWorldPosition - cameraPosition;
+    float distanceToCloud = length(viewRay);
+    vec3 direction = viewRay / distanceToCloud;
+    vec3 sky = lakeSkyRadiance(direction);
+    float opticalDepth = distanceToCloud * (0.00027 + 0.00028 * exp(-max(0.0, vWorldPosition.y) / 105.0));
+    float aerial = 1.0 - exp(-opticalDepth);
+    vec3 daylight = cloud.rgb * vec3(1.32, 1.34, 1.36);
+    vec3 aerialTint = mix(sky, vec3(0.57, 0.66, 0.75), 0.49);
+    daylight = mix(daylight, aerialTint, aerial);
+
     float luma = dot(cloud.rgb, vec3(0.2126, 0.7152, 0.0722));
-    vec3 daylight = cloud.rgb * vec3(1.15, 1.11, 1.07);
-    vec3 nightLight = uCoastNightHorizon * (0.36 + 0.72 * luma)
-      + vec3(0.0012, 0.0015, 0.0022) + vec3(0.020, 0.026, 0.038) * luma * moonlight;
-    vec3 radiance = coastApplyAerial(mix(daylight, nightLight, uCoastNight), vWorldPosition);
-    gl_FragColor = vec4(radiance, alpha);
+    float moonlight = pow(max(0.0, dot(direction, uCoastSunDirection)), 12.0);
+    vec3 nightLight = sky * (0.40 + 0.51 * luma + 0.20 * aerial)
+      + vec3(0.014, 0.019, 0.029) * luma * moonlight;
+    gl_FragColor = vec4(mix(daylight, nightLight, uCoastNight), alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -78,28 +86,33 @@ const cirrusFragmentShader = /* glsl */`
   varying vec2 vUv;
   varying vec3 vWorldPosition;
   ${coastSkyGlsl}
+  ${lakeSkyRadianceGlsl}
   ${coastNoise}
 
   void main() {
     vec2 boundary = min(vUv, 1.0 - vUv);
-    float edge = smoothstep(0.035, 0.19, min(boundary.x, boundary.y));
-    vec2 drift = vWorldPosition.xz - vec2(6.0, -2.5) * uElapsed;
-    vec2 wind = mat2(0.80, 0.60, -0.60, 0.80) * (drift * 0.010);
-    float bends = coastNoise(wind * 0.54 + 9.0);
-    vec2 filaments = vec2(wind.x * 1.23, (wind.y + bends * 1.20) * 3.45);
-    float fibers = 0.54 * coastNoise(filaments) + 0.30 * coastNoise(filaments * 2.11 + 7.0)
-      + 0.16 * coastNoise(filaments * 5.1 + 3.0);
-    // Local patches interrupt the streaks and leave gaps of clear sky.
-    float coverage = coastNoise(wind * vec2(0.59, 0.71) - 8.0);
-    coverage += 0.22 * coastNoise(wind * 1.47 + 17.0);
-    float density = smoothstep(0.43, 0.80, fibers) * smoothstep(0.42, 0.74, coverage);
-    float alpha = edge * density * mix(0.81, 0.24, uCoastNight);
-    if (alpha <= 0.008) discard;
-
+    float edge = smoothstep(0.02, 0.19, min(boundary.x, boundary.y));
+    vec2 drift = vWorldPosition.xz - vec2(7.0, -3.1) * uElapsed;
+    vec2 wind = mat2(0.91, 0.41, -0.41, 0.91) * drift * 0.010;
+    float bends = coastNoise(wind * 0.60 + 9.0);
+    vec2 filaments = vec2(wind.x * 1.38, (wind.y + bends * 1.21) * 4.59);
+    float fibers = 0.55 * coastNoise(filaments) + 0.30 * coastNoise(filaments * 2.13 + 7.0)
+      + 0.15 * coastNoise(filaments * 5.23 + 3.0);
+    float coverage = coastNoise(wind * vec2(0.55, 0.69) - 8.0) + 0.20 * coastNoise(wind * 1.51 + 17.0);
+    float brokenPatches = coastNoise(wind * vec2(1.57, 0.93) + vec2(2.0, 13.0));
     vec3 direction = normalize(vWorldPosition - cameraPosition);
-    vec3 sky = coastSkyRadiance(direction);
-    vec3 light = mix(mix(vec3(0.99, 1.05, 1.08), sky, 0.17), sky * 0.60, uCoastNight);
-    gl_FragColor = vec4(light, alpha);
+    float sunward = lakeSunwardSky(direction);
+    float filamentDensity = smoothstep(0.43, 0.80, fibers) * smoothstep(0.37, 0.77, coverage)
+      * smoothstep(0.24, 0.66, brokenPatches);
+    float thinVeil = smoothstep(0.45, 0.78, coverage) * smoothstep(0.33, 0.69, fibers);
+    float forwardLight = smoothstep(0.64, 1.0, sunward) * (1.0 - uCoastNight);
+    float density = filamentDensity + (1.0 - filamentDensity) * thinVeil * forwardLight * 0.48;
+    float alpha = edge * density * mix(0.54 + sunward * 0.29, 0.17, uCoastNight);
+    if (alpha <= 0.004) discard;
+
+    vec3 sky = lakeSkyRadiance(direction);
+    vec3 daylight = mix(vec3(0.79, 0.86, 0.92), vec3(1.20, 1.18, 1.11), sunward);
+    gl_FragColor = vec4(mix(daylight, sky * 0.70, uCoastNight), alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -110,50 +123,51 @@ const shoreMistFragmentShader = /* glsl */`
   varying vec2 vUv;
   varying vec3 vWorldPosition;
   ${coastSkyGlsl}
+  ${lakeSkyRadianceGlsl}
   ${coastNoise}
 
   void main() {
-    float advectedX = vWorldPosition.x - 1.85 * uElapsed;
-    vec2 position = vec2(advectedX * 0.018, vWorldPosition.y * 0.062);
-    float drift = coastNoise(position * vec2(0.56, 0.78) + vec2(3.9, 0.0));
-    float folds = 0.72 * drift + 0.28 * coastNoise(position + vec2(0.0, 5.7));
+    float advectedX = vWorldPosition.x - 1.28 * uElapsed;
+    vec2 position = vec2(advectedX * 0.012, vWorldPosition.y * 0.051);
+    float drift = coastNoise(position * vec2(0.60, 0.70) + 3.9);
+    float folds = 0.79 * drift + 0.21 * coastNoise(position + vec2(0.0, 5.7));
     float side = 1.0 - smoothstep(0.39, 1.0, abs(vUv.x * 2.0 - 1.0));
-    float ground = smoothstep(0.007, 0.27, vUv.y);
-    float ceiling = 1.0 - smoothstep(0.27, 0.83, vUv.y + 0.27 * (folds - 0.5));
-    float alpha = side * ground * ceiling * (0.51 + 0.49 * folds) * mix(0.56, 0.32, uCoastNight);
-    if (alpha <= 0.008) discard;
+    float ground = smoothstep(0.03, 0.20, vUv.y);
+    float ceiling = 1.0 - smoothstep(0.21, 0.92, vUv.y + 0.20 * (folds - 0.5));
+    float alpha = side * ground * ceiling * (0.57 + 0.43 * folds) * mix(0.65, 0.34, uCoastNight);
+    if (alpha <= 0.004) discard;
 
-    vec3 sky = coastSkyRadiance(normalize(vWorldPosition - cameraPosition));
-    vec3 dayMist = mix(vec3(0.72, 0.78, 0.83), sky, 0.31);
-    vec3 nightMist = mix(uCoastNightHorizon, sky, 0.25) * 0.88;
-    gl_FragColor = vec4(mix(dayMist, nightMist, uCoastNight), alpha);
+    vec3 sky = lakeSkyRadiance(normalize(vWorldPosition - cameraPosition));
+    vec3 daylight = mix(vec3(0.55, 0.64, 0.73), sky, 0.35);
+    vec3 nightMist = mix(uCoastNightHorizon, sky, 0.29) * 0.78;
+    gl_FragColor = vec4(mix(daylight, nightMist, uCoastNight), alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `;
 
 export function buildLakeSkyClouds(sky: THREE.Group, atmosphere: CoastAtmosphere) {
-  const cloudMap = loadCoastTexture('cumulus.webp');
+  const cloudMap = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}lake-materials/lake-cumulus-atlas.webp`);
+  cloudMap.colorSpace = THREE.SRGBColorSpace;
   const bankGeometry = new THREE.PlaneGeometry();
+  // These single-sheet layers also render from below in the planar lake reflection.
+  const layer = { side: THREE.DoubleSide, transparent: true, depthWrite: false } as const;
+  const atlasSize = 1254;
   const cumulus = banks.map(bank => {
-    const [left, top, width, height] = atlasTiles[bank.tile];
+    const [left, top, right, bottom] = atlasTiles[bank.tile];
     const opacity = { value: bank.opacity };
     const material = new THREE.ShaderMaterial({
-      side: THREE.DoubleSide,
-      transparent: true,
-      depthWrite: false,
+      ...layer,
       uniforms: {
         uCumulus: { value: cloudMap },
-        uAtlasTile: { value: new THREE.Vector4(left, 1 - top - height, width, height) },
+        uAtlasTile: { value: new THREE.Vector4(left / atlasSize, 1 - bottom / atlasSize,
+          (right - left) / atlasSize, (bottom - top) / atlasSize) },
         uOpacity: opacity,
-        uFeatherBase: { value: Number(bank.featherBase ?? false) },
       },
       vertexShader: cloudVertexShader,
       fragmentShader: cumulusFragmentShader,
     });
     bindCoastSky(material.uniforms, atmosphere);
-    material.uniforms.uCoastAerialDistanceScale = atmosphere.aerialDistanceScale;
-    material.uniforms.uCoastSubmersion = atmosphere.submersion;
     const mesh = new THREE.Mesh(bankGeometry, material);
     mesh.name = 'Lake cumulus';
     mesh.position.set(...bank.center);
@@ -164,26 +178,21 @@ export function buildLakeSkyClouds(sky: THREE.Group, atmosphere: CoastAtmosphere
 
   const elapsedTime = { value: 0 };
   const mistMaterial = new THREE.ShaderMaterial({
-    side: THREE.DoubleSide,
-    transparent: true,
-    depthWrite: false,
+    ...layer,
     uniforms: { uElapsed: elapsedTime },
     vertexShader: cloudVertexShader,
     fragmentShader: shoreMistFragmentShader,
   });
   bindCoastSky(mistMaterial.uniforms, atmosphere);
-  // Placed on the lake side of the settlement to keep the veil in front of its walls.
   const mist = new THREE.Mesh(bankGeometry, mistMaterial);
   mist.name = 'Lake shore mist';
-  mist.position.set(-34, 37, -369);
-  mist.scale.set(530, 104, 1);
+  mist.position.set(0, 26, -352);
+  mist.scale.set(556, 78, 1);
   sky.add(mist);
 
-  const cirrusGeometry = new THREE.PlaneGeometry(2380, 1790);
+  const cirrusGeometry = new THREE.PlaneGeometry(2330, 1650);
   const cirrusMaterial = new THREE.ShaderMaterial({
-    side: THREE.DoubleSide,
-    transparent: true,
-    depthWrite: false,
+    ...layer,
     uniforms: { uElapsed: elapsedTime },
     vertexShader: cloudVertexShader,
     fragmentShader: cirrusFragmentShader,
@@ -192,8 +201,7 @@ export function buildLakeSkyClouds(sky: THREE.Group, atmosphere: CoastAtmosphere
   const cirrus = new THREE.Mesh(cirrusGeometry, cirrusMaterial);
   cirrus.name = 'Lake cirrus';
   cirrus.rotation.x = Math.PI / 2;
-  cirrus.position.set(18, 355, -1040);
-  // The horizontal high layer spans both nearer and farther cumulus distances.
+  cirrus.position.set(14, 356, -1000);
   cirrus.renderOrder = -1;
   sky.add(cirrus);
 
@@ -203,7 +211,7 @@ export function buildLakeSkyClouds(sky: THREE.Group, atmosphere: CoastAtmosphere
       const [startX, y, z] = bank.center;
       const halfSpan = Math.abs(z) * 1.55;
       mesh.position.x = THREE.MathUtils.euclideanModulo(startX + elapsed * bank.wind + halfSpan, 2 * halfSpan) - halfSpan;
-      // Fade off the ends of each bank's path before it re-enters the valley.
+      // The cloud fades beyond the main valley before returning upwind.
       opacity.value = bank.opacity * (1 - THREE.MathUtils.smoothstep(Math.abs(mesh.position.x) / halfSpan, 0.80, 1));
       mesh.lookAt(0, y, 7);
     }

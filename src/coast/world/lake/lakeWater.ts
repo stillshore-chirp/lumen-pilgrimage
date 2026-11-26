@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import type { CoastQuality } from '../../CoastWorld';
 import { bindCoastSky, type CoastAtmosphere } from '../coastAtmosphere';
-import { LAKE_HALL, LAKE_WATER_Y } from './lakeLayout';
+import { LAKE_HALL, LAKE_TERRAIN, LAKE_WATER_Y } from './lakeLayout';
 import { lakeBedShader, lakeWaterShader } from './lakeWaterShaders';
 
-const LAKE_BACK_Z = -380;
+const LAKE_BACK_Z = LAKE_TERRAIN.shoreZ - 40;
+const LAKE_NEAR_Z = 220;
+const LAKE_HALF_WIDTH = 680;
 const SHALLOW_DEPTH = 0.84;
 const DEEP_DEPTH = 12;
 const SHALLOWS_END_Z = -32;
@@ -19,10 +21,9 @@ function createLakeGeometry(rows: readonly number[], depthAt: (z: number) => num
   const vertices: number[] = [];
   const indices: number[] = [];
   for (const [row, z] of rows.entries()) {
-    const halfWidth = 32 + 0.96 * (LAKE_HALL.frontZ - z);
     const depth = depthAt(z);
     // Reflector takes its plane normal from local +Z. Rotation maps it to world +Y.
-    vertices.push(-halfWidth, -z, -depth, halfWidth, -z, -depth);
+    vertices.push(-LAKE_HALF_WIDTH, -z, -depth, LAKE_HALF_WIDTH, -z, -depth);
     if (row > 0) {
       const i = row * 2;
       indices.push(i - 2, i - 1, i, i, i - 1, i + 1);
@@ -40,7 +41,8 @@ function lakeDepthAt(z: number): number {
 }
 
 export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>, atmosphere: CoastAtmosphere) {
-  const surfaceGeometry = createLakeGeometry([LAKE_HALL.frontZ, LAKE_BACK_Z], () => 0);
+  // Extend underneath the hall and both banks so oblique views have no exposed lake edge.
+  const surfaceGeometry = createLakeGeometry([LAKE_NEAR_Z, LAKE_BACK_Z], () => 0);
   const initialSize = REFLECTION_SIZES.light;
   const surface = new Reflector(surfaceGeometry, {
     shader: lakeWaterShader,
@@ -60,14 +62,13 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
   material.transparent = true;
   material.depthWrite = false;
   material.forceSinglePass = true;
-  material.fog = true;
   material.uniforms.uTime = time;
   material.uniforms.uDepthProfile.value.set(-SHALLOWS_END_Z, -DEEP_WATER_Z, SHALLOW_DEPTH, DEEP_DEPTH);
   bindCoastSky(material.uniforms, atmosphere);
   scene.add(surface);
 
   const bedGeometry = createLakeGeometry([
-    LAKE_HALL.frontZ, SHALLOWS_END_Z, -42, -54, -68, -82, DEEP_WATER_Z, LAKE_BACK_Z,
+    LAKE_NEAR_Z, SHALLOWS_END_Z, -42, -54, -68, -82, DEEP_WATER_Z, LAKE_BACK_Z,
   ], lakeDepthAt);
   const bed = new THREE.Mesh(bedGeometry, new THREE.ShaderMaterial({
     ...lakeBedShader,
@@ -92,9 +93,15 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
   target.texture.generateMipmaps = true;
   target.texture.minFilter = THREE.LinearMipmapLinearFilter;
   const surfaceBounds = new THREE.Box3().setFromObject(surface);
+  const windowBounds = new THREE.Box3(
+    new THREE.Vector3(-LAKE_HALL.halfWidth, LAKE_WATER_Y, LAKE_HALL.frontZ - 0.1),
+    new THREE.Vector3(LAKE_HALL.halfWidth, LAKE_HALL.ceilingY, LAKE_HALL.frontZ + 0.1),
+  );
   const viewProjection = new THREE.Matrix4();
   const frustum = new THREE.Frustum();
   const eye = new THREE.Vector3();
+  const capturedEye = new THREE.Vector3();
+  const capturedProjection = new THREE.Matrix4();
   const viewport = new THREE.Vector4();
   const scissor = new THREE.Vector4();
   const hidden: THREE.Object3D[] = [];
@@ -112,7 +119,9 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
     camera.updateMatrixWorld();
     eye.setFromMatrixPosition(camera.matrixWorld);
     viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    if (eye.y <= LAKE_WATER_Y + 0.04 || !frustum.setFromProjectionMatrix(viewProjection).intersectsBox(surfaceBounds)) {
+    frustum.setFromProjectionMatrix(viewProjection);
+    if (eye.y <= LAKE_WATER_Y + 0.04 || !frustum.intersectsBox(surfaceBounds)
+      || (eye.z > LAKE_HALL.frontZ && !frustum.intersectsBox(windowBounds))) {
       material.uniforms.uLiveReflection.value = 0;
       lastCapture = -Infinity;
       return;
@@ -121,7 +130,9 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
     const night = atmosphere.night.value;
     const interval = REFLECTION_SIZES[quality].interval;
     const seconds = time.value;
-    if (night === capturedNight && seconds >= lastCapture && seconds - lastCapture < interval) return;
+    // A lens shift, field-of-view change or resize changes both the mirror and its lookup.
+    if (night === capturedNight && seconds >= lastCapture && seconds - lastCapture < interval
+      && capturedProjection.equals(camera.projectionMatrix) && capturedEye.distanceToSquared(eye) < 4) return;
 
     if (target.texture.type === THREE.HalfFloatType && !renderer.extensions.has('EXT_color_buffer_float')) {
       target.texture.type = THREE.UnsignedByteType;
@@ -132,6 +143,7 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
     const cubeFace = renderer.getActiveCubeFace();
     const mipLevel = renderer.getActiveMipmapLevel();
     const xrEnabled = renderer.xr.enabled;
+    const shadowEnabled = renderer.shadowMap.enabled;
     const shadowAutoUpdate = renderer.shadowMap.autoUpdate;
     const shadowNeedsUpdate = renderer.shadowMap.needsUpdate;
     const scissorTest = renderer.getScissorTest();
@@ -148,6 +160,9 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
     }
     material.uniforms.uLiveReflection.value = 0;
     try {
+      // No interior shadows are needed in the basin capture. The first frame can
+      // run before the main renderer has allocated its depth-compare shadow map.
+      renderer.shadowMap.enabled = false;
       renderer.shadowMap.needsUpdate = false;
       capture(renderer, scene, camera);
     } finally {
@@ -155,6 +170,7 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
       hidden.length = 0;
       surface.visible = true;
       renderer.xr.enabled = xrEnabled;
+      renderer.shadowMap.enabled = shadowEnabled;
       renderer.shadowMap.autoUpdate = shadowAutoUpdate;
       renderer.shadowMap.needsUpdate = shadowNeedsUpdate;
       renderer.setRenderTarget(previousTarget, cubeFace, mipLevel);
@@ -166,6 +182,8 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
     material.uniforms.uLiveReflection.value = 1;
     lastCapture = seconds;
     capturedNight = night;
+    capturedEye.copy(eye);
+    capturedProjection.copy(camera.projectionMatrix);
   }
 
   return {
