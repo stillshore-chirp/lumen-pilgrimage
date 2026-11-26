@@ -1,6 +1,6 @@
 # 商業アトリウム 1階テナント内装詳細設計
 
-**設計日 2026-11-26　改訂 03　Lumen Pilgrimage 仮想ワールド**
+**設計日 2026-11-26　改訂 04　Lumen Pilgrimage 仮想ワールド**
 
 [寸法図 PDF](tenant-interior-drawings.pdf) · [座標、建具、什器の設計元](tenant-interiors.json) · [現行のワールド実装仕様](../worlds.md#商業アトリウム)
 
