@@ -28,6 +28,8 @@ type Swimmer = {
   boutLength: number;
   coastLength: number;
   thrust: number;
+  passSide: -1 | 1;
+  passTimer: number;
 };
 
 const { clamp, damp, lerp, smoothstep, euclideanModulo } = MathUtils;
@@ -62,7 +64,7 @@ function createSwimmer(centerX: number, start: FishStart, slot: number, seed: nu
     current, previous: { ...current }, random, beatRate: start.beatRate, pace: .86 + random() * .28,
     affinity: .6 + random() * .7, yawGoal: current.yaw, heightGoal: current.y,
     verticalSpeed: 0, boutAge: .48 + random() * .36, boutLength: .43,
-    coastLength: .55 + random() * .77, thrust: 0,
+    coastLength: .55 + random() * .77, thrust: 0, passSide: 1, passTimer: 0,
   };
 }
 
@@ -90,6 +92,7 @@ function stepSwimmer(fish: Swimmer, neighbors: readonly Swimmer[], centerX: numb
   let socialTurn = 0;
   let evasiveTurn = 0;
   let braking = 0;
+  fish.passTimer = Math.max(0, fish.passTimer - step);
   let separationX = 0;
   let separationZ = 0;
   for (const neighbor of neighbors) {
@@ -116,14 +119,20 @@ function stepSwimmer(fish: Swimmer, neighbors: readonly Swimmer[], centerX: numb
     const urgency = (1 - smoothstep(Math.hypot(meetX, meetZ), .89, 1.57))
       * (1 - smoothstep(distance, 1.55, 2.6));
     const meetingSide = forwardZ * meetX - forwardX * meetZ;
-    // Give oncoming fish the same right-hand bias when there is no clear side to pass.
-    const turnAway = 1 - 2 * smoothstep(meetingSide, .05, .29);
+    // Keep the first passing side during a turn so two approaching fish do not keep changing sides.
+    if (fish.passTimer === 0 && urgency > .58 && ahead > .5) {
+      fish.passSide = meetingSide < .18 ? 1 : -1;
+      fish.passTimer = .94;
+    }
+    const turnAway = fish.passTimer > 0 ? fish.passSide : 1 - 2 * smoothstep(meetingSide, .05, .29);
     evasiveTurn += turnAway * urgency * (1.95 * smoothstep(ahead, -.62, .05) + .18);
     braking = Math.max(braking, urgency * smoothstep(ahead, -.1, .29));
     // A brief lateral slip keeps body clearance if steering alone was too late.
-    const slip = .52 * (1 - smoothstep(distance, .80, 1.23)) / distance;
-    separationX -= dx * slip;
-    separationZ -= dz * slip;
+    const slip = .52 * (1 - smoothstep(distance, .82, 1.36)) / distance;
+    const pass = .21 * urgency * smoothstep(ahead, .20, .63)
+      * (1 - smoothstep(distance, 1.0, 1.42)) * turnAway;
+    separationX += forwardZ * pass - dx * slip;
+    separationZ -= forwardX * pass + dz * slip;
   }
 
   const lookAhead = .95 * before.speed;
@@ -140,9 +149,14 @@ function stepSwimmer(fish: Swimmer, neighbors: readonly Swimmer[], centerX: numb
   const push = stroke * fish.thrust * fish.pace * (1 - .7 * braking);
   const drag = 1.32 * (before.speed - cruiseSpeed) + 3.2 * braking * (before.speed - .13);
   pose.speed = clamp(before.speed + (push - drag) * step, .13, .91);
-  pose.x = clamp(before.x + (Math.sin(pose.yaw) * pose.speed + separationX) * step,
+  const nextForwardX = Math.sin(pose.yaw);
+  const nextForwardZ = Math.cos(pose.yaw);
+  // A close neighbor can slow a fish to a crawl, while a lateral slip makes room to pass.
+  const forwardSpeed = Math.max(.037, pose.speed + nextForwardX * separationX + nextForwardZ * separationZ);
+  const lateralSlip = nextForwardZ * separationX - nextForwardX * separationZ;
+  pose.x = clamp(before.x + (nextForwardX * forwardSpeed + nextForwardZ * lateralSlip) * step,
     centerX - patchHalfWidth, centerX + patchHalfWidth);
-  pose.z = clamp(before.z + (Math.cos(pose.yaw) * pose.speed + separationZ) * step,
+  pose.z = clamp(before.z + (nextForwardZ * forwardSpeed - nextForwardX * lateralSlip) * step,
     patchZ - patchHalfLength, patchZ + patchHalfLength);
 
   const verticalGoal = clamp((fish.heightGoal - before.y) * .68, -.095, .095);

@@ -42,7 +42,8 @@ function windowCamera({ x, z, yaw, pitch }) {
 }
 
 test('fish explore the visible shallows for four minutes without repeating the former circuits', t => {
-  const { fish, swim } = shoal(t, 1221);
+  // This seed formerly let an oncoming fish's separation force push the third east fish backward.
+  const { fish, swim } = shoal(t, 978983473);
   const cameras = layout.LAKE_DESTINATIONS.slice(1).map(windowCamera);
   const scene = new Scene();
   const atmosphere = createCoastAtmosphere(COAST_SUN_DIRECTION);
@@ -72,6 +73,9 @@ test('fish explore the visible shallows for four minutes without repeating the f
       const turn = Math.abs(MathUtils.euclideanModulo(mesh.rotation.y - data.yaw + Math.PI, Math.PI * 2) - Math.PI);
       assert.ok(speed < 1.02 && turn * fps < 2.17, `${mesh.name} moved or turned abruptly`);
       if (frame > 2) {
+        const forward = (mesh.position.x - data.last.x) * Math.sin(mesh.rotation.y)
+          + (mesh.position.z - data.last.z) * Math.cos(mesh.rotation.y);
+        assert.ok(forward > 0, `${mesh.name} slid backward while opening a gap`);
         data.speeds.min = Math.min(data.speeds.min, speed);
         data.speeds.max = Math.max(data.speeds.max, speed);
       }
