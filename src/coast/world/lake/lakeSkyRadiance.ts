@@ -1,6 +1,7 @@
 export const lakeSkyRadianceGlsl = /* glsl */`
   float lakeSunwardSky(vec3 direction) {
-    float azimuth = dot(direction.xz, normalize(uCoastSunDirection.xz)) / max(length(direction.xz), 0.0001);
+    vec2 horizontalSun = uCoastSunDirection.xz / max(length(uCoastSunDirection.xz), 0.0001);
+    float azimuth = dot(direction.xz, horizontalSun) / max(length(direction.xz), 0.0001);
     return smoothstep(0.06, 1.0, azimuth);
   }
 

@@ -855,3 +855,111 @@ test('lake ambience reaches the output and follows the simulated XR listener', {
   await page.waitForFunction(() => window.lakeAudioProbe.peak() < 0.00002);
   assert.deepEqual(errors, []);
 });
+
+function observeLakeEnvironment() {
+  const gl = WebGL2RenderingContext.prototype;
+  const find = gl.getUniformLocation;
+  const writeNumber = gl.uniform1f;
+  const writeVector = gl.uniform3f;
+  const draw = gl.drawElements;
+  const drawInstanced = gl.drawElementsInstanced;
+  const moonUniforms = new WeakSet();
+  const directionUniforms = new WeakSet();
+  const lanternPrograms = new WeakSet();
+  const useProgram = gl.useProgram;
+  let program;
+  const probe = { futon: 0, lanterns: 0, count: 0, moon: null, direction: null };
+  window.lakeEnvironment = probe;
+  gl.getUniformLocation = function (program, name) {
+    const location = find.call(this, program, name);
+    if (location && name === 'uCoastMoonVisible') moonUniforms.add(location);
+    if (location && name === 'uCoastSunDirection') directionUniforms.add(location);
+    if (location && name === 'uLanternTime') lanternPrograms.add(program);
+    return location;
+  };
+  gl.useProgram = function (next) {
+    program = next;
+    return useProgram.call(this, next);
+  };
+  gl.uniform1f = function (location, value) {
+    if (moonUniforms.has(location)) probe.moon = value;
+    return writeNumber.call(this, location, value);
+  };
+  gl.uniform3f = function (location, x, y, z) {
+    if (directionUniforms.has(location)) probe.direction = [x, y, z];
+    return writeVector.call(this, location, x, y, z);
+  };
+  gl.drawElements = function (mode, count, ...rest) {
+    if (count === 30000) probe.futon = performance.now();
+    return draw.call(this, mode, count, ...rest);
+  };
+  gl.drawElementsInstanced = function (mode, count, type, offset, instances) {
+    if (program && lanternPrograms.has(program)) {
+      probe.lanterns = performance.now();
+      probe.count = instances;
+    }
+    return drawInstanced.call(this, mode, count, type, offset, instances);
+  };
+}
+
+test('lake environment settings update the scene, persist, and fit a short landscape screen', { timeout }, async t => {
+  const { page, errors } = await newPage(t);
+  await page.addInitScript(observeLakeEnvironment);
+  await goToLake(page);
+  const trigger = action(page, '環境設定');
+  const dialog = page.getByRole('dialog', { name: '湖畔の環境設定' });
+  const futon = dialog.getByRole('button', { name: '布団', exact: true });
+  const lanterns = dialog.getByRole('button', { name: '湖の灯籠', exact: true });
+  const moon = dialog.getByRole('button', { name: '月の表示', exact: true });
+  const azimuth = name => dialog.getByRole('slider', { name: `${name}の方位` });
+  const elevation = name => dialog.getByRole('slider', { name: `${name}の高度` });
+
+  await page.waitForFunction(() => window.lakeEnvironment.direction);
+  const startingDay = await page.evaluate(() => window.lakeEnvironment.direction);
+  await trigger.click();
+  assert.equal(await futon.getAttribute('aria-pressed'), 'false');
+  assert.equal(await lanterns.getAttribute('aria-pressed'), 'false');
+  assert.equal(await moon.getAttribute('aria-pressed'), 'true');
+  await futon.click();
+  await lanterns.click();
+  await page.waitForFunction(() => window.lakeEnvironment.futon > 0 && window.lakeEnvironment.count >= 180);
+  await azimuth('太陽').fill('30');
+  await elevation('太陽').fill('32');
+  await page.waitForFunction(() => Math.abs(window.lakeEnvironment.direction?.[1] - Math.sin(32 * Math.PI / 180)) < 0.002);
+  await moon.click();
+  await azimuth('月').fill('20');
+  await elevation('月').fill('25');
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.activeElement?.textContent === '環境設定');
+  if (screenshots) await capture(page, 'lake-environment-day');
+
+  await action(page, '夜').click();
+  await page.waitForFunction(() => window.lakeEnvironment.moon === 0
+    && Math.abs(window.lakeEnvironment.direction?.[1] - Math.sin(25 * Math.PI / 180)) < 0.002);
+  if (screenshots) await capture(page, 'lake-environment-lantern-night');
+
+  await page.setViewportSize({ width: 667, height: 375 });
+  await goToLake(page, '&time=night');
+  await page.waitForFunction(() => window.lakeEnvironment.futon > 0 && window.lakeEnvironment.lanterns > 0);
+  await trigger.click();
+  assert.equal(await futon.getAttribute('aria-pressed'), 'true');
+  assert.equal(await lanterns.getAttribute('aria-pressed'), 'true');
+  assert.equal(await moon.getAttribute('aria-pressed'), 'false');
+  assert.equal(Number(await azimuth('月').inputValue()), 20);
+  const close = dialog.getByRole('button', { name: '閉じる', exact: true });
+  const box = await close.boundingBox();
+  assert.ok(box && box.y >= 0 && box.y + box.height <= 375 && box.x + box.width <= 667);
+  await dialog.getByRole('button', { name: '太陽と月を既定に戻す' }).click();
+  assert.equal(await moon.getAttribute('aria-pressed'), 'true');
+  assert.equal(await futon.getAttribute('aria-pressed'), 'true');
+  await futon.click();
+  await lanterns.click();
+  await close.click();
+  await page.evaluate(() => { window.lakeEnvironment.futon = window.lakeEnvironment.lanterns = 0; });
+  await action(page, '昼').click();
+  await page.waitForFunction(start => window.lakeEnvironment.direction?.every((value, index) =>
+    Math.abs(value - start[index]) < 0.002), startingDay);
+  assert.equal(await page.evaluate(() => window.lakeEnvironment.futon + window.lakeEnvironment.lanterns), 0);
+  assert.deepEqual(errors, []);
+});

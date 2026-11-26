@@ -146,6 +146,8 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 [広間](../src/coast/world/lake/lakeHall.ts)、[岩盆と石の環](../src/coast/world/lake/lakeBasin.ts)、[空と移流する雲](../src/coast/world/lake/lakeSky.ts)、[水面と水底](../src/coast/world/lake/lakeWater.ts)、[鳥と魚](../src/coast/world/lake/lakeWildlife.ts)を別々に編集できます。水面は通常画面で空と外の地形を縮小鏡映し、ヘッドセットの描画では各視点から方向を求めて反射を近似します。
 
+湖畔専用の設定は `lumen-pilgrimage:lake-settings` に保存します。布団と灯籠は既定で収納し、月は既定で表示します。太陽と月の方位・高度は時間帯ごとに保持し、対応する空、照明と水面反射へ適用します。月を隠すと円盤と反射が消え、夜の基礎照明は継続します。 [設定の実装](../src/coast/world/lake/lakeSettings.ts)
+
 [音響](../src/coast/world/lake/lakeAudio.ts)は水と鳥の距離、固定ガラスの遮蔽と両端の換気ルーバーを参照します。床の位置から畳と板の足音を選びます。形や寸法の根拠と確認条件は [湖畔の広間の設計](lake/lake-hall-design.md) にまとめています。
 
 ## 共通の変更経路

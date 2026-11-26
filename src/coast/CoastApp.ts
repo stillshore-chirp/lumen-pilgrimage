@@ -3,6 +3,7 @@ import {
 } from 'three';
 import { CoastAudio } from './CoastAudio';
 import { CoastXR } from './CoastXR';
+import { createLakeEnvironmentPanel, createLakeEnvironmentXRItems } from './LakeEnvironmentPanel';
 import type { ImmersiveMenuItem } from '../xr/ImmersiveMenu';
 import { renderImmersiveStatus } from '../xr/ImmersiveSession';
 import { CoastControls, type CoastMovement, type CoastNavigation } from './CoastControls';
@@ -21,6 +22,7 @@ import type { CoastTimeOfDay } from './world/coastAtmosphere';
 import { cinemaLightingModes, createCinemaPanel, type CinemaControls } from './world/cinema/CinemaPanel';
 import { createCinemaSeatTransition } from './world/cinema/cinemaSeatTransition';
 import { LAKE_VIEW_FOV, LAKE_VIEW_VERTICAL_OFFSET } from './world/lake/lakeLayout';
+import type { LakeSettings } from './world/lake/lakeSettings';
 import { disposeSceneDrawables } from './disposeSceneDrawables';
 import { bindWorldLightingControl, worldLightingChoices, type WorldLightingControl } from './WorldLightingControl';
 import './coast.css';
@@ -64,6 +66,7 @@ export type ExplorationScene = {
   readonly interaction?: ExplorationInteraction;
   readonly residenceControls?: readonly ResidenceControlSection[];
   readonly cinemaControls?: CinemaControls;
+  readonly lakeSettings?: LakeSettings;
 } & (
   | { readonly id: 'coast'; readonly navigation?: never }
   | { readonly id: Exclude<ExplorationWorldId, 'coast'>; readonly navigation: CoastNavigation }
@@ -116,6 +119,8 @@ export class CoastApp {
   private readonly residencePanel?: ReturnType<typeof createResidenceControlPanel>;
   private readonly cinemaPanel?: ReturnType<typeof createCinemaPanel>;
   private readonly cinemaControls?: CinemaControls;
+  private readonly lakePanel?: ReturnType<typeof createLakeEnvironmentPanel>;
+  private readonly openLakeXRSettings?: () => void;
   private readonly residenceControls: readonly ResidenceControlSection[];
   private loadingTravel = false;
   private hasRetainedCinemaScreening = false;
@@ -331,6 +336,15 @@ export class CoastApp {
       });
       actions.append(this.residencePanel.element);
     }
+    if (loaded.lakeSettings) {
+      this.lakePanel = createLakeEnvironmentPanel(loaded.lakeSettings, () => {
+        this.monitor?.closePanel();
+        this.controls.releaseInput();
+      });
+      this.openLakeXRSettings = createLakeEnvironmentXRItems(loaded.lakeSettings,
+        (name, items) => this.xr.openMenu(name, items), () => this.openXRSettings());
+      actions.append(this.lakePanel.element);
+    }
     this.monitorBinding = this.bindMonitor(actions);
     if (this.interaction) {
       this.interactionButton = document.createElement('button');
@@ -531,6 +545,7 @@ export class CoastApp {
         { label: '設定に戻る', invoke: () => this.openXRSettings() },
       ]),
     });
+    if (this.openLakeXRSettings) items.push({ label: '湖畔の環境設定', invoke: this.openLakeXRSettings });
     items.push({ label: '探索メニューに戻る', invoke: () => this.openXRMenu() });
     this.xr.openMenu('設定', items);
   }
@@ -565,7 +580,8 @@ export class CoastApp {
   }
 
   private sceneDialogOpen(): boolean {
-    return this.travelDialog.open || this.residencePanel?.dialog.open === true || this.cinemaPanel?.dialog.open === true;
+    return this.travelDialog.open || this.residencePanel?.dialog.open === true || this.cinemaPanel?.dialog.open === true
+      || this.lakePanel?.dialog.open === true;
   }
 
   private desktopGrabBlocked(): boolean {
