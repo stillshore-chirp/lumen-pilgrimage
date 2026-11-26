@@ -36,7 +36,7 @@ function createLakeGeometry(rows: readonly number[], depthAt: (z: number) => num
   return geometry;
 }
 
-function lakeDepthAt(z: number): number {
+export function lakeDepthAt(z: number): number {
   return THREE.MathUtils.lerp(SHALLOW_DEPTH, DEEP_DEPTH, THREE.MathUtils.smoothstep(-z, -SHALLOWS_END_Z, -DEEP_WATER_Z));
 }
 
