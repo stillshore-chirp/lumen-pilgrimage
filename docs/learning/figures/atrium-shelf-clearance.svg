@@ -25,7 +25,7 @@
   <rect x="862.8" y="119" width="164.2" height="73" fill="#daceb8" stroke="#846f52" stroke-width="1.5"/>
   <text class="label" x="101" y="162" text-anchor="middle">主通路</text>
   <text class="label" x="502.8" y="162" text-anchor="middle">奥棚B · 奥行き 0.42 m</text>
-  <text class="label" x="945" y="162" text-anchor="middle">奥壁</text>
+  <text class="label" x="945" y="162" text-anchor="middle">仕上げパネル</text>
 
   <path class="guide" d="M150 192V264 M200.4 192V264 M805.2 192V264 M862.8 192V264"/>
   <path class="dim" d="M150 214v12 M200.4 214v12 M150 220h50.4 M805.2 214v12 M862.8 214v12 M805.2 220h57.6"/>
