@@ -1,10 +1,11 @@
-import { Color, MathUtils, Mesh, MeshStandardMaterial, Vector3, type Group } from 'three';
+import { Color, MathUtils, Mesh, Vector3, type Group, type MeshStandardMaterial } from 'three';
 import { coastRandom } from '../../terrain';
 import { PlantSurface } from '../coastTreeMeshes';
 import { addLakeBankPines, type LakePine } from './lakeBasinPines';
 import { addRockMass, buildLakeStoneRing, lakeStoneMaterials, type RockMass } from './lakeBasinStone';
 import { addLakeFarArchitecture } from './lakeFarArchitecture';
-import { LAKE_TERRAIN, LAKE_WATER_Y } from './lakeLayout';
+import { buildFarShoreSurface, farShoreMaterial } from './lakeFarShore';
+import { LAKE_WATER_Y } from './lakeLayout';
 
 type BankSide = -1 | 1;
 type BankPoint = readonly [distance: number, edge: number];
@@ -232,49 +233,6 @@ function addShoreDetails(ledges: Readonly<Record<BankSide, PlantSurface>>): Lake
   return trees;
 }
 
-function buildFarShore(root: Group, material: MeshStandardMaterial): void {
-  const ground = new PlantSurface();
-  const point = new Vector3();
-  const tint = new Color();
-  const dryGravel = new Color(0xffe9c7);
-  const wetGravel = new Color(0xb7a68f);
-  const shadedGravel = new Color(0xa5afb8);
-  const upland = new Color(0x9fa8aa);
-  let previous: number[] | undefined;
-  const distances = [-27, -22, -18, -15, -12, -8, -3, 2, 7, 13, 21, 30, 43, 55, 75, 102, 140, 200, 305];
-  for (const distance of distances) {
-    const row: number[] = [];
-    for (let x = -480; x <= 480; x += 4.8) {
-      const inlet = 4.3 * Math.sin(x * 0.024 + 0.21) + 1.35 * Math.sin(x * 0.067 + 0.5);
-      const bar = distance + 3.1 * Math.sin(x * 0.023 + 0.7) + 1.7 * Math.sin(x * 0.047);
-      const relief = 0.38 + 0.62 * Math.sin(x * 0.013 + 0.71) ** 2;
-      const wave = Math.sin(bar * 0.49 + 0.79 * Math.sin(x * 0.032));
-      // The gravel apron enters the water ahead of the mist plane and rises into low bars.
-      const apron = MathUtils.lerp(-2.1, 2.15, MathUtils.smoothstep(bar, -22, -10));
-      const bars = MathUtils.smoothstep(bar, -7, 12) * (1.45 + 1.25 * relief + 0.49 * wave);
-      const plain = MathUtils.smoothstep(bar, 8, 73) * (2.1 + 4.6 * relief);
-      // The dry gravel rises into a low apron under the central eave and a broader slope in the east.
-      const slope = MathUtils.smoothstep(bar, -7, 25) * (7.6 + 4.9 * MathUtils.smoothstep(x, 95, 240));
-      const fromEave = (x + 44) / 28;
-      const apronRelief = 11.4 * Math.exp(-fromEave * fromEave)
-        * MathUtils.smoothstep(bar, -5, 7) * (1 - MathUtils.smoothstep(bar, 22, 63));
-      const y = LAKE_WATER_Y + apron + bars + plain + slope + apronRelief;
-      const dry = MathUtils.smoothstep(y, LAKE_WATER_Y, LAKE_WATER_Y + 0.48);
-      const lee = MathUtils.smoothstep(bar, -4, 6) * MathUtils.smoothstep(wave, 0.05, 0.97);
-      const exposedApron = dry * (1.0 - MathUtils.smoothstep(bar, -6, 10));
-      const sunlitApron = dry * MathUtils.smoothstep(bar, -13, -1)
-        * (1 - MathUtils.smoothstep(bar, 22, 43)) * (1 - 0.75 * lee);
-      tint.copy(wetGravel).lerp(dryGravel, dry).lerp(shadedGravel, lee * 0.43)
-        .lerp(upland, MathUtils.smoothstep(bar, 6, 89) * (0.68 + 0.30 * relief)).lerp(dryGravel, sunlitApron * 0.54);
-      row.push(ground.point(point.set(x, y, LAKE_TERRAIN.shoreZ - distance + inlet), tint,
-        0.95 + 0.27 * exposedApron + 0.57 * sunlitApron - 0.09 * lee));
-    }
-    if (previous) stitchRows(ground, previous, row, true);
-    previous = row;
-  }
-  addMesh(root, ground, material, 'Pale alluvial terraces on the far shore');
-}
-
 function addMesh(root: Group, surface: PlantSurface, material: MeshStandardMaterial, name: string): void {
   const mesh = new Mesh(surface.geometry(), material);
   mesh.name = name;
@@ -301,13 +259,9 @@ export async function buildLakeBasin(root: Group): Promise<void> {
     addMesh(root, distantPeaks[side], stone.bedrock, `${direction} distant cirque summits`);
   }
   buildLakeStoneRing(root, stone.ring);
-  const far = new MeshStandardMaterial({ vertexColors: true, roughness: 0.89 });
-  const sand = new MeshStandardMaterial({
-    vertexColors: true, roughness: 0.94, emissive: 0x756e60, emissiveIntensity: 0.055,
-  });
-  buildFarShore(root, sand);
+  addMesh(root, buildFarShoreSurface(), farShoreMaterial('gravel'), 'Pale alluvial terraces on the far shore');
   const architecture = new PlantSurface();
   addLakeFarArchitecture(architecture);
-  addMesh(root, architecture, far, 'Far shore walls, roof ledges and terraces');
+  addMesh(root, architecture, farShoreMaterial('masonry'), 'Far shore walls, roof ledges and terraces');
   await addLakeBankPines(root, trees);
 }

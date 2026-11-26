@@ -25,7 +25,7 @@ type CloudBank = {
 // through the ring while the lower, nearer clouds break up its feet.
 const banks: readonly CloudBank[] = [
   { tile: 'bank', center: [-125, 44, -344], size: [91, 54], opacity: 0.82, wind: 1.13 },
-  { tile: 'cluster', center: [-67, 27, -382], size: [106, 53], opacity: 0.74, wind: 1.27 },
+  { tile: 'cluster', center: [-180, 44, -525], size: [114, 62], opacity: 0.62, wind: 1.27 },
   { tile: 'bank', center: [74, 29, -403], size: [144, 44], opacity: 0.95, wind: 1.54 },
   { tile: 'chain', center: [221, 48, -365], size: [108, 69], opacity: 0.76, wind: 1.38 },
   // The distant cloud banks advance together in horizontal view coordinates.
@@ -142,7 +142,7 @@ const shoreMistFragmentShader = /* glsl */`
     float side = 1.0 - smoothstep(0.39, 1.0, abs(vUv.x * 2.0 - 1.0));
     float ground = smoothstep(0.03, 0.20, vUv.y);
     float ceiling = 1.0 - smoothstep(0.21, 0.92, vUv.y + 0.20 * (folds - 0.5));
-    float alpha = side * ground * ceiling * (0.57 + 0.43 * folds) * mix(0.65, 0.34, uCoastNight);
+    float alpha = side * ground * ceiling * (0.57 + 0.43 * folds) * mix(0.20, 0.19, uCoastNight);
     if (alpha <= 0.004) discard;
 
     vec3 sky = lakeSkyRadiance(normalize(vWorldPosition - cameraPosition));
