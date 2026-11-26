@@ -95,6 +95,7 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
     audio: new LakeAudio(),
     world: {
       scene,
+      grabTargets: [andon.grabTarget],
       get artificialLightingMode() { return mode; },
       setArtificialLightingMode(value) {
         mode = value;

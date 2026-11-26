@@ -6,6 +6,8 @@ import { CoastXR } from './CoastXR';
 import type { ImmersiveMenuItem } from '../xr/ImmersiveMenu';
 import { renderImmersiveStatus } from '../xr/ImmersiveSession';
 import { CoastControls, type CoastMovement, type CoastNavigation } from './CoastControls';
+import { DesktopGrab, type DesktopGrabTarget } from './DesktopGrab';
+import { createDesktopGrabOcclusion } from './desktopGrabOcclusion';
 import type { MonitorTheater } from '../monitor/monitorObject';
 import type { MonitorView, MonitorViewBinding } from '../monitor/monitorView';
 import type { CoastBirdCue } from './coastBirdCue';
@@ -36,6 +38,7 @@ const movementLabels: Record<CoastMovement, string> = {
 interface ExplorationWorld extends WorldLightingControl {
   readonly scene: Scene;
   readonly theater?: MonitorTheater;
+  readonly grabTargets?: readonly DesktopGrabTarget[];
   setQuality(quality: CoastQuality): void;
   setTimeOfDay(time: CoastTimeOfDay): void;
   update(elapsed: number, camera: PerspectiveCamera): readonly CoastBirdCue[];
@@ -102,6 +105,8 @@ export class CoastApp {
   private readonly forward = new Vector3();
   private readonly up = new Vector3();
   private readonly controls: CoastControls;
+  private readonly desktopGrab: DesktopGrab;
+  private readonly grabHint: HTMLElement;
   private readonly travel: ReturnType<typeof createCoastTravelPanel>;
   private readonly travelDialog: HTMLDialogElement;
   private readonly resize: ResizeObserver;
@@ -123,6 +128,7 @@ export class CoastApp {
   private disposed = false;
   private travelRequest = 0;
   private restoringHistory = false;
+  private refreshGrabHintAt = 0;
 
   constructor(
     private readonly mount: HTMLElement,
@@ -153,6 +159,7 @@ export class CoastApp {
       : lake ? new PerspectiveCamera(LAKE_VIEW_FOV, 1, 0.10, 2400)
       : new PerspectiveCamera(60, 1, residence || cinema ? 0.08 : 0.12, residence ? 43500 : cinema ? 110 : 2500);
     if (lake) this.camera.setViewOffset(1, 1, 0, LAKE_VIEW_VERTICAL_OFFSET, 1, 1);
+    this.desktopGrab = new DesktopGrab(this.camera, this.world.grabTargets, createDesktopGrabOcclusion(this.world.scene));
     this.time = initialRoute.time;
     const destination = findDestination(this.worldId, initialRoute.placeId);
     this.world.setTimeOfDay(this.time);
@@ -172,6 +179,7 @@ export class CoastApp {
         </div>
         <div class="coast-header-actions"></div>
       </header>
+      <div class="coast-grab-hint" role="status" hidden></div>
       <div class="coast-reticle" aria-hidden="true"></div>
       <div class="coast-dock">
         <section class="coast-panel coast-guide" aria-label="探索操作">
@@ -188,7 +196,8 @@ export class CoastApp {
             <p><kbd>C</kbd> ${cinema || atrium ? '座位／立位' : 'しゃがむ／立つ'}</p>
             <p class="coast-water-guide">泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
             <p><kbd>T</kbd> ファストトラベル</p>
-            ${allowFlight ? '<p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>' : ''}
+            <p><kbd>F</kbd> 照準を合わせて掴む／置く</p>
+            ${allowFlight ? '<p>対象がないとき <kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>' : ''}
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
@@ -239,7 +248,13 @@ export class CoastApp {
     const lock = ui.querySelector<HTMLButtonElement>('.coast-lock')!;
     const flight = ui.querySelector<HTMLButtonElement>('.coast-flight');
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
+    this.grabHint = ui.querySelector<HTMLElement>('.coast-grab-hint')!;
     this.controls = new CoastControls(this.camera, canvas, {
+      onGrabKey: () => {
+        if (this.desktopGrabBlocked()) return true;
+        this.refreshGrabHintAt = 0;
+        return this.desktopGrab.toggle(this.monitor?.grabTarget);
+      },
       diveObstacleHeight: (x, z) => this.world.diveObstacleHeight?.(x, z),
       onMovementChange: movement => {
         mode.textContent = (cinema || atrium) && movement === 'crouch' ? '座位' : movementLabels[movement];
@@ -285,7 +300,8 @@ export class CoastApp {
     const vrButton = vr.querySelector('button')!;
     const vrStatus = vr.querySelector('p')!;
     vrButton.addEventListener('click', () => void this.xr.session.toggle(), { signal: this.events.signal });
-    this.bindXRStatus = () => this.xr.session.observe(status => {
+    this.bindXRStatus = () => this.xr.session.observe((status, session) => {
+      if (session) this.desktopGrab.release();
       const unavailable = status.state === 'unavailable' && window.isSecureContext;
       renderImmersiveStatus(vrButton, vrStatus, status, unavailable ? 'VR非対応' : 'VRを開始', 'VRを終了');
       vrButton.title = unavailable ? status.message : '';
@@ -547,6 +563,25 @@ export class CoastApp {
     return this.travelDialog.open || this.residencePanel?.dialog.open === true || this.cinemaPanel?.dialog.open === true;
   }
 
+  private desktopGrabBlocked(): boolean {
+    return this.renderer.xr.isPresenting || this.sceneDialogOpen() || this.monitor?.blocksSceneInput === true
+      || this.seatTransition?.active === true || this.loadingTravel;
+  }
+
+  private updateGrabHint(now: number): void {
+    if (this.desktopGrabBlocked() || !this.controls.canUseSceneShortcuts) {
+      this.grabHint.hidden = true;
+      this.refreshGrabHintAt = 0;
+      return;
+    }
+    // F checks the current ray immediately. Checking the hint less often avoids per-frame scene raycasts.
+    if (now < this.refreshGrabHintAt) return;
+    this.refreshGrabHintAt = now + 80;
+    const label = this.desktopGrab.label(this.monitor?.grabTarget);
+    this.grabHint.hidden = !label;
+    if (label && label !== this.grabHint.textContent) this.grabHint.textContent = label;
+  }
+
   private goTo(worldId: string, placeId: string): void {
     const decision = decideTravel({
       href: this.currentUrl.href,
@@ -556,6 +591,7 @@ export class CoastApp {
       time: this.time,
     });
     if (decision.kind === 'invalid') return;
+    this.desktopGrab.release();
     if (decision.kind === 'navigate') {
       if (this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection || this.shouldKeepCinemaFiles) {
         void this.changeWorld(decision.url);
@@ -602,6 +638,7 @@ export class CoastApp {
     const description = EXPLORATION_WORLDS.find(({ id }) => id === worldId)!;
     const destination = findDestination(worldId, placeId) ?? description.places[0];
     this.controls.releaseInput();
+    this.desktopGrab.release();
     this.controls.relocate(destination);
     this.monitor?.releaseGrab();
     this.xr.relocate();
@@ -621,6 +658,7 @@ export class CoastApp {
     this.travel.close();
     this.seatTransition?.cancel();
     this.controls.releaseInput();
+    this.desktopGrab.release();
     this.monitor?.closePanel();
     this.showTravelStatus(`${label}を読み込んでいます。`, true);
     let loaded: ExplorationScene | undefined;
@@ -675,6 +713,7 @@ export class CoastApp {
   private applyTimeOfDay(time: CoastTimeOfDay): void {
     this.time = time;
     this.world.setTimeOfDay(time);
+    this.desktopGrab.update();
     this.audio.setTimeOfDay?.(time);
     this.travel.setTimeOfDay(time);
   }
@@ -695,9 +734,10 @@ export class CoastApp {
     toggle.setAttribute('aria-expanded', 'false');
     entry.append(toggle);
     actions.append(entry);
-    const binding = {
+    const binding: MonitorViewBinding = {
       entry, toggle, scene: this.world.scene, camera: this.camera,
       releaseInput: () => this.controls.releaseInput(),
+      releaseDesktopGrab: target => this.desktopGrab.release(target),
     };
     toggle.addEventListener('click', async () => {
       if (this.monitor) {
@@ -811,6 +851,7 @@ export class CoastApp {
       && !this.seatTransition?.active) this.controls.update(dt);
     this.seatTransition?.update(dt);
     const viewer = this.xr.update(frame, dt);
+    if (!immersive) this.desktopGrab.update();
     const allowGrab = this.xr.hasTracking && !this.xr.menuOpen && !this.sceneDialogOpen()
       && !this.loadingTravel && !this.seatTransition?.active;
     if (!allowGrab) this.monitor?.releaseGrab();
@@ -819,6 +860,7 @@ export class CoastApp {
     this.syncLightingControl();
     this.residencePanel?.sync();
     if (this.cinemaPanel?.dialog.open) this.cinemaPanel.sync();
+    this.updateGrabHint(now);
     if (this.interactionButton) {
       const label = immersive ? null : this.interactionLabel();
       this.interactionButton.hidden = !label;
@@ -840,6 +882,7 @@ export class CoastApp {
 
   private readonly onPageHide = (event: PageTransitionEvent): void => {
     ++this.travelRequest;
+    this.desktopGrab.release();
     if (event.persisted) {
       this.showTravelStatus('');
       void this.xr.session.stop();

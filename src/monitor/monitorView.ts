@@ -5,6 +5,7 @@ import { MonitorObject, type MonitorTheater } from './monitorObject';
 import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
 import { MonitorXR } from './monitorXR';
 import type { CoastXR } from '../coast/CoastXR';
+import type { DesktopGrabTarget } from '../coast/DesktopGrab';
 import { renderImmersiveStatus } from '../xr/ImmersiveSession';
 import './monitorView.css';
 
@@ -14,10 +15,20 @@ export interface MonitorViewBinding {
   scene: Scene;
   camera: PerspectiveCamera;
   releaseInput(): void;
+  releaseDesktopGrab?(target: DesktopGrabTarget): void;
 }
 
 export class MonitorView {
   private readonly screen = new MonitorObject();
+  readonly grabTarget: DesktopGrabTarget = {
+    label: '浮遊モニター',
+    object: this.screen.group,
+    // The default placement can be over 7 m away on a narrow portrait display.
+    reach: 7.25,
+    available: () => this.panel.hidden && !this.editing && this.xrSession === null
+      && !this.renderer.xr.isPresenting && this.screen.isFloating && this.screen.isVisible,
+    hitDistance: ray => this.screen.intersect(ray)?.distance,
+  };
   private readonly desktop = new MonitorDesktop(this.screen);
   private readonly audio = new MonitorAudio();
   private readonly xr: MonitorXR;
@@ -210,6 +221,7 @@ export class MonitorView {
 
   resetDisplayInXR(): void {
     if (!this.screen.isFloating) return;
+    this.releaseDesktopGrab();
     this.placed = false;
     this.pendingXRSummon = true;
   }
@@ -249,6 +261,7 @@ export class MonitorView {
   }
 
   rebind(binding: MonitorViewBinding, theater: MonitorTheater | null): void {
+    this.releaseDesktopGrab();
     this.closePanel();
     this.xr.release();
     this.theater?.cinema?.project(null);
@@ -307,6 +320,7 @@ export class MonitorView {
   }
 
   release(): void {
+    this.releaseDesktopGrab();
     this.finishDrag();
     this.receiver.disconnect();
     this.audio.stop();
@@ -329,15 +343,25 @@ export class MonitorView {
   private setOpen(open: boolean): void {
     this.panel.hidden = !open;
     this.binding.toggle.setAttribute('aria-expanded', String(open));
-    if (open) this.binding.releaseInput();
-    else this.setEditing(false);
+    if (open) {
+      this.releaseDesktopGrab();
+      this.binding.releaseInput();
+    } else this.setEditing(false);
+  }
+
+  private releaseDesktopGrab(): void {
+    this.binding.releaseDesktopGrab?.(this.grabTarget);
+  }
+
+  private resetScreen(camera: PerspectiveCamera): void {
+    this.releaseDesktopGrab();
+    this.screen.reset(camera);
+    this.placed = true;
   }
 
   private setScreenVisible(visible: boolean, camera = this.binding.camera): void {
-    if (visible && this.screen.isFloating && !this.placed) {
-      this.screen.reset(camera);
-      this.placed = true;
-    }
+    if (!visible) this.releaseDesktopGrab();
+    if (visible && this.screen.isFloating && !this.placed) this.resetScreen(camera);
     this.screen.setVisible(visible);
     this.visibilityButton.textContent = this.screen.isFloating
       ? (visible ? 'モニターを隠す' : 'モニターを表示')
@@ -350,6 +374,7 @@ export class MonitorView {
   }
 
   private updateDisplayTarget(visible: boolean): void {
+    this.releaseDesktopGrab();
     const target = this.displayTarget.value === 'television' ? this.theater : null;
     this.screen.setTarget(target?.screen ?? null, Boolean(target?.cinema));
     this.setScreenVisible(visible);
@@ -385,6 +410,7 @@ export class MonitorView {
 
   private setXRPresentation(presenting: boolean): void {
     if (presenting) {
+      this.releaseDesktopGrab();
       this.panelOpenOnExit = !this.panel.hidden;
       this.setOpen(false);
       this.pendingXRSummon = this.summonOnEntry && !this.screen.isVisible
@@ -398,6 +424,7 @@ export class MonitorView {
 
   private setEditing(editing: boolean): void {
     if (this.editing === editing) return;
+    if (editing) this.releaseDesktopGrab();
     this.editing = editing;
     this.editButton.setAttribute('aria-pressed', String(editing));
     this.dragControls.hidden = !editing;
@@ -494,7 +521,7 @@ export class MonitorView {
     this.editButton.addEventListener('click', () => this.setEditing(!this.editing), listen);
     this.resetButton.addEventListener('click', () => {
       this.finishDrag();
-      this.screen.reset(this.binding.camera);
+      this.resetScreen(this.binding.camera);
     }, listen);
     const modes = this.dragControls.querySelectorAll<HTMLButtonElement>('[data-monitor-mode]');
     for (const button of modes) {
