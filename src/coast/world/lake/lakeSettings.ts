@@ -62,17 +62,23 @@ export function setLakeLightDirection(target: Vector3, state: LakeSettingsState,
 }
 
 export function createLakeSettings(changed: (next: LakeSettingsState, previous: LakeSettingsState) => void) {
-  let state: LakeSettingsState = { ...defaults };
-  try {
-    state = sanitize(JSON.parse(globalThis.localStorage.getItem(settingsKey) ?? 'null'));
-  } catch {
-    // The scene remains adjustable when storage is unavailable.
+  function readStored(): LakeSettingsState | undefined {
+    try {
+      return sanitize(JSON.parse(globalThis.localStorage.getItem(settingsKey) ?? 'null'));
+    } catch {
+      return undefined;
+    }
+  }
+  let state: LakeSettingsState = readStored() ?? { ...defaults };
+
+  function apply(next: LakeSettingsState): void {
+    const previous = state;
+    state = next;
+    changed(state, previous);
   }
 
   function update(patch: Partial<LakeSettingsState>): void {
-    const previous = state;
-    state = sanitize({ ...state, ...patch });
-    changed(state, previous);
+    apply(sanitize({ ...(readStored() ?? state), ...patch }));
     try {
       globalThis.localStorage.setItem(settingsKey, JSON.stringify(state));
     } catch {
@@ -84,6 +90,10 @@ export function createLakeSettings(changed: (next: LakeSettingsState, previous: 
     get state() { return state; },
     update,
     resetSky() { update(defaultSky); },
+    refresh() {
+      const stored = readStored();
+      if (stored) apply(stored);
+    },
   };
 }
 

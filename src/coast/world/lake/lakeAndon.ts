@@ -5,6 +5,7 @@ import {
   SRGBColorSpace, TextureLoader, TubeGeometry, Vector2, Vector3,
 } from 'three';
 import type { DesktopGrabTarget } from '../../DesktopGrab';
+import { setGrabWorldPosition } from '../../floorGrabPosition';
 import { beginLakeHallAssembly } from './lakeHallGeometry';
 import { LAKE_TABLE } from './lakeLayout';
 import { lakeNavigation } from './lakeNavigation';
@@ -53,9 +54,10 @@ function makePaperMaps() {
   return { map: maps[0], emissiveMap: maps[1] };
 }
 
-export function buildLakeAndon(parent: Group, arrangementBounds: Box3): {
+export function buildLakeAndon(parent: Group, arrangementBounds: Box3, getFutonBounds: () => Box3 | undefined): {
   grabTarget: DesktopGrabTarget;
   setLighting(night: boolean, lampsOn: boolean): void;
+  makeRoomForFuton(): void;
 } {
   const root = new Group();
   root.name = 'Lake andon';
@@ -161,13 +163,14 @@ export function buildLakeAndon(parent: Group, arrangementBounds: Box3): {
   const maxX = lakeNavigation.bounds.maxX - wallInset;
   const minZ = lakeNavigation.bounds.minZ + wallInset;
   const maxZ = lakeNavigation.bounds.maxZ - wallInset;
+  const inHall = (x: number, z: number) => x >= minX && x <= maxX && z >= minZ && z <= maxZ;
   const overlapsTable = (x: number, z: number) => Math.abs(x - LAKE_TABLE.x) < LAKE_TABLE.width / 2 + footRadius
     && Math.abs(z - LAKE_TABLE.z) < LAKE_TABLE.depth / 2 + footRadius;
   const fitsOnTable = (x: number, z: number) => Math.abs(x - LAKE_TABLE.x) <= LAKE_TABLE.width / 2 - footRadius
     && Math.abs(z - LAKE_TABLE.z) <= LAKE_TABLE.depth / 2 - footRadius;
-  const overlapsArrangement = (x: number, z: number) => x + footRadius > arrangementBounds.min.x
-    && x - footRadius < arrangementBounds.max.x && z + footRadius > arrangementBounds.min.z
-    && z - footRadius < arrangementBounds.max.z;
+  const overlapsBounds = (x: number, z: number, other: Box3) => x + footRadius > other.min.x
+    && x - footRadius < other.max.x && z + footRadius > other.min.z && z - footRadius < other.max.z;
+  const worldPosition = new Vector3();
   root.position.set(LAKE_TABLE.x + LAKE_TABLE.width / 2 + .53, 0, LAKE_TABLE.z + .23);
   root.rotation.y = yaw;
   parent.add(root);
@@ -186,19 +189,46 @@ export function buildLakeAndon(parent: Group, arrangementBounds: Box3): {
         return ray.ray.origin.distanceTo(hit.applyMatrix4(root.matrixWorld));
       },
       floorHeight(x, z) {
-        if (x < minX || x > maxX || z < minZ || z > maxZ) return;
-        if (!overlapsTable(x, z)) return lakeNavigation.groundHeight();
-        if (fitsOnTable(x, z) && !overlapsArrangement(x, z)) return LAKE_TABLE.topY;
+        if (!inHall(x, z)) return;
+        if (overlapsTable(x, z)) {
+          if (fitsOnTable(x, z) && !overlapsBounds(x, z, arrangementBounds)) return LAKE_TABLE.topY;
+          return;
+        }
+        const futon = getFutonBounds();
+        if (!futon || !overlapsBounds(x, z, futon)) return lakeNavigation.groundHeight();
       },
       constrainCarry(position) {
         position.x = MathUtils.clamp(position.x, minX, maxX);
         position.z = MathUtils.clamp(position.z, minZ, maxZ);
         const { x, z } = position;
         let bottomY = lakeNavigation.groundHeight();
-        if (overlapsArrangement(x, z)) bottomY = arrangementBounds.max.y + .025;
+        if (overlapsBounds(x, z, arrangementBounds)) bottomY = arrangementBounds.max.y + .025;
         else if (overlapsTable(x, z)) bottomY = LAKE_TABLE.topY + (fitsOnTable(x, z) ? 0 : .025);
+        const futon = getFutonBounds();
+        if (futon && overlapsBounds(x, z, futon)) bottomY = Math.max(bottomY, futon.max.y + .025);
         position.y = Math.max(position.y, bottomY);
       },
+    },
+    makeRoomForFuton() {
+      const futon = getFutonBounds();
+      if (!futon) return;
+      const { x, y, z } = root.getWorldPosition(worldPosition);
+      if (y >= futon.max.y || !overlapsBounds(x, z, futon)) return;
+
+      const clearance = footRadius + .02;
+      const candidates = [
+        [futon.min.x - clearance, z], [futon.max.x + clearance, z],
+        [x, futon.min.z - clearance], [x, futon.max.z + clearance],
+      ];
+      let nearestDistance = Infinity;
+      for (const [nextX, nextZ] of candidates) {
+        if (!inHall(nextX, nextZ) || overlapsTable(nextX, nextZ)) continue;
+        const distance = Math.hypot(nextX - x, nextZ - z);
+        if (distance >= nearestDistance) continue;
+        nearestDistance = distance;
+        worldPosition.set(nextX, lakeNavigation.groundHeight(), nextZ);
+      }
+      if (nearestDistance < Infinity) setGrabWorldPosition(root, worldPosition);
     },
     setLighting(night, lampsOn) {
       const lit = night && lampsOn;

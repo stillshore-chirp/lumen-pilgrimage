@@ -154,6 +154,7 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
   trigger.addEventListener('click', () => {
     if (dialog.open) return;
     onOpen();
+    settings.refresh();
     sync();
     dialog.showModal();
     trigger.setAttribute('aria-expanded', 'true');
@@ -166,7 +167,13 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
     if (event.target === dialog) dialog.close();
   });
 
-  return { element, dialog };
+  return {
+    element, dialog,
+    refresh() {
+      settings.refresh();
+      if (dialog.open) sync();
+    },
+  };
 }
 
 export function createLakeEnvironmentXRItems(settings: LakeSettings,

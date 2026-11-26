@@ -1,5 +1,5 @@
 import {
-  BufferGeometry, CatmullRomCurve3, Color, DataTexture, Float32BufferAttribute, Group, LinearFilter,
+  Box3, BufferGeometry, CatmullRomCurve3, Color, DataTexture, Float32BufferAttribute, Group, LinearFilter,
   LinearMipmapLinearFilter, MathUtils, Mesh, MeshStandardMaterial, RepeatWrapping, RGBAFormat, SRGBColorSpace,
   TubeGeometry, Vector3,
 } from 'three';
@@ -119,7 +119,7 @@ function addBedding(root: Group, weave: DataTexture, layer: FabricLayer): void {
   }
 }
 
-export function buildLakeFuton(parent: Group): { setVisible(value: boolean): void } {
+export function buildLakeFuton(parent: Group): { readonly visibleBounds: Box3 | undefined; setVisible(value: boolean): void } {
   const root = new Group();
   root.name = 'Lake futon';
   root.position.set(-2.70, 0, 1.60);
@@ -155,7 +155,9 @@ export function buildLakeFuton(parent: Group): { setVisible(value: boolean): voi
     tint: v => v < -.84 ? 0xb8ac93 : 0x607d92,
   });
 
+  const bounds = new Box3().setFromObject(root, true);
   return {
+    get visibleBounds() { return root.visible ? bounds : undefined; },
     setVisible(value) { root.visible = value; },
   };
 }
