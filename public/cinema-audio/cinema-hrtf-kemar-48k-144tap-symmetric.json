@@ -1,0 +1,510 @@
+{
+  "schema": "lumen.cinema.hrtf.v1",
+  "generator": {
+    "script": "scripts/prepare-cinema-hrtf.py",
+    "version": "1",
+    "source_rate_hz": 44100,
+    "target_rate_hz": 48000,
+    "target_tap_count": 144,
+    "resampler": "16-sample-radius Hann-windowed sinc, output times n*44100/48000",
+    "clamp_count": 0
+  },
+  "source": {
+    "dataset": "MIT Media Lab KEMAR compact HRTF measurements",
+    "authors": [
+      "Bill Gardner",
+      "Keith Martin"
+    ],
+    "measurement_rate_hz": 44100,
+    "measurement_distance_m": 1.4,
+    "archive_url": "https://sound.media.mit.edu/resources/KEMAR/compact.tar.Z",
+    "page_url": "https://sound.media.mit.edu/resources/KEMAR.html",
+    "readme": {
+      "url": "https://sound.media.mit.edu/resources/KEMAR/README",
+      "sha256": "5224ad7d89784de0bb8a4fee0cdd9b530071180ed3371a0109378e966fa12733"
+    },
+    "documentation": {
+      "url": "https://sound.media.mit.edu/resources/KEMAR/hrtfdoc.txt",
+      "sha256": "d04e290a6203cca961d1d2598d3caf5023a85a11f6d602ef327e7a6e4e8bc9fb"
+    },
+    "archive_sha256": "2548d9e78db5e74c4a39aaee2061c247bafed2f9d0da070d51f7a74a35fe4797",
+    "original_encoding": "signed-int16-big-endian, left/right interleaved, 128 taps per ear",
+    "compact_symmetry": "the compact set derives both ears from the left-ear measurements at mirrored azimuths; median-plane interaural differences are therefore not retained"
+  },
+  "license": {
+    "name": "MIT Media Lab KEMAR data usage terms",
+    "url": "https://sound.media.mit.edu/resources/KEMAR.html",
+    "summary": "Free with no usage restrictions; cite Gardner and Martin when used in research or commercial applications.",
+    "required_attribution": "Bill Gardner and Keith Martin, MIT Media Lab, HRTF Measurements of a KEMAR Dummy-Head Microphone (1994)."
+  },
+  "file": {
+    "path": "cinema-hrtf-kemar-48k-144tap-symmetric.i16le.bin",
+    "sha256": "457134d01c073483d36bc8e5d0dbbfef26a14393ec6260ff5f29b0b677271704",
+    "bytes": 34560,
+    "encoding": "signed-int16-little-endian",
+    "record_layout": "direction-major, tap-major, ear-interleaved",
+    "ear_order": [
+      "left",
+      "right"
+    ],
+    "direction_stride_bytes": 576,
+    "tap_stride_bytes": 4,
+    "ear_offsets_bytes": {
+      "left": 0,
+      "right": 2
+    },
+    "normalization": "none; source int16 full-scale is retained"
+  },
+  "coordinate": {
+    "azimuth_reference": "listener forward",
+    "azimuth_positive": "listener right, increasing clockwise when viewed from above",
+    "elevation_reference": "horizontal plane",
+    "elevation_positive": "up",
+    "source_radius_m": 1.4,
+    "common_delay_and_itd": "the compact source crop is retained; no additional common delay is added or removed, and directional ITD remains",
+    "selected_elevations_deg": [
+      -20,
+      0,
+      20,
+      60,
+      80
+    ],
+    "selected_azimuths_deg": [
+      0,
+      30,
+      60,
+      90,
+      120,
+      150,
+      180,
+      210,
+      240,
+      270,
+      300,
+      330
+    ],
+    "direction_index": "elevation-major, then azimuth ascending; use directions[index]"
+  },
+  "directions": [
+    {
+      "index": 0,
+      "elevation_deg": -20,
+      "azimuth_deg": 0,
+      "source_azimuth_deg": 0,
+      "swap_ears": false
+    },
+    {
+      "index": 1,
+      "elevation_deg": -20,
+      "azimuth_deg": 30,
+      "source_azimuth_deg": 30,
+      "swap_ears": false
+    },
+    {
+      "index": 2,
+      "elevation_deg": -20,
+      "azimuth_deg": 60,
+      "source_azimuth_deg": 60,
+      "swap_ears": false
+    },
+    {
+      "index": 3,
+      "elevation_deg": -20,
+      "azimuth_deg": 90,
+      "source_azimuth_deg": 90,
+      "swap_ears": false
+    },
+    {
+      "index": 4,
+      "elevation_deg": -20,
+      "azimuth_deg": 120,
+      "source_azimuth_deg": 120,
+      "swap_ears": false
+    },
+    {
+      "index": 5,
+      "elevation_deg": -20,
+      "azimuth_deg": 150,
+      "source_azimuth_deg": 150,
+      "swap_ears": false
+    },
+    {
+      "index": 6,
+      "elevation_deg": -20,
+      "azimuth_deg": 180,
+      "source_azimuth_deg": 180,
+      "swap_ears": false
+    },
+    {
+      "index": 7,
+      "elevation_deg": -20,
+      "azimuth_deg": 210,
+      "source_azimuth_deg": 150,
+      "swap_ears": true
+    },
+    {
+      "index": 8,
+      "elevation_deg": -20,
+      "azimuth_deg": 240,
+      "source_azimuth_deg": 120,
+      "swap_ears": true
+    },
+    {
+      "index": 9,
+      "elevation_deg": -20,
+      "azimuth_deg": 270,
+      "source_azimuth_deg": 90,
+      "swap_ears": true
+    },
+    {
+      "index": 10,
+      "elevation_deg": -20,
+      "azimuth_deg": 300,
+      "source_azimuth_deg": 60,
+      "swap_ears": true
+    },
+    {
+      "index": 11,
+      "elevation_deg": -20,
+      "azimuth_deg": 330,
+      "source_azimuth_deg": 30,
+      "swap_ears": true
+    },
+    {
+      "index": 12,
+      "elevation_deg": 0,
+      "azimuth_deg": 0,
+      "source_azimuth_deg": 0,
+      "swap_ears": false
+    },
+    {
+      "index": 13,
+      "elevation_deg": 0,
+      "azimuth_deg": 30,
+      "source_azimuth_deg": 30,
+      "swap_ears": false
+    },
+    {
+      "index": 14,
+      "elevation_deg": 0,
+      "azimuth_deg": 60,
+      "source_azimuth_deg": 60,
+      "swap_ears": false
+    },
+    {
+      "index": 15,
+      "elevation_deg": 0,
+      "azimuth_deg": 90,
+      "source_azimuth_deg": 90,
+      "swap_ears": false
+    },
+    {
+      "index": 16,
+      "elevation_deg": 0,
+      "azimuth_deg": 120,
+      "source_azimuth_deg": 120,
+      "swap_ears": false
+    },
+    {
+      "index": 17,
+      "elevation_deg": 0,
+      "azimuth_deg": 150,
+      "source_azimuth_deg": 150,
+      "swap_ears": false
+    },
+    {
+      "index": 18,
+      "elevation_deg": 0,
+      "azimuth_deg": 180,
+      "source_azimuth_deg": 180,
+      "swap_ears": false
+    },
+    {
+      "index": 19,
+      "elevation_deg": 0,
+      "azimuth_deg": 210,
+      "source_azimuth_deg": 150,
+      "swap_ears": true
+    },
+    {
+      "index": 20,
+      "elevation_deg": 0,
+      "azimuth_deg": 240,
+      "source_azimuth_deg": 120,
+      "swap_ears": true
+    },
+    {
+      "index": 21,
+      "elevation_deg": 0,
+      "azimuth_deg": 270,
+      "source_azimuth_deg": 90,
+      "swap_ears": true
+    },
+    {
+      "index": 22,
+      "elevation_deg": 0,
+      "azimuth_deg": 300,
+      "source_azimuth_deg": 60,
+      "swap_ears": true
+    },
+    {
+      "index": 23,
+      "elevation_deg": 0,
+      "azimuth_deg": 330,
+      "source_azimuth_deg": 30,
+      "swap_ears": true
+    },
+    {
+      "index": 24,
+      "elevation_deg": 20,
+      "azimuth_deg": 0,
+      "source_azimuth_deg": 0,
+      "swap_ears": false
+    },
+    {
+      "index": 25,
+      "elevation_deg": 20,
+      "azimuth_deg": 30,
+      "source_azimuth_deg": 30,
+      "swap_ears": false
+    },
+    {
+      "index": 26,
+      "elevation_deg": 20,
+      "azimuth_deg": 60,
+      "source_azimuth_deg": 60,
+      "swap_ears": false
+    },
+    {
+      "index": 27,
+      "elevation_deg": 20,
+      "azimuth_deg": 90,
+      "source_azimuth_deg": 90,
+      "swap_ears": false
+    },
+    {
+      "index": 28,
+      "elevation_deg": 20,
+      "azimuth_deg": 120,
+      "source_azimuth_deg": 120,
+      "swap_ears": false
+    },
+    {
+      "index": 29,
+      "elevation_deg": 20,
+      "azimuth_deg": 150,
+      "source_azimuth_deg": 150,
+      "swap_ears": false
+    },
+    {
+      "index": 30,
+      "elevation_deg": 20,
+      "azimuth_deg": 180,
+      "source_azimuth_deg": 180,
+      "swap_ears": false
+    },
+    {
+      "index": 31,
+      "elevation_deg": 20,
+      "azimuth_deg": 210,
+      "source_azimuth_deg": 150,
+      "swap_ears": true
+    },
+    {
+      "index": 32,
+      "elevation_deg": 20,
+      "azimuth_deg": 240,
+      "source_azimuth_deg": 120,
+      "swap_ears": true
+    },
+    {
+      "index": 33,
+      "elevation_deg": 20,
+      "azimuth_deg": 270,
+      "source_azimuth_deg": 90,
+      "swap_ears": true
+    },
+    {
+      "index": 34,
+      "elevation_deg": 20,
+      "azimuth_deg": 300,
+      "source_azimuth_deg": 60,
+      "swap_ears": true
+    },
+    {
+      "index": 35,
+      "elevation_deg": 20,
+      "azimuth_deg": 330,
+      "source_azimuth_deg": 30,
+      "swap_ears": true
+    },
+    {
+      "index": 36,
+      "elevation_deg": 60,
+      "azimuth_deg": 0,
+      "source_azimuth_deg": 0,
+      "swap_ears": false
+    },
+    {
+      "index": 37,
+      "elevation_deg": 60,
+      "azimuth_deg": 30,
+      "source_azimuth_deg": 30,
+      "swap_ears": false
+    },
+    {
+      "index": 38,
+      "elevation_deg": 60,
+      "azimuth_deg": 60,
+      "source_azimuth_deg": 60,
+      "swap_ears": false
+    },
+    {
+      "index": 39,
+      "elevation_deg": 60,
+      "azimuth_deg": 90,
+      "source_azimuth_deg": 90,
+      "swap_ears": false
+    },
+    {
+      "index": 40,
+      "elevation_deg": 60,
+      "azimuth_deg": 120,
+      "source_azimuth_deg": 120,
+      "swap_ears": false
+    },
+    {
+      "index": 41,
+      "elevation_deg": 60,
+      "azimuth_deg": 150,
+      "source_azimuth_deg": 150,
+      "swap_ears": false
+    },
+    {
+      "index": 42,
+      "elevation_deg": 60,
+      "azimuth_deg": 180,
+      "source_azimuth_deg": 180,
+      "swap_ears": false
+    },
+    {
+      "index": 43,
+      "elevation_deg": 60,
+      "azimuth_deg": 210,
+      "source_azimuth_deg": 150,
+      "swap_ears": true
+    },
+    {
+      "index": 44,
+      "elevation_deg": 60,
+      "azimuth_deg": 240,
+      "source_azimuth_deg": 120,
+      "swap_ears": true
+    },
+    {
+      "index": 45,
+      "elevation_deg": 60,
+      "azimuth_deg": 270,
+      "source_azimuth_deg": 90,
+      "swap_ears": true
+    },
+    {
+      "index": 46,
+      "elevation_deg": 60,
+      "azimuth_deg": 300,
+      "source_azimuth_deg": 60,
+      "swap_ears": true
+    },
+    {
+      "index": 47,
+      "elevation_deg": 60,
+      "azimuth_deg": 330,
+      "source_azimuth_deg": 30,
+      "swap_ears": true
+    },
+    {
+      "index": 48,
+      "elevation_deg": 80,
+      "azimuth_deg": 0,
+      "source_azimuth_deg": 0,
+      "swap_ears": false
+    },
+    {
+      "index": 49,
+      "elevation_deg": 80,
+      "azimuth_deg": 30,
+      "source_azimuth_deg": 30,
+      "swap_ears": false
+    },
+    {
+      "index": 50,
+      "elevation_deg": 80,
+      "azimuth_deg": 60,
+      "source_azimuth_deg": 60,
+      "swap_ears": false
+    },
+    {
+      "index": 51,
+      "elevation_deg": 80,
+      "azimuth_deg": 90,
+      "source_azimuth_deg": 90,
+      "swap_ears": false
+    },
+    {
+      "index": 52,
+      "elevation_deg": 80,
+      "azimuth_deg": 120,
+      "source_azimuth_deg": 120,
+      "swap_ears": false
+    },
+    {
+      "index": 53,
+      "elevation_deg": 80,
+      "azimuth_deg": 150,
+      "source_azimuth_deg": 150,
+      "swap_ears": false
+    },
+    {
+      "index": 54,
+      "elevation_deg": 80,
+      "azimuth_deg": 180,
+      "source_azimuth_deg": 180,
+      "swap_ears": false
+    },
+    {
+      "index": 55,
+      "elevation_deg": 80,
+      "azimuth_deg": 210,
+      "source_azimuth_deg": 150,
+      "swap_ears": true
+    },
+    {
+      "index": 56,
+      "elevation_deg": 80,
+      "azimuth_deg": 240,
+      "source_azimuth_deg": 120,
+      "swap_ears": true
+    },
+    {
+      "index": 57,
+      "elevation_deg": 80,
+      "azimuth_deg": 270,
+      "source_azimuth_deg": 90,
+      "swap_ears": true
+    },
+    {
+      "index": 58,
+      "elevation_deg": 80,
+      "azimuth_deg": 300,
+      "source_azimuth_deg": 60,
+      "swap_ears": true
+    },
+    {
+      "index": 59,
+      "elevation_deg": 80,
+      "azimuth_deg": 330,
+      "source_azimuth_deg": 30,
+      "swap_ears": true
+    }
+  ]
+}

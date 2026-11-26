@@ -6,9 +6,10 @@ import { createCinemaFloor } from './cinemaFloor';
 import {
   CINEMA_BOUNDS, CINEMA_CEILING_BAFFLES, CINEMA_CEILING_COFFERS, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH,
   CINEMA_EXITS, CINEMA_PROJECTION_Y,
-  CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, CINEMA_SIDE_SURROUNDS, cinemaGroundHeight,
+  CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, cinemaGroundHeight,
 } from './cinemaLayout';
 import { createCinemaSeats } from './cinemaSeats';
+import { CINEMA_RENDER_SPEAKERS } from './cinemaSpeakers';
 
 type CinemaQuality = 'light' | 'high';
 
@@ -211,21 +212,21 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
 function addAuditoriumEquipment(group: Group, finish: CinemaFinishes): void {
   const cabinets: CinemaBox[] = [];
   const grilles: CinemaBox[] = [];
-  for (const sign of [-1, 1]) {
-    for (const { x, y, z } of CINEMA_SIDE_SURROUNDS) {
-      cabinets.push([sign * (x + 0.388), y + 0.015, z, 0.75, 0.92, 0.61]);
-      grilles.push([sign * x, y, z, 0.038, 0.78, 0.51]);
-    }
-    for (let i = 0; i < 8; i += 1) {
-      const z = 8 + i * 6;
-      cabinets.push([sign * 6.655, 20.61, z, 0.61, 0.43, 0.77]);
-      grilles.push([sign * 6.655, 20.381, z, 0.53, 0.034, 0.65]);
-    }
+  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'side')) {
+    const [x, y, z] = speaker.position;
+    const sign = x < 0 ? -1 : 1;
+    cabinets.push([x + sign * 0.388, y + 0.015, z, 0.75, 0.92, 0.61]);
+    grilles.push([x, y, z, 0.038, 0.78, 0.51]);
   }
-  for (let i = 0; i < 12; i += 1) {
-    const x = -17.60 + i * 35.2 / 11;
-    cabinets.push([x, 12.4, 53.33, 0.62, 0.91, 0.63]);
-    grilles.push([x, 12.38, 52.999, 0.52, 0.76, 0.038]);
+  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'top')) {
+    const [x, y, z] = speaker.position;
+    cabinets.push([x, y + 0.229, z, 0.61, 0.43, 0.77]);
+    grilles.push([x, y, z, 0.53, 0.034, 0.65]);
+  }
+  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'rear')) {
+    const [x, y, z] = speaker.position;
+    cabinets.push([x, y + 0.02, z + 0.331, 0.62, 0.91, 0.63]);
+    grilles.push([x, y, z, 0.52, 0.76, 0.038]);
   }
   const surrounds: CinemaBox[] = [];
   const inner: CinemaBox[] = [];

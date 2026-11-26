@@ -69,6 +69,7 @@ export async function loadExplorationScene(worldId: ExplorationWorldId): Promise
   switch (worldId) {
     case 'residence': return (await import('./world/residence/ResidenceWorld')).loadResidenceScene();
     case 'cinema': return (await import('./world/cinema/CinemaWorld')).loadCinemaScene();
+    case 'atrium': return (await import('./world/atrium/AtriumWorld')).loadAtriumScene();
     case 'overlook': return (await import('./world/overlook/OverlookWorld')).loadOverlookScene();
     case 'coast': return { id: 'coast', world: new CoastWorld(), audio: new CoastAudio() };
   }
@@ -109,6 +110,7 @@ export class CoastApp {
   private readonly cinemaControls?: CinemaControls;
   private readonly residenceControls: readonly ResidenceControlSection[];
   private loadingTravel = false;
+  private hasRetainedCinemaScreening = false;
   private showTravelStatusUntil = 0;
   private monitor?: MonitorView;
   private readonly seatTransition?: ReturnType<typeof createCinemaSeatTransition>;
@@ -137,18 +139,21 @@ export class CoastApp {
     const overlook = this.worldId === 'overlook';
     const residence = this.worldId === 'residence';
     const cinema = this.worldId === 'cinema';
+    const atrium = this.worldId === 'atrium';
+    const allowFlight = loaded.navigation?.allowFlight !== false;
     this.world = loaded.world;
     if (cinema) this.seatTransition = createCinemaSeatTransition(this.world.scene);
     this.audio = loaded.audio;
     this.interaction = loaded.interaction;
-    this.camera = overlook ? new PerspectiveCamera(54, 1, 0.20, 43500)
+    this.camera = atrium ? new PerspectiveCamera(42, 1, 0.08, 92)
+      : overlook ? new PerspectiveCamera(54, 1, 0.20, 43500)
       : new PerspectiveCamera(60, 1, residence || cinema ? 0.08 : 0.12, residence ? 43500 : cinema ? 110 : 2500);
     this.time = initialRoute.time;
     const destination = findDestination(this.worldId, initialRoute.placeId);
     this.world.setTimeOfDay(this.time);
     this.audio.setTimeOfDay?.(this.time);
     this.world.setQuality(this.quality);
-    this.canvasLabel = residence || cinema ? `${description.label}の探索画面`
+    this.canvasLabel = residence || cinema || atrium ? `${description.label}の探索画面`
       : overlook ? '丘陵の展望デッキの探索画面' : '海岸、森、湖と山の探索画面';
     const canvas = this.renderer.domElement;
 
@@ -167,7 +172,7 @@ export class CoastApp {
         <section class="coast-panel coast-guide" aria-label="探索操作">
           <div class="coast-row">
             <button type="button" class="coast-lock">マウス操作を開始</button>
-            <button type="button" class="coast-flight" aria-pressed="false">自由飛行</button>
+            ${allowFlight ? '<button type="button" class="coast-flight" aria-pressed="false">自由飛行</button>' : ''}
           </div>
           <details>
             <summary>操作方法</summary>
@@ -175,16 +180,16 @@ export class CoastApp {
             <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動 <span class="coast-divider">·</span> <kbd>Shift</kbd> 加速</p>
             <p>マウス 視点 <span class="coast-divider">·</span> <kbd>Esc</kbd> 解除</p>
             <p>地上で <kbd>Space</kbd> ジャンプ</p>
-            <p><kbd>C</kbd> ${cinema ? '座位／立位' : 'しゃがむ／立つ'}</p>
+            <p><kbd>C</kbd> ${cinema || atrium ? '座位／立位' : 'しゃがむ／立つ'}</p>
             <p class="coast-water-guide">泳いでいるとき <kbd>C</kbd> 潜る <kbd>Space</kbd> 浮上</p>
             <p><kbd>T</kbd> ファストトラベル</p>
-            <p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>
+            ${allowFlight ? '<p><kbd>F</kbd> 歩行／飛行 <span class="coast-divider">·</span> 飛行中 <kbd>Space</kbd> 上昇 <kbd>C</kbd> 下降</p>' : ''}
             <details>
               <summary>ゲームパッド</summary>
               <p>左スティック 移動 <span class="coast-divider">·</span> 右スティック 視点</p>
-              <p><kbd>A</kbd> ジャンプ <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行</p>
+              <p><kbd>A</kbd> ジャンプ${allowFlight ? ' <span class="coast-divider">·</span> <kbd>Y</kbd> 歩行／飛行' : ''}</p>
               <p class="coast-water-guide">泳いでいるとき <kbd>B</kbd> 潜る <kbd>A</kbd> 浮上</p>
-              <p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>
+              ${allowFlight ? '<p>飛行中 <kbd>A</kbd> 上昇 <kbd>B</kbd> 下降</p>' : ''}
             </details>
           </details>
           <p class="coast-lock-message" role="status" hidden></p>
@@ -210,6 +215,8 @@ export class CoastApp {
     ui.querySelector('h1')!.textContent = loaded.id === 'coast' ? '自然景観探索' : description.label;
     ui.querySelector('.coast-guide-description')!.textContent = cinema
       ? 'ファストトラベルで席を選べます。上映設定から試映、仮想モニターからスクリーンへ投影できます。'
+      : atrium
+      ? 'ソファから立ち上がり、ショーウィンドウの前と大階段から続く上階の回廊を散策できます。'
       : residence
       ? '南の大窓から都心を見下ろせます。主寝室のバルコニーに近づくと、Eキーで引戸を開閉できます。'
       : overlook
@@ -223,13 +230,13 @@ export class CoastApp {
 
     const mode = ui.querySelector<HTMLElement>('.coast-mode')!;
     const lock = ui.querySelector<HTMLButtonElement>('.coast-lock')!;
-    const flight = ui.querySelector<HTMLButtonElement>('.coast-flight')!;
+    const flight = ui.querySelector<HTMLButtonElement>('.coast-flight');
     const lockMessage = ui.querySelector<HTMLElement>('.coast-lock-message')!;
     this.controls = new CoastControls(this.camera, canvas, {
       diveObstacleHeight: (x, z) => this.world.diveObstacleHeight?.(x, z),
       onMovementChange: movement => {
-        mode.textContent = cinema && movement === 'crouch' ? '座位' : movementLabels[movement];
-        flight.setAttribute('aria-pressed', String(movement === 'flight'));
+        mode.textContent = (cinema || atrium) && movement === 'crouch' ? '座位' : movementLabels[movement];
+        flight?.setAttribute('aria-pressed', String(movement === 'flight'));
       },
       onLockChange: locked => {
         if (ui.isConnected) this.mount.classList.toggle('coast-locked', locked);
@@ -245,7 +252,7 @@ export class CoastApp {
       if (!this.renderer.xr.isPresenting && !this.monitor?.blocksSceneInput) this.controls.requestLock();
     };
     lock.addEventListener('click', this.lockView);
-    flight.addEventListener('click', () => {
+    flight?.addEventListener('click', () => {
       this.controls.toggleFlight();
       canvas.focus({ preventScroll: true });
     });
@@ -487,6 +494,12 @@ export class CoastApp {
             }
           },
         },
+        {
+          label: () => cinema.localScreening.playing ? '本編を一時停止' : '本編を再生',
+          enabled: () => cinema.localScreening.playing || (cinema.localScreening.available
+            && !cinema.localScreening.blocked && !cinema.localScreening.loading),
+          invoke: () => { void cinema.toggleScreening(); this.xr.closeMenu(); },
+        },
         { label: '設定に戻る', invoke: () => this.openXRSettings() },
       ]),
     });
@@ -537,8 +550,9 @@ export class CoastApp {
     });
     if (decision.kind === 'invalid') return;
     if (decision.kind === 'navigate') {
-      if (this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection) void this.changeWorld(decision.url);
-      else {
+      if (this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection || this.shouldKeepCinemaFiles) {
+        void this.changeWorld(decision.url);
+      } else {
         ++this.travelRequest;
         location.assign(decision.url);
       }
@@ -589,6 +603,10 @@ export class CoastApp {
     this.currentUrl = url;
   };
 
+  private get shouldKeepCinemaFiles(): boolean {
+    return this.cinemaControls?.localScreening.available ?? this.hasRetainedCinemaScreening;
+  }
+
   private async changeWorld(url: URL, historyIndex?: number): Promise<void> {
     const request = ++this.travelRequest;
     const { worldId } = parseStartupRoute(url.search);
@@ -610,6 +628,8 @@ export class CoastApp {
       }
       targetHistoryIndex = historyIndex ?? readHistoryIndex(history.state) + 1;
       next = new CoastApp(this.mount, loaded, url, this.renderer, targetHistoryIndex, this.xr);
+      // Keep the document and its local File handles alive on both legs of the trip.
+      next.hasRetainedCinemaScreening = this.shouldKeepCinemaFiles;
     } catch {
       loaded?.audio.dispose();
       loaded?.world.dispose();
@@ -703,6 +723,10 @@ export class CoastApp {
     if (this.worldId === 'cinema') {
       light.title = '客席の形を維持し、映写の反射と初期反射を軽く処理';
       high.title = '張り地、近くの反射光、頭部に追従する反射音を細かく処理';
+    }
+    if (this.worldId === 'atrium') {
+      light.title = '石床、ガラス、照明を保ち、床の反射を軽く描画';
+      high.title = '石目と照明の映り込みを細かく描画';
     }
     const apply = (quality: CoastQuality) => {
       this.quality = quality;

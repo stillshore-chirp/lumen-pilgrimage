@@ -2,12 +2,12 @@ import { CanvasTexture, SRGBColorSpace } from 'three';
 
 const WIDTH = 960;
 const HEIGHT = 540;
-const DURATION = 26;
+export const CINEMA_PREVIEW_DURATION = 26;
 const phases = [
   { at: 0, cue: 'center', caption: '幕の中央' },
-  { at: 5, cue: 'left', caption: 'スクリーン左' },
+  { at: 5, cue: 'left', caption: '幕の左から右へ' },
   { at: 10, cue: 'right', caption: 'スクリーン右' },
-  { at: 15, cue: 'overhead', caption: '客席の上' },
+  { at: 15, cue: 'overhead', caption: '天井を前から後ろへ' },
   { at: 20, cue: 'rear', caption: '客席の後方' },
 ] as const;
 
@@ -25,10 +25,26 @@ export function createCinemaPreview() {
   let drawnFrame = -1;
   let lastCue = -1;
   let cueAt = 0;
+  let frameVersion = 0;
+
+  function renderAt(seconds: number, cue: number): boolean {
+    const time = Math.max(0, Math.min(CINEMA_PREVIEW_DURATION - 1 / 24, seconds));
+    const nextFrame = Math.floor(time * 24);
+    if (nextFrame === drawnFrame) return true;
+    drawnFrame = nextFrame;
+    const phaseIndex = Math.min(phases.length - 1, Math.floor(time / 5));
+    paintFrame(frame!, phaseIndex, time, cue);
+    ++frameVersion;
+    texture.needsUpdate = true;
+    return true;
+  }
 
   return {
+    canvas,
+    duration: CINEMA_PREVIEW_DURATION,
     texture,
     aspect: WIDTH / HEIGHT,
+    get frameVersion() { return frameVersion; },
     get playing() { return startedAt !== null; },
     start(elapsed: number) {
       startedAt = elapsed;
@@ -36,10 +52,19 @@ export function createCinemaPreview() {
       cueAt = 0;
     },
     stop() { startedAt = null; },
+    present(time: number) {
+      const phase = Math.min(phases.length - 1, Math.max(0, Math.floor(time / 5)));
+      return renderAt(time, phases[phase].at + 0.6);
+    },
+    seek(time: number) {
+      drawnFrame = -1;
+      this.present(time);
+      return Promise.resolve();
+    },
     update(elapsed: number, play: (cue: PreviewCue) => void) {
       if (startedAt === null) return;
       const time = elapsed - startedAt;
-      if (time >= DURATION) {
+      if (time >= CINEMA_PREVIEW_DURATION) {
         startedAt = null;
         return;
       }
@@ -50,11 +75,7 @@ export function createCinemaPreview() {
         lastCue = phaseIndex;
         play(phase.cue);
       }
-      const nextFrame = Math.floor(time * 24);
-      if (nextFrame === drawnFrame) return;
-      drawnFrame = nextFrame;
-      paintFrame(frame, phaseIndex, time, cueAt);
-      texture.needsUpdate = true;
+      renderAt(time, cueAt);
     },
     dispose() { texture.dispose(); },
   };
@@ -64,7 +85,7 @@ function paintFrame(frame: CanvasRenderingContext2D, phase: number, time: number
   frame.fillStyle = '#060b12';
   frame.fillRect(0, 0, WIDTH, HEIGHT);
 
-  const phaseEnd = phases[phase + 1]?.at ?? DURATION;
+  const phaseEnd = phases[phase + 1]?.at ?? CINEMA_PREVIEW_DURATION;
   const reveal = Math.min(1, (time - phases[phase].at) * 1.4, (phaseEnd - time) / .82);
   const pulse = Math.exp(-3.5 * Math.max(0, time - cueAt));
   const x = phase === 1 ? 211 : phase === 2 ? WIDTH - 211 : WIDTH / 2;
