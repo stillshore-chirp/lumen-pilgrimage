@@ -16,8 +16,9 @@
     "test:residence:browser": "node --test scripts/residence-browser.test.mjs scripts/residence-light-motion.test.mjs",
     "test:cinema": "node --test scripts/cinema-navigation.test.mjs scripts/cinema-lighting.test.mjs scripts/cinema-audio.test.mjs scripts/cinema-source.test.mjs scripts/cinema-routing.test.mjs scripts/cinema-reflections-geometry.test.mjs scripts/cinema-room-audio.test.mjs",
     "test:cinema:browser": "node --test --test-concurrency=1 scripts/cinema-browser.test.mjs scripts/cinema-audio.test.mjs scripts/cinema-movie-video.test.mjs scripts/cinema-screening.browser.test.mjs",
-    "test:atrium": "node --test scripts/atrium-navigation.test.mjs scripts/atrium-audio.test.mjs",
-    "test:atrium:browser": "node --test scripts/atrium-browser.test.mjs",
+    "test:atrium": "node --experimental-transform-types --test scripts/atrium-navigation.test.mjs scripts/atrium-audio.test.mjs scripts/atrium-facility.test.mjs",
+    "test:atrium:browser": "node --test --test-concurrency=1 scripts/atrium-browser.test.mjs scripts/atrium-facility-browser.test.mjs",
+    "capture:atrium:facility": "node scripts/atrium-facility-views.mjs",
     "test:lake": "node --experimental-transform-types --test scripts/lake-navigation.test.mjs scripts/lake-audio.test.mjs scripts/lake-geometry.test.mjs scripts/lake-fish.test.mjs scripts/lake-vegetation.test.mjs",
     "test:lake:browser": "node --test --test-concurrency=1 scripts/lake-browser.test.mjs scripts/lake-sky-browser.test.mjs",
     "validate:harness": "node --test scripts/validate-harness.test.mjs && node scripts/validate-harness.mjs"

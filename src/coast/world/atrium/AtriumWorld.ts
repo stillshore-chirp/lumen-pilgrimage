@@ -10,6 +10,7 @@ import { AtriumAudio } from './atriumAudio';
 import { batchAtriumOpaqueMeshes } from './atriumBatches';
 import { createAtriumFloor } from './atriumFloor';
 import { buildAtriumFurnishings } from './atriumFurnishings';
+import { buildAtriumFrontCommons } from './atriumFrontCommons';
 import { atriumNavigation } from './atriumNavigation';
 import { buildAtriumRetail } from './atriumRetail';
 import { buildAtriumRoof } from './atriumRoof';
@@ -81,6 +82,7 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
   const stair = buildAtriumStair(room);
   const retail = await buildAtriumRetail(room, floor.wallStone);
   const furnishings = buildAtriumFurnishings(room);
+  const frontCommons = await buildAtriumFrontCommons(room, floor.wallStone);
   batchAtriumOpaqueMeshes(room);
   let mode: WorldLightingMode = 'auto';
   let time: CoastTimeOfDay = 'day';
@@ -102,6 +104,7 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
     retail.setLighting(artificialOn);
     furnishings.setLighting(artificialOn);
     floor.setLighting(artificialOn, time);
+    frontCommons.setLighting(artificialOn, time);
   }
 
   updateLighting();
@@ -120,9 +123,16 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
         time = value;
         updateLighting();
       },
-      setQuality: floor.setQuality,
+      setQuality(quality) {
+        floor.setQuality(quality);
+        frontCommons.setQuality(quality);
+      },
       update() { return []; },
-      prepareRender: floor.prepareRender,
+      prepareRender(renderer, camera) {
+        // A dirty active G2 map must exist before the floor reflector caches its standard render.
+        frontCommons.prepareRender(renderer);
+        floor.prepareRender(renderer, camera);
+      },
       dispose() {
         if (disposed) return;
         disposed = true;

@@ -10,6 +10,7 @@ import type { TenantLocalLight } from './atriumTenantLighting';
 import { ATRIUM_TENANT_COMMON, ATRIUM_TENANTS } from './atriumTenantPlan';
 import { furnishRearTenant } from './atriumTenantRear';
 import { furnishWestTenant } from './atriumTenantWest';
+import { atriumFrontRemainingSideSpans } from './atriumFrontPlan';
 
 const FACADE_X = ATRIUM_TENANT_COMMON.halfWidth;
 
@@ -150,8 +151,11 @@ function addConcoursePiers(parent: Group, boxes: BoxGeometry, finishes: TenantFi
     for (const bay of bays) {
       const gap = bay.span[0] - lastS;
       if (gap > 0.24) {
-        addWarmStoneFiller(parent, side, -(lastS + bay.span[0]) / 2, gap,
-          boxes, stone, cream, bronze, dark, light, `${bay.id} approach pier`);
+        for (const [start, end] of atriumFrontRemainingSideSpans(lastS, bay.span[0])) {
+          if (end - start <= .24) continue;
+          addWarmStoneFiller(parent, side, -(start + end) / 2, end - start,
+            boxes, stone, cream, bronze, dark, light, `${bay.id} approach pier`);
+        }
       }
       if (gap >= 1 && (bay.id === 'L2' || bay.id === 'R2')) {
         const z = -(lastS + gap * (side < 0 ? 0.62 : 0.37));

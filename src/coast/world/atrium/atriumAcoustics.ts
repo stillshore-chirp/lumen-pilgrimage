@@ -14,11 +14,13 @@ import {
   ATRIUM_TENANT_COMMON, ATRIUM_TENANT_GLAZING_DEPTH, ATRIUM_TENANTS, tenantWidth, tenantWorldPoint,
 } from './atriumTenantPlan';
 import type { TenantBay, TenantWorldPoint } from './atriumTenantPlan';
+import { ATRIUM_FRONT_GLAZING, ATRIUM_FRONT_GLASS_PLANES } from './atriumFrontPlan';
 
 type MutablePoint = { x: number; y: number; z: number };
 export type AtriumPoint = Readonly<MutablePoint>;
 export type AtriumSurface = 'stone' | 'rug' | 'stair' | 'gallery';
-type ReflectionSurface = 'floor' | 'gallery-floor' | 'soffit' | 'ceiling' | 'left-wall' | 'right-wall' | 'rear-wall';
+type ReflectionSurface = 'floor' | 'gallery-floor' | 'soffit' | 'ceiling' | 'left-wall' | 'right-wall' | 'rear-wall'
+  | 'front-glass';
 type Axis = 'x' | 'y' | 'z';
 
 type AtriumReflection = {
@@ -220,6 +222,14 @@ export function createAtriumSoundPath(): AtriumSoundPath {
     reflections: [createReflection(), createReflection()] };
 }
 
+/** Nominal fixed-window assemblies include their flush reflecting metal frames. */
+function inFrontGlass(x: number, y: number, z: number): boolean {
+  for (const pane of ATRIUM_FRONT_GLASS_PLANES) {
+    if (z === pane.faceZ && x >= pane.minX && x <= pane.maxX && y >= pane.minY && y <= pane.maxY) return true;
+  }
+  return false;
+}
+
 function considerReflection(
   path: AtriumSoundPath,
   listener: AtriumPoint,
@@ -237,7 +247,11 @@ function considerReflection(
   const y = axis === 'y' ? plane : listener.y + (source.y - listener.y) * t;
   const z = axis === 'z' ? plane : listener.z + (source.z - listener.z) * t;
   const { minX, maxX, minZ, maxZ } = ATRIUM_BOUNDS;
-  if (x < minX || x > maxX || z < minZ || z > maxZ || y < 0 || y > ATRIUM_SKYLIGHT.y) return;
+  const frontGlass = surface === 'front-glass';
+  if (frontGlass && (listener.z >= plane || source.z >= plane || !inFrontGlass(x, y, z))) return;
+  // Only the finite finished glazing face extends beyond the unchanged walkable room bound.
+  const reflectionMaxZ = frontGlass ? plane : maxZ;
+  if (x < minX || x > maxX || z < minZ || z > reflectionMaxZ || y < 0 || y > ATRIUM_SKYLIGHT.y) return;
   if (deck !== undefined && !atriumDeckContains(x, z, deck, -0.25)) return;
   if (surface === 'ceiling' && inSkylightOpening(x, z)) return;
   if (isFrontageOpening(surface, x, y, z)) return;
@@ -295,6 +309,8 @@ export function atriumSoundPath(
   considerReflection(path, listener, source, 'left-wall', 'x', ATRIUM_BOUNDS.minX, 0.33);
   considerReflection(path, listener, source, 'right-wall', 'x', ATRIUM_BOUNDS.maxX, 0.33);
   considerReflection(path, listener, source, 'rear-wall', 'z', ATRIUM_BOUNDS.minZ, 0.27);
+  // All front window assemblies are coplanar; test their union once to avoid duplicate arrivals.
+  considerReflection(path, listener, source, 'front-glass', 'z', ATRIUM_FRONT_GLAZING.faceZ, 0.30);
   return path;
 }
 

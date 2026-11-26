@@ -11,6 +11,7 @@ const hooks = registerHooks({
   },
 });
 const {
+  ATRIUM_AIR_SOURCES,
   ATRIUM_REFLECTION_MAX_DELAY,
   ATRIUM_SERVICE_SOURCES,
   ATRIUM_SOUND_SPEED,
@@ -26,6 +27,7 @@ const {
   ATRIUM_LEVELS, ATRIUM_LOUNGE, ATRIUM_SOFA, ATRIUM_WALK_LEVEL, atriumStairFrame, atriumUpperStairPoint,
 } = await import('../src/coast/world/atrium/atriumLayout.ts');
 const { ATRIUM_TENANTS, tenantWorldPoint } = await import('../src/coast/world/atrium/atriumTenantPlan.ts');
+const { ATRIUM_FRONT_END_BAYS, atriumFrontWindowMullions } = await import('../src/coast/world/atrium/atriumFrontPlan.ts');
 hooks.deregister();
 
 const open = { x: 0, y: 1.65, z: -19 };
@@ -63,6 +65,90 @@ test('stone floor, soffit and gallery deck provide different finite image paths'
   assert.equal(atriumSoundPath(underGallery, underSource, path), path);
   atriumSoundPath(open, underSource, path);
   for (const arrival of arrivals) assert.ok(path.reflections.includes(arrival));
+});
+
+test('the front glazing returns a near footfall from the shared finished face on each level', () => {
+  for (const floor of [0, ...ATRIUM_LEVELS]) {
+    for (const x of floor === 0 ? [-2.7] : [-6.5, -2.7, 6.5]) {
+      const listener = { x, y: floor + 1.65, z: 1.2 };
+      const source = { x, y: floor + 0.045, z: 1.2 };
+      const path = atriumSoundPath(listener, source);
+      const arrival = path.reflections.find(reflection => reflection.surface === 'front-glass' && reflection.gain > 0);
+      assert.ok(arrival, `the bay at (${x}, ${floor}) m has a finite front-glass arrival`);
+      assert.equal(path.reflections.length, 2);
+      assert.equal(arrival.point.x, x);
+      assert.equal(arrival.point.z, 3.040, 'the atrium-side glass face, not the slab centre, defines the reflection');
+      assert.ok(Math.abs(arrival.point.y - (floor + 0.8475)) < 1e-9);
+      assert.ok(Math.abs(arrival.delay - 0.007026) < 0.000001, 'the excess path is approximately 7.026 ms');
+    }
+  }
+});
+
+test('the four end-display window assemblies reflect their glass and flush metal frames', () => {
+  let bays = 0;
+  for (const bay of ATRIUM_FRONT_END_BAYS) {
+    for (const span of bay.glassX) {
+      bays += 1;
+      const x = (span[0] + span[1]) * 0.5;
+      const listener = { x, y: 1.65, z: 2 };
+      const source = { x, y: 0.045, z: 2 };
+      const path = atriumSoundPath(listener, source);
+      const arrival = path.reflections.find(reflection => reflection.surface === 'front-glass' && reflection.gain > 0);
+      assert.ok(arrival, `${bay.id} assembly ${span} returns the near footfall`);
+      assert.equal(path.reflections.length, 2);
+      assert.equal(arrival.point.z, 3.040);
+      assert.ok(Math.abs(arrival.point.y - 0.8475) < 1e-9);
+      assert.ok(Math.abs(arrival.delay - 0.002980311) < 1e-9);
+      for (const bar of atriumFrontWindowMullions(span)) {
+        const atFrame = { x: bar.position, y: 1.2, z: 2.8 };
+        assert.ok(atriumSoundPath(atFrame, atFrame).reflections.some(reflection =>
+          reflection.surface === 'front-glass' && reflection.gain > 0), 'flush metal is not a silent hole');
+      }
+    }
+  }
+  assert.equal(bays, 4);
+});
+
+test('front-glass reflections stop at finite panel edges and do not widen other room bounds', () => {
+  const hasFront = (listener, source = listener) => atriumSoundPath(listener, source).reflections.some(reflection =>
+    reflection.surface === 'front-glass' && reflection.gain > 0);
+  assert.equal(hasFront({ x: 4.481, y: 0.8475, z: 1.2 }), false, 'outside the garden glazing width');
+  assert.equal(hasFront({ x: 0, y: 0.119, z: 1.2 }), false, 'below the garden glazing');
+  assert.equal(hasFront({ x: 0, y: 3.921, z: 1.2 }), false, 'above the garden glazing');
+  assert.equal(hasFront({ x: 0, y: 4.3, z: 1.2 }), false, 'between the garden and upper glazing');
+  assert.equal(hasFront({ x: 8.851, y: 5.4, z: 1.2 }), false, 'outside the upper glazing width');
+  assert.equal(hasFront({ x: -4.72, y: 5.4, z: 1.2 }), false, 'the west support is not part of the glass');
+  assert.equal(hasFront({ x: 4.72, y: 5.4, z: 1.2 }), false, 'the east support is not part of the glass');
+  for (const x of [-10.801, -8.99, -5, 5, 8.99, 10.801]) {
+    assert.equal(hasFront({ x, y: 1.2, z: 2.8 }), false, `the end-display boundary or support excludes x=${x}`);
+  }
+  assert.equal(hasFront({ x: 7, y: 0.149, z: 2.8 }), false, 'below the end-display glazing');
+  assert.equal(hasFront({ x: 7, y: 3.351, z: 2.8 }), false, 'above the end-display glazing');
+  assert.equal(hasFront({ x: 0, y: 1.2, z: 3.1 }), false, 'the sealed garden side is not a listening region');
+
+  const outsideWalkBound = atriumSoundPath({ x: -2.7, y: 1.65, z: 3.02 }, { x: -2.7, y: 0.045, z: 3.02 });
+  assert.ok(outsideWalkBound.reflections.some(reflection => reflection.surface === 'front-glass' && reflection.gain > 0));
+  assert.equal(outsideWalkBound.reflections.some(reflection => reflection.surface !== 'front-glass' && reflection.gain > 0),
+    false, 'only the shared front face may extend past the existing maxZ');
+  assert.equal(ATRIUM_BOUNDS.maxZ, 3);
+});
+
+test('the sofa excludes the 187.566 ms front return while keeping its existing direct path and tail', () => {
+  const footfall = { x: sofa.x, y: 0.045, z: sofa.z };
+  const footPath = atriumSoundPath(sofa, footfall);
+  assert.equal(ATRIUM_REFLECTION_MAX_DELAY, 0.18);
+  assert.equal(footPath.reflections.some(reflection => reflection.surface === 'front-glass' && reflection.gain > 0), false);
+
+  // Baseline values captured before adding the front reflection candidate.
+  const existing = atriumSoundPath(sofa, ATRIUM_AIR_SOURCES[0]);
+  for (const [field, expected] of Object.entries({
+    directDistance: 17.857572623399857,
+    gain: 0.19485286129805532,
+    cutoff: 11595.289025573835,
+    shelter: 0,
+    lateSend: 0.10046859163898561,
+  })) assert.ok(Math.abs(existing[field] - expected) < 1e-9, `${field} retains the pre-change value`);
+  assert.ok(Math.abs(atriumLocalTailMix(sofa) - 0.36985712998201664) < 1e-12);
 });
 
 test('a finite gallery slab shelters an elevated source and the lounge softens the floor arrival', () => {
