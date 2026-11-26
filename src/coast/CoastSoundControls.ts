@@ -13,6 +13,7 @@ const worldSounds: Record<ExplorationWorldId, readonly ExplorationSound[]> = {
   residence: ['traffic', 'wind', 'doors', 'appliances'],
   cinema: ['preview', 'wind'],
   atrium: ['crowd', 'appliances'],
+  lake: ['water', 'birds'],
 };
 
 const soundLabels: Record<ExplorationSound, string> = {

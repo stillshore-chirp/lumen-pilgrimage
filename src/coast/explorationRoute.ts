@@ -28,7 +28,7 @@ export function parseStartupRoute(search: string): StartupRoute {
   const options = new URLSearchParams(search);
   const requestedWorld = options.get('world');
   const worldId: ExplorationWorldId = requestedWorld === 'overlook' || requestedWorld === 'residence'
-    || requestedWorld === 'cinema' || requestedWorld === 'atrium' ? requestedWorld : 'coast';
+    || requestedWorld === 'cinema' || requestedWorld === 'atrium' || requestedWorld === 'lake' ? requestedWorld : 'coast';
   return { monitorSender: options.get('monitor') === 'sender', worldId };
 }
 
