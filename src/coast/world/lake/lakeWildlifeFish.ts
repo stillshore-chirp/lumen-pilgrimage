@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { LAKE_HALL, LAKE_WATER_Y, LAKE_WINDOW_VIEW_X } from './lakeLayout';
+import { createLakeFishMotion } from './lakeFishMotion';
 
 type Point = [number, number, number];
 type FishPigment = { belly: number; back: number; patch: number; fin: number; pattern: number };
@@ -12,18 +12,12 @@ const pigments: readonly FishPigment[] = [
   { belly: 0xc4b88c, back: 0x6e7861, patch: 0xa49b68, fin: 0x6c775e, pattern: 4.5 },
 ];
 
-const fishInSchool = [
-  { pigment: 0, size: 1.0, lag: 0, lane: -.41, depth: .0, beatRate: 1.28, atNight: true },
-  { pigment: 1, size: .79, lag: .55, lane: .40, depth: -.018, beatRate: 1.46, atNight: true },
-  { pigment: 2, size: .91, lag: 2.8, lane: -.50, depth: -.037, beatRate: 1.32, atNight: false },
-  { pigment: 3, size: .72, lag: 3.45, lane: .49, depth: -.058, beatRate: 1.51, atNight: false },
+const fishInPatch = [
+  { size: 1.0, beatRate: 1.28, atNight: true, x: -.90, z: 1.12, depth: .33 },
+  { size: .79, beatRate: 1.46, atNight: true, x: .76, z: .71, depth: .47 },
+  { size: .91, beatRate: 1.32, atNight: false, x: .94, z: -.94, depth: .38 },
+  { size: .72, beatRate: 1.51, atNight: false, x: -.87, z: -1.13, depth: .50 },
 ] as const;
-
-// Each loop sits below the sightline from its window and above the shallow gravel bed.
-const shallowCircuit: readonly Point[] = [
-  [-.20, -.28, 6.70], [1.20, -.30, 7.02], [1.80, -.37, 8.12], [1.36, -.45, 8.95],
-  [.10, -.50, 9.18], [-1.54, -.44, 8.92], [-2.12, -.36, 7.98], [-1.69, -.30, 7.02],
-];
 
 const profile = new THREE.SplineCurve([
   [0, -.516], [.026, -.49], [.047, -.384], [.083, -.255],
@@ -60,6 +54,7 @@ function bendFish(geometry: THREE.BufferGeometry): void {
   const offsets = [
     (lag: number) => Math.cos(lag),
     (lag: number) => -Math.sin(lag),
+    () => 1,
   ];
   geometry.morphAttributes.position = [];
   geometry.morphAttributes.normal = [];
@@ -77,7 +72,7 @@ function bendFish(geometry: THREE.BufferGeometry): void {
       positionShift[i * 3] = displacement(z);
       normalShift[i * 3 + 2] = -normals.getX(i) * slope;
     }
-    // The two relative morphs combine into a traveling bend with a still head.
+    // Two morphs make the tail beat; the third keeps a bend into a turn even while gliding.
     geometry.morphAttributes.position.push(new THREE.BufferAttribute(positionShift, 3));
     geometry.morphAttributes.normal.push(new THREE.BufferAttribute(normalShift, 3));
   }
@@ -116,57 +111,39 @@ function createFishGeometry({ belly, back, patch, fin: finColor, pattern }: Fish
   return geometry;
 }
 
-export function buildLakeFish(root: THREE.Group) {
+export function buildLakeFish(root: THREE.Group, seed = Math.floor(Math.random() * 0x1_0000_0000)) {
   const group = new THREE.Group();
   group.name = 'Lake fish';
   root.add(group);
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .68, side: THREE.DoubleSide });
   const colors = pigments.map(createFishGeometry);
-  const schools = [-1, 1].map((side, index) => {
-    const track = new THREE.CatmullRomCurve3(shallowCircuit.map(([x, depth, distance]) =>
-      new THREE.Vector3(side * (LAKE_WINDOW_VIEW_X + x), LAKE_WATER_Y + depth, LAKE_HALL.frontZ - distance)), true);
-    const fish = fishInSchool.map((slot, i) => {
-      const mesh = new THREE.Mesh(colors[(slot.pigment + index) % colors.length], material);
-      mesh.name = 'lake-fish-' + (side < 0 ? 'west-' : 'east-') + (i + 1);
-      mesh.scale.setScalar(slot.size);
-      const sway = mesh.morphTargetInfluences!;
-      group.add(mesh);
-      return { ...slot, mesh, sway, phase: i * 1.41 + index * 2.72 };
-    });
-    return { track, length: track.getLength(), fish, phase: index * .081, speed: .62 + index * .06 };
-  });
-  const tangent = new THREE.Vector3();
-  const upcoming = new THREE.Vector3();
-  const { euclideanModulo, smoothstep } = THREE.MathUtils;
+  const motion = createLakeFishMotion(fishInPatch, seed);
+  const fish = ['west', 'east'].flatMap((side, patch) => fishInPatch.map((slot, i) => {
+    const mesh = new THREE.Mesh(colors[(i + patch) % colors.length], material);
+    mesh.name = 'lake-fish-' + side + '-' + (i + 1);
+    mesh.scale.setScalar(slot.size);
+    group.add(mesh);
+    const { current, previous } = motion.fish[patch * fishInPatch.length + i];
+    return { mesh, sway: mesh.morphTargetInfluences!, atNight: slot.atNight, current, previous };
+  }));
+  const { lerp } = THREE.MathUtils;
 
   return function swim(elapsed: number, night: boolean): void {
-    for (const { track, length, fish, phase: schoolPhase, speed } of schools) {
-      for (const { mesh, sway, lane, lag, depth, phase, beatRate, atNight } of fish) {
-        mesh.visible = !night || atNight;
-        if (!mesh.visible) continue;
+    const mix = motion.advance(elapsed);
+    for (const { mesh, sway, atNight, current, previous } of fish) {
+      mesh.visible = !night || atNight;
+      if (!mesh.visible) continue;
 
-        const pulse = elapsed * 1.34 + phase;
-        const distance = (elapsed - lag) * speed + .11 * Math.sin(pulse);
-        const u = euclideanModulo(schoolPhase + distance / length, 1);
-        track.getPointAt(u, mesh.position);
-        track.getTangentAt(u, tangent);
-        track.getTangentAt(euclideanModulo(u + .009, 1), upcoming);
-
-        const lateral = lane + .092 * Math.sin(elapsed * .74 + phase);
-        mesh.position.x += tangent.z * lateral;
-        mesh.position.z -= tangent.x * lateral;
-        mesh.position.y += depth + .016 * Math.sin(elapsed * .71 + phase);
-
-        const yaw = Math.atan2(tangent.x, tangent.z);
-        const turn = Math.atan2(tangent.z * upcoming.x - tangent.x * upcoming.z,
-          tangent.x * upcoming.x + tangent.z * upcoming.z);
-        const pitch = -Math.atan2(tangent.y, Math.hypot(tangent.x, tangent.z));
-        const beat = Math.PI * 2 * elapsed * beatRate + phase;
-        const effort = .37 + .63 * smoothstep(Math.cos(pulse), -.42, .72);
-        mesh.rotation.set(pitch, yaw + .024 * Math.sin(beat), -turn * 1.08, 'YXZ');
-        sway[0] = Math.sin(beat) * effort;
-        sway[1] = Math.cos(beat) * effort;
-      }
+      mesh.position.set(lerp(previous.x, current.x, mix), lerp(previous.y, current.y, mix),
+        lerp(previous.z, current.z, mix));
+      const beat = lerp(previous.beat, current.beat, mix);
+      const effort = lerp(previous.effort, current.effort, mix);
+      const turn = lerp(previous.turnRate, current.turnRate, mix);
+      mesh.rotation.set(lerp(previous.pitch, current.pitch, mix),
+        lerp(previous.yaw, current.yaw, mix) + .017 * Math.sin(beat) * effort, -.085 * turn, 'YXZ');
+      sway[0] = Math.sin(beat) * effort;
+      sway[1] = Math.cos(beat) * effort;
+      sway[2] = .32 * turn;
     }
   };
 }

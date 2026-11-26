@@ -18,7 +18,7 @@
     "test:cinema:browser": "node --test --test-concurrency=1 scripts/cinema-browser.test.mjs scripts/cinema-audio.test.mjs scripts/cinema-movie-video.test.mjs scripts/cinema-screening.browser.test.mjs",
     "test:atrium": "node --test scripts/atrium-navigation.test.mjs scripts/atrium-audio.test.mjs",
     "test:atrium:browser": "node --test scripts/atrium-browser.test.mjs",
-    "test:lake": "node --experimental-transform-types --test scripts/lake-navigation.test.mjs scripts/lake-audio.test.mjs scripts/lake-geometry.test.mjs",
+    "test:lake": "node --experimental-transform-types --test scripts/lake-navigation.test.mjs scripts/lake-audio.test.mjs scripts/lake-geometry.test.mjs scripts/lake-fish.test.mjs",
     "test:lake:browser": "node --test scripts/lake-browser.test.mjs",
     "validate:harness": "node --test scripts/validate-harness.test.mjs && node scripts/validate-harness.mjs"
   },
