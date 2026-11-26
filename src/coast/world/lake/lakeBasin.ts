@@ -262,10 +262,12 @@ function buildFarShore(root: Group, material: MeshStandardMaterial): void {
       const dry = MathUtils.smoothstep(y, LAKE_WATER_Y, LAKE_WATER_Y + 0.48);
       const lee = MathUtils.smoothstep(bar, -4, 6) * MathUtils.smoothstep(wave, 0.05, 0.97);
       const exposedApron = dry * (1.0 - MathUtils.smoothstep(bar, -6, 10));
+      const sunlitApron = dry * MathUtils.smoothstep(bar, -13, -1)
+        * (1 - MathUtils.smoothstep(bar, 22, 43)) * (1 - 0.75 * lee);
       tint.copy(wetGravel).lerp(dryGravel, dry).lerp(shadedGravel, lee * 0.43)
-        .lerp(upland, MathUtils.smoothstep(bar, 6, 89) * (0.68 + 0.30 * relief));
+        .lerp(upland, MathUtils.smoothstep(bar, 6, 89) * (0.68 + 0.30 * relief)).lerp(dryGravel, sunlitApron * 0.54);
       row.push(ground.point(point.set(x, y, LAKE_TERRAIN.shoreZ - distance + inlet), tint,
-        0.95 + 0.27 * exposedApron - 0.09 * lee));
+        0.95 + 0.27 * exposedApron + 0.57 * sunlitApron - 0.09 * lee));
     }
     if (previous) stitchRows(ground, previous, row, true);
     previous = row;

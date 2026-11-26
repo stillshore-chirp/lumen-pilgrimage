@@ -4,11 +4,12 @@ import type { PlantSurface } from '../coastTreeMeshes';
 type Volume = readonly [left: number, right: number, front: number, back: number, bottom: number, top: number];
 type AddVolume = (volume: Volume, color: Color, shade?: number) => void;
 type Vertex = readonly [x: number, y: number, z: number];
-type Course = readonly [belowRoof: number, projection: number, thickness: number];
+type Course = readonly [belowRoof: number, projection: number, thickness: number, shade?: number];
 
 const blueGrey = new Color(0x91a9c0);
 const weatheredGrey = new Color(0x929ea9);
 const paleMasonry = new Color(0xbfb1a0);
+const paleEave = new Color(0xe3c9b2);
 const coolMasonry = new Color(0x929aa3);
 const roofEdge = new Color(0x919caa);
 const shoreBounce = new Color(0xb0c0cb);
@@ -44,10 +45,10 @@ function addTerrace(add: AddVolume, volume: Volume, color: Color, courses: reado
   const [left, right, front, back, bottom, top] = volume;
   const [, , capThickness] = courses[0];
   add([left, right, front, back, bottom, top - capThickness * 0.5], color);
-  for (const [belowRoof, projection, thickness] of courses) {
+  for (const [belowRoof, projection, thickness, shade = 1.15] of courses) {
     const edgeHeight = top - belowRoof;
     add([left - projection * 0.55, right + projection * 0.55, front + projection, back - 0.3,
-      edgeHeight - thickness, edgeHeight], color, 1.15);
+      edgeHeight - thickness, edgeHeight], color, shade);
   }
 }
 
@@ -138,14 +139,17 @@ export function addLakeFarArchitecture(surface: PlantSurface): void {
   detachedFace([-75.7, -73.9, -397.6, -411.7, 5, 53.3], blueGrey, 0.89);
 
   // Along the rear of the gravel, long courses overlap at several different distances.
-  addTerrace(add, [-71, -22.15, -442, -481, -1, 37.5], coolMasonry, [[0, 0.64, 0.41], [5, 0.3, 0.5]]);
-  addTerrace(add, [-27, 27, -449, -492, -1, 34.8], coolMasonry, [[0, 0.9, 0.66], [3.8, 0.6, 0.28]]);
+  addTerrace(add, [-71, -22.15, -442, -481, -1, 37.5], coolMasonry,
+    [[0, 0.64, 0.41, 1.40], [1.6, 0.43, 0.44, 0.70], [3.4, 0.5, 0.31, 1.38], [5, 0.3, 0.5, 0.77], [7.1, 0.4, 0.32, 1.29]]);
+  addTerrace(add, [-27, 27, -449, -492, -1, 34.8], coolMasonry,
+    [[0, 0.9, 0.66, 1.35], [1.7, 0.55, 0.46, 0.76], [3.8, 0.6, 0.38, 1.37], [6.1, 0.46, 0.43, 0.77]]);
   addTerrace(add, [17, 69, -467, -512, -1, 31.3], coolMasonry, [[0, 0.65, 0.4]]);
   addTerrace(add, [61, 113, -450, -495, -1, 27], weatheredGrey, [[0, 0.46, 0.35], [4.5, 0.24, 0.45]]);
   addTerrace(add, [104, 169, -438, -480, -1, 32.2], coolMasonry, [[0, 1.0, 0.54], [3.2, 0.75, 0.36]]);
   addTerrace(add, [164, 201, -423, -464, -1, 29.1], coolMasonry, [[0, 0.88, 0.78]]);
 
-  addTerrace(add, [-66, -22, -416, -454, -1, 26.4], weatheredGrey, [[0, 0.9, 0.74], [2.8, 0.72, 0.54], [5.5, 0.68, 0.52]]);
+  addTerrace(add, [-66, -22, -416, -454, -1, 26.4], weatheredGrey,
+    [[0, 0.9, 0.74, 1.29], [1.7, 0.45, 0.48, 0.68], [2.8, 0.72, 0.54, 1.43], [5.5, 0.68, 0.52, 0.74]]);
   addTerrace(add, [-17, 37, -423, -461, -1, 25], coolMasonry, [[0, 1.8, 0.82], [3.2, 0.92, 0.49], [5.7, 0.5, 0.68]]);
   addTerrace(add, [26, 85, -407, -448, -1, 22.2], coolMasonry, [[0, 1.1, 0.72], [2.2, 0.76, 0.63]]);
   addTerrace(add, [77, 121, -416, -456, -1, 24.6], weatheredGrey, [[0, 1.18, 0.64], [2.9, 0.7, 0.57], [5.7, 0.63, 0.62]]);
@@ -153,19 +157,26 @@ export function addLakeFarArchitecture(surface: PlantSurface): void {
   addTerrace(add, [150, 200, -402.2, -438, -1, 25.1], weatheredGrey, [[0, 1.05, 0.64], [5.8, 0.84, 0.66]]);
 
   // Lower front ranges are offset around the next low roof, leaving their end walls visible.
-  addTerrace(add, [-34, 8, -391, -426, -1, 23.6], coolMasonry, [[0, 0.57, 0.71], [3.0, 0.70, 0.53]]);
-  addTerrace(add, [3, 26, -399, -425, -1, 25.5], weatheredGrey, [[0, 0.87, 0.84], [3.9, 0.48, 0.47]]);
-  addTerrace(add, [12, 56, -387, -416, -1, 18.9], weatheredGrey, [[0, 1.22, 0.81], [2.6, 0.57, 0.56]]);
-  addTerrace(add, [47, 78, -395, -430, -1, 23.2], coolMasonry, [[0, 0.68, 0.62], [3.1, 0.71, 0.60]]);
-  addTerrace(add, [75, 96, -404, -432, -1, 21.0], weatheredGrey, [[0, 0.68, 0.81]]);
+  addTerrace(add, [-34, 8, -391, -426, -1, 23.6], coolMasonry,
+    [[0, 0.67, 0.71, 1.35], [1.8, 0.39, 0.46, 0.71], [3.2, 0.75, 0.44, 1.44], [5.2, 0.4, 0.42, 0.72]]);
+  addTerrace(add, [3, 26, -399, -425, -1, 25.5], weatheredGrey,
+    [[0, 0.87, 0.84, 1.40], [1.9, 0.45, 0.37, 0.70], [3.9, 0.60, 0.47, 1.37], [5.7, 0.42, 0.40, 0.75]]);
+  addTerrace(add, [12, 56, -387, -416, -1, 18.9], weatheredGrey,
+    [[0, 1.22, 0.81, 1.39], [1.6, 0.63, 0.40, 0.70], [3.5, 0.70, 0.48, 1.37]]);
+  addTerrace(add, [47, 78, -395, -430, -1, 23.2], coolMasonry,
+    [[0, 0.68, 0.62, 1.39], [1.5, 0.43, 0.42, 0.71], [3.1, 0.71, 0.60, 1.38], [5, 0.50, 0.39, 0.75]]);
+  addTerrace(add, [75, 96, -404, -432, -1, 21.0], weatheredGrey, [[0, 0.68, 0.81, 1.34], [1.9, 0.44, 0.49, 0.76]]);
   addTerrace(add, [9, 22, -384, -401, -1, 17.3], paleMasonry, [[0, 0.78, 0.68]]);
 
   // The nearer pale roof has deep eaves over its smaller, solid base.
-  addTerrace(add, [-53.7, -34.2, -373.5, -395.6, -1, 22.7], paleMasonry,
-    [[0, 0.5, 0.7], [1.8, 0.25, 0.42], [4.4, 0.20, 0.34], [6.6, 0.18, 0.31]]);
-  add([-55.6, -32.5, -372.1, -397.3, 22.5, 24.3], paleMasonry, 0.86);
-  add([-57.9, -30.5, -370.3, -399.5, 24.3, 25.9], paleMasonry);
-  add([-57.5, -30.9, -370.7, -399.1, 25.9, 26.25], paleMasonry, 1.04);
+  addTerrace(add, [-53.7, -34.2, -373.5, -395.6, -1, 22.7], paleEave,
+    [[0, 0.5, 0.7, 1.14], [1.8, 0.31, 0.33, 0.68], [3.3, 0.36, 0.34, 1.25],
+      [4.6, 0.26, 0.28, 0.76], [6.2, 0.35, 0.38, 1.22], [7.8, 0.29, 0.32, 0.78], [9.1, 0.41, 0.42, 1.17]]);
+  add([-54.7, -33.3, -372.65, -396.8, 22.5, 23.5], paleMasonry, 0.78);
+  add([-55.6, -32.5, -372.1, -397.3, 23.5, 24.3], paleMasonry, 0.68);
+  add([-57.9, -30.5, -370.3, -399.5, 24.3, 24.83], paleMasonry, 0.74);
+  add([-57.8, -30.6, -370.4, -399.4, 24.83, 25.9], paleEave, 1.08);
+  add([-57.5, -30.9, -370.7, -399.1, 25.9, 26.25], paleEave, 1.18);
   addTerrace(add, [-36.3, -26.2, -377.7, -399.5, -1, 19.3], coolMasonry, [[0, 0.57, 0.72], [2.8, 0.36, 0.43]]);
 
   // The eastern silhouette meets the upslope ranges. A lifted cap leaves a narrow shadow at the rim.
