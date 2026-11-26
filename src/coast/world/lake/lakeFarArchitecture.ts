@@ -68,7 +68,7 @@ function addGriddedWall(add: AddVolume, wall: GriddedWall): void {
   const width = right - left;
   const inset = front - setback;
   add([left, right, inset, back, bottom, top], blueGrey, 0.96);
-  add([left, right, front - 0.05, inset - 0.24, bottom, sill], weatheredGrey, 0.89);
+  add([left, right, front - 0.05, inset, bottom, sill], weatheredGrey, 0.89);
   add([left - 0.04, left + width * 0.047, front, back, sill - 0.15, top], weatheredGrey, 1.04);
   add([right - width * 0.050, right + 0.04, front, back, sill - 0.15, top], weatheredGrey, 1.04);
   for (const stop of pierStops) {
@@ -87,7 +87,7 @@ function addGriddedWall(add: AddVolume, wall: GriddedWall): void {
     add([right - 0.16, right + 0.32, z + 0.31, z - 0.31, sill - 0.1, top - 0.45], blueGrey, 0.92);
     add([left - 0.27, left + 0.13, z + 0.29, z - 0.29, sill - 0.1, top - 0.45], blueGrey, 0.92);
   }
-  add([left, right, front - 0.07, back, top - 0.36, top + 0.01], roofEdge);
+  add([left - 0.065, right + 0.065, front - 0.07, back - 0.08, top - 0.36, top + 0.01], roofEdge);
 }
 
 // Dimensions are in metres, from the camera-facing edge to the rear. Floors start inside the ground,
@@ -138,7 +138,7 @@ export function addLakeFarArchitecture(surface: PlantSurface): void {
   detachedFace([-75.7, -73.9, -397.6, -411.7, 5, 53.3], blueGrey, 0.89);
 
   // Along the rear of the gravel, long courses overlap at several different distances.
-  addTerrace(add, [-71, -22, -442, -481, -1, 37.5], coolMasonry, [[0, 0.64, 0.41], [5, 0.3, 0.5]]);
+  addTerrace(add, [-71, -22.15, -442, -481, -1, 37.5], coolMasonry, [[0, 0.64, 0.41], [5, 0.3, 0.5]]);
   addTerrace(add, [-27, 27, -449, -492, -1, 34.8], coolMasonry, [[0, 0.9, 0.66], [3.8, 0.6, 0.28]]);
   addTerrace(add, [17, 69, -467, -512, -1, 31.3], coolMasonry, [[0, 0.65, 0.4]]);
   addTerrace(add, [61, 113, -450, -495, -1, 27], weatheredGrey, [[0, 0.46, 0.35], [4.5, 0.24, 0.45]]);
@@ -150,7 +150,7 @@ export function addLakeFarArchitecture(surface: PlantSurface): void {
   addTerrace(add, [26, 85, -407, -448, -1, 22.2], coolMasonry, [[0, 1.1, 0.72], [2.2, 0.76, 0.63]]);
   addTerrace(add, [77, 121, -416, -456, -1, 24.6], weatheredGrey, [[0, 1.18, 0.64], [2.9, 0.7, 0.57], [5.7, 0.63, 0.62]]);
   addTerrace(add, [110, 162, -402, -442, -1, 23.5], coolMasonry, [[0, 1.21, 0.63], [3.1, 0.75, 0.55]]);
-  addTerrace(add, [150, 200, -402, -438, -1, 25.1], weatheredGrey, [[0, 1.05, 0.64], [5.8, 0.84, 0.66]]);
+  addTerrace(add, [150, 200, -402.2, -438, -1, 25.1], weatheredGrey, [[0, 1.05, 0.64], [5.8, 0.84, 0.66]]);
 
   // Lower front ranges are offset around the next low roof, leaving their end walls visible.
   addTerrace(add, [-34, 8, -391, -426, -1, 23.6], coolMasonry, [[0, 0.57, 0.71], [3.0, 0.70, 0.53]]);
