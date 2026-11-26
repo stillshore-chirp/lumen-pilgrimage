@@ -85,20 +85,40 @@ function addShelf(
   shelfGlow: MeshStandardMaterial | undefined,
   name: string,
   rows: number,
+  rearTrim?: PaletteMaterial,
 ): void {
   const [u, d, width, depth] = fixtureRect(item);
   const top = item.height;
   const boardDepth = Math.max(0.16, depth * 0.72);
-  context.box(backing, u + width * 0.5, top * 0.5, d + depth * 0.16,
-    width, top, Math.min(0.06, depth * 0.20), `${name} back`);
+  const backingThickness = Math.min(0.06, depth * 0.20);
+  const backingFace = d + boardDepth - backingThickness;
+  context.box(backing, u + width * 0.5, top * 0.5, backingFace + backingThickness * 0.5,
+    width, top, backingThickness, `${name} back`);
   for (let index = 0; index < rows; index += 1) {
     const fraction = rows === 1 ? 0.5 : index / (rows - 1);
     const y = 0.23 + (top - 0.34) * fraction;
     context.box(shelfMaterial, u + width * 0.5, y, d + boardDepth * 0.5,
       width - 0.05, 0.035, boardDepth, `${name} shelf ${index + 1}`);
     if (shelfGlow) {
-      context.box(shelfGlow, u + width * 0.5, y + 0.024, d + boardDepth * 0.94,
+      context.box(shelfGlow, u + width * 0.5, y - 0.024, d + 0.025,
         width - 0.12, 0.012, 0.018, `${name} shelf light ${index + 1}`);
+      if (rearTrim) {
+        context.box(shelfGlow, u + width * 0.5, y - 0.024, backingFace - 0.008,
+          width - 0.24, 0.010, 0.016, `${name} backing light ${index + 1}`);
+      }
+    }
+  }
+
+  if (!rearTrim) return;
+  const divisions = Math.max(2, Math.round(width / 0.95));
+  const backingShade = tint(backing, `${name} backing shade`, 0xb9a78f, 0.72);
+  for (let index = 0; index <= divisions; index += 1) {
+    const frameU = u + 0.035 + (width - 0.07) * index / divisions;
+    context.box(rearTrim, frameU, (top - 0.12) * 0.5, d + 0.016,
+      0.014, top - 0.12, 0.024, `${name} vertical frame ${index + 1}`);
+    if (index > 0 && index < divisions) {
+      context.box(backingShade, frameU, (top - 0.20) * 0.5, backingFace - 0.006,
+        0.018, top - 0.20, 0.012, `${name} backing seam ${index}`);
     }
   }
 }
@@ -493,7 +513,8 @@ function furnishR1(context: TenantBuildContext): void {
   for (const [id, rows] of shelfRows) {
     const item = fixture(context, id);
     if (!item) continue;
-    addShelf(context, item, palette.plaster, palette.lightWood, shelfGlow, `${id} shelf`, rows);
+    const rearTrim = id === 'R1-09' || id === 'R1-10' ? palette.brass : undefined;
+    addShelf(context, item, palette.plaster, palette.lightWood, shelfGlow, `${id} shelf`, rows, rearTrim);
     addR1ShelfProducts(context, item, productMaterials, rows, `${id} product`);
   }
   const rearWall = fixture(context, 'R1-11');
