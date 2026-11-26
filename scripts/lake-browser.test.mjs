@@ -985,7 +985,13 @@ test('the twelve ceiling speakers play and stop koto from desktop and simulated 
   await page.addInitScript(() => {
     localStorage.setItem('lumen-pilgrimage:sound', JSON.stringify({ environmentOn: false, footstepsOn: false, master: 1 }));
     const resume = AudioContext.prototype.resume;
+    const audioState = Object.getOwnPropertyDescriptor(BaseAudioContext.prototype, 'state').get;
     let rejected = false;
+    // An AudioContext created during the button click can already be running in Chromium.
+    Object.defineProperty(AudioContext.prototype, 'state', {
+      configurable: true,
+      get() { return rejected ? audioState.call(this) : 'suspended'; },
+    });
     AudioContext.prototype.resume = function () {
       if (!rejected) {
         rejected = true;
