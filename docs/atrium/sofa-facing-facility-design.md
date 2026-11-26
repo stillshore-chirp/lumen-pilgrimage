@@ -4,6 +4,8 @@
 
 この資料と[自作の平面・断面図](sofa-facing-facility-plan-section.svg)を建築・内装の正本とする。専門稿は[照明・素材・展示](sofa-facing-light-material-design.md)、[植栽](sofa-facing-landscape-design.md)、[音響](sofa-facing-acoustic-design.md)。実装入力は[共通寸法](../../src/coast/world/atrium/atriumFrontPlan.ts)で共有し、設計過程と査読の採否は[Issue #269](https://github.com/stillshore-chirp/lumen-pilgrimage/issues/269)へ記録する。
 
+実装後の同条件画像、巡回、是正、描画量と検証の境界は[比較・検証記録](sofa-facing-facility-verification.md)を参照する。
+
 ## 目的と観察の境界
 
 ソファに座り、写真と反対の `+Z` を向いたときにも、商業施設の中で休んでいると分かり、無人の落ち着いた滞在空間が成立することを目的とする。床に小物や鉢を増やすのではなく、空白になっている店先、中央終端、上階の返しを、実際の奥行きと用途を持つ建築としてつなぐ。

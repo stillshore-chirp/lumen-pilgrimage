@@ -86,6 +86,8 @@ npm run test:coast:browser
 
 ソファ正面を変更するときは `ATRIUM_OUTPUT=/absolute/output/path npm run capture:atrium:facility` で座位正面・左右、原画方向、上階の5視点を保存します。2944×1648、DPR1、縦FOV42°、各初期pitch、アニメーション時刻を固定し、実際の投影行列とカメラ位置を `atrium-views.json` に記録します。比較には同条件の原本を使います。`ATRIUM_CAPTURE_MODE=audit` は時刻を進め、通常歩行で庭前の低い姿勢/立位、店舗斜視、上階端と振り返りの6視点へ移動します。`ATRIUM_TIME=day|night`、`ATRIUM_QUALITY=high|default`、`ATRIUM_LIGHTING=default|on|off` を指定できます。
 
+今回取得した画像・描画量・検証結果は[ソファ正面の比較・検証記録](atrium/sofa-facing-facility-verification.md)にまとめています。
+
 追加の施設ブラウザー検査はガラス越しの受光面の点消灯差と、通常歩行・ジャンプ・模擬XR両眼で庭前の同じ境界に停止することを確認します。透過材や接地の自然さは近接画像を目視し、画素差や単体テストだけで美観を合格にしません。模擬XRは実機のフレーム時間や聴感の実証とは分けます。
 
 湖畔の広間では `COAST_CHROME_CHANNEL=chromium npm run test:lake:browser` を使います。`LAKE_SCREENSHOTS` を指定すると、正面の昼夜、固定視点での昼の時間差、中央から見回した全方向と床・天井、両窓辺と背面の画像を保存できます。参照と照合する場合は、正面の広間、縦52°、約16:9を使います。窓辺では水面下の魚と背後の室内を観察します。窓と背面へ歩き続け、素材の見える境界で進めなくなることを確かめます。 [確認する構図](lake/lake-hall-design.md#写真と照合する視点)

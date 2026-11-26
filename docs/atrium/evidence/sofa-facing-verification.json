@@ -1,0 +1,1339 @@
+{
+  "base": "31a37ae66fdaf08f66dfc2e24ab9f9eb2ed78f68",
+  "implementation": "8ccb962a7d2f4378e39e004b21d3437a7a2f3555",
+  "images": [
+    {
+      "image": "sofa-facing-before.webp",
+      "pngSource": "before/atrium-sofa-center.png",
+      "nativeDimensions": "2944x1648",
+      "sourcePngSha256": "ff6b49cc79a6f34668d45d8ced6d74c12215c6cac8397b50b3c6a13fe0f3a951",
+      "webpSha256": "65aca6c892566b7f63a2a4147c485403ca6222d37cb74ef6757e3947be902adb",
+      "pixelDifferences": 0,
+      "bytes": 1781482
+    },
+    {
+      "image": "sofa-facing-after.webp",
+      "pngSource": "final/atrium-sofa-center.png",
+      "nativeDimensions": "2944x1648",
+      "sourcePngSha256": "b85629dd5b8ebe6946bd0435cc0119d8e4fb8ed11e834a37f9083563ecf8bc15",
+      "webpSha256": "5d2dd36c69fc505e29842c516ccef30e9272d89671808a11946683a5d2411ba2",
+      "pixelDifferences": 0,
+      "bytes": 1942122
+    },
+    {
+      "image": "sofa-facing-garden.webp",
+      "pngSource": "audit-final/atrium-garden-near-standing.png",
+      "nativeDimensions": "2944x1648",
+      "sourcePngSha256": "08732d866ef92de9833826b8452b574ee86e8ea503a08990e385f2466e0fabca",
+      "webpSha256": "7f0ec1cedffc2aee6e16b9de43b26b32cf6a0236c8b38695618daf941fa097a4",
+      "pixelDifferences": 0,
+      "bytes": 1457048
+    },
+    {
+      "image": "sofa-facing-west-shop.webp",
+      "pngSource": "audit-final/atrium-west-shop-oblique.png",
+      "nativeDimensions": "2944x1648",
+      "sourcePngSha256": "a3700195d307a18e1a189c313acd6467c9d84e09e3e447089b0813112a081deb",
+      "webpSha256": "3fc23f03b630297eb7903b64e4261d337cfd66873d4e335fd7c268824e5317fa",
+      "pixelDifferences": 0,
+      "bytes": 895338
+    },
+    {
+      "image": "sofa-facing-east-shop.webp",
+      "pngSource": "audit-final/atrium-east-shop-oblique.png",
+      "nativeDimensions": "2944x1648",
+      "sourcePngSha256": "beb5ead858431eeb7f0033d32b881f811c04c1970198725d218beff97a42ff5d",
+      "webpSha256": "f585968c2be6bd96cd3279fc367044c056267bb4a86ceba70437b38be86267b7",
+      "pixelDifferences": 0,
+      "bytes": 877590
+    },
+    {
+      "image": "sofa-facing-night.webp",
+      "pngSource": "night-final/atrium-sofa-center.png",
+      "nativeDimensions": "2944x1648",
+      "sourcePngSha256": "e548bf3562bca878f69705e8897b5c0d26f6b013623f22353003c07c48b1dd89",
+      "webpSha256": "d167f6109702a6f1a269b07d476d71c743ed19fd2734a911b220337516f1e040",
+      "pixelDifferences": 0,
+      "bytes": 1838046
+    },
+    {
+      "image": "sofa-facing-off.webp",
+      "pngSource": "off-final/atrium-sofa-center.png",
+      "nativeDimensions": "2944x1648",
+      "sourcePngSha256": "f32b171eb31df65739239faabc23123a1915a155209f4a0eed1eb3df9c33da14",
+      "webpSha256": "8855e5a750352d3693c5e053b50798f364997ef3abc7d05e2648e4a4313744fa",
+      "pixelDifferences": 0,
+      "bytes": 1170734
+    }
+  ],
+  "views": {
+    "before": {
+      "viewport": {
+        "width": 2944,
+        "height": 1648
+      },
+      "time": "day",
+      "quality": "high",
+      "elapsed": 0,
+      "frames": [
+        {
+          "image": "atrium-sofa-center.png",
+          "position": [
+            -2.7000000476837123,
+            1.1999999063745008,
+            -29.700000908825544
+          ],
+          "direction": [
+            -1.2238968313801538e-16,
+            0.03499285504221916,
+            0.9993875622749329
+          ],
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 277,
+            "triangles": 96539,
+            "onScreenCalls": 277,
+            "onScreenTriangles": 96539
+          }
+        },
+        {
+          "image": "atrium-sofa-left.png",
+          "position": [
+            -2.6999995628506,
+            1.2000000582050419,
+            -29.69999983867717
+          ],
+          "direction": [
+            0.6040198802947998,
+            0.03499285504221916,
+            0.796200692653656
+          ],
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 596,
+            "triangles": 181994,
+            "onScreenCalls": 325,
+            "onScreenTriangles": 98115
+          }
+        },
+        {
+          "image": "atrium-sofa-right.png",
+          "position": [
+            -2.7000005599516506,
+            1.2000000201828274,
+            -29.699999717334094
+          ],
+          "direction": [
+            -0.6040198802947998,
+            0.03499285504221916,
+            0.796200692653656
+          ],
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 290,
+            "triangles": 106785,
+            "onScreenCalls": 290,
+            "onScreenTriangles": 106785
+          }
+        },
+        {
+          "image": "atrium-reference.png",
+          "position": [
+            6.136354766331231e-10,
+            1.6500000645019712,
+            -1.8371784094028953e-09
+          ],
+          "direction": [
+            -0.037708476185798645,
+            0.12169758230447769,
+            -0.9918506741523743
+          ],
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1739,
+            "triangles": 551488,
+            "onScreenCalls": 948,
+            "onScreenTriangles": 288475
+          }
+        },
+        {
+          "image": "atrium-upper-facing-front.png",
+          "position": [
+            -9.22000002607016,
+            10.79999985917727,
+            -44.099999510826564
+          ],
+          "direction": [
+            -0.0019529318669810891,
+            -0.19866932928562164,
+            0.9800646305084229
+          ],
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 828,
+            "triangles": 386796,
+            "onScreenCalls": 451,
+            "onScreenTriangles": 201299
+          }
+        }
+      ]
+    },
+    "final": {
+      "viewport": {
+        "width": 2944,
+        "height": 1648
+      },
+      "time": "day",
+      "quality": "high",
+      "lighting": "default",
+      "mode": "comparison",
+      "elapsed": 0,
+      "input": "normal keyboard/pointer-lock mouse; no application teleport or scene mutation",
+      "frames": [
+        {
+          "image": "atrium-sofa-center.png",
+          "position": [
+            -2.7000000476837123,
+            1.1999999063745008,
+            -29.700000908825544
+          ],
+          "direction": [
+            -1.2238968313801538e-16,
+            0.03499285504221916,
+            0.9993875622749329
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 675,
+            "triangles": 390617,
+            "onScreenCalls": 675,
+            "onScreenTriangles": 390617
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-sofa-left.png",
+          "position": [
+            -2.6999995628506,
+            1.2000000582050419,
+            -29.69999983867717
+          ],
+          "direction": [
+            0.6040198802947998,
+            0.03499285504221916,
+            0.796200692653656
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1053,
+            "triangles": 602098,
+            "onScreenCalls": 570,
+            "onScreenTriangles": 308365
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-sofa-right.png",
+          "position": [
+            -2.7000005599516506,
+            1.2000000201828274,
+            -29.699999717334094
+          ],
+          "direction": [
+            -0.6040198802947998,
+            0.03499285504221916,
+            0.796200692653656
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 477,
+            "triangles": 208413,
+            "onScreenCalls": 477,
+            "onScreenTriangles": 208413
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-reference.png",
+          "position": [
+            6.136354766331231e-10,
+            1.6500000645019712,
+            -1.8371784094028953e-09
+          ],
+          "direction": [
+            -0.037708476185798645,
+            0.12169758230447769,
+            -0.9918506741523743
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1767,
+            "triangles": 550840,
+            "onScreenCalls": 962,
+            "onScreenTriangles": 288151
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "concourse",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-upper-facing-front.png",
+          "position": [
+            -9.22000002607016,
+            10.79999985917727,
+            -44.099999510826564
+          ],
+          "direction": [
+            -0.0019529318669810891,
+            -0.19866932928562164,
+            0.9800646305084229
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1598,
+            "triangles": 974640,
+            "onScreenCalls": 863,
+            "onScreenTriangles": 495545
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "upper-gallery",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        }
+      ]
+    },
+    "audit-final": {
+      "viewport": {
+        "width": 2944,
+        "height": 1648
+      },
+      "time": "day",
+      "quality": "default",
+      "lighting": "default",
+      "mode": "audit",
+      "elapsed": 44.177,
+      "input": "normal keyboard/pointer-lock mouse; no application teleport or scene mutation",
+      "frames": [
+        {
+          "image": "atrium-garden-near-low.png",
+          "position": [
+            -2.5830883998640393,
+            1.1499999590009877,
+            2.099991007353139
+          ],
+          "direction": [
+            -0.001592377433553338,
+            0.018598927184939384,
+            0.9998257756233215
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 181,
+            "triangles": 209513,
+            "onScreenCalls": 181,
+            "onScreenTriangles": 209513
+          },
+          "raster": {
+            "width": 2355,
+            "height": 1318,
+            "dpr": 1
+          },
+          "route": {
+            "start": "concourse",
+            "waypoints": [
+              [
+                -2.7,
+                2.2
+              ]
+            ],
+            "posture": "crouched",
+            "eyeHeight": 1.15
+          }
+        },
+        {
+          "image": "atrium-garden-near-standing.png",
+          "position": [
+            2.5466899662570888,
+            1.649999992148182,
+            2.187224318589246
+          ],
+          "direction": [
+            -0.0015919457655400038,
+            -0.029795588925480843,
+            0.9995547533035278
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 154,
+            "triangles": 186569,
+            "onScreenCalls": 154,
+            "onScreenTriangles": 186569
+          },
+          "raster": {
+            "width": 2355,
+            "height": 1318,
+            "dpr": 1
+          },
+          "route": {
+            "start": "garden-near-low",
+            "waypoints": [
+              [
+                2.7,
+                2.2
+              ]
+            ],
+            "posture": "standing"
+          }
+        },
+        {
+          "image": "atrium-west-shop-oblique.png",
+          "position": [
+            -10.764001712808037,
+            1.6500001271687736,
+            -3.9269481575944156
+          ],
+          "direction": [
+            -0.9665315747261047,
+            -0.06934430450201035,
+            -0.2469981610774994
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 151,
+            "triangles": 87331,
+            "onScreenCalls": 151,
+            "onScreenTriangles": 87331
+          },
+          "raster": {
+            "width": 2355,
+            "height": 1318,
+            "dpr": 1
+          },
+          "route": {
+            "operation": "normal walking and mouse look",
+            "waypoint": [
+              -10.9,
+              -4
+            ]
+          }
+        },
+        {
+          "image": "atrium-east-shop-oblique.png",
+          "position": [
+            10.81554416067942,
+            1.6500001334226866,
+            -4.034767354354466
+          ],
+          "direction": [
+            0.9667780995368958,
+            -0.06934430450201035,
+            -0.2460315078496933
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 163,
+            "triangles": 91387,
+            "onScreenCalls": 163,
+            "onScreenTriangles": 91387
+          },
+          "raster": {
+            "width": 2355,
+            "height": 1318,
+            "dpr": 1
+          },
+          "route": {
+            "operation": "normal walking and mouse look",
+            "waypoint": [
+              10.9,
+              -4
+            ]
+          }
+        },
+        {
+          "image": "atrium-upper-front-end.png",
+          "position": [
+            -9.310373021813016,
+            10.79999977282248,
+            1.253029849534208
+          ],
+          "direction": [
+            -0.0019611679017543793,
+            -0.177061527967453,
+            0.9841978549957275
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 157,
+            "triangles": 79007,
+            "onScreenCalls": 157,
+            "onScreenTriangles": 79007
+          },
+          "raster": {
+            "width": 2355,
+            "height": 1318,
+            "dpr": 1
+          },
+          "route": {
+            "start": "upper-gallery",
+            "waypoints": [
+              [
+                -9.22,
+                1.35
+              ]
+            ]
+          }
+        },
+        {
+          "image": "atrium-upper-front-turnback.png",
+          "position": [
+            -9.310372935333437,
+            10.79999936521704,
+            1.2530299938667866
+          ],
+          "direction": [
+            -0.0001968399592442438,
+            -0.177061527967453,
+            -0.9841997623443604
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1699,
+            "triangles": 543664,
+            "onScreenCalls": 928,
+            "onScreenTriangles": 284275
+          },
+          "raster": {
+            "width": 2355,
+            "height": 1318,
+            "dpr": 1
+          },
+          "route": {
+            "operation": "mouse turnback at the same supported end"
+          }
+        }
+      ]
+    },
+    "night-final": {
+      "viewport": {
+        "width": 2944,
+        "height": 1648
+      },
+      "time": "night",
+      "quality": "high",
+      "lighting": "default",
+      "mode": "comparison",
+      "elapsed": 0,
+      "input": "normal keyboard/pointer-lock mouse; no application teleport or scene mutation",
+      "frames": [
+        {
+          "image": "atrium-sofa-center.png",
+          "position": [
+            -2.7000000476837123,
+            1.1999999063745008,
+            -29.700000908825544
+          ],
+          "direction": [
+            -1.2238968313801538e-16,
+            0.03499285504221916,
+            0.9993875622749329
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 675,
+            "triangles": 390617,
+            "onScreenCalls": 675,
+            "onScreenTriangles": 390617
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-sofa-left.png",
+          "position": [
+            -2.6999995628506,
+            1.2000000582050419,
+            -29.69999983867717
+          ],
+          "direction": [
+            0.6040198802947998,
+            0.03499285504221916,
+            0.796200692653656
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1053,
+            "triangles": 602098,
+            "onScreenCalls": 570,
+            "onScreenTriangles": 308365
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-sofa-right.png",
+          "position": [
+            -2.7000005599516506,
+            1.2000000201828274,
+            -29.699999717334094
+          ],
+          "direction": [
+            -0.6040198802947998,
+            0.03499285504221916,
+            0.796200692653656
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 477,
+            "triangles": 208413,
+            "onScreenCalls": 477,
+            "onScreenTriangles": 208413
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-reference.png",
+          "position": [
+            6.136354766331231e-10,
+            1.6500000645019712,
+            -1.8371784094028953e-09
+          ],
+          "direction": [
+            -0.037708476185798645,
+            0.12169758230447769,
+            -0.9918506741523743
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1767,
+            "triangles": 550840,
+            "onScreenCalls": 962,
+            "onScreenTriangles": 288151
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "concourse",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-upper-facing-front.png",
+          "position": [
+            -9.22000002607016,
+            10.79999985917727,
+            -44.099999510826564
+          ],
+          "direction": [
+            -0.0019529318669810891,
+            -0.19866932928562164,
+            0.9800646305084229
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1598,
+            "triangles": 974640,
+            "onScreenCalls": 863,
+            "onScreenTriangles": 495545
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "upper-gallery",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        }
+      ]
+    },
+    "off-final": {
+      "viewport": {
+        "width": 2944,
+        "height": 1648
+      },
+      "time": "night",
+      "quality": "high",
+      "lighting": "off",
+      "mode": "comparison",
+      "elapsed": 0,
+      "input": "normal keyboard/pointer-lock mouse; no application teleport or scene mutation",
+      "frames": [
+        {
+          "image": "atrium-sofa-center.png",
+          "position": [
+            -2.7000000476837123,
+            1.1999999063745008,
+            -29.700000908825544
+          ],
+          "direction": [
+            -1.2238968313801538e-16,
+            0.03499285504221916,
+            0.9993875622749329
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 675,
+            "triangles": 390617,
+            "onScreenCalls": 675,
+            "onScreenTriangles": 390617
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-sofa-left.png",
+          "position": [
+            -2.6999995628506,
+            1.2000000582050419,
+            -29.69999983867717
+          ],
+          "direction": [
+            0.6040198802947998,
+            0.03499285504221916,
+            0.796200692653656
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1053,
+            "triangles": 602098,
+            "onScreenCalls": 570,
+            "onScreenTriangles": 308365
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-sofa-right.png",
+          "position": [
+            -2.7000005599516506,
+            1.2000000201828274,
+            -29.699999717334094
+          ],
+          "direction": [
+            -0.6040198802947998,
+            0.03499285504221916,
+            0.796200692653656
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 477,
+            "triangles": 208413,
+            "onScreenCalls": 477,
+            "onScreenTriangles": 208413
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "lounge",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-reference.png",
+          "position": [
+            6.136354766331231e-10,
+            1.6500000645019712,
+            -1.8371784094028953e-09
+          ],
+          "direction": [
+            -0.037708476185798645,
+            0.12169758230447769,
+            -0.9918506741523743
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1767,
+            "triangles": 550840,
+            "onScreenCalls": 962,
+            "onScreenTriangles": 288151
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "concourse",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        },
+        {
+          "image": "atrium-upper-facing-front.png",
+          "position": [
+            -9.22000002607016,
+            10.79999985917727,
+            -44.099999510826564
+          ],
+          "direction": [
+            -0.0019529318669810891,
+            -0.19866932928562164,
+            0.9800646305084229
+          ],
+          "projection": {
+            "verticalFovDeg": 42.00000169963833,
+            "aspect": 1.786407698736096
+          },
+          "draws": {
+            "calls": 1598,
+            "triangles": 974640,
+            "onScreenCalls": 863,
+            "onScreenTriangles": 495545
+          },
+          "raster": {
+            "width": 2944,
+            "height": 1648,
+            "dpr": 1
+          },
+          "route": {
+            "start": "upper-gallery",
+            "operation": "mouse look",
+            "frozenAnimationTimeMs": 1000
+          }
+        }
+      ]
+    }
+  },
+  "sourceInputs": {
+    "package-lock.json": "77d83a329599a7e34ad592ef76dc8d0e7b648bd6eeff0ed91556b54247616aac",
+    "package.json": "aee0c467163dd2b0e0da81705a28388fd358b70f9ca4026f29b7e29e45b521f1",
+    "scripts/atrium-audio.test.mjs": "63933ed2fa3e5c0785b3ebb37a57782b2c1629570f40dbbdf849c86fad4ec629",
+    "scripts/atrium-browser.test.mjs": "9576e411638e5b7e8bed4f4d00c78f41fcef19922b5bba145d1d0c5d0a6b788d",
+    "scripts/atrium-facility-browser.test.mjs": "912d955be83665e8d6ef2b32d6fdb2dbf7db8d22f5d85a40a4209995b81b6329",
+    "scripts/atrium-facility-views.mjs": "241ec93542ae8d6b688fb01c1c71d420b48d2a4144970b4a7b59ddf46b717c65",
+    "scripts/atrium-facility.test.mjs": "1137fc86385df92aee94873420c9c6f1e0aeb1833f2038f8531f81b95daca205",
+    "scripts/atrium-navigation.test.mjs": "6b8ca22bc8ca18ec3357ffbc03705bab2e5e877701543411b5bec408f1b4bd9f",
+    "scripts/cinema-audio.test.mjs": "ab37a93fe99c20f442f2d882855b25c5ae4a57b4015ba9cb08b0a66a9e8e7d54",
+    "scripts/cinema-browser.test.mjs": "a254f92a10e02b2b126f1b56a0a9776bc36be20b397718b579332410cbf611cb",
+    "scripts/cinema-lighting.test.mjs": "b89fa79100a5a0ecdc00f07948a9390349b5d1a41f476c2730a9b6bbf4b82186",
+    "scripts/cinema-movie-video.test.mjs": "f00582c395280d65afa0674abcaca6c36e91409e699edd38203dd48230b1045d",
+    "scripts/cinema-navigation.test.mjs": "77fbe6801df896a6f5138cec03fdbcc03410e24b0fcaf0f370b94a27e42c9faa",
+    "scripts/cinema-reflections-geometry.test.mjs": "aba69e8c58daa55a0f7767164395d7affcb0dd442d0197614e6cd00774abf1d6",
+    "scripts/cinema-room-audio.test.mjs": "3456399cdec79d0cb757d82d0b8b1f3aa0c3456fc993ef9ce8acde9d793caad1",
+    "scripts/cinema-routing.test.mjs": "547e0771cc840b95416a68e6a22d05a7b99e1a6d931acc220992633db36a3c7d",
+    "scripts/cinema-screening-fixture.mjs": "0b69ffbf72b1f9ee2dfd35228fbc07cf8c323413d4e630af48626bc487bd016a",
+    "scripts/cinema-screening.browser.test.mjs": "1229a4f4d28380d55cdcdb4336d15f7860dc6665e3eec54110c259195df92421",
+    "scripts/cinema-source.test.mjs": "222860905819ae57f9b9a8d80fdaddada47e0a1eef00f84961c37f31c40bb597",
+    "scripts/coast-acoustics.test.mjs": "6b277e1a971078103493638b45ab6cb7f6bfe8a48ad4a0fb9d0066ac3ad1a4ae",
+    "scripts/coast-browser.test.mjs": "6ea485c168d83f13e872313f9b3d5ac2d3607ad539e5b976b17acb3d8753bf34",
+    "scripts/coast-controls.test.mjs": "10fd172086aa8cd1dacdda820cb4266eaf366353f04bd97926d189b929a78c9d",
+    "scripts/coast-terrain.test.mjs": "2f4495a5cdf5aac3dcb9f42fbbc532aa2a79c889f7ed50f69fb9e48f4a118591",
+    "scripts/exploration-route.test.mjs": "a1edc41ca6d3df186eeb88315c1b6d4a5c7e9ccccf754722f2e551288aca1cc0",
+    "scripts/lake-audio.test.mjs": "7c4d4303e8c30f104697a22b625cd7585a65512b5e5461a25e85470c5ea4c221",
+    "scripts/lake-browser.test.mjs": "21e79886b2bb2eaa9913e5dfaea0bc6451081811731808ed67c0026f8e943f84",
+    "scripts/lake-fish.test.mjs": "85a17c9d8e09d28c24fe5e37edf16b72cab5e282edb495aa1d4e19351e639491",
+    "scripts/lake-geometry.test.mjs": "757f9e48b27719b46118c49f90e735f05361917342c0701ab3f23a8b73dccb3b",
+    "scripts/lake-navigation.test.mjs": "2b08ab7f596f9d1dc7142615036b8bf24f03dadad4c383b65e59ea544f80caea",
+    "scripts/lake-sky-browser.test.mjs": "6e8e3dc79e327653e524834632e796cbb9881d12a46945f13038c717da9a195c",
+    "scripts/lake-vegetation.test.mjs": "8d913ca5517a52dda283b8cd6b2a1c65c8b3d0ec0600f0726cdaf06aa43526ba",
+    "scripts/monitor-audio.test.mjs": "7c418397f49b7aded97e12f60ecfd38464aa7be485606583210306ec0411e3e6",
+    "scripts/monitor-browser.test.mjs": "9f77756c8a8f23d4e80dc4a213bc8622d57c16a333bf7e4dd267448a27d5697a",
+    "scripts/monitor-capture.test.mjs": "aec5a073cd60582c8b699cb310b1f5ea7adb107b53f0a26c9cc1ed26a2a59784",
+    "scripts/monitor-pose.test.mjs": "3f4b2163c9731876fac28b02cc2f2b4cdf6b1b3a69589c53c6b71a12b03181a8",
+    "scripts/monitor-session.test.mjs": "2cb6863bf3016c95cdc136199950ccc4756ca064662bb6ee40aed99d6afeed61",
+    "scripts/monitor-signaling.test.mjs": "f2b1009ddb9617f8c1248008aaace8c1c3dbf9f88a1eacb512f3644ee060085f",
+    "scripts/monitor-xr.test.mjs": "b42b67b0e82fa68fd6c3febc593bdcbcdb8b082e93cf4c988e9f5b7d7a00b5d7",
+    "scripts/residence-appliances.test.mjs": "e457ae9094b8676aba43a690d85ce679d1ff58a8e609d1280d59a0d7a5158f31",
+    "scripts/residence-audio.test.mjs": "55585d12b5c3b5719729ca5345fbdbdeb431afecf6c5d11eac700baab239e1fe",
+    "scripts/residence-browser.test.mjs": "818b1205073eb32be6ebfd7dbc153592024bef6167993737932e6a9ca892a305",
+    "scripts/residence-light-motion.test.mjs": "7046dfe0c1713b04c54d581946381656834a0f4ab8cf107f02b6e442b6eef764",
+    "scripts/residence-lighting.test.mjs": "ed5d996f8458628ae7bff0f482aa512130c02c8acc8b71dd1a12bc6771ee5b01",
+    "scripts/residence-navigation.test.mjs": "0b6a209f72ec4a76d7038d1f75e898c18e317cd98565cee30df97d17a490922d",
+    "scripts/residence-street.test.mjs": "51f8949f7b795f88ed3eb186ec9629e72af0ac644e783e27428bfcf85bdd4a3d",
+    "scripts/simulated-xr.mjs": "8d56cfa932977dea05155f31e18316cdfea20f78f594e74627a676158048b607",
+    "scripts/validate-harness.mjs": "c284009eca8b4257b7975011ae7ffdb1fb0de89891b6bb570553322ebe129a95",
+    "scripts/validate-harness.test.mjs": "665eb7b81eda23307d46657d4b57ad3986f6344140e5bc34b87289b05e39ab9d",
+    "src/coast/CoastApp.ts": "c0e2d384f7225df32e0629eacfd8df5d110b29a97dd5cf8334faed8085d57745",
+    "src/coast/CoastAudio.ts": "91e9f8aa653fc78b0cee5b7b14f3b2b79ba87402e2fe56fc617b7f5a5d0ddfa9",
+    "src/coast/CoastControls.ts": "bce6a241cda3bd7bedf56b3c828cc925813625d9be5301137f9d3a77d7e19379",
+    "src/coast/CoastFoley.ts": "ffb4605943d3aa51f4e690b745a39897dde8ff252c521fa90bd46997441383ed",
+    "src/coast/CoastSoundControls.ts": "b10e30136081d43072f84bede8a799e761a0111a0fa84a1809c5f22b90d5cb0f",
+    "src/coast/CoastTravelPanel.ts": "4cf0429be5af06449f270c881aae26581d36ba2e284a5d9b85b69657fc87642f",
+    "src/coast/CoastWorld.ts": "09cc6871d027c2414c7027c3dd8f237921b7476010a49f334a6b11cde0489a79",
+    "src/coast/CoastXR.ts": "271abb726e9abf25de6b14a85082b61356bb5a8efee14628a9bf908cbdd666c4",
+    "src/coast/DesktopGrab.ts": "a0f1b3a916fb9febf70e254275be9def6a7a78c697f4b0856dd65283ed39c9f7",
+    "src/coast/LakeEnvironmentPanel.ts": "d3550647e52b537614fcd64e2a7dd948325af5d455e15bdc1c2c7d645921c421",
+    "src/coast/ResidenceControlPanel.ts": "81a3c99b1a6e7d0cbe58dad18afb65b4205b1d73d31996782d007fb2bd10ed87",
+    "src/coast/WorldLightingControl.ts": "7a3c39ac5d60f6822ba9f665cbb3feb73b54d608494b09a67b94957fd1fca29d",
+    "src/coast/WorldXRGrab.ts": "d16be22a771f368316e237415562e2642a5ad93fd5426bb360c8215e54a425d4",
+    "src/coast/coastAcoustics.ts": "29c11c11ba898333fced51560fb1a868c43a374f73e1c7a59284b59617d3fd42",
+    "src/coast/coastBirdCue.ts": "ddea4496917243e9b47a4ac68c6042820796d7b3363bcb0d6b593d1f23d135ca",
+    "src/coast/coastDestinations.ts": "8f1ecaef6a05f92451157c75319e31c6cdf7ea88d08137d627cd66840cdaf90a",
+    "src/coast/coastShore.ts": "3a2d9d1a35e2e8e51bd58673f737abcd0383bf443c11b5039c0be7e7bc33346d",
+    "src/coast/desktopGrabOcclusion.ts": "f03fd9a4c754b18650f59c756be958515bdc0df898f7992340e4140d289c5fd9",
+    "src/coast/disposeSceneDrawables.ts": "752a5c91161b86f994780e032bc3f3e7851de6563c181f1e1013fd39b75e2503",
+    "src/coast/explorationOutput.ts": "8305d1ad0a0ce976f7eee5870cd389233a44f9566b41c8521316c9ff679a3cca",
+    "src/coast/explorationRoute.ts": "5c7993dc5bc1268e2f5f61fb544ea87d1fef9648b78b2744b89de4cdbc847cbb",
+    "src/coast/explorationSound.ts": "7e777875309e286662f902cf222d118326940f9a38420282658b6f1844d74efa",
+    "src/coast/floorGrabPosition.ts": "38b30423d2230bb43c7a12e0daa648cf3a97795c3570cb7ef5f78518f3dbf71a",
+    "src/coast/terrain.ts": "4502f6aec853b5add7a8d19e43135c11c4fdcae3d9a6af8535f907233028f531",
+    "src/coast/world/atrium/AtriumWorld.ts": "39f9f239bd2e5ebd752d1f482bb2754ddcf01cae676554da453896d0fc8fbb66",
+    "src/coast/world/atrium/atriumAcoustics.ts": "94796d4a829626f5457bc15e48358d16da8451a674d026a45e173f2c0e98e940",
+    "src/coast/world/atrium/atriumAudio.ts": "01fd159ae18ac5b0074244cfbc1d82d0d46915b3b4a257a7ada0ff2a01cab60e",
+    "src/coast/world/atrium/atriumAudioSamples.ts": "f48b7cd209071f9ef81dc0527ff6e2dcc306d7a541d16a36bd5fe4fb7e7f0d41",
+    "src/coast/world/atrium/atriumBatches.ts": "0d3bc84750bfd2ffa838c202be4e0110e4daa3c22214bbb4bb0f249296e07a37",
+    "src/coast/world/atrium/atriumFloor.ts": "963060523a352ebd39e937c6fbd1a06af27e6a0a1f3d2c5574338a91ee3199d1",
+    "src/coast/world/atrium/atriumFrontCommons.ts": "a42924bb0c93b5493ec3bfc66c256fef1c9eaf85fb339774b37c240b4be14253",
+    "src/coast/world/atrium/atriumFrontGarden.ts": "db29ef4d2ccce4f3641b7cdf9a2e6928db6fe47284bcf92a704d1bf804faf96b",
+    "src/coast/world/atrium/atriumFrontInteriors.ts": "f8841c46f63eb6f1bf4ad4032cc3a36bfa79a42ed0917a542e1cb17643a97c55",
+    "src/coast/world/atrium/atriumFrontMaterials.ts": "1db938ac89a16f8d7e5e8dce8992f2a06ac511133bd2db0accae2dc8049bd527",
+    "src/coast/world/atrium/atriumFrontOcclusion.ts": "9aca11f1eb588248e79e1ac8dcaf4950e32a9898b5fef33f9a18adf41033212d",
+    "src/coast/world/atrium/atriumFrontPlan.ts": "e6e8b5aa516e7bc2b561026db1a1ed398813387057ca2775004124b26cfc111d",
+    "src/coast/world/atrium/atriumFrontShell.ts": "8974a32453edf87675e5f35cb798f9eba6fdf80745a2a9d2e6d668a5858237ff",
+    "src/coast/world/atrium/atriumFurnishings.ts": "7e8cab9e5921eae92e2b8aa3f70e450124676a7a1ace091b38de001ce1aa7290",
+    "src/coast/world/atrium/atriumLayout.ts": "6fa7b437fd7bc4c7dc1ebbc7e014474352fe4df017e1d4edf41533db6e3e3b73",
+    "src/coast/world/atrium/atriumNavigation.ts": "d3f1b0af45f613f6dc1a2d805be772ec667451c333d95b8ad05c2394eb5730ba",
+    "src/coast/world/atrium/atriumRetail.ts": "4930466dde1ce8998b72fef6f28a5cf7f3d4b61979e29639b2dd43d6bac47fa2",
+    "src/coast/world/atrium/atriumRoof.ts": "c27371eacd7f65f719434a6e18ea92e248b3b44db411017ccf3c493ecc7a222e",
+    "src/coast/world/atrium/atriumShell.ts": "52dd71e626219ee9469d48b75c8dd0a67543b7796605522a3bed2c1d961b332a",
+    "src/coast/world/atrium/atriumStair.ts": "fc501dec386cd441b7ebea8ed30788a3c0a3987fb1ba4b8432b1838e8d1037d0",
+    "src/coast/world/atrium/atriumTenantArchitecture.ts": "efefb00c4cfab486b62e39a62fa8b3e58f2b47a0656f205e92db3455e4c44b8c",
+    "src/coast/world/atrium/atriumTenantEast.ts": "045b2bf8d8d1c5f275f58f9cb6a3cf3f813605ff7bc8bd0e7f5cbe8ec2140e1f",
+    "src/coast/world/atrium/atriumTenantLighting.ts": "23acf46cc11e8b728d1f81f950d7f27d70347a06078dbf54700ac724753dfe81",
+    "src/coast/world/atrium/atriumTenantPlan.ts": "3cdc18f5f1ef6dc77313577af808ba8b3783b9e8a87c8498e44c326100d8f9c2",
+    "src/coast/world/atrium/atriumTenantRear.ts": "2e1c68b7ab3e3c6eef8ff34ebfb430985ccf8707c037150a5067dda82e1f7ab7",
+    "src/coast/world/atrium/atriumTenantWest.ts": "c2a6a02dcb955111b63c7b9397c7c6f0dfe97aa7e71a0df4428d40e8fb607e66",
+    "src/coast/world/cinema/CinemaPanel.ts": "5b0f879030a4da6486864f058b7434e3dad79ef1df828cf7d40155ae95c8b303",
+    "src/coast/world/cinema/CinemaWorld.ts": "93107b9cbe120954ed5597e620cab768395bb0279c38f7223ad1736a464dd53a",
+    "src/coast/world/cinema/cinemaAcoustics.ts": "5583ebe665e77359a1c33ef6febd41c91dd08963fe0693c40d18746b588cf5c4",
+    "src/coast/world/cinema/cinemaAmbience.ts": "2a5c821cc22418c0451502227f00ce42568b824367e9a0d0ca9e3166564fa2bc",
+    "src/coast/world/cinema/cinemaAuditorium.ts": "293f87b7b9c4dd6810ec2d2f2ff81b6a08a9174fe0947d6412195ec5a447f302",
+    "src/coast/world/cinema/cinemaDemo.ts": "ebd0a14a05d09d6c4424e6dfcc3d1bcf74dca5975085b356933bf98cbf3254f1",
+    "src/coast/world/cinema/cinemaFinishes.ts": "5898d41e5a984e00350ef219ddd88918ca8a3ad5874a85391a9c3546ecbf6987",
+    "src/coast/world/cinema/cinemaFixtureLighting.ts": "edc8765b6f6371fcaaa51f9f02fa4637f42d288cb0f7a452206dd14ee4b95797",
+    "src/coast/world/cinema/cinemaFixtures.ts": "1ccdf6510f7284f99894ade4b0645dd7f04fbb56e57d89d31fb5bc3b878b7ab2",
+    "src/coast/world/cinema/cinemaFloor.ts": "73849173e7806f623ca6cad05a676cccd3462244f46ff0b10176c06baf61f4aa",
+    "src/coast/world/cinema/cinemaLayout.ts": "b9f38511b09a70908c5a101317b29d014e959c7f8db31a853e04d131132448bb",
+    "src/coast/world/cinema/cinemaLightShaders.ts": "e54afeed597ad83689b3de76eb9b4fb5fc926e52946d41f291bd3eb02c49caee",
+    "src/coast/world/cinema/cinemaLightTransport.ts": "0efbc77bec0927f23706fd2abc8e73155ec9634a24d9875d47424f891d57e508",
+    "src/coast/world/cinema/cinemaLighting.ts": "dbe31448b48edb08cde480e18b38ac02d89c02ce72c4805973ab1847024ba723",
+    "src/coast/world/cinema/cinemaMovieVideo.ts": "43fccf946cfe2d401e4e508de0ce3e35bbdc57a2c2625e9d3e0a248ef1188eed",
+    "src/coast/world/cinema/cinemaNavigation.ts": "0fe35ca7f5701c89f7197a7dc341f4d463e7fb9f0a134ef1c49bb36747f96d9f",
+    "src/coast/world/cinema/cinemaPlayback.ts": "94980f3a26caa0105af64cb5ebe1bd085f9df0f33cbf55f6e00166517e15ab29",
+    "src/coast/world/cinema/cinemaPreview.ts": "4a771b661342e1be164446709d6e338f028c517c31d617a515cc7f7bf4d2d0b0",
+    "src/coast/world/cinema/cinemaProgram.ts": "5ef7848e9237fdbe2c27eedb56ba235d700061d1106a4544b7c22c98e85b76ca",
+    "src/coast/world/cinema/cinemaReflectionsGeometry.ts": "5615d2ce77528e2dffca32e9d783a742aa2c311644e33c1cc108eacc97dd50de",
+    "src/coast/world/cinema/cinemaRoomAudio.ts": "a94eb57362b06ceeb889f1ddd51d45a73b808ac4e0b419057c35257333a92c10",
+    "src/coast/world/cinema/cinemaRoomProcessor.ts": "4f8deab17788c88bd5e6a09251e71b0edd370297877f49f5ca90c2997c69c0ce",
+    "src/coast/world/cinema/cinemaScreening.ts": "33e1d0e8ea06f0e226edf9430fb07eaf67f95c18775208e1a0dd7aca2ca22759",
+    "src/coast/world/cinema/cinemaSeatTransition.ts": "cc202800bf89c9a3e97bba4de20c1f1eab85cd9fdea8de7588ca099e45f26c30",
+    "src/coast/world/cinema/cinemaSeats.ts": "b0cc4cfe753dbdefeb4036f7b2bd5ff3cf71d5a2b4e0ef71073afcd0b95461f2",
+    "src/coast/world/cinema/cinemaSource.ts": "e07ac536b431229e2a170177fbdf61700c5d4eb494b649277b48fbd9cc48d50b",
+    "src/coast/world/cinema/cinemaSpeakers.ts": "2d4bd80131605166a8317fa702543e357429f7001f37481d2c66600a176d6b3c",
+    "src/coast/world/coastAtmosphere.ts": "843e59371c19062f6e6333b1550a31ab379d2fa78f669d37bf12003bb65ee19a",
+    "src/coast/world/coastBirdLife.ts": "4463de4d93df171d29cf80c485d1fa063815aefca8e42658116cb8304bf7cb12",
+    "src/coast/world/coastBirdModels.ts": "264ca5a315cf9965c49d6059d5f2f92cd3fdd5b26e57ff801650bf60fe15ff54",
+    "src/coast/world/coastCascadeGeometry.ts": "670aab961388a0be30aee84bc8fcb733a61d474bb2c245b383ff8e38535e53b4",
+    "src/coast/world/coastForestLight.ts": "4938dec32e4cc3e5c26b371378178f34abaa3c58bf2b6ad771f03c41fc2077ec",
+    "src/coast/world/coastForestRocks.ts": "cd402501c59e69a968673f68fd1d0829980639e531e10176150a9239e19687ae",
+    "src/coast/world/coastForestVegetation.ts": "5995f3288cbfc27f649664c626176591e2fc528c1981a06083b6b93756370f87",
+    "src/coast/world/coastForestWater.ts": "32dd04a347b3eb266a9b3b1cb4eacf248d546c423abe7e8b6ba04be27eeccb61",
+    "src/coast/world/coastInariFinishes.ts": "e4271d1efa1ae80fd437ee694cf546b10f4899d03b897cd4f7f276dd408f2796",
+    "src/coast/world/coastInariGrove.ts": "5b186dc00f2393ddc48c14fd6f602bacce03e67b1a438a4d99d2f03a1a4ae6b7",
+    "src/coast/world/coastInariModels.ts": "7731db345231791c90db7ccd76f2b38f103a708fa2756bb06eb289bfdfd06f42",
+    "src/coast/world/coastInariStonework.ts": "6ece526df2ad832d83b86341c80ef3c6e41edc58b7040f4e594536b760316402",
+    "src/coast/world/coastInariTrail.ts": "a9daef36b5dc62dbdc947a0614cb4f986a95f72ffe28840edabd2267e56a22f3",
+    "src/coast/world/coastLandmarks.ts": "a484f9e4b86cb47cf3fe0686c3bb90c1bccb08f8bc67fd5d5e76550197bae915",
+    "src/coast/world/coastLighting.ts": "73b44118a5c76a4d6d80f6c9e528577257eab1c2a174c5b2a1c4a350ad96c9b3",
+    "src/coast/world/coastMilkyWay.ts": "9f9e0874902005b20f4b3c292bc2f0e5aa1cc26e79467a080cec2f7a72095910",
+    "src/coast/world/coastNoise.ts": "deeba2473d0b77a0df560268a06bb105783ef06dc06f24b793d26853693ddeb2",
+    "src/coast/world/coastOcean.ts": "0dee3c303df7d4f5211d0f392fc6c5fe19ad44ae1e455ba32146ebf8861290d1",
+    "src/coast/world/coastPlantMeshes.ts": "52208c5644880d227b943a49113acff47e48894be92da4cafc2a797e6ce7151b",
+    "src/coast/world/coastRestAreas.ts": "11602f913c3650b376e0705bcc2d050d24a395e784a1131c0f55821734a503e7",
+    "src/coast/world/coastSceneryAssets.ts": "74da5924b285b5c2acd0ddb029f7034c4c941d5bed5ce4616f94e46e3a929077",
+    "src/coast/world/coastSky.ts": "03cae4ee606c872090f4787860314503e9b44ccc57c3a63a8828888c71eeb1a2",
+    "src/coast/world/coastSprayRainbow.ts": "ee44e624f1e46bbfbb2d5dfb87186c0f455994112fb25886bafdd921495a095f",
+    "src/coast/world/coastSurface.ts": "992cb22eb9be2fc24b43c989d3051d74e7508dd9d2484d8d1948b162d278b379",
+    "src/coast/world/coastSwell.ts": "b0e11a6dfbece9480c22ec8cf198677db7528f7b3bd93587bfb125289f633e63",
+    "src/coast/world/coastTreeMeshes.ts": "eb191f2a83157fd7828ccee1d6ce4fa8345af48e653e890b64decd9a8df20270",
+    "src/coast/world/coastUplandDetails.ts": "f1fa6b090a53db21c56fefd8bf9b5eec1b90abc1a6e75fa9a3d289461ba9d320",
+    "src/coast/world/coastUplandLake.ts": "a5f5536d23a984af783398d06d2e0166f5126aef8bc496d837c823180eaa89bb",
+    "src/coast/world/coastVegetation.ts": "a5bb9c58f8f8cc2f983caaf20b35ed33910b297e11db3b39590a89abea902a13",
+    "src/coast/world/coastWaterOptics.ts": "658612d427fefeda3829c5f61ffaa069161d2866eb13810ff22173bdf774a540",
+    "src/coast/world/coastWaterfall.ts": "6762616a4ef9c5a289ea721aea42c9c4d55e43bbfde40e9f8765eab095d670ec",
+    "src/coast/world/lake/LakeWorld.ts": "b0f79b60caa2b372ee392db49fb693605676dd9d3c603a0c984e96c8cb9cd0db",
+    "src/coast/world/lake/lakeAndon.ts": "3ad001dab8d147ad491810b3c102690e206c844fe751bc64cdf6f6a3e21b8108",
+    "src/coast/world/lake/lakeAudio.ts": "59f587283a8fe83afe58850e0c1b72d1ce5381d23379783bd61ed48df3186202",
+    "src/coast/world/lake/lakeAudioAcoustics.ts": "b7a89cfbd7f6c9446f45669e89539b830fad42eaf1db289027e53a3100ca0657",
+    "src/coast/world/lake/lakeAudioSamples.ts": "cffc5b3b64eb0ad2be3a5b2cfb396a39e0e92146eded6943c3f9f6372e1d5b95",
+    "src/coast/world/lake/lakeBankSupport.ts": "69153899429c60407edb0ed87d69f6168fc3282fa0e8171db46b4afbcacba20b",
+    "src/coast/world/lake/lakeBasin.ts": "9d5d07ae391652506d1019e0441f8a041df5bd416e6f69ed2381ef84efda76b7",
+    "src/coast/world/lake/lakeBasinStone.ts": "a1ecffb91c38039901c36c09aa3d7bac0ce07339f7381e0193c3caa5c9e2ae5a",
+    "src/coast/world/lake/lakeFarArchitecture.ts": "b5367b11b9afc1315ad35bc7da24e58a29955eebb93577d8a4d1c1ab82d1edc6",
+    "src/coast/world/lake/lakeFarShore.ts": "ca64281aa0e2d243e50e843b47af1e515348bf2d62e3f23d11e2919f6bb8c82c",
+    "src/coast/world/lake/lakeFishMotion.ts": "fce2cba16aa92a8379b255c0d887e5f1c767709330a8be1dfe0f4f110fbbe04d",
+    "src/coast/world/lake/lakeFloatingLanternMaterials.ts": "8ea82be22db42e75e81eb532466c0dee9a4ea44479a5cb40efd86269e638e470",
+    "src/coast/world/lake/lakeFloatingLanterns.ts": "6ad175c79583c8ef8fb079bf5a96351e227b548f73108d2af4573ba6055f9308",
+    "src/coast/world/lake/lakeFuton.ts": "a86999fe7b7759ecff9470794ddbebab377ba583e161cb63fb6e3baa09aa26f6",
+    "src/coast/world/lake/lakeHall.ts": "589b19cb30321ba00dad51df35481c070faccd2d115ea70fe54fdff936cb8ea7",
+    "src/coast/world/lake/lakeHallArrangement.ts": "9afcffd926cc41213d80808e1a012a25042b8fe4f42cbe3f4ef640bcee324abe",
+    "src/coast/world/lake/lakeHallEnclosure.ts": "83517f69ada02d6e27ba6b5bb8b1fd0f32b2ee390ffecdfa6075080a93d526ee",
+    "src/coast/world/lake/lakeHallGeometry.ts": "dbb2356f523a572f7de0a430d8ea2c92873f526cabc8cc883ba3402fe1e1fd6b",
+    "src/coast/world/lake/lakeHallMaterials.ts": "f3f14251668287ac15201f0179b350eb30925fa2c381db9fc792941a9ea796c1",
+    "src/coast/world/lake/lakeKoto.ts": "40d7e336f3ebaa8513db876d245877c584080fbd568328f41d7fd6e76b91ac06",
+    "src/coast/world/lake/lakeKotoScore.ts": "8d5e7c24cefd032932dc90c91964a67cc62c409452ac1926bb3e745aa75ca170",
+    "src/coast/world/lake/lakeLayout.ts": "bda1a185ef1ea08e9659d339dc46a14c8d62ef6cd0369fece0b2ba8984c020c7",
+    "src/coast/world/lake/lakeNavigation.ts": "1da46a6afc89aa4ab34fbcc8be14ed0266a0f0c020130d5f00e254ff8b60a760",
+    "src/coast/world/lake/lakeSettings.ts": "99806b2c9712f27a91c9331c5832f2191422bf4e03f26803a919d5e02e590c73",
+    "src/coast/world/lake/lakeSky.ts": "6aaf889ba718b93c5dc4f87a88efcca0c3904a2eaab0bb08a562479a67100010",
+    "src/coast/world/lake/lakeSkyClouds.ts": "3ac56cfa5696be13981d8e703ba0111d3724f1e8cec7bec3cee00e509a749b7f",
+    "src/coast/world/lake/lakeSkyRadiance.ts": "10e485476e8814072fae4a9959115cf04a99532e7d7f630dd7bc4d2d716dbf19",
+    "src/coast/world/lake/lakeVegetation.ts": "f661a5519592028e970b30553dc509bf25514880a89a4f02f40758c73b89998e",
+    "src/coast/world/lake/lakeWater.ts": "186758189fc6a6b6ee542c9ae613092481dde7e74115e58819a2f70cea620ef5",
+    "src/coast/world/lake/lakeWaterShaders.ts": "7996dd87f5d6319d91e3b1f5c9f9de2f3f2fbe5a49e06485e9f33587b1c6de91",
+    "src/coast/world/lake/lakeWildlife.ts": "94dabb91d63ace0758b9b5c5cb8b448d0d5283ec1fa101e2b6cbc46f2b31cb73",
+    "src/coast/world/lake/lakeWildlifeFish.ts": "53e4ef27ad314fff6ad43b63f123e533015ee7993a44a266c8f53ebfb1200eff",
+    "src/coast/world/overlook/OverlookWorld.ts": "20dc5cdcebeb727b69121c51b001c45e56fe62c2e8e67120decf68168d7d10f8",
+    "src/coast/world/overlook/overlookAirTraffic.ts": "a56f1ced643dc189ee2c469aa89d18b283a169a650684e4f34af5f9901a4a8c9",
+    "src/coast/world/overlook/overlookAudio.ts": "8f17025ecc6e947413cc855b88de3bcc1d547511302054b5d7de38dc681b3ad3",
+    "src/coast/world/overlook/overlookCity.ts": "6bc557f4e8ba505414f350fecc7925c26ab2520807f6c875295b47401ea3fa13",
+    "src/coast/world/overlook/overlookDeck.ts": "e57f8b66c01e423edf89206bf38d31bb859661b4e88b04cb874a4fb72b10e51d",
+    "src/coast/world/overlook/overlookDeckDetail.ts": "dd431151dedd17885310f8e11e97f4913a72d2c76bc59f70e0958ecd78b17724",
+    "src/coast/world/overlook/overlookDistricts.ts": "35102eab6ca50a9f9b2480da97d71e9ee58dfd466cd3d756b2ebc43764165c4d",
+    "src/coast/world/overlook/overlookHillside.ts": "f47fe9ca8c8236199ea75eaddc0dfa12f265e2a6d9622bdc4792669bae6ef866",
+    "src/coast/world/overlook/overlookModel.ts": "6f645da5054ff4a9c3cc27e3ece2698d73c6d05b347872949a7b719d8a57bd73",
+    "src/coast/world/overlook/overlookPavilion.ts": "6563907919fbd337701477293ec81e4aa566bfcba2f226e37ca36061303fc6b7",
+    "src/coast/world/overlook/overlookSkyline.ts": "205ca65005d9c9a17737a105ec55f2e94ceba0382c236ee5dd7f1ae779118aa0",
+    "src/coast/world/overlook/overlookTerrain.ts": "5218d8958cbfd2c81ae45f36cdc93b22f8c3e59c3044752333c091db1805b70f",
+    "src/coast/world/overlook/overlookTraffic.ts": "db5ed357ff9315df163ab21c639c870688ff46233385d4cd62fd73c8822b6cb0",
+    "src/coast/world/overlook/overlookUpperDeck.ts": "6b1e939fd79f4644c6481872a71995ce8850f171faa379b9fe001d563d9c006d",
+    "src/coast/world/residence/ResidenceWorld.ts": "16884d1301edce02ee8161733e31162149d2e0400e098f6c5b9857f45e7168d2",
+    "src/coast/world/residence/residenceAcoustics.ts": "ac26940731cc9cc50d76b02a4119bfb7233e76cdc5785a6e35e5df28e26dc030",
+    "src/coast/world/residence/residenceApplianceAudio.ts": "c5453bda560426da73ca0c6c3d0552911b31d7a2cb60dd11adc13bd5e9466e79",
+    "src/coast/world/residence/residenceApplianceCycle.ts": "2c4ab384bcba9892f2e59b4437477e8009275fe1d79f6e17f13ce857dc9a8cf3",
+    "src/coast/world/residence/residenceAppliances.ts": "47b19d7d170fa5efc4079b9de89a54280e4870d2f0b2bf24b58bddce364b9d83",
+    "src/coast/world/residence/residenceAudio.ts": "7dcf8cc2db534399da24a3e2f02304a54ca99bf25ccd12514c25cfee98fe44fa",
+    "src/coast/world/residence/residenceAudioSamples.ts": "25270de1058cf0ba1c8242e9e6e935dd5b7e15e62201a37349cf2fc5ad5463c3",
+    "src/coast/world/residence/residenceCity.ts": "f1c73c3fe0c2de8f48ed7e3326b69792c7b27c3172fe64d26ee0a8f1f2f560d6",
+    "src/coast/world/residence/residenceCityMaterials.ts": "391b1f20ec2683008b42c278c13f2a106a9c3b77c2e14fc0e5efc3c6b6fb7a00",
+    "src/coast/world/residence/residenceCityPlan.ts": "b721526e9680eb10d9029a59b5dd8fe6fdd65c20a5b1c352e23566eaece94414",
+    "src/coast/world/residence/residenceContactMap.ts": "617aa854cf747242f15fd1b0e4b2aca9629816d96f500f83137356bf44d6b746",
+    "src/coast/world/residence/residenceCurtains.ts": "96b885e54c4a00d3ccdeb7a082e2d11129ff151afd01c87e091b5b16447ee1a4",
+    "src/coast/world/residence/residenceDistrictBuildings.ts": "d5ca790591a78b63f26d620bfc88284cadef323fb7675eb6034bcb6d6ed57fcc",
+    "src/coast/world/residence/residenceDistrictGround.ts": "f0e25e04028830b9b029bcc63699478b16353782bac74cc384aae6dc3e38b840",
+    "src/coast/world/residence/residenceDoors.ts": "6099a2d25c03ec1c37592d94d815292a274988f74d92bf97da9dd999c1eb2b65",
+    "src/coast/world/residence/residenceFixtureFinish.ts": "f089004d67646faab64f559a7f95867c1f0bd58004aff54add0ff14b2ac1b65f",
+    "src/coast/world/residence/residenceFloor.ts": "f9f8e03e7fdba2eb964f1513973339aee28d6422abbd5746aace7143879dd6d6",
+    "src/coast/world/residence/residenceFurniture.ts": "172a58d9833f942097c80cb9ae86ad75f386da4ed4c90576a2d36651fe9850c0",
+    "src/coast/world/residence/residenceFurnitureCloth.ts": "42650a13b5bdbe79df8b25cb69b550169fcc310537bd5b54d136f0271c2be607",
+    "src/coast/world/residence/residenceFurnitureDecor.ts": "ac6e13f57bf1e5a53ec6e31c3f87f108e0ef4f88c761a1fed5e06b745915c845",
+    "src/coast/world/residence/residenceFurnitureFixtures.ts": "bb359c434ee2f0dec86bec1d41a90dcba0ed5bf90195b7909cd9f4a38fdbb713",
+    "src/coast/world/residence/residenceFurnitureModel.ts": "be841a89647527f4ba32a3af4d5dab9d051c70f9f0fbbf0818390697b29852cf",
+    "src/coast/world/residence/residenceLightField.ts": "5d868a38e4e8a1cf280b2b2d3cfa213322311458bb4a48336ad4dc827a3de762",
+    "src/coast/world/residence/residenceLightSpill.ts": "28bae59c17a4ddec3b16f9f04cf17d5a689e663958510f0e6549c34034efaf48",
+    "src/coast/world/residence/residenceLighting.ts": "129e2d5fadb5eb3fc900f0e5fe7b43613ec2b8b70294d6c99cf558dd4ac7dda9",
+    "src/coast/world/residence/residenceMaterials.ts": "1b349e92d02a78fe3bbfa8120309a62b930fb0bede99476a3a19728be14a2885",
+    "src/coast/world/residence/residenceNavigation.ts": "f4c34cf23619626f20139a8a779901515a58bb20355d7660a39224d9375e0123",
+    "src/coast/world/residence/residenceNeighborhood.ts": "b59ab68f7249b3dd6a1c87bac63cf48c208ba3a7ad62026cfac0c8683a63cd54",
+    "src/coast/world/residence/residencePlan.ts": "352d4bac6c0481f1cd76699d74e17ca594c5db8cbfd61ec49fb970882faabad3",
+    "src/coast/world/residence/residencePortalAcoustics.ts": "9c1cebbc2c64dad2cd62aa9fa3da752333adfba31b77919c2cd1d07865d4c29e",
+    "src/coast/world/residence/residenceReflections.ts": "5a7f48c2515200a7a57fcad40480ac943484b2b7fd0d650a00aea1495c49ab63",
+    "src/coast/world/residence/residenceScreenOcclusion.ts": "0047a62aa1ae6d4912bd6e26fab99ebef7090e564d31fe6a45a0aa9c4efc29c7",
+    "src/coast/world/residence/residenceShell.ts": "652c3264196a317d4d04999dc36dc962c6f8e84826992652ae4e8c8da895bd95",
+    "src/coast/world/residence/residenceShoji.ts": "e335f2c20275da6064ded0970dbd3d0a6a5629a1ad913fcf2a842d5075dc0fce",
+    "src/coast/world/residence/residenceStreetTraffic.ts": "b5a4c72237c5fe1043109640a6a5a0ab308306a1ba70b8869bf38c12d2aa1e2c",
+    "src/coast/world/residence/residenceStudy.ts": "087c7a64182aa50f30c89196c43c73f3247cf39a46041bcbf2bdfaf14f9026b3",
+    "src/coast/world/residence/residenceTeaRoom.ts": "b01b13dd79be7256655e9451b63e82140fb1d020fa1dbc8475f818b690f25ef9",
+    "src/coast/world/residence/residenceTheater.ts": "eeed2737aa1d4ad58e11407f1b9c7a6efedf691e462a559693ead73245a72aba",
+    "src/coast/world/residence/residenceTheaterLights.ts": "bb947b68ae9dd0586d1b1d0f45dad60491c5fe454cd9512634f1788aac2d8c35",
+    "src/main.ts": "56c09dc970bed82965fe0c4dd2f26f0dea72b5200ec4e879b23f6bb2c082b24d",
+    "src/monitor/monitorAudio.ts": "f738a63acc0bd4316d2ffa5b73eb741e366bc116f4d7c78815c96896aa68bd1b",
+    "src/monitor/monitorCapture.ts": "a333fd54ab46c4ddd09fa7596d25fa48df14ed15c6a59bfd01882b48f3b3c076",
+    "src/monitor/monitorDesktop.ts": "94764918255b305aa885690ddc7ba6f8154284754f817b8abb4239ebc952e06e",
+    "src/monitor/monitorObject.ts": "4b05f840cf779833a1381b1ac92dec9ce52f8366c986cff895ce7b7f6961de5e",
+    "src/monitor/monitorSender.ts": "499c3dc29d1b8d2b874987d6d214959d25b4e7022d16c12447e4380d5bb5ec31",
+    "src/monitor/monitorSession.ts": "e9fe1572240babf23827eb2a218a3665b22e6513b0ec09702727a9649a1d57a3",
+    "src/monitor/monitorView.ts": "2548702035def9a95c8a91448698376d880ee9c823937873d66cd0c1c169bc83",
+    "src/monitor/monitorXR.ts": "a356a4d95f1e9e000adc1d03ded8447dac3a2b75c3cfb625125d94fda1dc61c0",
+    "src/xr/ImmersiveControls.ts": "964a29b202cef49e0b1955841a67e1c23d1a3a0c10a3b13d716ed1b563abbed3",
+    "src/xr/ImmersiveMenu.ts": "4cb7b93b7a82f0bbe16e5d2d8362f01d0f9f4255c751b725d0ac3ac874ae522e",
+    "src/xr/ImmersiveSession.ts": "76735b7cdcf0fce9dc29afdc0bcce99880397def0e6df567af3efca382a6f6e5",
+    "tsconfig.json": "0c3691806fbc1622fc791e1d1fb47225f2fe2e25c9f7f7d19cfff760d2eedc81"
+  },
+  "shadowCost": {
+    "viewport": {
+      "width": 960,
+      "height": 600
+    },
+    "time": "night",
+    "counting": "Submitted WebGL TRIANGLES=count/3 or TRIANGLE_STRIP=max(0,count-2), multiplied by instance count; not GPU time or unique geometry.",
+    "passes": [
+      {
+        "stage": "initial",
+        "id": 2,
+        "width": 512,
+        "height": 512,
+        "serial": 1,
+        "draws": 83,
+        "triangles": 154166
+      },
+      {
+        "stage": "high-quality",
+        "id": 10,
+        "width": 1024,
+        "height": 1024,
+        "serial": 37948,
+        "draws": 83,
+        "triangles": 154166
+      },
+      {
+        "stage": "relight",
+        "id": 20,
+        "width": 512,
+        "height": 512,
+        "serial": 80847,
+        "draws": 83,
+        "triangles": 154166
+      }
+    ]
+  },
+  "audio": {
+    "duration": 27.36,
+    "sampleRate": 48000,
+    "channels": 2,
+    "rms": 0.0028857889067310997,
+    "peak": 0.020581118762493134,
+    "elapsed": 28.558,
+    "microphone": false,
+    "time": "night",
+    "mix": "reset default",
+    "route": "sofa seated 3s, stand, walk to garden(-2.7,2.2), face +Z 3s, walk to W shop(-10.8,-4), face -X 3s",
+    "capture": "Browser final output forked to MediaStreamDestination; no microphone or headphone measurement",
+    "errors": []
+  },
+  "coastBaselineComparison": {
+    "baseline": "e81124d7913e45a289b951290a7a53227fd6ea96",
+    "taskBase": "31a37ae66fdaf08f66dfc2e24ab9f9eb2ed78f68",
+    "comparedPaths": [
+      "scripts/coast-browser.test.mjs",
+      "src/coast/CoastApp.ts",
+      "src/coast/CoastAudio.ts",
+      "src/coast/CoastControls.ts",
+      "src/coast/CoastFoley.ts",
+      "src/coast/CoastSoundControls.ts",
+      "src/coast/CoastTravelPanel.ts",
+      "src/coast/CoastWorld.ts",
+      "src/coast/CoastXR.ts",
+      "src/coast/DesktopGrab.ts",
+      "src/coast/LakeEnvironmentPanel.ts",
+      "src/coast/ResidenceControlPanel.ts",
+      "src/coast/WorldLightingControl.ts",
+      "src/coast/WorldXRGrab.ts",
+      "src/coast/coast.css",
+      "src/coast/coastAcoustics.ts",
+      "src/coast/coastBirdCue.ts",
+      "src/coast/coastDestinations.ts",
+      "src/coast/coastShore.ts",
+      "src/coast/desktopGrabOcclusion.ts",
+      "src/coast/disposeSceneDrawables.ts",
+      "src/coast/explorationOutput.ts",
+      "src/coast/explorationRoute.ts",
+      "src/coast/explorationSound.ts",
+      "src/coast/floorGrabPosition.ts",
+      "src/coast/lakeEnvironmentPanel.css",
+      "src/coast/residenceControlPanel.css",
+      "src/coast/terrain.ts",
+      "src/monitor/monitorSender.css",
+      "src/monitor/monitorView.css"
+    ],
+    "changedInputPaths": [],
+    "failure": "coast sound settings: masterVisible false at scripts/coast-browser.test.mjs:613 in 667x375 viewport",
+    "currentResult": {
+      "pass": 13,
+      "fail": 1,
+      "skip": 1
+    },
+    "preservedBaselineLogSha256": "99bedc4af1e7346c1d7a087636c02db641e0a203777d0f99ad10535502fe65d6"
+  }
+}
