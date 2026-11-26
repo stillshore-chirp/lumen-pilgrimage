@@ -7,7 +7,10 @@ import { LAKE_TERRAIN, LAKE_WATER_Y } from './lakeLayout';
 
 // Coordinates are metres. Positive inland distance runs from the shore into the cirque.
 function shoreInlet(x: number): number {
-  return 4.1 * Math.sin(x * 0.021 + 0.3) + 1.8 * Math.sin(x * 0.055 + 0.8);
+  // The western fan reaches the foot of the stepped cliff buildings, then
+  // recedes gradually into the main shore rather than ending in open water.
+  return 4.1 * Math.sin(x * 0.021 + 0.3) + 1.8 * Math.sin(x * 0.055 + 0.8)
+    + 65 * Math.exp(-(((x + 106) / 46) ** 4));
 }
 
 function ridge(distance: number, crest: number, lakeSide: number, inlandSide: number): number {
@@ -18,10 +21,14 @@ function ridge(distance: number, crest: number, lakeSide: number, inlandSide: nu
 const gravelBanks = [
   { x: -91, span: 34, d: 9, rise: 2.8 },
   { x: -22, span: 27, d: 21, rise: 2.9 },
-  { x: 20, span: 24, d: 15, rise: 3.5 },
-  { x: 71, span: 32, d: 15, rise: 2.4 },
-  { x: 127, span: 31, d: 22, rise: 4.9 },
-  { x: 182, span: 36, d: 27, rise: 4.4 },
+  { x: 20, span: 48, d: 15, rise: 1.7 },
+  { x: 71, span: 48, d: 15, rise: 1.4 },
+  { x: 127, span: 46, d: 22, rise: 3.0 },
+  { x: 182, span: 47, d: 27, rise: 3.0 },
+  // Scree fans run between the foundations instead of stopping at a level facade line.
+  { x: -77, span: 35, d: 34, rise: 2.8 },
+  { x: 112, span: 39, d: 43, rise: 2.6 },
+  { x: 205, span: 34, d: 12, rise: 2.8 },
 ] as const;
 
 function shoreProfile(x: number, distance: number): number {
@@ -35,7 +42,7 @@ function shoreProfile(x: number, distance: number): number {
     const across = (x - bank.x) / bank.span;
     const fan = 1 - MathUtils.smoothstep(Math.abs(across), 0.08, 1);
     const crest = bank.d + 7.8 * across + 4.7 * across * across;
-    folds += bank.rise * fan * ridge(distance, crest, 14, 22);
+    folds += bank.rise * fan * ridge(distance, crest, 20, 37);
   }
   const eastward = MathUtils.smoothstep(x, 46, 232);
   const rightApron = eastward * (10.5 * MathUtils.smoothstep(distance, -13, 23)
@@ -43,8 +50,8 @@ function shoreProfile(x: number, distance: number): number {
   const leftApron = 6.2 * (1 - MathUtils.smoothstep(x, -133, -35))
     * MathUtils.smoothstep(distance, -7, 31);
   // A low collar continues under the pale eave, with a lower runnel to its east.
-  const eaveApron = 6.6 * Math.exp(-(((x + 45) / 20) ** 2))
-    * ridge(distance, 13, 20, 35);
+  const eaveApron = 11.8 * (1 - MathUtils.smoothstep(Math.abs(x + 45 - distance * 0.14), 8, 43))
+    * ridge(distance, 14, 48, 85);
   const runnel = 1.25 * Math.exp(-(((x + 5 - distance * 0.18) / 19) ** 2))
     * ridge(distance, 25, 29, 26);
   return LAKE_WATER_Y + wetApron + inlandGrade + bar + folds + rightApron + leftApron + eaveApron - runnel;
@@ -153,13 +160,13 @@ export function farShoreMaterial(layer: 'gravel' | 'masonry'): MeshStandardMater
           // The cirque shelters uneven, low pockets of hazy air. The exposed gravel
           // keeps its brighter patches while bases farther up the valley fade into gray.
           float drift = coastNoise(p.xz * vec2(0.017, 0.010));
-          float height = ${ground ? 'p.y' : 'p.y - 5.0'};
-          float lowBank = 1.0 - smoothstep(4.0, 18.0 + 28.0 * drift, height);
+          float lowBank = 1.0 - smoothstep(4.0, 18.0 + 28.0 * drift, p.y);
           float valley = smoothstep(306.0, 463.0, -p.z) * (0.32 + 0.68 * drift);
           float westFoot = (1.0 - smoothstep(17.0, 62.0, abs(p.x + 106.0)))
             * (1.0 - smoothstep(10.0, 34.0 + 29.0 * drift, p.y));
-          float air = valley * lowBank * ${ground ? '0.16' : '0.84'}
-            + westFoot * ${ground ? '0.07' : '0.41'};
+          // Extinction belongs to the air at this position, not to the material
+          // of the surface behind it. Keep the shared contact equally legible.
+          float air = valley * lowBank * 0.52 + westFoot * 0.23;
           fogFactor = 1.0 - (1.0 - fogFactor) * exp(-air);
           gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
         #else
