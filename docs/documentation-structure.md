@@ -21,6 +21,7 @@
 | [映画館の上映音響設計](cinema/cinema-sound-design.md) | 大型映画館の上映音の入力、スピーカーへの配線、室内伝搬、非VRとPC VRの品質目標を定めます。 | 上映用音声の受入形式、館内の配線、耳への音響処理、上映時の性能目標を変えるとき。 |
 | [住戸の設計資料](residence/residence-70f-design.md)・[寸法図 PDF](residence/residence-70f-drawings.pdf) | 現行の70階住戸の寸法、平面、視線、制作時の受け入れ条件を記録します。 | 現行住戸の設計寸法、眺望、素材、制作受け入れ条件が変わるとき。 |
 | [映画館の基本設計 PDF](cinema/cinema-floor-plan.pdf)・[音響・照明設計 PDF](cinema/cinema-light-sound-design.pdf) | 映画館の客席、平面、照明、音響の設計資料です。利用者向け操作は探索ガイド、実装契約は各設計文書に記載します。 | 映画館の設計前提を変更するとき。実装、利用手順、検証方法にも影響する場合は該当する正本を更新します。 |
+| [商業アトリウム1階の内装詳細設計](atrium/tenant-interior-design.md)・[寸法図 PDF](atrium/tenant-interior-drawings.pdf) | 1階の店舗・展示島の詳細設計。間口、入口、什器の座標正本は [設計データ](atrium/tenant-interiors.json) です。 | 写真との照合位置、区画と什器の寸法、仕上げ、照明・音響の製作条件を変えるとき。 |
 | [docs/verification.md](verification.md) | CI、ローカル・ブラウザー検証、実機確認、配布ビルドの手順と確認範囲を記録します。 | 検証コマンド、対象範囲、環境、期待結果、実機で確認できる条件が変わるとき。 |
 | [配布と運用](operations.md) | ビルド後の配信、Vite側の運用、設定と制約、切り分け、復旧手順をまとめます。 | 配布を前提とする環境、配信構成、設定、復旧方法や運用上の制約が変わるとき。 |
 | [50階住戸の旧設計](residence/residence-50f-design.md) | 現行70階住戸の前に作成された設計案です。 | 50階案の記録を補うとき。現行住戸の変更は70階住戸の資料に記録します。 |

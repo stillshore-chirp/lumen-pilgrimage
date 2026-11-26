@@ -123,6 +123,8 @@
 
 共用部は一人で散策する空間です。店先は衣服のラック、商品棚、展示ケースで構成します。
 
+店舗内装の制作寸法と図面は [1階テナント内装詳細設計](atrium/tenant-interior-design.md) にあります。現行の探索範囲と移動境界はこのページの仕様に従います。
+
 主階段は下端の幅約5 mから絞り、初めに右へ寄り、昇降塔の手前で左へ回り込んで西回廊の9.15 mへ着きます。西回廊の奥に続く階段でもう一層上がり、13.55 mの回廊へ渡れます。高さ4.55 mの回廊は手前で吹抜け側に張り出し、奥に向かって開きます。この回廊と奥の張り出しは景観と音の遮蔽に使います。[支持面](../src/coast/world/atrium/atriumNavigation.ts)は、踏面と同じ経路を連続した高さでたどります。地上の通路と回廊が上下に重なる場所では、現在の足元から到達できる支持面を選びます。店先、昇降塔、家具と手すりが探索の境界です。
 
 [回廊と建築](../src/coast/world/atrium/atriumShell.ts)、[天窓の立ち上がりと昇降塔](../src/coast/world/atrium/atriumRoof.ts)、[階段](../src/coast/world/atrium/atriumStair.ts)、[店先](../src/coast/world/atrium/atriumRetail.ts)、[家具](../src/coast/world/atrium/atriumFurnishings.ts)を個別に編集できます。天窓には青い縦窓と上面の桟を置き、手前に昇降塔の上端を重ねます。回廊の庇と階段の側板は、光が器具から離れるにつれて弱くなる勾配を持ちます。店舗の照明は正面のケース、側面の木壁、奥の棚で光る位置を変えます。 [壁や天井を使う間接照明](https://www.erco.com/en/knowledge/fundamentals/indirect-lighting/)
