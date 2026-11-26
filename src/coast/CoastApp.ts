@@ -18,7 +18,7 @@ import { createResidenceControlPanel, type ResidenceControl, type ResidenceContr
 import type { CoastTimeOfDay } from './world/coastAtmosphere';
 import { cinemaLightingModes, createCinemaPanel, type CinemaControls } from './world/cinema/CinemaPanel';
 import { createCinemaSeatTransition } from './world/cinema/cinemaSeatTransition';
-import { LAKE_VIEW_FOV } from './world/lake/lakeLayout';
+import { LAKE_VIEW_FOV, LAKE_VIEW_VERTICAL_OFFSET } from './world/lake/lakeLayout';
 import { disposeSceneDrawables } from './disposeSceneDrawables';
 import { bindWorldLightingControl, worldLightingChoices, type WorldLightingControl } from './WorldLightingControl';
 import './coast.css';
@@ -152,6 +152,7 @@ export class CoastApp {
       : overlook ? new PerspectiveCamera(54, 1, 0.20, 43500)
       : lake ? new PerspectiveCamera(LAKE_VIEW_FOV, 1, 0.10, 2400)
       : new PerspectiveCamera(60, 1, residence || cinema ? 0.08 : 0.12, residence ? 43500 : cinema ? 110 : 2500);
+    if (lake) this.camera.setViewOffset(1, 1, 0, LAKE_VIEW_VERTICAL_OFFSET, 1, 1);
     this.time = initialRoute.time;
     const destination = findDestination(this.worldId, initialRoute.placeId);
     this.world.setTimeOfDay(this.time);
@@ -222,7 +223,7 @@ export class CoastApp {
       : atrium
       ? 'ソファから立ち上がり、ショーウィンドウの前と大階段から続く上階の回廊を散策できます。'
       : lake
-      ? '広間の左右から縁側に出られます。水面を見下ろすと魚が泳ぎ、夜に切り替えると星が見えます。'
+      ? '広間の左右の窓辺から湖を見渡せます。水面を見下ろすと魚が泳ぎ、夜に切り替えると星が見えます。'
       : residence
       ? '南の大窓から都心を見下ろせます。主寝室のバルコニーに近づくと、Eキーで引戸を開閉できます。'
       : overlook

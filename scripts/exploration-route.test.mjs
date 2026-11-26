@@ -76,7 +76,10 @@ test('destination lookup stays scoped to a known world and place ID', () => {
   assert.equal(findDestination('atrium', 'lounge')?.seatedEyeHeight, 1.20);
   assert.equal(findDestination('atrium', 'upper-gallery')?.floorY, 9.15);
   assert.equal(findDestination('coast', 'lake')?.label, '湖畔');
-  assert.equal(findDestination('lake', 'west-veranda')?.label, '西の縁側');
+  assert.equal(findDestination('lake', 'west-window')?.label, '西の窓辺');
+  assert.equal(findDestination('lake', 'east-window')?.label, '東の窓辺');
+  assert.equal(findDestination('lake', 'west-veranda'), findDestination('lake', 'west-window'));
+  assert.equal(findDestination('lake', 'east-veranda'), findDestination('lake', 'east-window'));
   assert.equal(findDestination('lake', 'lake'), undefined);
   assert.equal(findDestination('residence', 'missing'), undefined);
   assert.equal(findDestination('unknown', 'inlet'), undefined);

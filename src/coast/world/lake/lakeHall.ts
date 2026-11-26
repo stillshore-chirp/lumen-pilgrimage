@@ -1,11 +1,10 @@
-import { ExtrudeGeometry, Float32BufferAttribute, Group, Mesh, PlaneGeometry, Shape } from 'three';
+import { Group, Mesh, PlaneGeometry } from 'three';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { addLakeHallArrangement } from './lakeHallArrangement';
+import { addHallEnclosure } from './lakeHallEnclosure';
 import { beginLakeHallAssembly, type LakeHallAssembly } from './lakeHallGeometry';
-import { createLakeHallMaterials } from './lakeHallMaterials';
-import { LAKE_GLAZING, LAKE_HALL, LAKE_TABLE, LAKE_TATAMI, LAKE_VERANDA } from './lakeLayout';
-
-type HallMaterials = ReturnType<typeof createLakeHallMaterials>;
+import { createLakeHallMaterials, type HallMaterials } from './lakeHallMaterials';
+import { LAKE_GLAZING, LAKE_HALL, LAKE_SIDE_VENTS, LAKE_TABLE, LAKE_TATAMI } from './lakeLayout';
 
 const { halfWidth, frontZ, rearZ, ceilingY } = LAKE_HALL;
 const hallWidth = halfWidth * 2;
@@ -13,10 +12,9 @@ const hallDepth = rearZ - frontZ;
 const hallMidZ = (frontZ + rearZ) / 2;
 const { halfWidth: tatamiHalfWidth, frontZ: tatamiFront, rearZ: tatamiRear } = LAKE_TATAMI;
 const tatamiColumns = 12;
-const tatamiRows = 4;
 const matLength = tatamiHalfWidth * 2 / tatamiColumns;
 const matWidth = matLength / 2;
-const verandaCanopyFrontZ = LAKE_VERANDA.endZ + .70;
+const tatamiRows = Math.round((tatamiRear - tatamiFront) / matLength);
 
 function addMat(
   mat: LakeHallAssembly,
@@ -26,32 +24,62 @@ function addMat(
   crosswise: boolean,
   tint: number,
 ): void {
-  const edgeWidth = .027;
+  const edgeWidth = .021;
   const faceSize = matWidth - 2 * edgeWidth - .003;
   const edgeOffset = (matWidth - edgeWidth) / 2;
-  mat.box([x, -.020, z], crosswise ? [matLength - .003, .040, faceSize] : [faceSize, .040, matLength - .003],
-    crosswise ? 0 : 2, tint, x * .091 + z * .137);
+  mat.slab([x, -.020, z], crosswise ? [matLength - .004, .04, faceSize] : [faceSize, .04, matLength - .004],
+    .003, crosswise ? 0 : 2, tint, x * .091 + z * .137);
   for (const side of [-1, 1]) {
     binding.box(
-      crosswise ? [x, -.0195, z + side * edgeOffset] : [x + side * edgeOffset, -.0195, z],
-      crosswise ? [matLength - .003, .039, edgeWidth] : [edgeWidth, .039, matLength - .003],
-      crosswise ? 0 : 2,
-      tint,
+      crosswise ? [x, -.0188, z + side * edgeOffset] : [x + side * edgeOffset, -.0188, z],
+      crosswise ? [matLength - .004, .038, edgeWidth] : [edgeWidth, .038, matLength - .004],
+      crosswise ? 0 : 2, tint,
     );
+  }
+}
+
+function layBoardCourses(
+  boards: LakeHallAssembly, acrossStart: number, acrossEnd: number, alongStart: number, alongEnd: number,
+  runsAlongX: boolean,
+): void {
+  const courses = Math.round((acrossEnd - acrossStart) / .25);
+  const courseWidth = (acrossEnd - acrossStart) / courses;
+  for (let row = 0; row < courses; row += 1) {
+    const course = acrossStart + (row + .5) * courseWidth;
+    let joint = alongStart;
+    let plank = 0;
+    while (joint < alongEnd - .005) {
+      const seed = row * 71 + plank * 37;
+      const next = Math.min(alongEnd, joint + 2.05 + (seed % 23) * .073);
+      const centre = (joint + next) / 2;
+      const length = next - joint - .002;
+      const tone = .88 + ((seed * 13 + 19) % 21) / 100;
+      boards.box(runsAlongX ? [centre, -.018, course] : [course, -.018, centre],
+        runsAlongX ? [length, .036, courseWidth - .002] : [courseWidth - .002, .036, length],
+        runsAlongX ? 0 : 2, tone, .31 * seed);
+      joint = next;
+      plank += 1;
+    }
   }
 }
 
 function addHallFloor(hall: Group, materials: HallMaterials): void {
   const foundation = beginLakeHallAssembly(hall, 'Basalt plinth and subfloor', materials.foundation, true);
-  const boards = beginLakeHallAssembly(hall, 'Oak perimeter floor', materials.boards);
-  const mats = beginLakeHallAssembly(hall, 'Alternating tatami mats', materials.tatami);
+  const boards = beginLakeHallAssembly(hall, 'Staggered oak perimeter boards', materials.boards);
+  const borders = beginLakeHallAssembly(hall, 'Oak tatami edgings', materials.joinery);
+  const mats = beginLakeHallAssembly(hall, 'Beveled alternating tatami mats', materials.tatami);
   const bindings = beginLakeHallAssembly(hall, 'Tatami long-edge bindings', materials.binding);
-  foundation.box([0, -.34, hallMidZ], [hallWidth, .59, hallDepth]);
-  boards.box([0, -.018, (frontZ + tatamiFront) / 2], [hallWidth, .036, tatamiFront - frontZ]);
-  boards.box([0, -.018, (rearZ + tatamiRear) / 2], [hallWidth, .036, rearZ - tatamiRear]);
+  foundation.box([0, -.335, hallMidZ + .16], [hallWidth + .72, .597, hallDepth + .32]);
+  layBoardCourses(boards, frontZ, tatamiFront, -halfWidth, halfWidth, true);
+  layBoardCourses(boards, tatamiRear, rearZ, -halfWidth, halfWidth, true);
+  const tatamiMid = (tatamiFront + tatamiRear) / 2;
   for (const side of [-1, 1]) {
-    boards.box([side * (halfWidth + tatamiHalfWidth) / 2, -.018, (tatamiFront + tatamiRear) / 2],
-      [halfWidth - tatamiHalfWidth, .036, tatamiRear - tatamiFront], 2, .91);
+    const [start, end] = side < 0 ? [-halfWidth, -tatamiHalfWidth] : [tatamiHalfWidth, halfWidth];
+    layBoardCourses(boards, start, end, tatamiFront, tatamiRear, false);
+    borders.box([side * (tatamiHalfWidth + .016), -.0082, tatamiMid], [.032, .018, tatamiRear - tatamiFront], 2, .94);
+  }
+  for (const z of [tatamiFront, tatamiRear]) {
+    borders.box([0, -.0082, z + Math.sign(z - tatamiMid) * .016], [tatamiHalfWidth * 2, .018, .032], 0, .91);
   }
 
   for (let row = 0; row < tatamiRows; row += 1) {
@@ -60,224 +88,138 @@ function addHallFloor(hall: Group, materials: HallMaterials): void {
       const z = (row + .5) * matLength + tatamiFront;
       const crosswise = (row + column) % 2 === 1;
       for (const [index, side] of [-1, 1].entries()) {
-        const tint = .86 + ((row * 7 + column * 13 + index * 3) % 17) / 100;
+        const tint = .91 + ((row * 7 + column * 13 + index * 3) % 14) / 100;
         const offset = side * matWidth / 2;
         addMat(mats, bindings, crosswise ? x : x + offset, crosswise ? z + offset : z, crosswise, tint);
       }
     }
   }
-  foundation.finish();
-  boards.finish();
-  mats.finish();
-  bindings.finish();
+  for (const assembly of [foundation, boards, borders, mats, bindings]) assembly.finish();
 }
 
 function addHallCeiling(hall: Group, materials: HallMaterials): void {
-  const eaves = beginLakeHallAssembly(hall, 'Deep roof and eaves', materials.timber, true);
+  const roof = beginLakeHallAssembly(hall, 'Closed ceramic-clad roof slab', materials.foundation, true);
   const ceiling = beginLakeHallAssembly(hall, 'Oiled ceiling boarding', materials.ceiling);
   const battens = beginLakeHallAssembly(hall, 'Carpentered ceiling lattice', materials.lattice);
-  eaves.box([0, ceilingY + .30, hallMidZ], [hallWidth + .46, .49, hallDepth + .12]);
+  const beams = beginLakeHallAssembly(hall, 'Rebated roof beams', materials.timber, true);
+  roof.box([0, ceilingY + .29, hallMidZ + .08], [hallWidth + 1.05, .55, hallDepth + .69]);
+  ceiling.box([0, ceilingY + .054, hallMidZ], [hallWidth, .09, hallDepth], 2, .74);
 
-  const panels = 124;
+  const panels = 112;
   const panelWidth = hallWidth / panels;
   for (let index = 0; index < panels; index += 1) {
     const x = -halfWidth + (index + .5) * panelWidth;
-    const tone = .88 + ((index * 19) % 23) / 100;
-    ceiling.box([x, ceilingY + .047, hallMidZ], [panelWidth - .004, .094, hallDepth], 2, tone, index * .67);
+    const tone = .86 + ((index * 19) % 27) / 100;
+    ceiling.box([x, ceilingY + .012, hallMidZ], [panelWidth - .010, .032, hallDepth], 2, tone, index * .49);
     if (index > 0) {
-      battens.box([x - panelWidth / 2, ceilingY - .020, hallMidZ], [.029, .041, hallDepth], 2, tone * .89, index * .57);
+      battens.box([x - panelWidth / 2, ceilingY - .028, hallMidZ], [.046, .066, hallDepth], 2, tone * .85, index * .63);
     }
   }
-  for (let z = frontZ + .10; z < rearZ; z += .62) {
-    battens.box([0, ceilingY - .044, z], [hallWidth, .052, .061], 0, .81 + .08 * Math.cos(z), z * .17);
+  for (let z = frontZ + .18; z < rearZ; z += .65) {
+    battens.box([0, ceilingY - .015, z], [hallWidth, .025, .056], 0, .83 + .08 * Math.cos(z), z * .17);
   }
-
-  const wingWidth = LAKE_VERANDA.outsideX - LAKE_VERANDA.insideX;
-  const canopyDepth = frontZ - verandaCanopyFrontZ;
-  const wingZ = (verandaCanopyFrontZ + frontZ) / 2;
-  for (const side of [-1, 1]) {
-    const x = side * (LAKE_VERANDA.outsideX + LAKE_VERANDA.insideX) / 2;
-    eaves.box([x, ceilingY + .15, wingZ], [wingWidth + .23, .40, canopyDepth], 2);
-    ceiling.box([x, ceilingY - .048, wingZ], [wingWidth, .091, canopyDepth], 2, .82);
-    for (let offset = -.5 * wingWidth + .10; offset < .5 * wingWidth; offset += .35) {
-      battens.box([x + offset, ceilingY - .11, wingZ], [.071, .070, canopyDepth], 2, .82);
-    }
+  const beamSpacing = hallDepth / 5;
+  for (let index = 1; index < 5; index += 1) {
+    const z = frontZ + index * beamSpacing;
+    beams.box([0, ceilingY - .095, z], [hallWidth, .19, .23], 0, .88, z * .27);
+    battens.box([0, ceilingY - .184, z], [hallWidth, .035, .255], 0, .87, z * .48);
   }
-  eaves.finish();
-  ceiling.finish();
-  battens.finish();
+  for (const assembly of [roof, ceiling, battens, beams]) assembly.finish();
 }
 
 function addHallGlazing(hall: Group, materials: HallMaterials): void {
   const frames = beginLakeHallAssembly(hall, 'Full-height lake aperture frames', materials.timber, true);
+  const fascia = beginLakeHallAssembly(hall, 'Oiled glazing head casing', materials.lattice);
   const tracks = beginLakeHallAssembly(hall, 'Flush lake aperture sill tracks', materials.rail);
+  const piers = beginLakeHallAssembly(hall, 'Glazing flank piers', materials.plaster, true);
+  const ventBox = beginLakeHallAssembly(hall, 'Dark louver duct backing and lining', materials.foundation);
+  const ventGrille = beginLakeHallAssembly(hall, 'Directional bronze louver blades', materials.rail);
   const apertureX = LAKE_GLAZING.halfWidth;
   const apertureTop = LAKE_GLAZING.headY;
   const mullionX = LAKE_GLAZING.centralPostX;
-  const edges = [-apertureX, -mullionX, mullionX, apertureX];
-  frames.box([0, (ceilingY + apertureTop) / 2, frontZ + .029], [hallWidth, ceilingY - apertureTop, .34]);
-  frames.box([0, apertureTop + .036, frontZ + .188], [hallWidth, .081, .069], 0, .81);
-  tracks.box([0, .002, frontZ + .026], [apertureX * 2, .009, .126], 0, .82);
-  tracks.box([0, .002, frontZ + .108], [apertureX * 2, .007, .018], 0, .67);
+  const edges = [-apertureX, -13.6, -mullionX, mullionX, 13.6, apertureX];
+  const vent = LAKE_SIDE_VENTS;
+  frames.box([0, (ceilingY + apertureTop) / 2, frontZ + .020], [hallWidth, ceilingY - apertureTop, .41]);
+  frames.box([0, apertureTop + .041, frontZ + .224], [hallWidth, .086, .081], 0, .83);
+  fascia.box([0, apertureTop + .220, frontZ + .230], [hallWidth, .194, .027], 0, .76);
+  fascia.box([0, apertureTop + .111, frontZ + .247], [hallWidth, .026, .035], 0, .94);
+  tracks.box([0, .002, frontZ + .026], [apertureX * 2, .010, .137], 0, .82);
+  tracks.box([0, .002, frontZ + .113], [apertureX * 2, .007, .020], 0, .75);
+  tracks.box([0, apertureTop - .013, frontZ + .104], [apertureX * 2, .026, .056]);
   for (const x of edges) {
-    const outside = Math.abs(x) === apertureX;
-    frames.box([x, apertureTop / 2, frontZ + .037], [outside ? .157 : .107, apertureTop, .182], 1, outside ? .92 : .75);
-    frames.box([x, apertureTop / 2, frontZ + .134], [.049, apertureTop - .012, .020], 1, .83);
+    const jamb = Math.abs(x) === apertureX;
+    frames.box([x, apertureTop / 2, frontZ + .040], [jamb ? .168 : .107, apertureTop, .197], 1, jamb ? .88 : .75);
+    tracks.box([x, apertureTop / 2, frontZ + .145], [.038, apertureTop - .012, .019], 1, .82);
+  }
+  for (const side of [-1, 1]) {
+    const pierWidth = halfWidth - apertureX + .02;
+    const pierX = side * (halfWidth + apertureX) / 2;
+    const lower = vent.y - vent.height / 2;
+    const upper = vent.y + vent.height / 2;
+    const flankWidth = (pierWidth - vent.width) / 2;
+    const x = side * vent.x;
+    piers.box([pierX, lower / 2, frontZ + .037], [pierWidth, lower, .412]);
+    piers.box([pierX, (upper + apertureTop) / 2, frontZ + .037], [pierWidth, apertureTop - upper, .412]);
+    for (const edge of [-1, 1]) {
+      piers.box([x + edge * (vent.width + flankWidth) / 2, vent.y, frontZ + .037], [flankWidth, vent.height, .412]);
+      ventGrille.box([x + edge * vent.width / 2, vent.y, vent.z + .256], [.020, vent.height + .026, .045], 1, .87);
+      ventGrille.box([x, vent.y + edge * vent.height / 2, vent.z + .258], [vent.width + .019, .019, .047], 0, .86);
+    }
+    ventBox.box([x, vent.y, vent.z - .099], [vent.width, vent.height, .12], 1, .43);
+    for (let index = 0; index < 7; index += 1) {
+      const y = lower + .025 + index * .050;
+      ventGrille.box([x, y, vent.z + .238], [vent.width - .016, .013, .088], 0, .83);
+      ventGrille.box([x, y - .007, vent.z + .270], [vent.width - .016, .019, .019], 0, .91);
+    }
   }
   for (let index = 1; index < edges.length; index += 1) {
     const x0 = edges[index - 1];
     const x1 = edges[index];
     const pane = new Mesh(new PlaneGeometry(x1 - x0, apertureTop - .012), materials.glazing);
     pane.name = 'Lake aperture glass';
-    pane.position.set((x0 + x1) / 2, apertureTop / 2, frontZ + .040);
+    pane.position.set((x0 + x1) / 2, apertureTop / 2, frontZ + .041);
     hall.add(pane);
   }
-  frames.finish();
-  tracks.finish();
-}
-
-function addHallEnclosure(hall: Group, materials: HallMaterials): void {
-  const walls = beginLakeHallAssembly(hall, 'Mineral-plastered outer walls', materials.plaster, true);
-  const frames = beginLakeHallAssembly(hall, 'Posts and perimeter beam', materials.timber, true);
-  const panels = beginLakeHallAssembly(hall, 'Smoked timber wainscot', materials.panel);
-  const lamps = beginLakeHallAssembly(hall, 'Recessed kozo paper lanterns', materials.lamp);
-  const baseY = 1.12;
-
-  walls.box([0, ceilingY / 2, rearZ + .16], [hallWidth + .52, ceilingY, .32]);
-  panels.box([0, baseY / 2, rearZ - .034], [hallWidth, baseY, .065], 1, .95);
-  frames.box([0, baseY, rearZ - .079], [hallWidth, .052, .083]);
-  frames.box([0, 2.89, rearZ - .046], [hallWidth, .102, .095]);
-  frames.box([0, ceilingY - .165, rearZ - .111], [hallWidth, .33, .21]);
-  for (let x = -20.4; x <= 20.4; x += 3.4) {
-    frames.box([x, ceilingY / 2, rearZ - .055], [.146, ceilingY, .116], 1, .85);
-  }
-
-  for (const side of [-1, 1]) {
-    walls.box([side * (halfWidth + .16), ceilingY / 2, hallMidZ], [.32, ceilingY, hallDepth]);
-    panels.box([side * (halfWidth - .034), baseY / 2, hallMidZ], [.065, baseY, hallDepth], 1);
-    frames.box([side * (halfWidth - .079), baseY, hallMidZ], [.083, .052, hallDepth], 2);
-    frames.box([side * (halfWidth - .046), 2.89, hallMidZ], [.095, .102, hallDepth], 2);
-    frames.box([side * (halfWidth - .111), ceilingY - .165, hallMidZ], [.21, .33, hallDepth], 2);
-    for (const z of [frontZ + .18, -2.5, 1.4, 5.3, 9.2, rearZ - .2]) {
-      frames.box([side * (halfWidth - .023), ceilingY / 2, z], [.115, ceilingY, .15], 1, .84);
-    }
-
-    const lampZ = 10.6;
-    frames.box([side * (halfWidth - .077), .85, lampZ], [.15, .62, .276], 1, .95);
-    lamps.box([side * (halfWidth - .153), .85, lampZ], [.010, .526, .198], 1);
-    for (const offset of [-.135, 0, .135]) {
-      frames.box([side * (halfWidth - .165), .85 + offset, lampZ], [.012, .012, .218], 2, .92);
-    }
-  }
-  walls.finish();
-  frames.finish();
-  panels.finish();
-  lamps.finish();
-}
-
-function addVerandas(hall: Group, materials: HallMaterials): void {
-  const veranda = beginLakeHallAssembly(hall, 'Lakeside veranda boards', materials.veranda);
-  const supports = beginLakeHallAssembly(hall, 'Veranda columns, rails and joists', materials.timber, true);
-  const balusters = beginLakeHallAssembly(hall, 'Slender veranda balusters', materials.rail);
-  const { insideX, outsideX, endZ } = LAKE_VERANDA;
-  const width = outsideX - insideX;
-  const depth = frontZ - endZ;
-  const centreZ = (frontZ + endZ) / 2;
-  const inset = .13;
-  const railTop = 1.04;
-  const railFoot = .144;
-  const balusterY = (railFoot + railTop) / 2;
-  const balusterHeight = railTop - railFoot - .036;
-
-  for (const side of [-1, 1]) {
-    const centreX = side * (insideX + outsideX) / 2;
-    const courses = 27;
-    const boardWidth = width / courses;
-    for (let index = 0; index < courses; index += 1) {
-      const x = side * (insideX + (index + .5) * boardWidth);
-      const tone = .82 + ((index * 13 + 3) % 26) / 100;
-      veranda.box([x, -.034, centreZ], [boardWidth - .004, .068, depth], 2, tone, index * .31);
-    }
-    supports.box([centreX, -.124, endZ + .065], [width, .245, .13], 0, .88);
-    supports.box([centreX, railTop, endZ + inset], [width - 2 * inset + .10, .086, .099], 0, .89);
-    supports.box([centreX, railFoot, endZ + inset], [width - 2 * inset + .10, .044, .069], 0, .76);
-    for (let x = insideX + .29; x < outsideX - .24; x += .18) {
-      balusters.box([side * x, balusterY, endZ + inset], [.014, balusterHeight, .026], 1);
-    }
-    for (const x of [insideX + inset, outsideX - inset]) {
-      supports.box([side * x, -.141, centreZ], [.165, .251, depth], 2, .91);
-      supports.box([side * x, railTop, centreZ + inset / 2], [.093, .086, depth - inset], 2, .89);
-      supports.box([side * x, railFoot, centreZ + inset / 2], [.065, .044, depth - inset], 2, .76);
-      for (let z = endZ + .31; z < frontZ - .14; z += .18) {
-        balusters.box([side * x, balusterY, z], [.026, balusterHeight, .014], 1);
-      }
-      supports.box([side * x, (ceilingY - 1.75) / 2, verandaCanopyFrontZ + .14],
-        [.171, ceilingY + 1.75, .171], 1, .94);
-      for (const z of [endZ + inset, centreZ, frontZ - .12]) {
-        supports.box([side * x, railTop / 2, z], [.091, railTop, .091], 1, .91);
-      }
-    }
-  }
-  veranda.finish();
-  supports.finish();
-  balusters.finish();
+  for (const assembly of [frames, fascia, tracks, piers, ventBox, ventGrille]) assembly.finish();
 }
 
 function addLowTable(hall: Group, materials: HallMaterials): void {
   const { x, z, width, depth, topY } = LAKE_TABLE;
   const base = beginLakeHallAssembly(hall, 'Low table solid wood legs and apron', materials.timber, true);
-  const edge = .008;
-  const thickness = .052;
-  const underside = topY - thickness - 2 * edge;
-  const shape = new Shape();
-  const halfX = width / 2 - edge;
-  const halfZ = depth / 2 - edge;
-  shape.moveTo(-halfX, -halfZ);
-  shape.lineTo(halfX, -halfZ);
-  shape.lineTo(halfX, halfZ);
-  shape.lineTo(-halfX, halfZ);
-  shape.closePath();
-  const topGeometry = new ExtrudeGeometry(shape, {
-    depth: thickness, bevelEnabled: true, bevelThickness: edge, bevelSize: edge, bevelSegments: 2,
-  });
-  const tint = new Float32Array(topGeometry.attributes.position.count * 3).fill(1);
-  topGeometry.setAttribute('color', new Float32BufferAttribute(tint, 3));
-  topGeometry.rotateX(-Math.PI / 2);
-  const top = new Mesh(topGeometry, materials.table);
-  top.name = 'Low table chamfered top';
-  top.position.set(x, underside + edge, z);
-  top.castShadow = top.receiveShadow = true;
-  hall.add(top);
-
+  const top = beginLakeHallAssembly(hall, 'Oiled charcoal table top', materials.table, true);
+  const thickness = .067;
+  const underside = topY - thickness;
+  top.slab([x, topY - thickness / 2, z], [width, thickness, depth], .007, 0, 1, .31);
   for (const side of [-1, 1]) {
-    base.box([x + side * width * .33, underside / 2, z], [.273, underside, depth * .66], 1, .98);
+    const legX = x + side * width * .335;
+    base.box([legX, underside / 2, z], [.270, underside, depth * .68], 1, .92, .3 * side);
+    base.box([legX, underside - .018, z], [.313, .036, depth * .73], 0, .85);
   }
-  base.box([x, underside - .044, z], [width * .78, .092, depth * .69], 0, .73);
+  base.box([x, underside - .034, z], [width * .70, .068, depth * .63], 0, .86);
   base.finish();
+  top.finish();
   addLakeHallArrangement(hall);
 }
 
 export function buildLakeHall(root: Group) {
   const hall = new Group();
-  hall.name = 'Lakeside hall and verandas';
+  hall.name = 'Enclosed lakeside hall';
   root.add(hall);
   const materials = createLakeHallMaterials();
   addHallFloor(hall, materials);
   addHallCeiling(hall, materials);
   addHallGlazing(hall, materials);
   addHallEnclosure(hall, materials);
-  addVerandas(hall, materials);
   addLowTable(hall, materials);
 
   return {
     setTimeOfDay(time: CoastTimeOfDay, lampsOn = time === 'night'): void {
       const night = time === 'night';
-      materials.ceiling.emissiveIntensity = night ? .030 : .26;
-      materials.lattice.emissiveIntensity = night ? .025 : .22;
-      materials.table.emissiveIntensity = night ? .018 : .18;
-      materials.tableWindowLight.value = night ? .09 : 1;
-      materials.glazing.opacity = night ? .016 : .032;
-      materials.lamp.emissiveIntensity = lampsOn ? 1.28 : .02;
+      materials.ceiling.emissiveIntensity = night ? .024 : .38;
+      materials.lattice.emissiveIntensity = night ? .016 : .22;
+      materials.windowLight.value = night ? .045 : 1;
+      materials.glazing.opacity = night ? .011 : .018;
+      materials.lamp.emissiveIntensity = lampsOn ? .48 : 0;
     },
   };
 }

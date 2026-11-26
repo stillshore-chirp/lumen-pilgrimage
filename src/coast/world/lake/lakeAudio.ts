@@ -6,11 +6,11 @@ import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } fr
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { createFootfall } from '../residence/residenceAudioSamples';
 import {
-  createLakeSoundPaths, lakeSoundPaths, lakeSurfaceAt, LAKE_MAX_OPENING_DELAY,
+  createLakeSoundPaths, lakeSoundPaths, lakeSurfaceAt, LAKE_MAX_VENT_DELAY,
   type LakePoint, type LakeSoundPaths, type LakeSurface,
 } from './lakeAudioAcoustics';
 import { createLakeWater } from './lakeAudioSamples';
-import { LAKE_VERANDA, LAKE_WATER_Y } from './lakeLayout';
+import { LAKE_HALL, LAKE_WATER_Y, LAKE_WINDOW_VIEW_X } from './lakeLayout';
 
 const MIX_SOUNDS = ['water', 'birds', 'footsteps'] as const;
 type MixSound = typeof MIX_SOUNDS[number];
@@ -87,7 +87,7 @@ function createExteriorVoice(context: AudioContext, bus: GainNode): ExteriorVoic
     filter.type = 'lowpass';
     const panner = spatialPanner(context);
     placePanner(panner, point, context.currentTime, true);
-    const delay = index === 0 ? undefined : context.createDelay(LAKE_MAX_OPENING_DELAY);
+    const delay = index === 0 ? undefined : context.createDelay(LAKE_MAX_VENT_DELAY);
     if (delay) input.connect(delay).connect(filter);
     else input.connect(filter);
     filter.connect(level).connect(panner).connect(bus);
@@ -224,9 +224,9 @@ export class LakeAudio {
     this.updateMix(context.currentTime, true);
     for (const [index, side] of [-1, 1].entries()) {
       const point = {
-        x: side * (LAKE_VERANDA.insideX + LAKE_VERANDA.outsideX) / 2,
+        x: side * LAKE_WINDOW_VIEW_X,
         y: LAKE_WATER_Y,
-        z: LAKE_VERANDA.endZ - 1.5 - index * 0.9,
+        z: LAKE_HALL.frontZ - 9.2 - index * 0.4,
       };
       const voice = this.addExteriorVoice(context, buses.water);
       const source = context.createBufferSource();

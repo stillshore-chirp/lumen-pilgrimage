@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { LAKE_WATER_Y, LAKE_VERANDA } from './lakeLayout';
+import { LAKE_HALL, LAKE_WATER_Y, LAKE_WINDOW_VIEW_X } from './lakeLayout';
 
 type Point = [number, number, number];
 type FishPigment = { belly: number; back: number; patch: number; fin: number; pattern: number };
@@ -19,11 +19,10 @@ const fishInSchool = [
   { pigment: 3, size: .72, lag: 3.45, lane: .49, depth: -.058, beatRate: 1.51, atNight: false },
 ] as const;
 
-// The nearest loop fits in the view beneath each veranda's handrail.
-const verandaCenterX = (LAKE_VERANDA.insideX + LAKE_VERANDA.outsideX) / 2;
+// Each loop sits below the sightline from its window and above the shallow gravel bed.
 const shallowCircuit: readonly Point[] = [
-  [-.20, -.28, 3.56], [1.74, -.30, 4.05], [2.67, -.356, 5.27], [1.90, -.406, 6.53],
-  [.10, -.43, 7.01], [-1.81, -.385, 6.49], [-2.61, -.323, 5.22], [-1.99, -.293, 4.05],
+  [-.20, -.28, 6.70], [1.20, -.30, 7.02], [1.80, -.37, 8.12], [1.36, -.45, 8.95],
+  [.10, -.50, 9.18], [-1.54, -.44, 8.92], [-2.12, -.36, 7.98], [-1.69, -.30, 7.02],
 ];
 
 const profile = new THREE.SplineCurve([
@@ -125,7 +124,7 @@ export function buildLakeFish(root: THREE.Group) {
   const colors = pigments.map(createFishGeometry);
   const schools = [-1, 1].map((side, index) => {
     const track = new THREE.CatmullRomCurve3(shallowCircuit.map(([x, depth, distance]) =>
-      new THREE.Vector3(side * (verandaCenterX + x), LAKE_WATER_Y + depth, LAKE_VERANDA.endZ - distance)), true);
+      new THREE.Vector3(side * (LAKE_WINDOW_VIEW_X + x), LAKE_WATER_Y + depth, LAKE_HALL.frontZ - distance)), true);
     const fish = fishInSchool.map((slot, i) => {
       const mesh = new THREE.Mesh(colors[(slot.pigment + index) % colors.length], material);
       mesh.name = 'lake-fish-' + (side < 0 ? 'west-' : 'east-') + (i + 1);

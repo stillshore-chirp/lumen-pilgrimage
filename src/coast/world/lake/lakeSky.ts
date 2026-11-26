@@ -3,6 +3,7 @@ import { coastRandom } from '../../terrain';
 import { bindCoastSky, coastSkyGlsl, type CoastAtmosphere, type CoastTimeOfDay } from '../coastAtmosphere';
 import { coastMilkyWayGlsl, createCoastMilkyWay, sampleGalacticStars } from '../coastMilkyWay';
 import { buildLakeSkyClouds } from './lakeSkyClouds';
+import { lakeSkyRadianceGlsl } from './lakeSkyRadiance';
 
 const lakeMilkyWayGlsl = /* glsl */`
   ${coastMilkyWayGlsl}
@@ -106,10 +107,11 @@ export function buildLakeSky(root: THREE.Group | THREE.Scene, atmosphere: CoastA
       varying vec3 vDirection;
       ${coastSkyGlsl}
       ${lakeMilkyWayGlsl}
+      ${lakeSkyRadianceGlsl}
 
       void main() {
         vec3 direction = normalize(vDirection);
-        gl_FragColor = vec4(coastSkyRadiance(direction) + coastSunRadiance(direction) + lakeMilkyWay(direction), 1.0);
+        gl_FragColor = vec4(lakeSkyRadiance(direction) + coastSunRadiance(direction) + lakeMilkyWay(direction), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }

@@ -26,9 +26,9 @@ function noise(seed: number) {
 }
 
 export function addLakeHallArrangement(root: Group): void {
-  const base = new Vector3(LAKE_TABLE.x, LAKE_TABLE.topY, LAKE_TABLE.z - .12);
+  const base = new Vector3(LAKE_TABLE.x + .04, LAKE_TABLE.topY, LAKE_TABLE.z - .16);
   const ceramic = new MeshPhysicalMaterial({
-    name: 'Iron-glazed stoneware', color: 0x403124, roughness: .43, clearcoat: .31, clearcoatRoughness: .33,
+    name: 'Iron-glazed stoneware', color: 0x322b23, roughness: .38, clearcoat: .37, clearcoatRoughness: .28,
   });
   const profile = [
     [0, .003], [.080, .003], [.088, .010], [.089, .023], [.137, .033], [.182, .059],
@@ -87,19 +87,20 @@ export function addLakeHallArrangement(root: Group): void {
   const wood = new Mesh(geometry, new MeshStandardMaterial({ color: 0x554234, roughness: .94 }));
   wood.name = 'Tapering flowering branches';
   wood.position.copy(base);
+  wood.scale.set(1.28, 1.17, 1.10);
   wood.castShadow = wood.receiveShadow = true;
   root.add(wood);
 
   const petalShape = new SphereGeometry(1, 8, 6);
-  const petalMaterial = new MeshStandardMaterial({ color: 0xffffff, roughness: .78, emissive: 0x7c3437, emissiveIntensity: .26 });
+  const petalMaterial = new MeshStandardMaterial({ color: 0xffffff, roughness: .80, emissive: 0x843041, emissiveIntensity: .23 });
   const petals = new InstancedMesh(petalShape, petalMaterial, flowers.length * 5);
   const centres = new InstancedMesh(petalShape, new MeshStandardMaterial({ color: 0xb78a56, roughness: .87 }), flowers.length);
   const leaves = new InstancedMesh(petalShape, new MeshStandardMaterial({ color: 0xffffff, roughness: .89 }), flowers.length);
-  const palette = [0xcb746c, 0xe19d9a, 0xe6a49d, 0xd48b86, 0xf1bfb0].map(color => new Color(color));
-  const leafTones = [0x545c3f, 0x6b6c43, 0x766a46].map(color => new Color(color));
+  const palette = [0xc16674, 0xdf8c91, 0xe6a4a4, 0xcf7682, 0xf0c2bc, 0xd9888b].map(color => new Color(color));
+  const leafTones = [0x586246, 0x6b754d, 0x796249].map(color => new Color(color));
   const pose = new Object3D();
   for (const [index, point] of flowers.entries()) {
-    const size = .008 + .007 * noise(index + 22);
+    const size = .007 + .013 * noise(index + 22);
     const normal = new Vector3(noise(index + 89) - .5, .24 + .65 * noise(index + 12), noise(index + 48) - .5).normalize();
     const tilt = pose.quaternion.clone().setFromUnitVectors(up, normal);
     for (let petal = 0; petal < 5; petal += 1) {
@@ -120,7 +121,7 @@ export function addLakeHallArrangement(root: Group): void {
 
     pose.position.copy(point).add(new Vector3(.014 * (noise(index + 19) - .5), -.010, .018));
     pose.rotation.set(.91 - noise(index + 7), noise(index + 5) * Math.PI, noise(index + 2) - .5);
-    pose.scale.set(size * 1.72, size * .10, size * .57);
+    pose.scale.set(size * 1.47, size * .10, size * .51);
     pose.updateMatrix();
     leaves.setMatrixAt(index, pose.matrix);
     leaves.setColorAt(index, leafTones[index % leafTones.length]);
@@ -130,6 +131,7 @@ export function addLakeHallArrangement(root: Group): void {
   leaves.name = 'Bronze-green spring leaves';
   for (const detail of [petals, centres, leaves]) {
     detail.position.copy(base);
+    detail.scale.copy(wood.scale);
     detail.receiveShadow = true;
     root.add(detail);
   }

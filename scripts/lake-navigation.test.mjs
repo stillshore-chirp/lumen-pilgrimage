@@ -25,22 +25,26 @@ function checkWalk(x0, z0, x1, z1) {
   }
 }
 
-test('both side wings and their verandas are connected to the hall', () => {
+test('the indoor floor is continuous to both windows, under the table, and toward the rear wall', () => {
   const { x, z } = lakeNavigation.spawn;
-  for (const veranda of layout.LAKE_DESTINATIONS.slice(1)) {
-    checkWalk(x, z, veranda.x, z);
-    checkWalk(veranda.x, z, veranda.x, veranda.z);
+  for (const window of layout.LAKE_DESTINATIONS.slice(1)) {
+    checkWalk(x, z, window.x, z);
+    checkWalk(window.x, z, window.x, window.z);
   }
+  checkWalk(x, z, x, layout.LAKE_HALL.rearZ - 0.3);
+  checkWalk(x, z, layout.LAKE_TABLE.x, layout.LAKE_TABLE.z - layout.LAKE_TABLE.depth);
 });
 
-test('the pane, hall perimeter, veranda rails and tea table bound movement', () => {
-  assert.ok(lakeWalkBlocked(0, layout.LAKE_HALL.frontZ));
-  assert.ok(lakeWalkBlocked(layout.LAKE_GLAZING.halfWidth, layout.LAKE_HALL.frontZ));
-  assert.equal(lakeWalkBlocked(17.5, layout.LAKE_HALL.frontZ), false);
-  assert.ok(lakeWalkBlocked(-17.5, layout.LAKE_VERANDA.endZ));
-  assert.ok(lakeWalkBlocked(17.5, layout.LAKE_VERANDA.endZ));
-  assert.ok(lakeWalkBlocked(layout.LAKE_HALL.halfWidth, 7));
-  assert.ok(lakeWalkBlocked(0, layout.LAKE_HALL.rearZ));
-  assert.ok(lakeWalkBlocked(layout.LAKE_TABLE.x, layout.LAKE_TABLE.z));
+test('all window bays and solid walls enclose the supported floor', () => {
+  const { halfWidth, frontZ, rearZ } = layout.LAKE_HALL;
+  for (let x = -halfWidth + 0.3; x < halfWidth - 0.2; x += 0.1) {
+    assert.ok(lakeWalkBlocked(x, frontZ));
+    assert.ok(lakeWalkBlocked(x, frontZ - 1));
+    assert.ok(lakeWalkBlocked(x, rearZ));
+  }
+  for (const x of [-halfWidth, halfWidth]) {
+    assert.ok(lakeWalkBlocked(x, 7));
+  }
+  assert.equal(lakeNavigation.bounds.minZ, frontZ);
   assert.equal(lakeNavigation.allowFlight, false);
 });
