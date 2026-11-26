@@ -11,11 +11,14 @@ const hooks = registerHooks({
     return nextResolve(internal ? `${specifier}.ts` : specifier, context);
   },
 });
-const [{ buildLakeStoneRing }, { LAKE_TERRAIN, LAKE_WATER_Y }, { addLakeBank }, { PlantSurface }] = await Promise.all([
+const [
+  { buildLakeStoneRing }, { LAKE_TERRAIN, LAKE_WATER_Y }, { addLakeBank }, { PlantSurface }, { addLakeFarArchitecture },
+] = await Promise.all([
   import('../src/coast/world/lake/lakeBasinStone.ts'),
   import('../src/coast/world/lake/lakeLayout.ts'),
   import('../src/coast/world/lake/lakeBasin.ts'),
   import('../src/coast/world/coastTreeMeshes.ts'),
+  import('../src/coast/world/lake/lakeFarArchitecture.ts'),
 ]);
 hooks.deregister();
 
@@ -75,6 +78,29 @@ test('both banks carry a continuous profile from submerged toe into the inland s
       }
     }
   } finally {
+    material.dispose();
+  }
+});
+
+test('the far shore has recessed grid bays and free roof overhangs', () => {
+  const surface = new PlantSurface();
+  addLakeFarArchitecture(surface);
+  const material = new MeshStandardMaterial();
+  const mesh = new Mesh(surface.geometry(), material);
+  const ray = new Raycaster(undefined, new Vector3(0, 0, -1));
+  const frontAt = (x, y, z) => {
+    ray.ray.origin.set(x, y, z);
+    return ray.intersectObject(mesh, false)[0]?.point.z;
+  };
+  try {
+    const pier = frontAt(-109.38, 73.7, -275);
+    const bay = frontAt(-108.92, 73.7, -275);
+    assert.ok(pier - bay > 0.4, 'the western grid stands forward of the recessed bays');
+    const eave = frontAt(-51.5, 25.3, -355);
+    const wall = frontAt(-51.5, 20, -355);
+    assert.ok(eave - wall > 2, 'the pale roof projects over its lower wall');
+  } finally {
+    mesh.geometry.dispose();
     material.dispose();
   }
 });
