@@ -103,16 +103,16 @@ async function capture(page, name) {
   });
 }
 
-async function skySample(page, buffer) {
-  return page.evaluate(async image => {
+async function sampleBrightness(page, buffer, region) {
+  return page.evaluate(async ({ image, region: [x, y, width, height] }) => {
     const bytes = Uint8Array.from(atob(image), letter => letter.charCodeAt(0));
     const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
     const crop = document.createElement('canvas');
     crop.width = 64;
     crop.height = 24;
     const ctx = crop.getContext('2d');
-    ctx.drawImage(bitmap, bitmap.width * 0.30, bitmap.height * 0.195, bitmap.width * 0.40,
-      bitmap.height * 0.085, 0, 0, crop.width, crop.height);
+    ctx.drawImage(bitmap, bitmap.width * x, bitmap.height * y, bitmap.width * width,
+      bitmap.height * height, 0, 0, crop.width, crop.height);
     bitmap.close();
     const { data } = ctx.getImageData(0, 0, crop.width, crop.height);
     const pixelCount = data.length / 4;
@@ -121,7 +121,7 @@ async function skySample(page, buffer) {
       sum += data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722;
     }
     return sum / pixelCount;
-  }, buffer.toString('base64'));
+  }, { image: buffer.toString('base64'), region });
 }
 
 async function withPointerLock(page, inspect) {
@@ -187,7 +187,8 @@ test('lake hall starts at its photo comparison view and switches the sky to nigh
   assert.ok(Math.hypot(position.x, position.y - 1.65, position.z - 7) < 0.04);
   assert.equal(await page.locator('#coast-fov').inputValue(), '52');
   await page.waitForLoadState('networkidle');
-  const day = await skySample(page, await capture(page, 'lake-hall-day'));
+  const skyRegion = [0.30, 0.195, 0.40, 0.085];
+  const day = await sampleBrightness(page, await capture(page, 'lake-hall-day'), skyRegion);
   if (screenshots) {
     await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 8_000)));
     await capture(page, 'lake-hall-day-later');
@@ -200,12 +201,32 @@ test('lake hall starts at its photo comparison view and switches the sky to nigh
   await action(page, '夜').click();
   await page.waitForURL(url => url.searchParams.get('time') === 'night');
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const night = await skySample(page, await capture(page, 'lake-hall-night'));
+  const night = await sampleBrightness(page, await capture(page, 'lake-hall-night'), skyRegion);
   assert.ok(day > 70 && night < day * 0.70, `sky light changed from ${day.toFixed(1)} to ${night.toFixed(1)}`);
   await action(page, '高品質').click();
   assert.equal(await action(page, '高品質').getAttribute('aria-pressed'), 'true');
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   if (screenshots) await capture(page, 'lake-hall-night-high');
+  assert.deepEqual(errors, []);
+});
+
+test('the night andon illuminates its paper and nearby tatami and follows the world light control', { timeout }, async t => {
+  const { page, errors } = await newPage(t);
+  await goToLake(page, '&time=night');
+  await page.waitForLoadState('networkidle');
+  const lit = await capture(page, 'lake-andon-lit');
+  await action(page, '一括消灯').click();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const dark = await capture(page, 'lake-andon-unlit');
+  const shade = [0.678, 0.828, 0.014, 0.029];
+  const tatami = [0.667, 0.888, 0.040, 0.021];
+  const litShade = await sampleBrightness(page, lit, shade);
+  const darkShade = await sampleBrightness(page, dark, shade);
+  const litFloor = await sampleBrightness(page, lit, tatami);
+  const darkFloor = await sampleBrightness(page, dark, tatami);
+  assert.ok(litShade > darkShade + 20, `andon paper luminance: ${darkShade} → ${litShade}`);
+  assert.ok(litFloor > darkFloor + 5, `nearby floor luminance: ${darkFloor} → ${litFloor}`);
+  assert.match(page.url(), /time=night/);
   assert.deepEqual(errors, []);
 });
 

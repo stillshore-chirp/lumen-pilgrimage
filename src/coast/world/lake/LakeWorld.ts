@@ -3,6 +3,7 @@ import type { ExplorationScene } from '../../CoastApp';
 import { disposeSceneDrawables } from '../../disposeSceneDrawables';
 import type { WorldLightingMode } from '../../WorldLightingControl';
 import { createCoastAtmosphere, type CoastTimeOfDay } from '../coastAtmosphere';
+import { buildLakeAndon } from './lakeAndon';
 import { LakeAudio } from './lakeAudio';
 import { buildLakeBasin } from './lakeBasin';
 import { buildLakeHall } from './lakeHall';
@@ -46,6 +47,7 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   scene.add(ambient, daylight, sun, sun.target);
 
   const hallGroup = sceneGroup(scene, 'Lakeside hall');
+  const andon = buildLakeAndon(hallGroup);
   const basinGroup = sceneGroup(scene, 'Rock basin and stone ring');
   const wildlifeGroup = sceneGroup(scene, 'Birds and shallow-water fish');
   const lampMounts = [
@@ -83,6 +85,7 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
     fog.density = night ? 0.00151 : 0.00162;
     for (const lamp of lamps) lamp.intensity = lampsOn ? 3.5 : 0;
     hall.setTimeOfDay(time, lampsOn);
+    andon.setLighting(night, lampsOn);
   }
 
   updateLighting();
