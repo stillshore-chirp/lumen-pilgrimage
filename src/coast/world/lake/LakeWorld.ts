@@ -114,10 +114,12 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   sky.setMoonVisible(lakeSettings.state.moonVisible);
   setLakeLightDirection(atmosphere.sun.value, lakeSettings.state, time);
   updateLighting();
+  const audio = new LakeAudio();
   return {
     id: 'lake',
     navigation: lakeNavigation,
-    audio: new LakeAudio(),
+    audio,
+    lakeKoto: audio,
     lakeSettings,
     world: {
       scene,

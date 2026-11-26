@@ -977,3 +977,86 @@ test('lake environment settings update the scene, persist, and fit a short lands
   assert.equal(await page.evaluate(() => window.lakeEnvironment.futon + window.lakeEnvironment.lanterns), 0);
   assert.deepEqual(errors, []);
 });
+
+test('the twelve ceiling speakers play and stop koto from desktop and simulated XR controls', { timeout }, async t => {
+  const { page, errors } = await newPage(t);
+  await page.addInitScript(installSimulatedXR);
+  await page.addInitScript(observeOutput);
+  await page.addInitScript(() => {
+    localStorage.setItem('lumen-pilgrimage:sound', JSON.stringify({ environmentOn: false, footstepsOn: false, master: 1 }));
+    const resume = AudioContext.prototype.resume;
+    const audioState = Object.getOwnPropertyDescriptor(BaseAudioContext.prototype, 'state').get;
+    let rejected = false;
+    // An AudioContext created during the button click can already be running in Chromium.
+    Object.defineProperty(AudioContext.prototype, 'state', {
+      configurable: true,
+      get() { return rejected ? audioState.call(this) : 'suspended'; },
+    });
+    AudioContext.prototype.resume = function () {
+      if (!rejected) {
+        rejected = true;
+        return Promise.reject(new DOMException('Audio start was blocked', 'NotAllowedError'));
+      }
+      return resume.call(this);
+    };
+    const NativePanner = window.PannerNode;
+    window.ceilingPanners = [];
+    window.PannerNode = class extends NativePanner {
+      constructor(context, options) {
+        super(context, options);
+        if (options?.positionY > 8) window.ceilingPanners.push(options);
+      }
+    };
+  });
+  await goToLake(page);
+  const dialog = page.getByRole('dialog', { name: '湖畔の環境設定' });
+  const koto = dialog.getByRole('button', { name: '琴の演奏', exact: true });
+  await action(page, '環境設定').click();
+  assert.equal(await koto.getAttribute('aria-pressed'), 'false');
+  await koto.click();
+  await dialog.getByRole('status').waitFor();
+  assert.equal(await koto.getAttribute('aria-pressed'), 'false');
+  await dialog.getByRole('button', { name: '閉じる', exact: true }).click();
+
+  await action(page, 'VRを開始').click();
+  await page.waitForFunction(() => window.xrFixture.eyePoses[0] && window.xrFixture.eyePoses[320]);
+  const change = input => page.evaluate(value => window.xrFixture.mutate(value), input);
+  const choose = async (label, title) => {
+    for (let row = 0; row < 12; row += 1) {
+      if (await page.evaluate(() => window.xrFixture.selection) === label) {
+        await change({ select: true });
+        if (title) await page.waitForFunction(expected => window.xrFixture.menuTitle === expected, title);
+        return;
+      }
+      await change({ side: 'right', axes: [0, 1] });
+      await change({ side: 'right', axes: [0, 0] });
+    }
+    assert.fail(`No immersive menu item named ${label}`);
+  };
+  await change({ side: 'left', button: 4, pressed: true });
+  await change({ side: 'left', button: 4, pressed: false });
+  await page.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
+  await choose('設定', '設定');
+  await choose('湖畔の環境設定', '湖畔の環境設定');
+  await choose('琴を再生する（再試行）');
+  await page.waitForFunction(() => window.xrFixture.selection === '琴を停止する' && window.lakeAudioProbe.peak() > 0.001);
+  await choose('琴を停止する');
+  await page.waitForFunction(() => window.xrFixture.selection === '琴を再生する' && window.lakeAudioProbe.peak() < 0.00002);
+  await action(page, 'VRを終了').click();
+  await page.waitForFunction(() => window.xrFixture.ends === 1);
+
+  await action(page, '環境設定').click();
+  await dialog.getByRole('status').waitFor({ state: 'hidden' });
+  await koto.click();
+  await page.waitForFunction(() => window.lakeAudioProbe.peak() > 0.001);
+  assert.equal(await koto.getAttribute('aria-pressed'), 'true');
+  const speakers = await page.evaluate(() => window.ceilingPanners);
+  assert.equal(speakers.length, 12);
+  assert.equal(new Set(speakers.map(speaker => speaker.positionX)).size, 4);
+  assert.equal(new Set(speakers.map(speaker => speaker.positionZ)).size, 3);
+  assert.ok(speakers.every(speaker => speaker.panningModel === 'HRTF'));
+  await koto.click();
+  await page.waitForFunction(() => window.lakeAudioProbe.peak() < 0.00002);
+  assert.equal(await koto.getAttribute('aria-pressed'), 'false');
+  assert.deepEqual(errors, []);
+});
