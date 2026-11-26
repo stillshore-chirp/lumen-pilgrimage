@@ -17,9 +17,11 @@ export const LAKE_GLAZING = {
 
 export const LAKE_VERANDA = {
   endZ: -11.6,
-  insideX: 16.65,
-  outsideX: 21.6,
+  insideX: LAKE_GLAZING.halfWidth,
+  outsideX: LAKE_HALL.halfWidth,
 } as const;
+
+export const LAKE_TATAMI = { halfWidth: 20.4, frontZ: -1.88, rearZ: 11.72 } as const;
 
 export const LAKE_TABLE = {
   x: 0,
