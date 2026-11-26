@@ -13,7 +13,7 @@ const hooks = registerHooks({
 });
 const [
   { buildLakeStoneRing }, { LAKE_TERRAIN, LAKE_WATER_Y }, { addLakeBank }, { PlantSurface }, { addLakeFarArchitecture },
-  { buildFarShoreSurface },
+  { buildFarShoreSurface, farShoreMaterial },
 ] = await Promise.all([
   import('../src/coast/world/lake/lakeBasinStone.ts'),
   import('../src/coast/world/lake/lakeLayout.ts'),
@@ -98,14 +98,68 @@ test('the far shore has recessed grid bays and free roof overhangs', () => {
     const pier = frontAt(-110.4, 73.7, -275);
     const bay = frontAt(-110.18, 73.7, -275);
     assert.ok(pier - bay > 0.8, 'the western grid stands forward of the recessed bays');
-    const eave = frontAt(-51.5, 25.3, -355);
-    const wall = frontAt(-51.5, 20, -355);
+    const eave = frontAt(-58.71, 29.865, -405);
+    const wall = frontAt(-58.71, 22.569, -405);
     assert.ok(eave - wall > 4, 'the pale roof projects over its lower wall');
-    const arcadePier = frontAt(42.1, 18.4, -370);
-    const arcadeBack = frontAt(39, 18.4, -370);
+    const arcadePier = frontAt(40, 10.5, -370);
+    const arcadeBack = frontAt(41.5, 10.5, -370);
     assert.ok(arcadePier - arcadeBack > 1.8, 'the lower range has standing piers in front of a deeper gallery');
   } finally {
     mesh.geometry.dispose();
+    material.dispose();
+  }
+});
+
+test('gravel and masonry use the same atmospheric extinction at a shared contact', () => {
+  const compileFog = layer => {
+    const material = farShoreMaterial(layer);
+    const shader = {
+      vertexShader: '#include <common>\n#include <begin_vertex>',
+      fragmentShader: '#include <common>\n#include <color_fragment>\n#include <lights_fragment_end>\n#include <fog_fragment>',
+    };
+    try {
+      material.onBeforeCompile(shader, undefined);
+      const fog = shader.fragmentShader.indexOf('#if defined(USE_FOG)');
+      assert.ok(fog >= 0, 'the local air field participates in the rendered material');
+      return shader.fragmentShader.slice(fog);
+    } finally {
+      material.dispose();
+    }
+  };
+  assert.equal(compileFog('gravel'), compileFog('masonry'),
+    'a material boundary must not change the transmittance of the same air');
+});
+
+test('west, central and east foundations intersect continuous ground along their visible fronts', () => {
+  const material = new MeshStandardMaterial();
+  const shore = new Mesh(buildFarShoreSurface().geometry(), material);
+  const meshes = [shore];
+  for (const side of [-1, 1]) {
+    const surface = new PlantSurface();
+    addLakeBank(surface, side);
+    meshes.push(new Mesh(surface.geometry(), material));
+  }
+  const surface = new PlantSurface();
+  addLakeFarArchitecture(surface);
+  const buildings = new Mesh(surface.geometry(), material);
+  const down = new Raycaster(undefined, new Vector3(0, -1, 0));
+  const inland = new Raycaster(undefined, new Vector3(0, 0, -1));
+  try {
+    for (const [name, x, start] of [
+      ['west grid', -108, -275], ['west return', -82, -275], ['detached grid', -82, -375],
+      ['pale pavilion', -50.16, -405], ['central gallery', 42, -370], ['east grid', 201, -340],
+    ]) {
+      inland.ray.origin.set(x, LAKE_WATER_Y + 0.52, start);
+      const footing = inland.intersectObject(buildings, false)[0]?.point;
+      assert.ok(footing, `${name}: an opaque footing continues below the visible facade`);
+      for (const offset of [-0.25, 0.25, 2, 5]) {
+        down.ray.origin.set(x, 150, footing.z - offset);
+        const height = down.intersectObjects(meshes, false)[0]?.point.y;
+        assert.ok(height > footing.y + 0.5, `${name}: the ground meets and overlaps the footing at ${offset} m`);
+      }
+    }
+  } finally {
+    for (const mesh of [...meshes, buildings]) mesh.geometry.dispose();
     material.dispose();
   }
 });
@@ -123,14 +177,21 @@ test('the far gravel connects submerged slope to the base of the pale pavilion a
     return down.intersectObject(ground, false)[0]?.point.y;
   };
   try {
-    for (const [name, x] of [['pale pavilion', -44], ['east retaining wall', 198]]) {
+    for (const [name, x, start, maximumStep] of [
+      ['pale pavilion', -50.16, -405, 1], ['east retaining wall', 198, -345, 1.5],
+    ]) {
       assert.ok(heightAt(x, -344) < LAKE_WATER_Y, `${name}: gravel extends below the waterline`);
-      inland.ray.origin.set(x, LAKE_WATER_Y + 1, -345);
+      inland.ray.origin.set(x, LAKE_WATER_Y + 1, start);
       const [footing] = inland.intersectObject(buildings, false);
       assert.ok(footing, `${name}: an opaque foundation reaches the base of the slope`);
       const baseHeight = heightAt(x, footing.point.z + 0.25);
       assert.ok(baseHeight > footing.point.y + 1, `${name}: the foundation intersects rising gravel`);
-      assert.ok(heightAt(x, footing.point.z - 12) > baseHeight, `${name}: gravel continues to rise inland`);
+      // A broad, shallow crest may level off beneath the pavilion. Keep the
+      // supporting ground continuous instead of requiring a steep local mound.
+      const profile = Array.from({ length: 7 }, (_, i) => heightAt(x, footing.point.z - i * 2));
+      assert.ok(profile.every(y => y > baseHeight - 1), `${name}: the supporting grade continues inland`);
+      assert.ok(profile.every((y, i) => i === 0 || Math.abs(y - profile[i - 1]) < maximumStep),
+        `${name}: the foundation meets a broad grade without an abrupt bank`);
     }
   } finally {
     ground.geometry.dispose();

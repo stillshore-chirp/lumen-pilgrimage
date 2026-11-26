@@ -26,7 +26,7 @@ type CloudBank = {
 const banks: readonly CloudBank[] = [
   { tile: 'bank', center: [-125, 44, -344], size: [91, 54], opacity: 0.82, wind: 1.13 },
   { tile: 'cluster', center: [-180, 44, -525], size: [114, 62], opacity: 0.62, wind: 1.27 },
-  { tile: 'bank', center: [74, 29, -403], size: [144, 44], opacity: 0.95, wind: 1.54 },
+  { tile: 'bank', center: [74, 29, -426], size: [144, 44], opacity: 0.95, wind: 1.54 },
   { tile: 'chain', center: [221, 48, -365], size: [108, 69], opacity: 0.76, wind: 1.38 },
   // The distant cloud banks advance together in horizontal view coordinates.
   // The two upwind banks start behind the western cliffs. Their phases fill
