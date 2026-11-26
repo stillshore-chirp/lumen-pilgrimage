@@ -79,7 +79,7 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
   const shell = buildAtriumShell(room, floor.wallStone);
   const roof = buildAtriumRoof(room);
   const stair = buildAtriumStair(room);
-  const retail = buildAtriumRetail(room);
+  const retail = await buildAtriumRetail(room, floor.wallStone);
   const furnishings = buildAtriumFurnishings(room);
   batchAtriumOpaqueMeshes(room);
   let mode: WorldLightingMode = 'auto';

@@ -23,6 +23,7 @@ const {
   atriumUpperStairHeight, atriumUpperStairPoint,
 } = await import('../src/coast/world/atrium/atriumLayout.ts');
 const { atriumNavigation } = await import('../src/coast/world/atrium/atriumNavigation.ts');
+const { ATRIUM_TENANT_ISLANDS } = await import('../src/coast/world/atrium/atriumTenantPlan.ts');
 const { CoastControls } = await import(controlsUrl);
 hooks.deregister();
 
@@ -208,6 +209,56 @@ test('walkable storefront frontage stays within the atrium width near eleven met
       assert.ok(Math.abs(camera.position.x - (limit > 0 ? limit - 0.35 : limit + 0.35)) < 1e-6,
         `walkable edge is at x=${camera.position.x}`);
     }
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('display island footprints leave usable ground routes around the lounge and café', () => {
+  for (const { id, center: [x, s], size: [width, depth] } of ATRIUM_TENANT_ISLANDS) {
+    for (const [atX, atZ] of [[x, -s], [x + width * 0.45, -s], [x, -s - depth * 0.45]]) {
+      assert.equal(atriumNavigation.blocksWalking(atX, atZ, 0), true, `${id} blocks its entire footprint`);
+    }
+    assert.equal(atriumNavigation.blocksWalking(x - width / 2 - 0.25, -s, 0), false);
+    assert.equal(atriumNavigation.blocksWalking(x, -s, ATRIUM_WALK_LEVEL), false);
+  }
+
+  for (const [i, { center: [, s], size: [, depth] }] of ATRIUM_TENANT_ISLANDS.slice(1).entries()) {
+    const previous = ATRIUM_TENANT_ISLANDS[i];
+    const aisleZ = -(s - depth / 2 + previous.center[1] + previous.size[1] / 2) / 2;
+    for (let x = -8.5; x < -3.4; x += 0.15) {
+      assert.equal(atriumNavigation.blocksWalking(x, aisleZ, 0), false, `cross-aisle at (${x}, ${aisleZ})`);
+    }
+  }
+  for (let s = 28; s <= 38; s += 0.15) {
+    assert.equal(atriumNavigation.blocksWalking(-8.5, -s, 0), false, 'west corridor stays clear');
+    assert.equal(atriumNavigation.blocksWalking(10.9, -s, 0), false, 'east approach retains its café passage');
+  }
+  const { x, z } = atriumNavigation.spawn;
+  assert.equal(atriumNavigation.blocksWalking(x, z + 0.6, 0), false, 'the sofa can still be approached');
+});
+
+test('keyboard walking and jumping stop at the display case edge', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera);
+  const { center: [x, s], size: [width] } = ATRIUM_TENANT_ISLANDS[0];
+  const edgeX = x - width / 2;
+  try {
+    controls.relocate({ x: edgeX - 1.5, z: -s, yaw: -Math.PI / 2, pitch: 0 });
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW' });
+    for (let frame = 0; frame < 120; frame += 1) controls.update(0.01);
+    const stopX = camera.position.x;
+    assert.ok(stopX > edgeX - 0.24 && stopX < edgeX);
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
+    let highestFoot = 0;
+    for (let frame = 0; frame < 120; frame += 1) {
+      controls.update(0.01);
+      highestFoot = Math.max(highestFoot, camera.position.y - controls.eyeHeight);
+      assert.ok(camera.position.x <= stopX + 0.001, 'jumping cannot land in the case');
+    }
+    assert.ok(highestFoot > ATRIUM_TENANT_ISLANDS[0].height);
   } finally {
     controls.dispose();
     browser.cleanup();

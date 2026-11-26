@@ -12,6 +12,7 @@ import {
   ATRIUM_SCULPTURE,
   ATRIUM_SOFA,
 } from './atriumLayout';
+import { ATRIUM_TENANT_ISLANDS } from './atriumTenantPlan';
 
 type Point3 = readonly [x: number, y: number, z: number];
 
@@ -43,6 +44,9 @@ interface AtriumFurnishMaterials {
   readonly ramification: THREE.MeshStandardMaterial;
   readonly bulbs: readonly THREE.MeshStandardMaterial[];
   readonly amber: THREE.MeshStandardMaterial;
+  readonly islandGlows: readonly THREE.MeshStandardMaterial[];
+  readonly islandGlass: THREE.MeshPhysicalMaterial;
+  readonly islandAcrylic: THREE.MeshStandardMaterial;
   readonly controls: EmissiveControl[];
 }
 
@@ -53,10 +57,9 @@ const SOFA_SEAT_Z = SOFA_FRONT_Z - .23;
 const SOFA_BACK_Z = SOFA_FRONT_Z - .72;
 
 // Navigation stays in atriumNavigation.ts. Keep the seat center open for the requested
-// seated start and use only these physical rear/arm extents as furniture obstacles:
-// back x=[-5.10,-0.30], z=[-30.62,-30.18]; arms x=[-5.10,-4.78] and
-// [-0.62,-0.30], z=[-30.30,-29.34]. The rug has no collider; display plinths are
-// separate optional obstacles at (-4.72,-34.18) 1.22x.92 and (.34,-34.25) 1.34x.82.
+// seated start and use only the sofa's physical rear/arm extents as furniture obstacles.
+// The lounge rug and tenant display islands are visual layers; confirmed island
+// collision extents are owned by atriumNavigation.ts.
 
 function material(
   name: string,
@@ -106,6 +109,25 @@ function createMaterials(): AtriumFurnishMaterials {
   const amber = material('Atrium cafe warm trim', 0xffb86f, .42, .06);
   amber.emissive.setHex(0xffa34b);
   controls.push({ material: amber, artificial: .92, daylight: .07 });
+
+  const islandGlows = [
+    { name: 'I1 2700K underside reveal', color: 0xffb978, intensity: .66 },
+    { name: 'I2 3000K shelf reveal', color: 0xffca91, intensity: .70 },
+    { name: 'I3 3000K low surface reveal', color: 0xffd0a0, intensity: .52 },
+  ].map(({ name, color, intensity }) => {
+    const glow = material(name, color, .38, .08);
+    glow.emissive.setHex(color);
+    controls.push({ material: glow, artificial: intensity, daylight: 0 });
+    return glow;
+  });
+  const islandGlass = new THREE.MeshPhysicalMaterial({
+    name: 'Tenant island thin transparent case glass', color: 0xe7eee9, roughness: .18,
+    metalness: .04, transparent: true, opacity: .26, depthWrite: false, side: THREE.DoubleSide,
+  });
+  const islandAcrylic = new THREE.MeshStandardMaterial({
+    name: 'I3 milky acrylic top', color: 0xf3ece0, roughness: .30,
+    transparent: true, opacity: .74, depthWrite: false, side: THREE.DoubleSide,
+  });
 
   const ramification = material('Atrium sculpture pale silver twigs', 0xe0dbd0, .41, .25);
   ramification.emissive.setHex(0xffeed8);
@@ -163,6 +185,9 @@ function createMaterials(): AtriumFurnishMaterials {
     ramification,
     bulbs,
     amber,
+    islandGlows,
+    islandGlass,
+    islandAcrylic,
     controls,
   };
 }
@@ -404,24 +429,66 @@ function addLoungeRugAndTables(parent: THREE.Group, materials: AtriumFurnishMate
 
 function addDisplayIslands(parent: THREE.Group, materials: AtriumFurnishMaterials): void {
   const displays = new THREE.Group();
-  displays.name = 'Nearby display islands';
+  displays.name = 'Tenant display islands I1-I3';
   parent.add(displays);
-  const islands = [
-    { x: -4.72, z: -34.18, width: 1.22, depth: .92, yaw: -.08 },
-    { x: .34, z: -34.25, width: 1.34, depth: .82, yaw: .14 },
-  ] as const;
-  for (const [index, island] of islands.entries()) {
-    roundedBox(displays, `Display island ${index + 1} base`, materials.stone, island.width, .58, island.depth,
-      [island.x, .31, island.z], .085, [0, island.yaw, 0]);
-    roundedBox(displays, `Display island ${index + 1} warm reveal`, materials.stoneEdge, island.width - .10, .025,
-      island.depth - .10, [island.x, .618, island.z], .015, [0, island.yaw, 0]);
-    const glass = cylinder(displays, `Display island ${index + 1} glass dome`, materials.glass, .30, .36,
-      [island.x, .81, island.z], 32, island.width / .70, island.depth / .67);
-    glass.scale.y = .64;
-    oval(displays, `Display island ${index + 1} porcelain object`, materials.porcelain, .29, .34, .20,
-      [island.x, .76, island.z]);
-    horizontalRing(displays, `Display island ${index + 1} brass inset`, materials.brass, .28, .008,
-      [island.x, .64, island.z], island.width / .78, island.depth / .72);
+  for (const island of ATRIUM_TENANT_ISLANDS) {
+    const [x, s] = island.center;
+    const z = -s;
+    const [width, depth] = island.size;
+    if (island.id === 'I1') {
+      // I1 is the dark, floating case: four slender legs, a thin rectangular
+      // frame, and one shared transparent volume keep the silhouette light.
+      const footY = .12;
+      const frameY = .90;
+      const frameThickness = .035;
+      const legHeight = frameY - footY;
+      const legU = width / 2 - .075;
+      const legD = depth / 2 - .075;
+      for (const [index, offset] of ([
+        [-legU, -legD], [legU, -legD], [-legU, legD], [legU, legD],
+      ] as const).entries()) {
+        roundedBox(displays, `I1 blackened slender leg ${index + 1}`, materials.darkMetal,
+          .035, legHeight, .035, [x + offset[0], footY + legHeight / 2, z + offset[1]], .008);
+      }
+      roundedBox(displays, 'I1 lower rectangular frame', materials.darkMetal,
+        width - .08, frameThickness, depth - .08, [x, frameY, z], .012);
+      roundedBox(displays, 'I1 low iron rectangular case', materials.islandGlass,
+        width - .10, island.height - frameY - .035, depth - .10,
+        [x, (frameY + island.height - .035) / 2, z], .020);
+      roundedBox(displays, 'I1 upper blackened frame', materials.darkMetal,
+        width - .08, frameThickness, depth - .08, [x, island.height - frameThickness / 2, z], .012);
+      roundedBox(displays, 'I1 2700K underside light', materials.islandGlows[0],
+        width - .18, .018, .026, [x, frameY - .018, z - depth / 2 + .065], .006);
+    } else if (island.id === 'I2') {
+      // I2 is a solid pale-stone plinth with a champagne edge and a single
+      // shelf-light line under its transparent rectangular case.
+      const plinthHeight = .54;
+      const topFrameHeight = .035;
+      const caseHeight = island.height - plinthHeight - topFrameHeight;
+      roundedBox(displays, 'I2 pale stone plinth', materials.stone, width, plinthHeight, depth,
+        [x, plinthHeight / 2, z], .045);
+      roundedBox(displays, 'I2 champagne lower reveal', materials.brass,
+        width - .08, topFrameHeight, depth - .08, [x, plinthHeight + topFrameHeight / 2, z], .012);
+      roundedBox(displays, 'I2 transparent rectangular case', materials.islandGlass,
+        width - .12, caseHeight, depth - .12,
+        [x, plinthHeight + topFrameHeight + caseHeight / 2, z], .030);
+      roundedBox(displays, 'I2 champagne upper reveal', materials.brass,
+        width - .08, topFrameHeight, depth - .08, [x, island.height - topFrameHeight / 2, z], .012);
+      roundedBox(displays, 'I2 3000K shelf light', materials.islandGlows[1],
+        width - .20, .018, depth - .20, [x, plinthHeight + .018, z], .006);
+    } else if (island.id === 'I3') {
+      // I3 shifts to a white solid base and a milky acrylic top. Its broad,
+      // low-intensity surface light reads as a plane beside the stair sightline.
+      const solidHeight = .78;
+      const acrylicHeight = island.height - solidHeight;
+      roundedBox(displays, 'I3 white solid base', materials.porcelain, width, solidHeight, depth,
+        [x, solidHeight / 2, z], .050);
+      roundedBox(displays, 'I3 low 3000K surface light', materials.islandGlows[2],
+        width - .20, .018, depth - .20, [x, solidHeight + .012, z], .006);
+      roundedBox(displays, 'I3 milky acrylic top', materials.islandAcrylic,
+        width - .08, acrylicHeight - .018, depth - .08,
+        [x, solidHeight + .009 + (acrylicHeight - .018) / 2, z], .055);
+    }
   }
 }
 
