@@ -979,7 +979,9 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     };
     await pressXRMenu();
     await viewer.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
-    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '商業アトリウム', '設定']) await xrMenuStep(label);
+    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '商業アトリウム', '湖畔の広間', '設定']) {
+      await xrMenuStep(label);
+    }
     await xrInput({ select: true });
     await viewer.waitForFunction(() => window.xrFixture.menuTitle === '設定');
     for (const label of ['歩行音', '昼', '夜', 'ワールド照明', '仮想モニター']) await xrMenuStep(label);
@@ -1483,6 +1485,7 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await step(1, '都心の70階住戸');
     await step(1, '映画館シアター（大）');
     await step(1, '商業アトリウム');
+    await step(1, '湖畔の広間');
     await step(1, '設定');
     await choose();
     await waitForMenu('設定');
@@ -1507,6 +1510,7 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await step(1, '都心の70階住戸');
     await step(1, '映画館シアター（大）');
     await step(1, '商業アトリウム');
+    await step(1, '湖畔の広間');
     await step(1, '設定');
     await step(1, 'VRを終了');
     const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
