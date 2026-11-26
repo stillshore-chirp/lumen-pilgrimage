@@ -137,14 +137,24 @@ function growPine(wood: PlantSurface, needles: PlantSurface, pine: LakePine): vo
 }
 
 export function addLakeBankPines(root: Group, pines: readonly LakePine[]): void {
-  const wood = new PlantSurface();
-  const needles = new PlantSurface();
-  for (const pine of pines) growPine(wood, needles, pine);
-  const trunks = new Mesh(wood.geometry(), new MeshStandardMaterial({ vertexColors: true, roughness: 0.96 }));
-  trunks.name = 'Wind-shaped pine trunks and spreading limbs';
-  const crowns = new Mesh(needles.geometry(), new MeshStandardMaterial({
+  const barkMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.96 });
+  const needleMaterial = new MeshStandardMaterial({
     vertexColors: true, roughness: 0.95, side: DoubleSide,
-  }));
-  crowns.name = 'Layered pine boughs and needle sprays';
-  root.add(trunks, crowns);
+  });
+  const stands = [
+    { name: 'West bank', wood: new PlantSurface(), needles: new PlantSurface() },
+    { name: 'East bank', wood: new PlantSurface(), needles: new PlantSurface() },
+    { name: 'Distant ridge', wood: new PlantSurface(), needles: new PlantSurface() },
+  ];
+  for (const pine of pines) {
+    const stand = stands[pine.z < -260 ? 2 : pine.x < 0 ? 0 : 1];
+    growPine(stand.wood, stand.needles, pine);
+  }
+  for (const { name, wood, needles } of stands) {
+    const trunks = new Mesh(wood.geometry(), barkMaterial);
+    trunks.name = `${name} pine trunks and limbs`;
+    const crowns = new Mesh(needles.geometry(), needleMaterial);
+    crowns.name = `${name} pine boughs and needle sprays`;
+    root.add(trunks, crowns);
+  }
 }

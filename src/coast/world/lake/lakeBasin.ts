@@ -131,7 +131,7 @@ const pines: readonly LakePine[] = [
   { x: -62.7, y: 4.1, z: -215.8, height: 9.3, spread: 8.2, yaw: 1.09, seed: 16 },
 ];
 
-function addShoreDetails(surface: PlantSurface): LakePine[] {
+function addShoreDetails(ledges: Readonly<Record<BankSide, PlantSurface>>): LakePine[] {
   const random = coastRandom(81557);
   const trees = [...pines];
   for (const side of [-1, 1] as const) {
@@ -141,7 +141,7 @@ function addShoreDetails(surface: PlantSurface): LakePine[] {
       const nearby = distance < 99;
       const radius = (nearby ? 0.48 : 1.08) + random() ** 1.8 * (nearby ? 4.5 : 5.7);
       const bottom = bankHeight(side, offset, distance) - radius * 0.28 - 0.53;
-      addRockMass(surface, {
+      addRockMass(ledges[side], {
         x: side * (bankEdge(side, distance) + offset), z: -distance, bottom, radiusX: radius,
         radiusZ: radius * (0.58 + random() * 0.57), height: radius * (0.24 + random() * 0.56),
         yaw: random() * Math.PI, taper: 0.64, lean: 0.25, seed: random() * 100,
@@ -251,15 +251,24 @@ function addMesh(root: Group, surface: PlantSurface, material: MeshStandardMater
 
 export function buildLakeBasin(root: Group): void {
   root.name = 'Rock basin and stone ring';
-  const terrain = new PlantSurface();
-  addBank(terrain, -1);
-  addBank(terrain, 1);
-  const cliff = new PlantSurface();
-  for (const mass of basinCliffs) addRockMass(cliff, mass);
-  const trees = addShoreDetails(terrain);
+  const ledges = { [-1]: new PlantSurface(), [1]: new PlantSurface() };
+  const distantPeaks = new PlantSurface();
+  for (const mass of basinCliffs) {
+    const surface = mass.z < -280 ? distantPeaks : ledges[mass.x < 0 ? -1 : 1];
+    addRockMass(surface, mass);
+  }
+  const trees = addShoreDetails(ledges);
   const stone = lakeStoneMaterial();
-  addMesh(root, terrain, stone, 'Broken ledges and mossy slopes around the lake');
-  addMesh(root, cliff, stone, 'Fractured western escarpment and distant summit profiles');
+  // Keep the broad slopes apart from the ledges so their bounding spheres
+  // cannot pull dense cliff geometry into a view facing back into the room.
+  for (const side of [-1, 1] as const) {
+    const direction = side === -1 ? 'West' : 'East';
+    const slope = new PlantSurface();
+    addBank(slope, side);
+    addMesh(root, slope, stone, `${direction} bank mossy slopes`);
+    addMesh(root, ledges[side], stone, `${direction} bank fractured cliffs and ledges`);
+  }
+  addMesh(root, distantPeaks, stone, 'Distant cirque summits');
   buildLakeStoneRing(root, stone);
   buildFarShore(root);
   addLakeBankPines(root, trees);
