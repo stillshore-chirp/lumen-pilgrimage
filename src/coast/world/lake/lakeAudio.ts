@@ -10,7 +10,8 @@ import {
   type LakePoint, type LakeSoundPaths, type LakeSurface,
 } from './lakeAudioAcoustics';
 import { createLakeWater } from './lakeAudioSamples';
-import { LAKE_HALL, LAKE_WATER_Y, LAKE_WINDOW_VIEW_X } from './lakeLayout';
+import { LakeKoto } from './lakeKoto';
+import { LAKE_HALL, LAKE_SPAWN, LAKE_WATER_Y, LAKE_WINDOW_VIEW_X } from './lakeLayout';
 
 const MIX_SOUNDS = ['water', 'birds', 'footsteps'] as const;
 type MixSound = typeof MIX_SOUNDS[number];
@@ -119,6 +120,9 @@ export class LakeAudio {
   private readonly footfalls = new Map<LakeSurface, readonly AudioBuffer[]>();
   private readonly footsteps = new Set<AudioBufferSourceNode>();
   private context?: AudioContext;
+  private koto?: LakeKoto;
+  private kotoRequest = 0;
+  private listenerPosition: LakePoint = { x: LAKE_SPAWN.x, y: 1.65, z: LAKE_SPAWN.z };
   private master?: GainNode;
   private buses?: Record<MixSound, GainNode>;
   private output: readonly AudioNode[] = [];
@@ -135,6 +139,22 @@ export class LakeAudio {
 
   isRunning(): boolean {
     return Boolean(this.buses && this.context?.state === 'running');
+  }
+
+  get kotoPlaying(): boolean {
+    return this.koto?.playing ?? false;
+  }
+
+  async setKotoPlaying(value: boolean): Promise<void> {
+    const request = ++this.kotoRequest;
+    if (!value) {
+      this.koto?.stop();
+      return;
+    }
+    await this.start();
+    if (request !== this.kotoRequest || this.request.signal.aborted || !this.context || !this.master) return;
+    this.koto ??= new LakeKoto(this.context, this.master);
+    this.koto.play(this.listenerPosition);
   }
 
   start(): Promise<void> {
@@ -171,6 +191,7 @@ export class LakeAudio {
 
   update(position: Vector3, forward: Vector3, up: Vector3, elapsed: number, movement: CoastMovement,
     birdCues: readonly CoastBirdCue[], grounded: boolean, navigationPosition: Vector3): void {
+    this.listenerPosition = position;
     const context = this.context;
     const buses = this.buses;
     if (!buses || !context || context.state !== 'running') return;
@@ -188,6 +209,7 @@ export class LakeAudio {
     const now = context.currentTime;
     if (now >= this.nextPropagation) {
       this.nextPropagation = now + PROPAGATION_INTERVAL;
+      if (this.koto?.playing) this.koto.update(position, now);
       const waterStrength = this.time === 'day' ? 0.87 : 0.67;
       for (const { voice, point } of this.water) updateExteriorVoice(voice, position, point, waterStrength, now);
       const call = this.playingBird;
@@ -407,6 +429,8 @@ export class LakeAudio {
         panner.disconnect();
       }
     }
+    this.koto?.dispose();
+    this.koto = undefined;
     this.master?.disconnect();
     for (const node of this.output) node.disconnect();
     if (this.buses) for (const kind of MIX_SOUNDS) this.buses[kind].disconnect();
