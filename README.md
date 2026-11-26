@@ -32,6 +32,7 @@ Meta Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、「VRを
 | 映画館ワールドの上映音響設計 | [入力・スピーカー・非VRとPC VRでの検証](docs/cinema/cinema-sound-design.md) |
 | 70階住戸の間取りと窓からの眺望 | [基本設計](docs/residence/residence-70f-design.md) · [寸法入り設計図 PDF](docs/residence/residence-70f-drawings.pdf) |
 | 映画館シアター（大）の客席・光・音の計画 | [基本設計 PDF](docs/cinema/cinema-floor-plan.pdf) · [音響・照明設計 PDF](docs/cinema/cinema-light-sound-design.pdf) |
+| 商業アトリウム1階の店舗内装 | [詳細設計](docs/atrium/tenant-interior-design.md) · [寸法図 PDF](docs/atrium/tenant-interior-drawings.pdf) |
 | テストの実行、実機での確認、配布ビルド | [検証と配布ビルド](docs/verification.md) |
 | 開発時の契約、変更に応じた文書の更新先 | [AGENTS.md](AGENTS.md) · [正本と更新先](docs/agent-harness.md#正本と更新先) |
 | 旧ゲームの計画と進捗 | [旧ゲームの履歴](plans/README.md#旧ゲームの履歴) |
