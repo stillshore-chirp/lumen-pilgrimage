@@ -391,6 +391,75 @@ function addR1ShelfProducts(
   }
 }
 
+function addR1SideWallShelf(
+  context: TenantBuildContext,
+  item: Fixture,
+  shelfGlow: MeshStandardMaterial,
+  productMaterials: readonly PaletteMaterial[],
+): void {
+  const [u, d, width, length] = fixtureRect(item);
+  const { height } = item;
+  const backU = u + width * 0.84;
+  const frontU = u + width * 0.07;
+  const displayStart = d + length * 0.10;
+  const displayEnd = d + length * 0.97;
+  const displayLength = displayEnd - displayStart;
+  const displayCenter = (displayStart + displayEnd) * 0.5;
+  const shelfLevels = [0.22, 0.41, 0.60, 0.80].map(level => height * level);
+
+  // The backing is intentionally narrow in u: the fixed side wall remains the
+  // background while the new rack reads as a shallow, wall-mounted display.
+  context.box(context.palette.plaster, backU, height * 0.5, d + length * 0.5,
+    0.045, height, length, 'R1-12 wall shelf backing');
+  for (const [index, level] of shelfLevels.entries()) {
+    const shelfMaterial = index % 2 === 0 ? context.palette.cream : context.palette.stone;
+    context.box(shelfMaterial, u + width * 0.43, level, displayCenter,
+      width * 0.79, 0.035, displayLength, `R1-12 pale shelf ${index + 1}`);
+    // A very thin warm edge and under-shelf line keeps the face legible through
+    // the glazing without introducing a hard white rectangle.
+    context.box(context.palette.brass, frontU, level + 0.018, displayCenter,
+      0.018, 0.022, displayLength, `R1-12 champagne shelf edge ${index + 1}`);
+    context.box(shelfGlow, frontU - 0.014, level - 0.026, displayCenter,
+      0.012, 0.012, displayLength * 0.92, `R1-12 soft shelf underlight ${index + 1}`);
+  }
+
+  for (const terminalD of [displayStart, displayEnd]) {
+    context.box(context.palette.brass, frontU, height * 0.5, terminalD,
+      0.018, height, 0.026, `R1-12 champagne end trim ${terminalD.toFixed(2)}`);
+  }
+
+  const wallProducts = [
+    ...productMaterials.slice(0, 2).map((material, index) =>
+      tint(material, `R1-12 milky product ${index + 1}`, index === 0 ? 0xe5dfd4 : 0xd8d0c1, 0.50)),
+    tint(context.palette.cream, 'R1-12 pale stone product', 0xcac0ae, 0.48),
+    tint(context.palette.plaster, 'R1-12 soft white product', 0xf0e8dc, 0.56),
+  ];
+  const positions = [
+    [.08, .24, .48, .72, .90],
+    [.15, .34, .58, .82],
+    [.05, .26, .45, .66, .86],
+    [.19, .40, .62, .85],
+  ] as const;
+  positions.forEach((depths, row) => {
+    const base = shelfLevels[row] + 0.024;
+    depths.forEach((fraction, index) => {
+      const material = wallProducts[(index + row) % wallProducts.length];
+      const productD = displayStart + fraction * displayLength;
+      const productU = u + width * ((index + row) % 2 === 0 ? 0.36 : 0.56);
+      const productName = `R1-12 wall display ${row + 1}-${index + 1}`;
+      if ((index + row) % 3 === 1) {
+        addBottle(context, material, context.palette.brass, productU, productD, base,
+          0.027 + ((index + row) % 2) * 0.007, 0.095 + ((index + row) % 3) * 0.018,
+          `${productName} tester`);
+      } else {
+        addBoxProduct(context, material, productU, productD, base,
+          0.10 + ((index + row) % 2) * 0.022, 0.075, 0.095 + ((index + row) % 3) * 0.018,
+          `${productName} box`);
+      }
+    });
+  });
+}
+
 function furnishR1(context: TenantBuildContext): void {
   const { palette } = context;
   const shelfGlow = context.glow('East R1 warm shelf edge', 0xf1bd79, 1.35);
@@ -429,6 +498,9 @@ function furnishR1(context: TenantBuildContext): void {
   }
   const rearWall = fixture(context, 'R1-11');
   if (rearWall) addWallPanel(context, rearWall, palette.plaster, palette.cream, 'R1 rear wall finish');
+
+  const sideWallShelf = fixture(context, 'R1-12');
+  if (sideWallShelf) addR1SideWallShelf(context, sideWallShelf, shelfGlow, productMaterials);
 
   for (const mount of context.bay.mounts ?? []) {
     if (mount.id === 'R1-M01' || mount.id === 'R1-M02') addHangingTransparentStrips(context, mount);

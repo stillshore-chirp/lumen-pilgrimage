@@ -35,14 +35,12 @@ type AtriumMaterials = {
   darkBronze: MeshStandardMaterial;
   champagne: MeshStandardMaterial;
   glass: MeshPhysicalMaterial;
-  screen: MeshPhysicalMaterial;
   cove: MeshBasicMaterial;
   pierWash: MeshBasicMaterial;
   spot: MeshBasicMaterial;
   displayWarm: MeshBasicMaterial;
   displayCool: MeshBasicMaterial;
   displayNeutral: MeshBasicMaterial;
-  blueScreen: MeshBasicMaterial;
 };
 
 type LightingTargets = {
@@ -88,7 +86,6 @@ function makeMaterials(): AtriumMaterials {
     darkBronze: solid('Shadow gap dark bronze', 0x342b27, .49, .35),
     champagne: solid('Pale champagne titanium slim profiles', 0xc1b4a0, .22, .66),
     glass: glass('Low-iron upper gallery glazing', 0xb9bfb5, .19, .13),
-    screen: glass('Transparent architectural screen', 0x74c0d9, .33, .13),
     cove: new MeshBasicMaterial({ name: 'Warm concealed cove diffuser', color: 0xffc27f, toneMapped: false }),
     pierWash: new MeshBasicMaterial({ name: 'Grazing warm light on limestone piers', color: 0xffe6c1,
       vertexColors: true, transparent: true, depthWrite: false, side: DoubleSide, forceSinglePass: true,
@@ -100,8 +97,6 @@ function makeMaterials(): AtriumMaterials {
       transparent: true, opacity: .65, depthWrite: false, toneMapped: false }),
     displayNeutral: new MeshBasicMaterial({ name: 'Neutral upper retail display panel', color: 0xc1b8a8,
       transparent: true, opacity: .70, depthWrite: false, toneMapped: false }),
-    blueScreen: new MeshBasicMaterial({ name: 'Soft blue screen glow', color: 0x7fc7ef, transparent: true, opacity: .52,
-      depthWrite: false, toneMapped: false }),
   };
 }
 
@@ -763,18 +758,6 @@ function addRecessedSpots(group: Group, materials: AtriumMaterials): void {
   group.add(diffusers);
 }
 
-function addArchitecturalScreen(group: Group, materials: AtriumMaterials): void {
-  const x = 14.67;
-  const y = 2.55;
-  const z = -22.2;
-  addBox(group, materials.darkBronze, [x, y, z, .07, 1.82, 1.12], 'Small transparent screen frame');
-  addBox(group, materials.screen, [x - .045, y, z, .018, 1.55, .91], 'Small transparent architectural screen');
-  addBox(group, materials.blueScreen, [x - .057, y, z, .008, 1.25, .72], 'Small screen soft blue glow');
-  for (const yOffset of [-.57, -.19, .19, .57]) {
-    addBox(group, materials.champagne, [x - .068, y + yOffset, z, .024, .025, .73], 'Small screen mullion');
-  }
-}
-
 function addColumnDetails(group: Group, materials: AtriumMaterials): void {
   const groundTop = ATRIUM_TENANT_COMMON.soffit;
   const upperHeight = 16.72 - groundTop;
@@ -825,7 +808,6 @@ export function buildAtriumShell(root: Group, stoneMap: Texture | null): Lightin
   addRearBridges(group, materials);
   addUpperShadowGaps(group, materials);
   addRecessedSpots(group, materials);
-  addArchitecturalScreen(group, materials);
 
   const lighting: LightingTargets = {
     setLighting(artificialOn, time) {
@@ -844,10 +826,6 @@ export function buildAtriumShell(root: Group, stoneMap: Texture | null): Lightin
       materials.displayWarm.opacity = artificialOn ? (night ? .72 : .78) : .18;
       materials.displayCool.opacity = artificialOn ? (night ? .52 : .65) : .16;
       materials.displayNeutral.opacity = artificialOn ? (night ? .60 : .70) : .17;
-      // MeshBasicMaterial carries the architectural glow without introducing
-      // dynamic Three.js Lights; surfaces still respond to the world's lights.
-      materials.blueScreen.opacity = artificialOn ? (night ? .72 : .56) : .20;
-
     },
   };
   lighting.setLighting(true, 'day');

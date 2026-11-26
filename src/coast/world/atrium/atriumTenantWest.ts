@@ -250,6 +250,61 @@ function addRack(
   }
 }
 
+function addWallLineDisplay(
+  context: TenantBuildContext,
+  assets: WestAssets,
+  item: Fixture,
+  variant: StoreVariant,
+): void {
+  const p = assets.palette;
+  const { u, d, width, length, height } = bounds(item);
+  const centerU = u + width * 0.5;
+  const centerD = d + length * 0.5;
+  const metal = variant === 'wood' ? p.brass : p.dark;
+  const shelf = variant === 'wood' ? p.lightWood : p.white;
+  const shelfWidth = Math.max(0.12, width - 0.035);
+  const shelfLength = Math.max(0.18, length - 0.08);
+  context.box(shelf, centerU, 0.245, centerD, shelfWidth, 0.070, shelfLength,
+    `${item.id} wall-line lower folded shelf`);
+  context.box(metal, centerU, height - 0.105, centerD, shelfWidth, 0.035, shelfLength,
+    `${item.id} wall-line long garment rail`);
+  for (const side of [-1, 1]) {
+    context.box(metal, centerU + side * Math.max(0.035, shelfWidth * 0.42), height * 0.50, centerD,
+      0.018, height - 0.19, 0.018, `${item.id} wall-line end support`);
+  }
+
+  const isL1 = item.id === 'L1-15';
+  const shapes: readonly GarmentShape[] = isL1
+    ? ['coat', 'dress', 'shirt']
+    : ['dress', 'shirt', 'coat', 'dress'];
+  const materialIndices = isL1 ? [5, 1, 0] : [2, 5, 2, 4];
+  const garmentWidth = Math.min(width - 0.055, isL1 ? 0.215 : 0.175);
+  const garmentHeight = Math.min(height - 0.34, isL1 ? 0.95 : 1.12);
+  for (let index = 0; index < shapes.length; index += 1) {
+    const fraction = (index + 0.5) / shapes.length;
+    const garmentD = d + fraction * length;
+    const shape = shapes[index];
+    const itemHeight = garmentHeight * (shape === 'shirt' ? 0.80 : shape === 'dress' ? 0.96 : 1);
+    const baseY = Math.max(0.30, height - 0.16 - itemHeight);
+    addGarment(context, assets, centerU, garmentD, baseY, garmentWidth, itemHeight,
+      materialIndices[index], shape, index % 2, `${item.id} wall-line ${shape} ${index + 1}`);
+    context.box(metal, centerU, height - 0.15, garmentD, 0.018, 0.08, 0.018,
+      `${item.id} wall-line hanger ${index + 1}`);
+  }
+
+  // The pale lower stacks make the long L2 display legible even when garments overlap in perspective.
+  if (!isL1) {
+    for (let index = 0; index < 3; index += 1) {
+      const stackD = d + (index + 0.5) * length / 3;
+      context.box(index % 2 === 0 ? p.cream : p.lightWood, centerU, 0.35, stackD,
+        Math.max(0.12, width - 0.07), 0.11, Math.min(0.28, length / 4),
+        `${item.id} folded light fabric stack ${index + 1}`);
+      context.box(p.white, centerU, 0.415, stackD, Math.max(0.11, width - 0.085), 0.025,
+        Math.min(0.25, length / 4 - 0.02), `${item.id} folded stack highlight ${index + 1}`);
+    }
+  }
+}
+
 function addShelf(
   context: TenantBuildContext,
   assets: WestAssets,
@@ -372,6 +427,10 @@ function furnishFixture(
   item: Fixture,
   variant: StoreVariant,
 ): void {
+  if (item.id === 'L1-15' || item.id === 'L2-19') {
+    addWallLineDisplay(context, assets, item, variant);
+    return;
+  }
   switch (item.type) {
     case 'rack':
       addRack(context, assets, item, variant);
