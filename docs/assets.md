@@ -15,6 +15,8 @@
 | 商業アトリウム | [床材の取得と加工](../public/atrium-materials/ATTRIBUTION.md) · [合成環境音の内訳](../public/atrium-audio/ATTRIBUTION.md)。 | [建築・展示と音の編集先](worlds.md#商業アトリウム)。環境音の生成は [`atriumAudioSamples.ts`](../src/coast/world/atrium/atriumAudioSamples.ts)。 |
 | 湖畔の広間 | [雲と植生の出典・生成と変換](../public/lake-materials/ATTRIBUTION.md)。小葉の[編集元PNG](../assets/lake-materials/lake-broadleaf-clusters.png)を保持。木材と岩は既存の仕上げ材・景観素材を使用。 | [植生の形態と配置](lake/lake-hall-design.md#植生の形態と配置)、[樹木・低木・地被](../src/coast/world/lake/lakeVegetation.ts)、[卓上の有花枝](../src/coast/world/lake/lakeHallArrangement.ts) · [ワールドの編集先](worlds.md#湖畔の広間)。 |
 
+商業アトリウムの新設施設では、木・布・紙の模様を [`atriumFrontMaterials.ts`](../src/coast/world/atrium/atriumFrontMaterials.ts)、植物の形状を [`atriumFrontGarden.ts`](../src/coast/world/atrium/atriumFrontGarden.ts) から生成します。調査資料の図版・写真・製品意匠は転写せず、出典と適用条件は [施設設計](atrium/sofa-facing-facility-design.md)に記録します。
+
 ### 画像・3Dモデル・録音の再作成
 
 - 海岸の4つの GLB は `GLTFLoader` で読み込み、各モデルのメッシュ名と `MeshStandardMaterial` を実行時に参照します。`moss.glb` は `moss01`〜`moss06`、`shelf.glb` は `rockShelf`、`boulder.glb` は `rockBoulder`、`ferns.glb` は `fernA`〜`fernD` を持ちます。差し替え時も [`coastSceneryAssets.ts`](../src/coast/world/coastSceneryAssets.ts) にある名前を保ち、メートル単位、X/Z 中央、Y=0 の底面ピボットを使います。現在のファイルでは `EXT_texture_webp` が必須です。メタデータの `glTF-Transform v4.5.1` は確認できますが、編集可能なモデル原本、利用アプリ、変換コマンドはリポジトリにありません。元モデルとライセンスは景観素材のクレジットから確認してください。

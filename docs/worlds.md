@@ -128,17 +128,21 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 [配置定義](../src/coast/world/atrium/atriumLayout.ts) を建築、支持面、環境音と共有します。地上共用部は幅22.8 m、奥行き63 m。ソファ `(-2.70, -29.70)` の眼高は1.20 mで、通路側を向きます。「正面通路」は原点、立位、仰角約7°、縦視野角42°です。写真の消失方向、ソファ、曲階段下端、立面の縦線から制作寸法を求めました。天窓の輪郭は、高さ17.10 mの仮定面に写真上の点を逆投影して楕円を近似しました。実装値は中心 `(0.565, -44.92)` m、半径9.56 mと13.17 m、Y軸回り約22°です。 [単視点からの寸法推定](https://www.robots.ox.ac.uk/~vgg/publications/1999/Criminisi99/) · [専門書の実装事例](learning/atrium-case.md#商業アトリウムの実装で確かめたこと)
 
-共用部は一人で散策する空間です。左右9店と正面奥2店を通路から見渡せます。各店の入口の引き込み、床、奥壁、什器の位置は [1階テナント内装詳細設計](atrium/tenant-interior-design.md) の [寸法データ](atrium/tenant-interiors.json) に合わせています。左の衣料店はラックの背後に陳列台や試着室が見え、右手前の小物売場ではガラス、吊り装飾、商品、奥棚が手前から重なります。中央の展示島3基とソファの間も共用部から見渡せます。
+共用部は一人で散策する空間です。原画方向には左右9店と正面奥2店を通路から見渡せます。各店の入口の引き込み、床、奥壁、什器の位置は [1階テナント内装詳細設計](atrium/tenant-interior-design.md) の [寸法データ](atrium/tenant-interiors.json) に合わせています。左の衣料店はラックの背後に陳列台や試着室が見え、右手前の小物売場ではガラス、吊り装飾、商品、奥棚が手前から重なります。中央の展示島3基とソファの間も共用部から見渡せます。
+
+ソファは原画と反対の `+Z` を向きます。この方向の施設は写真から確認できないため、[ソファ正面の施設設計](atrium/sofa-facing-facility-design.md)として独自に設計しました。固定ガラスの奥に室内光庭、着座右の西側に装丁・書籍の店、着座左の東側に生活工芸の店を配置します。上階には読書室、素材展示室、小サロンが重なります。庭・新店・用途室の内部は閉鎖展示で、共用床と既存の回廊から見渡せます。歩行端とソファの位置・向きは変更しません。
 
 主階段は下端の幅約5 mから絞り、初めに右へ寄り、昇降塔の手前で左へ回り込んで西回廊の9.15 mへ着きます。西回廊の奥に続く階段でもう一層上がり、13.55 mの回廊へ渡れます。高さ4.55 mの回廊は手前で吹抜け側に張り出し、奥に向かって開きます。この回廊と奥の張り出しは景観と音の遮蔽に使います。[支持面](../src/coast/world/atrium/atriumNavigation.ts)は、踏面と同じ経路を連続した高さでたどります。地上の通路と回廊が上下に重なる場所では、現在の足元から到達できる支持面を選びます。店先、昇降塔、家具と手すりが探索の境界です。
 
 [回廊と建築](../src/coast/world/atrium/atriumShell.ts)、[天窓の立ち上がりと昇降塔](../src/coast/world/atrium/atriumRoof.ts)、[階段](../src/coast/world/atrium/atriumStair.ts)、[店先](../src/coast/world/atrium/atriumRetail.ts)、[家具](../src/coast/world/atrium/atriumFurnishings.ts)を個別に編集できます。天窓には青い縦窓と上面の桟を置き、手前に昇降塔の上端を重ねます。回廊の庇と階段の側板は、光が器具から離れるにつれて弱くなる勾配を持ちます。店舗の照明は正面のケース、側面の木壁、奥の棚で光る位置を変えます。 [壁や天井を使う間接照明](https://www.erco.com/en/knowledge/fundamentals/indirect-lighting/)
 
+新設施設の寸法は [`atriumFrontPlan.ts`](../src/coast/world/atrium/atriumFrontPlan.ts)に集約しています。[閉じた建築とガラス](../src/coast/world/atrium/atriumFrontShell.ts)、[店内・上階の内装と照明](../src/coast/world/atrium/atriumFrontInteriors.ts)、[植床・樹木・低植栽](../src/coast/world/atrium/atriumFrontGarden.ts)、[素材](../src/coast/world/atrium/atriumFrontMaterials.ts)を編集し、[`atriumFrontCommons.ts`](../src/coast/world/atrium/atriumFrontCommons.ts)で統合します。光は4点の実光と局所の拡散受光近似を組み合わせ、一括点消灯へ接続します。庭の鑑賞光G2だけが静的な影を持ち、品質切替や点灯に伴う必要な更新後は同じmapを使います。棚や脚などの接点は、新設受光面の形状に対応する[間接光の遮蔽近似](../src/coast/world/atrium/atriumFrontOcclusion.ts)を適用します。育成用の設備は造形上の予約にとどまり、昼夜とも消灯します。画面輝度から実植物の育成性能や照度を保証する設計ではありません。
+
 床は石板の中央から色・法線・粗さを取り、1.35 m角の板と通路沿いの淡い帯を割り付けます。通常画面ではカメラを床に鏡映し、粗さに応じて反射の輪郭を広げます。WebXRでは各眼の反射方向から庇、店先、天窓の光を求めます。両方の反射に一括点消灯が反映されます。 [床の実装](../src/coast/world/atrium/atriumFloor.ts) · [素材の出典](../public/atrium-materials/ATTRIBUTION.md) · [WebXRのビュー](https://www.w3.org/TR/webxr/#xrview)
 
 [店舗照明](../src/coast/world/atrium/atriumTenantLighting.ts)は、設計座標に合わせた灯具と棚の光を組み合わせます。黒枠の衣料店と右手前の小物売場には室内を照らす光源を各1点置きます。一括点消灯はこれらの光源、棚・縦光の発光、床に映る店舗の光に連動します。
 
-[音響の実装](../src/coast/world/atrium/atriumAudio.ts)は、左右と上階の換気、1階カフェのカウンター下と上階の設備を別の位置から鳴らします。[伝搬の計算](../src/coast/world/atrium/atriumAcoustics.ts)は、店舗の開口、固定ガラス、入口の袖壁を設計と同じ座標から求め、通過する直接音と初期反射の高域・音量を調整します。石床、ガラス側の壁、回廊の床面と軒裏からの初期反射は、経路差に応じた遅れと方向を持ちます。後期残響の設計値は吹抜け側1.86秒、低い天井の周辺0.95秒です。ソファの敷物や回廊の下に近づくと短い応答の比率が増え、歩行音にも反映されます。類似施設の測定を参考にした仮想空間の設定です。 [商業施設の残響実測](https://www.mdpi.com/2076-3417/10/3/1170) · [音源の生成と出典](../public/atrium-audio/ATTRIBUTION.md) · [鏡像法](https://pubs.aip.org/asa/jasa/article/65/4/943/765693/Image-method-for-efficiently-simulating-small-room)
+[音響の実装](../src/coast/world/atrium/atriumAudio.ts)は、左右と上階の換気、1階カフェのカウンター下と上階の設備を別の位置から鳴らします。[伝搬の計算](../src/coast/world/atrium/atriumAcoustics.ts)は、店舗の開口、固定ガラス、入口の袖壁を設計と同じ座標から求め、通過する直接音と初期反射の高域・音量を調整します。石床、ガラス側の壁、回廊の床面と軒裏からの初期反射は、経路差に応じた遅れと方向を持ちます。ソファ正面の固定ガラスも共有寸法の有限面で反射を計算し、枠・不透明な支持柱・ガラスのない隙間では成立させません。新たな群衆音、店舗音楽、水音は追加しません。後期残響の設計値は吹抜け側1.86秒、低い天井の周辺0.95秒です。ソファの敷物や回廊の下に近づくと短い応答の比率が増え、歩行音にも反映されます。類似施設の測定を参考にした仮想空間の設定です。 [商業施設の残響実測](https://www.mdpi.com/2076-3417/10/3/1170) · [音源の生成と出典](../public/atrium-audio/ATTRIBUTION.md) · [鏡像法](https://pubs.aip.org/asa/jasa/article/65/4/943/765693/Image-method-for-efficiently-simulating-small-room)
 
 ### 湖畔の広間
 

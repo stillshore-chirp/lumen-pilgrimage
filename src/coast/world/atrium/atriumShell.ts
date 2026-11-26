@@ -11,6 +11,7 @@ import {
 import {
   ATRIUM_TENANT_COMMON, ATRIUM_TENANTS,
 } from './atriumTenantPlan';
+import { atriumFrontRemainingSideSpans } from './atriumFrontPlan';
 
 /**
  * The shell is deliberately independent from the concourse floor, furniture and
@@ -517,16 +518,16 @@ function addGroundSideShell(group: Group, materials: AtriumMaterials, side: -1 |
   let cursor = ATRIUM_TENANT_COMMON.nearS;
 
   const addRange = (startS: number, endS: number, label: string): void => {
-    if (endS <= startS) return;
-    const width = endS - startS;
-    const z = -(startS + endS) * .5;
-    addBox(group, materials.plaster, [side * wallX, groundTop * .5, z, wallThickness, groundTop, width],
-      `${name} ground side wall ${label}`);
-    // The dark strip is kept on the concourse-facing edge. Splitting both
-    // elements by bay span prevents one continuous backing wall from enclosing
-    // a neighboring tenant while preserving the existing upper shell.
-    addBox(group, materials.darkBronze, [side * (wallX - wallThickness * .5), groundTop * .5, z,
-      .028, groundTop - .24, width], `${name} ground vertical reveal ${label}`);
+    for (const [start, end] of atriumFrontRemainingSideSpans(startS, endS)) {
+      if (end <= start) continue;
+      const width = end - start;
+      const z = -(start + end) * .5;
+      addBox(group, materials.plaster, [side * wallX, groundTop * .5, z, wallThickness, groundTop, width],
+        `${name} ground side wall ${label}`);
+      // Both the perimeter and its reveal stop at the new front tenant sleeve.
+      addBox(group, materials.darkBronze, [side * (wallX - wallThickness * .5), groundTop * .5, z,
+        .028, groundTop - .24, width], `${name} ground vertical reveal ${label}`);
+    }
   };
 
   for (const bay of sideBays) {
@@ -574,22 +575,12 @@ function addOuterStructure(group: Group, materials: AtriumMaterials): void {
       .035, upperRevealHeight, wallDepth - .35], `${side < 0 ? 'West' : 'East'} upper wall vertical reveal`);
   }
 
-  // At +Z the end is a luminous entry/transom, with its pedestrian opening
-  // above the clear ground route.  There is no solid cross-wall at floor level.
-  addBox(group, materials.plasterLight, [0, 4.10, FRONT_Z - .10, 29.70, .36, .28], 'Front entry lintel');
-  addBox(group, materials.darkBronze, [0, 3.82, FRONT_Z - .255, 29.72, .08, .12], 'Front entry shadow reveal');
-  addBox(group, materials.glass, [0, 4.38, FRONT_Z - .25, 21.55, .36, .026], 'Front entry transparent transom');
-  const entryFrames: BoxSpec[] = [];
-  for (let index = -9; index <= 9; index += 1) {
-    entryFrames.push([index * 1.12, 4.38, FRONT_Z - .285, .034, .40, .07]);
-  }
-  addInstancedBoxes(group, materials.champagne, 'Front entry transom mullions', entryFrames);
-  addBox(group, materials.cove, [0, 3.88, FRONT_Z - .34, 21.10, .036, .040], 'Front entry warm reveal');
+  // The +Z entry, vestibule and upper returns belong to the complete front commons shell.
 }
 
 function addPedestrianTermini(group: Group, materials: AtriumMaterials): void {
-  // The recessed vestibules preserve the depth of the sightline past the glazed boundary.
-  for (const [z, direction, label] of [[FRONT_Z + .17, 1, 'Front'], [REAR_Z - .17, -1, 'Rear']] as const) {
+  // The photo-facing rear terminus remains unchanged; +Z is authored by the front commons.
+  for (const [z, direction, label] of [[REAR_Z - .17, -1, 'Rear']] as const) {
     const rear = direction < 0;
     const insideFace = z - direction * .14;
     for (const side of [-1, 1]) {
