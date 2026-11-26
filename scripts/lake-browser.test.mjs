@@ -5,6 +5,7 @@ import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
 import { preview } from 'vite';
 import { installSimulatedXR } from './simulated-xr.mjs';
+import { LAKE_VIEW_FOV, LAKE_VIEW_VERTICAL_OFFSET } from '../src/coast/world/lake/lakeLayout.ts';
 
 const screenshots = process.env.LAKE_SCREENSHOTS;
 const viewport = { width: 1440, height: 808 };
@@ -46,6 +47,78 @@ function observeView() {
   gl.uniform3f = function (location, x, y, z) {
     if (cameraUniforms.has(location)) probe.camera = { x, y, z };
     return setPosition.call(this, location, x, y, z);
+  };
+}
+
+function observeAndon() {
+  const gl = WebGL2RenderingContext.prototype;
+  const locate = gl.getUniformLocation;
+  const setMatrix = gl.uniformMatrix4fv;
+  const setVector = gl.uniform3f;
+  const setFloat = gl.uniform1f;
+  const useProgram = gl.useProgram;
+  const draw = gl.drawElements;
+  const bindFramebuffer = gl.bindFramebuffer;
+  const programs = new WeakMap();
+  const uniforms = new WeakMap();
+  let current;
+  let view;
+  let onScreen = true;
+  window.andonDraw = null;
+
+  gl.getUniformLocation = function (program, name) {
+    const location = locate.call(this, program, name);
+    if (!location) return location;
+    if (!programs.has(program)) programs.set(program, {});
+    const info = programs.get(program);
+    if (name === 'emissiveMap') info.emissiveMap = true;
+    if (name === 'modelViewMatrix' || name === 'viewMatrix' || /^pointLights\[\d+\]\.(position|distance)$/.test(name)) {
+      uniforms.set(location, { info, name });
+    }
+    return location;
+  };
+  gl.uniformMatrix4fv = function (location, transpose, matrix, ...rest) {
+    const uniform = uniforms.get(location);
+    // The sky submits the current pass's view matrix before the paper draws.
+    // Three.js reuses the upload buffer across different matrix uniforms.
+    if (uniform?.name === 'viewMatrix' && onScreen) view = matrix.slice();
+    if (uniform?.name === 'modelViewMatrix' && uniform.info.emissiveMap) {
+      uniform.info.paperPosition = [matrix[12], matrix[13], matrix[14]];
+    }
+    return setMatrix.call(this, location, transpose, matrix, ...rest);
+  };
+  gl.uniform3f = function (location, x, y, z) {
+    const uniform = uniforms.get(location);
+    if (uniform) uniform.info[uniform.name] = [x, y, z];
+    return setVector.call(this, location, x, y, z);
+  };
+  gl.uniform1f = function (location, value) {
+    const uniform = uniforms.get(location);
+    if (uniform && Math.abs(value - 2.35) < 0.001) {
+      uniform.info.andonPosition = uniform.name.replace('.distance', '.position');
+    }
+    return setFloat.call(this, location, value);
+  };
+  gl.useProgram = function (program) {
+    current = programs.get(program);
+    return useProgram.call(this, program);
+  };
+  gl.bindFramebuffer = function (target, framebuffer) {
+    if (target !== this.READ_FRAMEBUFFER) onScreen = framebuffer === null;
+    return bindFramebuffer.call(this, target, framebuffer);
+  };
+  gl.drawElements = function (mode, count, ...rest) {
+    // Each paper panel uses a 6-by-8 grid. The andon's point light has a 2.35 m cutoff.
+    if (onScreen && count === 6 * 8 * 6 && view && current?.paperPosition) {
+      const position = current[current.andonPosition];
+      const toWorld = ([x, y, z]) => [0, 4, 8].map(i =>
+        view[i] * (x - view[12]) + view[i + 1] * (y - view[13]) + view[i + 2] * (z - view[14]));
+      window.andonDraw = {
+        paper: toWorld(current.paperPosition),
+        light: position && toWorld(position),
+      };
+    }
+    return draw.call(this, mode, count, ...rest);
   };
 }
 
@@ -227,6 +300,88 @@ test('the night andon illuminates its paper and nearby tatami and follows the wo
   assert.ok(litShade > darkShade + 20, `andon paper luminance: ${darkShade} → ${litShade}`);
   assert.ok(litFloor > darkFloor + 5, `nearby floor luminance: ${darkFloor} → ${litFloor}`);
   assert.match(page.url(), /time=night/);
+  assert.deepEqual(errors, []);
+});
+
+test('F carries the aimed night andon and leaves its paper and light at the new floor position', { timeout }, async t => {
+  const { page, errors } = await newPage(t);
+  await page.addInitScript(observeAndon);
+  await goToLake(page, '&time=night');
+  await page.waitForFunction(() => window.andonDraw?.light);
+  const original = await page.evaluate(() => window.andonDraw);
+  const hint = page.locator('.coast-grab-hint[role="status"]');
+  const pickup = hint.filter({ hasText: /^F 行灯を掴む$/ });
+  const release = hint.filter({ hasText: /^F 行灯を置く$/ });
+  const assertLightFollowsPaper = ({ paper, light }) => {
+    assert.ok(Math.hypot(...light.map((value, i) => value - paper[i])) < 0.14,
+      'the rendered paper and point light remain together');
+  };
+
+  await withPointerLock(page, async () => {
+    await page.keyboard.down('w');
+    await page.waitForFunction(() => window.lakeProbe.camera.z < 1.75);
+    await page.keyboard.up('w');
+    await page.keyboard.down('d');
+    await page.waitForFunction(() => window.lakeProbe.camera.x > 2.05);
+    await page.keyboard.up('d');
+
+    const eye = await page.evaluate(() => window.lakeProbe.camera);
+    const dx = original.light[0] - eye.x;
+    const dz = original.light[2] - eye.z;
+    const yaw = -Math.atan2(dx, -dz);
+    const pitch = Math.atan2(original.paper[1] - eye.y, Math.hypot(dx, dz));
+    const centerPitch = Math.atan(-2 * LAKE_VIEW_VERTICAL_OFFSET * Math.tan(LAKE_VIEW_FOV * Math.PI / 360));
+    await turn(page, -yaw / 0.0022, -pitch / 0.0022);
+    assert.equal(await hint.isVisible(), false, 'aiming with the unshifted lens misses the paper');
+    await turn(page, 0, centerPitch / 0.0022);
+    await pickup.waitFor();
+  });
+
+  // F and the movement keys also work on the canvas after leaving mouse-look mode.
+  await page.locator('canvas.coast-view').focus();
+  await pickup.waitFor();
+  await page.keyboard.down('f');
+  await release.waitFor();
+  await page.waitForFunction(previous => window.andonDraw.paper[1] > previous + 0.3, original.paper[1]);
+  await page.keyboard.down('f');
+  await page.keyboard.down('d');
+  const startX = await page.evaluate(() => window.lakeProbe.camera.x);
+  await page.waitForFunction(x => window.lakeProbe.camera.x > x + 0.9, startX);
+  await page.keyboard.up('d');
+  assert.equal(await release.isVisible(), true, 'a repeat keydown does not put down the andon');
+  await page.keyboard.up('f');
+  const carried = await page.evaluate(() => window.andonDraw);
+  assert.ok(carried.light[0] > original.light[0] + 0.65);
+  assertLightFollowsPaper(carried);
+  if (screenshots) await capture(page, 'lake-andon-carried');
+
+  await page.keyboard.press('f');
+  await release.waitFor({ state: 'hidden' });
+  await page.waitForFunction(y => Math.abs(window.andonDraw.paper[1] - y) < 0.015, original.paper[1]);
+  const placed = await page.evaluate(() => window.andonDraw);
+  assert.ok(placed.light[0] > original.light[0] + 0.65, 'the andon is placed on the floor at its transported location');
+  assertLightFollowsPaper(placed);
+  if (screenshots) await capture(page, 'lake-andon-placed');
+  const releaseX = await page.evaluate(() => window.lakeProbe.camera.x);
+  await page.keyboard.down('d');
+  await page.waitForFunction(x => window.lakeProbe.camera.x > x + 0.5, releaseX);
+  await page.keyboard.up('d');
+  await page.evaluate(() => { window.andonDraw = null; });
+  await page.waitForFunction(() => window.andonDraw?.light);
+  const afterWalk = await page.evaluate(() => window.andonDraw.light);
+  assert.ok(Math.hypot(...afterWalk.map((value, i) => value - placed.light[i])) < 0.015);
+
+  await action(page, '昼').click();
+  await page.evaluate(() => {
+    window.andonDraw = null;
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  assert.equal(await page.evaluate(() => window.andonDraw), null, 'the paper and light are absent during the day');
+  await action(page, '夜').click();
+  await page.waitForFunction(() => window.andonDraw?.light);
+  const restored = await page.evaluate(() => window.andonDraw);
+  assert.ok(Math.hypot(...restored.light.map((value, i) => value - placed.light[i])) < 0.015);
+  assertLightFollowsPaper(restored);
   assert.deepEqual(errors, []);
 });
 

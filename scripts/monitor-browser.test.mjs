@@ -133,6 +133,16 @@ function observeAudio() {
       return listener && [listener.positionX.value, listener.positionY.value, listener.positionZ.value,
         listener.forwardX.value, listener.forwardY.value, listener.forwardZ.value];
     },
+    placement() {
+      const entry = contexts.find(({ hasStream, panners }) => hasStream && panners.length);
+      if (!entry) return null;
+      const listener = entry.context.listener;
+      const [source] = entry.panners;
+      return {
+        eye: [listener.positionX.value, listener.positionY.value, listener.positionZ.value],
+        source: [source.positionX.value, source.positionY.value, source.positionZ.value],
+      };
+    },
     monitorResume: 'native',
     heldResumeInUserGesture: false,
     rejectedResumeInUserGesture: false,
@@ -538,6 +548,127 @@ test('separate tabs pair with approval, render native WebRTC media and control a
   }
 });
 
+test('F carries a floating monitor on the desktop and leaves its video and sound at the released pose', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  const errors = [];
+  viewer.on('pageerror', () => errors.push('viewer'));
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture), sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers), viewer.addInitScript(observeAudio), viewer.addInitScript(installSimulatedXR),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    await viewer.goto(url.href);
+    const panel = button(viewer, '仮想モニター');
+    const canvas = viewer.locator('canvas.coast-view');
+    const mode = viewer.locator('.coast-mode');
+    const hint = viewer.locator('.coast-grab-hint[role="status"]');
+    const pickup = hint.filter({ hasText: /^F 浮遊モニターを掴む$/ });
+    const release = hint.filter({ hasText: /^F 浮遊モニターを置く$/ });
+    const distance = (a, b) => Math.hypot(...a.map((value, i) => value - b[i]));
+    const pose = () => viewer.evaluate(() => window.monitorSound.placement());
+    const moveRight = async ({ eye }) => {
+      await viewer.keyboard.down('d');
+      try {
+        await viewer.waitForFunction(previous => {
+          const position = window.monitorSound.placement()?.eye;
+          return position && Math.hypot(position[0] - previous[0], position[2] - previous[2]) > 0.65;
+        }, eye);
+      } finally {
+        await viewer.keyboard.up('d');
+      }
+    };
+
+    await panel.click();
+    await button(viewer, 'モニターを表示').click();
+    const input = viewer.getByRole('textbox', { name: '接続コード' });
+    const initialMode = await mode.textContent();
+    await input.press('f');
+    assert.equal(await input.inputValue(), 'f');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    await input.clear();
+
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    await viewer.getByRole('combobox', { name: 'モニターの音響' }).selectOption('spatial');
+    await button(viewer, 'モニター音声').click();
+    await viewer.waitForFunction(() => {
+      const pose = window.monitorSound.placement();
+      return pose && Math.hypot(...pose.source.map((value, i) => value - pose.eye[i])) > 3;
+    });
+
+    const edit = button(viewer, '配置を編集');
+    await edit.click();
+    const beforeEdit = await pose();
+    await canvas.focus();
+    await viewer.keyboard.press('f');
+    assert.equal(await edit.getAttribute('aria-pressed'), 'true');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    assert.ok(distance((await pose()).source, beforeEdit.source) < 0.02);
+    await edit.click();
+    await panel.click();
+    await canvas.focus();
+    await pickup.waitFor();
+    assert.equal(await viewer.evaluate(() => document.pointerLockElement), null);
+    const initial = await pose();
+    const initialPixels = await screenPixels(viewer);
+    assert.ok(initialPixels.count > 2_000);
+
+    await viewer.keyboard.press('f');
+    await release.waitFor();
+    await moveRight(await pose());
+    const carried = await pose();
+    const carriedPixels = await screenPixels(viewer, 'monitor-desktop-carried');
+    assert.ok(distance(carried.source, initial.source) > 0.5, 'the spatial source travels with the player');
+    assert.ok(carriedPixels.count > 2_000 && Math.abs(carriedPixels.x - initialPixels.x) < 24,
+      'the rendered video stays in front of the moving player');
+
+    await viewer.keyboard.press('f');
+    await release.waitFor({ state: 'hidden' });
+    const placed = await pose();
+    assert.ok(distance(placed.source, carried.source) < 0.2, 'releasing keeps the carried world position');
+    await moveRight(placed);
+    const walked = await pose();
+    const placedPixels = await screenPixels(viewer, 'monitor-desktop-placed');
+    assert.ok(distance(walked.source, placed.source) < 0.02, 'the spatial source stays at the released position');
+    assert.ok(placedPixels.count > 2_000 && placedPixels.x < carriedPixels.x - 32,
+      'after release, walking shifts the stationary video across the view');
+    assert.equal(await mode.textContent(), initialMode);
+
+    // Reset to the wider default distance used by portrait canvases.
+    await viewer.setViewportSize({ width: 540, height: 900 });
+    await panel.click();
+    await button(viewer, '位置・サイズを戻す').click();
+    await panel.click();
+    await canvas.focus();
+    await pickup.waitFor();
+    const portrait = await pose();
+    assert.ok(distance(portrait.source, portrait.eye) > 4.5);
+    await viewer.keyboard.press('f');
+    await release.waitFor();
+
+    await button(viewer, 'VRを開始').click();
+    await viewer.waitForFunction(() => window.xrFixture.frames > 3 && window.xrFixture.xrDraws > 0);
+    const immersive = await pose();
+    await canvas.focus();
+    await viewer.keyboard.press('f');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    assert.ok(distance((await pose()).source, immersive.source) < 0.02);
+    await button(viewer.locator('.coast-xr-entry'), 'VRを終了').click();
+    await viewer.waitForFunction(() => window.xrFixture.ends === 1);
+    await canvas.focus();
+    await pickup.waitFor();
+    assert.deepEqual(errors, []);
+  } finally {
+    await Promise.all([sender.context().close(), viewer.context().close()]);
+  }
+});
+
 test('the audio toggle cancels and retries a pending start, and begins off after a new pairing', { timeout }, async () => {
   const sender = await newPage();
   const viewer = await newPage();
@@ -848,7 +979,9 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     };
     await pressXRMenu();
     await viewer.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
-    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '商業アトリウム', '設定']) await xrMenuStep(label);
+    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '商業アトリウム', '湖畔の広間', '設定']) {
+      await xrMenuStep(label);
+    }
     await xrInput({ select: true });
     await viewer.waitForFunction(() => window.xrFixture.menuTitle === '設定');
     for (const label of ['歩行音', '昼', '夜', 'ワールド照明', '仮想モニター']) await xrMenuStep(label);
@@ -1352,6 +1485,7 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await step(1, '都心の70階住戸');
     await step(1, '映画館シアター（大）');
     await step(1, '商業アトリウム');
+    await step(1, '湖畔の広間');
     await step(1, '設定');
     await choose();
     await waitForMenu('設定');
@@ -1376,6 +1510,7 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await step(1, '都心の70階住戸');
     await step(1, '映画館シアター（大）');
     await step(1, '商業アトリウム');
+    await step(1, '湖畔の広間');
     await step(1, '設定');
     await step(1, 'VRを終了');
     const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);

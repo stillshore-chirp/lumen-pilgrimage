@@ -26,6 +26,8 @@ export interface CoastControlCallbacks {
   onMovementChange: (movement: CoastMovement) => void;
   onLockChange: (locked: boolean) => void;
   onLockError: () => void;
+  // Returning true consumes F before the flight toggle.
+  onGrabKey?: () => boolean;
   diveObstacleHeight?: (x: number, z: number) => number | undefined;
 }
 
@@ -157,6 +159,11 @@ export class CoastControls {
     const { x, y, z } = this.camera.position;
     return !this.flying && this.divePhase === null && this.verticalVelocity <= 0
       && y - this.eyeHeight <= this.supportHeight(x, z, y - this.eyeHeight + FOOT_CLEARANCE) + FOOT_CLEARANCE;
+  }
+
+  get canUseSceneShortcuts(): boolean {
+    const active = document.activeElement;
+    return this.canUseSceneInput() && !this.isInteractiveTarget(active) && this.hasSceneFocus(active);
   }
 
   relocate(pose: CoastPose): void {
@@ -319,9 +326,9 @@ export class CoastControls {
       this.keys.add(event.code);
     }
 
-    if (event.code === 'KeyF') {
+    if (event.code === 'KeyF' && !event.defaultPrevented && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
-      if (!event.repeat) this.toggleFlight();
+      if (!event.repeat && !this.callbacks.onGrabKey?.()) this.toggleFlight();
     }
   };
 
@@ -383,6 +390,10 @@ export class CoastControls {
         && (this.isPlanarControlKey(event.code) || (event.code === 'KeyC' && this.movementMode === this.posture));
     }
     if (this.isInteractiveTarget(target)) return false;
+    return this.hasSceneFocus(active);
+  }
+
+  private hasSceneFocus(active: Element | null): boolean {
     return active === this.canvas || active === document.body || document.pointerLockElement === this.canvas;
   }
 

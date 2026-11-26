@@ -1,10 +1,13 @@
 import {
-  DataTexture, DoubleSide, Group, LatheGeometry, LinearFilter, LinearMipmapLinearFilter, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, NoColorSpace, PlaneGeometry, PointLight, QuadraticBezierCurve3, RepeatWrapping, RGBAFormat,
+  Box3, DataTexture, DoubleSide, Group, LatheGeometry, LinearFilter, LinearMipmapLinearFilter, MathUtils, Matrix4,
+  Mesh, MeshBasicMaterial, MeshStandardMaterial, NoColorSpace, PlaneGeometry, PointLight, QuadraticBezierCurve3,
+  Ray, RepeatWrapping, RGBAFormat,
   SRGBColorSpace, TextureLoader, TubeGeometry, Vector2, Vector3,
 } from 'three';
+import type { DesktopGrabTarget } from '../../DesktopGrab';
 import { beginLakeHallAssembly } from './lakeHallGeometry';
 import { LAKE_TABLE } from './lakeLayout';
+import { lakeNavigation } from './lakeNavigation';
 
 const halfWidth = .135;
 const shadeBottom = .051;
@@ -49,13 +52,10 @@ function makePaperMaps() {
   return { map: maps[0], emissiveMap: maps[1] };
 }
 
-export function buildLakeAndon(parent: Group): { root: Group; setLighting(night: boolean, lampsOn: boolean): void } {
+export function buildLakeAndon(parent: Group): { grabTarget: DesktopGrabTarget; setLighting(night: boolean, lampsOn: boolean): void } {
   const root = new Group();
   root.name = 'Lake floor andon';
-  root.position.set(LAKE_TABLE.x + LAKE_TABLE.width / 2 + .53, 0, LAKE_TABLE.z + .23);
-  root.rotation.y = -.14;
   root.visible = false;
-  parent.add(root);
 
   const loader = new TextureLoader();
   const woodMap = (file: string, color: boolean) => {
@@ -145,8 +145,47 @@ export function buildLakeAndon(parent: Group): { root: Group; setLighting(night:
   glow.position.y = flameY;
   root.add(flame, glow);
 
+  const bounds = new Box3().setFromObject(root, true);
+  const localRay = new Ray();
+  const worldToLocal = new Matrix4();
+  const hit = new Vector3();
+  // The square foot can face either axis at any angle.
+  const footRadius = halfWidth * Math.SQRT2;
+  // Leave room for the glazing piers and trim inside the hall perimeter.
+  const wallInset = 0.25 + footRadius;
+  const minX = lakeNavigation.bounds.minX + wallInset;
+  const maxX = lakeNavigation.bounds.maxX - wallInset;
+  const minZ = lakeNavigation.bounds.minZ + wallInset;
+  const maxZ = lakeNavigation.bounds.maxZ - wallInset;
+  const overlapsTable = (x: number, z: number) => Math.abs(x - LAKE_TABLE.x) < LAKE_TABLE.width / 2 + footRadius
+    && Math.abs(z - LAKE_TABLE.z) < LAKE_TABLE.depth / 2 + footRadius;
+  root.position.set(LAKE_TABLE.x + LAKE_TABLE.width / 2 + .53, 0, LAKE_TABLE.z + .23);
+  root.rotation.y = -.14;
+  parent.add(root);
+
   return {
-    root,
+    grabTarget: {
+      label: '行灯',
+      object: root,
+      reach: 2.25,
+      available: () => root.visible,
+      hitDistance(ray) {
+        root.updateWorldMatrix(true, false);
+        localRay.copy(ray.ray).applyMatrix4(worldToLocal.copy(root.matrixWorld).invert());
+        if (!localRay.intersectBox(bounds, hit)) return;
+        return ray.ray.origin.distanceTo(hit.applyMatrix4(root.matrixWorld));
+      },
+      floorHeight(x, z) {
+        if (x < minX || x > maxX || z < minZ || z > maxZ || overlapsTable(x, z)) return;
+        return lakeNavigation.groundHeight();
+      },
+      constrainCarry(position) {
+        position.x = MathUtils.clamp(position.x, minX, maxX);
+        position.z = MathUtils.clamp(position.z, minZ, maxZ);
+        const bottomY = overlapsTable(position.x, position.z) ? LAKE_TABLE.topY + 0.06 : lakeNavigation.groundHeight();
+        position.y = Math.max(position.y, bottomY);
+      },
+    },
     setLighting(night, lampsOn) {
       const lit = night && lampsOn;
       root.visible = night;
