@@ -109,7 +109,10 @@ function stoneMaterial(map: Texture, ring: boolean): MeshStandardMaterial {
         float determinant = dot(stoneX, acrossX);
         vec3 gradient = sign(determinant)
           * (dFdx(surfaceHeight) * acrossX + dFdy(surfaceHeight) * acrossY);
-        normal = normalize(normal * max(0.000001, abs(determinant)) - gradient);
+        // Keep the sun from picking out sharp texture ridges in the submerged shore.
+        float submerged = smoothstep(0.0, 0.12, ${LAKE_WATER_Y} - vBasinStone.y);
+        float relief = uLakeRingStone ? 1.0 : mix(1.0, 0.1, submerged);
+        normal = normalize(normal * max(0.000001, abs(determinant)) - gradient * relief);
       `);
   };
   return material;
