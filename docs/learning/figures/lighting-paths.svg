@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">照明の因果経路</title>
+  <desc id="desc">天窓、暖色コーブ、垂直面用器具、発光面から出た光が、直接光、遮蔽、反射と間接光を経て壁、床、展示面に届き、視点と表示変換を通って画像になる流れを示す。</desc>
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2276b7"/>
+    </marker>
+    <marker id="arrow-warm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c26a28"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="9" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8552a8"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#66737e"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#102333" flood-opacity=".16"/>
+    </filter>
+    <style>
+      .label { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif; fill:#122431; }
+      .small { font-size: 16px; }
+      .body { font-size: 18px; }
+      .head { font-size: 22px; font-weight: 700; }
+      .sub { font-size: 15px; fill:#48606e; }
+      .box { stroke:#35505f; stroke-width:2; rx:14; }
+      .note { fill:#fff; stroke:#d3dee4; stroke-width:1.5; rx:10; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="640" fill="#f4f7f8"/>
+  <rect x="24" y="20" width="1152" height="600" rx="22" fill="#ffffff" stroke="#d5e0e5" stroke-width="2"/>
+  <text x="56" y="64" class="label head">光源の設定を、観察できる経路へ戻す</text>
+  <text x="56" y="91" class="label sub">同じ「明るさ」でも、出発点・到達面・視点・表示変換を分離して検証する</text>
+
+  <text x="60" y="128" class="label small" fill="#48606e">出発点</text>
+  <text x="364" y="128" class="label small" fill="#48606e">光の経路</text>
+  <text x="695" y="128" class="label small" fill="#48606e">対象面</text>
+  <text x="982" y="128" class="label small" fill="#48606e">観察と出力</text>
+
+  <!-- sources -->
+  <g filter="url(#shadow)">
+    <rect x="54" y="148" width="242" height="76" class="box" fill="#e5f2fb"/>
+    <rect x="54" y="246" width="242" height="76" class="box" fill="#fff0df"/>
+    <rect x="54" y="344" width="242" height="76" class="box" fill="#f0e8f7"/>
+    <rect x="54" y="442" width="242" height="76" class="box" fill="#edf0f2"/>
+  </g>
+  <text x="76" y="180" class="label body" font-weight="700">天窓・CIE天空</text>
+  <text x="76" y="205" class="label sub">方向と天候を持つ広い光源</text>
+  <text x="76" y="278" class="label body" font-weight="700">暖色コーブ</text>
+  <text x="76" y="303" class="label sub">壁・天井を主対象にする</text>
+  <text x="76" y="376" class="label body" font-weight="700">垂直面用器具</text>
+  <text x="76" y="401" class="label sub">商品・顔の正面へ配光</text>
+  <text x="76" y="474" class="label body" font-weight="700">発光面</text>
+  <text x="76" y="499" class="label sub">見えることと照らすことを分ける</text>
+
+  <!-- path nodes -->
+  <g filter="url(#shadow)">
+    <rect x="350" y="153" width="260" height="66" class="box" fill="#f7fafb"/>
+    <rect x="350" y="250" width="260" height="66" class="box" fill="#f7fafb"/>
+    <rect x="350" y="347" width="260" height="66" class="box" fill="#f7fafb"/>
+    <rect x="350" y="444" width="260" height="66" class="box" fill="#f7fafb"/>
+  </g>
+  <text x="372" y="181" class="label body" font-weight="700">直接光</text>
+  <text x="372" y="205" class="label sub">距離・角度・配光</text>
+  <text x="372" y="278" class="label body" font-weight="700">遮蔽・透過</text>
+  <text x="372" y="302" class="label sub">開口、ガラス、影の境界</text>
+  <text x="372" y="375" class="label body" font-weight="700">反射・間接光</text>
+  <text x="372" y="399" class="label sub">面の反射率・BRDF・多重反射</text>
+  <text x="372" y="472" class="label body" font-weight="700">光の色・SPD</text>
+  <text x="372" y="496" class="label sub">CCT、白色点、色再現</text>
+
+  <!-- surfaces -->
+  <g filter="url(#shadow)">
+    <rect x="678" y="176" width="238" height="84" class="box" fill="#eef7ef"/>
+    <rect x="678" y="303" width="238" height="84" class="box" fill="#eef7ef"/>
+    <rect x="678" y="430" width="238" height="84" class="box" fill="#eef7ef"/>
+  </g>
+  <text x="702" y="210" class="label body" font-weight="700">壁・天井</text>
+  <text x="702" y="235" class="label sub">輝度勾配と返り</text>
+  <text x="702" y="337" class="label body" font-weight="700">床・歩行面</text>
+  <text x="702" y="362" class="label sub">水平照度と影</text>
+  <text x="702" y="464" class="label body" font-weight="700">展示面・顔</text>
+  <text x="702" y="489" class="label sub">垂直照度・色の可読性</text>
+
+  <!-- output -->
+  <g filter="url(#shadow)">
+    <rect x="968" y="202" width="174" height="90" class="box" fill="#fff9e9"/>
+    <rect x="968" y="354" width="174" height="104" class="box" fill="#fff9e9"/>
+  </g>
+  <text x="991" y="239" class="label body" font-weight="700">視点・輝度</text>
+  <text x="991" y="265" class="label sub">カメラ / VR</text>
+  <text x="991" y="391" class="label body" font-weight="700">HDR出力</text>
+  <text x="991" y="416" class="label sub">露出・トーン</text>
+  <text x="991" y="438" class="label sub">表示色域・白色点</text>
+
+  <!-- colored paths from sources to path nodes -->
+  <path d="M296 186 C320 186 328 186 350 186" fill="none" stroke="#2276b7" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <path d="M296 284 C322 284 328 284 350 284" fill="none" stroke="#c26a28" stroke-width="4" marker-end="url(#arrow-warm)"/>
+  <path d="M296 382 C322 382 328 382 350 382" fill="none" stroke="#8552a8" stroke-width="4" marker-end="url(#arrow-accent)"/>
+  <path d="M296 480 C322 480 328 480 350 480" fill="none" stroke="#66737e" stroke-width="4" marker-end="url(#arrow-gray)"/>
+
+  <!-- path nodes to surfaces -->
+  <path d="M610 186 C636 186 648 210 678 218" fill="none" stroke="#2276b7" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <path d="M610 284 C636 284 650 238 678 218" fill="none" stroke="#66737e" stroke-width="3" stroke-dasharray="8 7" marker-end="url(#arrow-gray)"/>
+  <path d="M610 284 C640 284 650 345 678 345" fill="none" stroke="#66737e" stroke-width="3" stroke-dasharray="8 7" marker-end="url(#arrow-gray)"/>
+  <path d="M610 382 C636 382 650 226 678 218" fill="none" stroke="#66737e" stroke-width="4" marker-end="url(#arrow-gray)"/>
+  <path d="M610 382 C638 382 650 345 678 345" fill="none" stroke="#66737e" stroke-width="4" marker-end="url(#arrow-gray)"/>
+  <path d="M610 382 C638 382 650 472 678 472" fill="none" stroke="#66737e" stroke-width="4" marker-end="url(#arrow-gray)"/>
+  <path d="M610 480 C638 480 650 472 678 472" fill="none" stroke="#8552a8" stroke-width="4" marker-end="url(#arrow-accent)"/>
+
+  <!-- surfaces to observation -->
+  <path d="M916 218 C940 218 946 247 968 247" fill="none" stroke="#66737e" stroke-width="3" marker-end="url(#arrow-gray)"/>
+  <path d="M916 345 C944 345 946 247 968 247" fill="none" stroke="#66737e" stroke-width="3" marker-end="url(#arrow-gray)"/>
+  <path d="M916 472 C944 472 946 247 968 247" fill="none" stroke="#8552a8" stroke-width="4" marker-end="url(#arrow-accent)"/>
+  <path d="M1055 292 L1055 354" fill="none" stroke="#c26a28" stroke-width="4" marker-end="url(#arrow-warm)"/>
+
+  <!-- feedback note -->
+  <path d="M968 507 C900 578 640 572 520 516" fill="none" stroke="#8799a3" stroke-width="2.5" stroke-dasharray="7 7" marker-end="url(#arrow-gray)"/>
+  <rect x="650" y="548" width="302" height="44" class="note"/>
+  <text x="671" y="576" class="label small">画像の違和感 → 原因の箱へ戻る</text>
+
+  <!-- legend -->
+  <line x1="56" y1="575" x2="84" y2="575" stroke="#2276b7" stroke-width="4"/>
+  <text x="93" y="581" class="label sub">空・冷色</text>
+  <line x1="171" y1="575" x2="199" y2="575" stroke="#c26a28" stroke-width="4"/>
+  <text x="208" y="581" class="label sub">コーブ・暖色</text>
+  <line x1="316" y1="575" x2="344" y2="575" stroke="#8552a8" stroke-width="4"/>
+  <text x="353" y="581" class="label sub">垂直面・発光</text>
+  <line x1="480" y1="575" x2="508" y2="575" stroke="#66737e" stroke-width="4" stroke-dasharray="8 7"/>
+  <text x="517" y="581" class="label sub">反射・間接</text>
+</svg>
