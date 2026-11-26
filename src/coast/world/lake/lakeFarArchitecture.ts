@@ -13,6 +13,7 @@ const roof = new Color(0x9babba);
 const paleStone = new Color(0xcfb9a0);
 const paleCoping = new Color(0xffdebb);
 const gravelBounce = new Color(0xb3b1a5);
+const terraceCourse = new Color(0xb8b4ab);
 
 function volumeBuilder(surface: PlantSurface, pivotX = 0, pivotZ = 0, yaw = 0): AddVolume {
   const point = new Vector3();
@@ -62,27 +63,27 @@ function addShaft(add: AddVolume, shaft: Shaft): void {
   const [left, right, front, back, bottom, top] = volume;
   const width = right - left;
   const inset = front - setBack;
-  const jamb = Math.min(0.85, width * 0.067);
+  const jamb = Math.min(0.24, width * 0.023);
   add([left + jamb, right - jamb, inset, back + 0.27, bottom, top - 0.54], glazing);
   add([left, right, front + 0.12, back - 0.15, bottom, sill], darkStone);
-  add([left - 0.15, right + 0.15, front + 0.19, back - 0.19, sill - 0.46, sill + 0.09], stone, 1.06);
+  add([left - 0.08, right + 0.08, front + 0.12, back - 0.12, sill - 0.14, sill + 0.05], stone, 1.02);
   add([left, left + jamb, front, back, sill, top - 0.46], upright);
   add([right - jamb, right, front, front - 1.43, sill, top - 0.46], stone);
-  for (let index = 1; index < bays; index += 1) {
-    const x = left + width * index / bays;
-    const main = pierStops.includes(index);
-    const radius = main ? 0.19 : 0.081;
-    const tip = main ? front + 0.04 : front - 0.46;
+  for (let index = 1; index < bays * 2; index += 1) {
+    const x = left + width * index / (bays * 2);
+    const main = index % 2 === 0 && pierStops.includes(index / 2);
+    const radius = main ? 0.060 : 0.025;
+    const tip = main ? front + 0.01 : front - 0.36;
     add([x - radius, x + radius, tip, inset - 0.10, sill, top - 0.47], upright, main ? 1 : 0.90);
   }
-  for (let level = sill + spacing; level < top - 0.8; level += spacing) {
-    add([left + jamb, right - jamb, front - 0.51, inset - 0.07, level - 0.18, level], upright, 0.94);
+  for (let level = sill + spacing * 0.27; level < top - 0.8; level += spacing * 0.27) {
+    add([left + jamb, right - jamb, front - 0.39, inset - 0.07, level - 0.052, level], upright, 0.92);
   }
   // A return gallery wraps behind the front corner. Its bays expose depth as the view moves sideways.
   add([right - jamb - 0.11, right - jamb + 0.08, front - 1.45, back + 0.5, sill, top - 0.54], glazing, 0.88);
   for (const fraction of [0.24, 0.49, 0.72, 0.91]) {
     const z = front + (back - front) * fraction;
-    add([right - jamb + 0.08, right + 0.13, z + 0.26, z - 0.26, sill, top - 0.44], stone);
+    add([right - jamb + 0.04, right + 0.07, z + 0.08, z - 0.08, sill, top - 0.44], stone);
   }
   add([left + 0.18, right - 0.16, front - 0.22, back + 0.22, top - 0.46, top], darkStone);
   add([left - 0.29, right + 0.26, front + 0.33, back - 0.24, top, top + 0.42], roof);
@@ -104,11 +105,13 @@ type Range = {
 
 function addRange(surface: PlantSurface, range: Range): void {
   const { x, front, width, depth, sill, top, divisions, openings = 3, raisedWing, yaw, color = stone } = range;
+  const fine = front > -435 && x > -25 && x < 180;
+  const bayCount = fine ? Math.ceil(width / 1.75) : divisions;
   const left = x - width * 0.5;
   const right = x + width * 0.5;
   const back = front - depth;
   const add = volumeBuilder(surface, x, front, yaw);
-  const roofBottom = top - 1.69;
+  const roofBottom = top - (fine ? 0.48 : 1.05);
   // The lower galleries descend into the alluvium. A tall, unbroken podium
   // would leave each range reading as a separate box on top of the slope.
   const floor = Math.max(2.4, Math.min(sill - 5.8, roofBottom - 4.0));
@@ -119,32 +122,33 @@ function addRange(surface: PlantSurface, range: Range): void {
   add([left + 0.65, right - 0.65, recess, back + 1.5, floor, roofBottom], darkStone, 0.77);
   add([left, left + 0.91, front + 0.07, back, floor, roofBottom], color, 0.85);
   add([right - 1.17, right, front, back, floor, roofBottom], color);
-  const openBays = Math.min(divisions, openings);
-  const firstOpen = Math.floor((divisions - openBays) * 0.5);
-  for (let index = 0; index < divisions; index += 1) {
-    const pierX = left + index * width / divisions;
-    const end = left + (index + 1) * width / divisions;
+  const openBays = Math.min(bayCount, fine ? 1 : openings);
+  const firstOpen = Math.floor((bayCount - openBays) * 0.5);
+  for (let index = 0; index < bayCount; index += 1) {
+    const pierX = left + index * width / bayCount;
+    const end = left + (index + 1) * width / bayCount;
     if (index >= firstOpen && index < firstOpen + openBays) {
-      add([pierX - 0.30, pierX + 0.45, front, recess - 0.1, floor, roofBottom], color, 0.81);
+      add([pierX - 0.075, pierX + 0.09, front, recess - 0.1, floor, roofBottom], color, 0.81);
     } else {
       add([pierX + 0.04, end - 0.06, front - 0.92, recess - 0.07, floor, roofBottom], color, 0.83);
-      add([pierX - 0.10, pierX + 0.12, front - 0.43, recess - 0.13, floor, roofBottom], color, 0.94);
+      add([pierX - (fine ? 0.032 : 0.10), pierX + (fine ? 0.038 : 0.12),
+        front - (fine ? 0.83 : 0.43), recess - 0.13, floor, roofBottom], color, fine ? 0.84 : 0.94);
       const middle = (pierX + end) * 0.5;
-      add([middle - 0.065, middle + 0.065, front - 0.69, recess - 0.10, floor, roofBottom], upright, 0.87);
+      if (!fine) add([middle - 0.065, middle + 0.065, front - 0.69, recess - 0.10, floor, roofBottom], upright, 0.87);
       for (let course = floor + 0.76; course < roofBottom - 0.25; course += 0.76) {
         add([pierX + 0.07, end - 0.09, front - 0.865, recess - 0.09,
           course - 0.023, course + 0.023], color, 0.77);
       }
     }
   }
-  for (let floorBand = floor + 3.15; floorBand < roofBottom - 0.65; floorBand += 3.15) {
-    add([left + 0.3, right - 0.3, front - 0.24, back, floorBand - 0.24, floorBand], color, 0.96);
-    add([left + 0.27, right - 0.24, front - 0.44, back, floorBand + 0.39, floorBand + 0.51], color, 0.83);
+  for (let floorBand = floor + (fine ? 0.86 : 2.1); floorBand < roofBottom - 0.25; floorBand += fine ? 0.86 : 2.1) {
+    add([left + 0.3, right - 0.3, front + (fine ? 0.11 : -0.24), back,
+      floorBand - (fine ? 0.17 : 0.15), floorBand], fine ? terraceCourse : color, fine ? 0.98 : 0.94);
   }
   // A narrow shadow between the upper slab and the fascia ties the opening to its roof.
-  add([left - 0.66, right + 0.68, front + 0.82, back - 0.46, roofBottom, top - 0.91], darkStone, 0.78);
-  add([left - 1.03, right + 1.17, front + 1.39, back - 0.9, top - 0.91, top - 0.31], color, 1.12);
-  add([left - 0.77, right + 0.85, front + 0.99, back - 0.68, top - 0.31, top], roof, 1.12);
+  add([left - 0.36, right + 0.38, front + 0.48, back - 0.36, roofBottom, top - 0.31], darkStone, 0.83);
+  add([left - 0.65, right + 0.72, front + 0.88, back - 0.6, top - 0.31, top - 0.11], color, 1.04);
+  add([left - 0.48, right + 0.55, front + 0.65, back - 0.48, top - 0.11, top], roof, 1.04);
   if (raisedWing) {
     const shoulder = left + width * 0.36;
     add([shoulder, right - 2.0, front - 4.9, back + 2.1, top, top + raisedWing - 0.54], color, 0.88);
@@ -154,41 +158,52 @@ function addRange(surface: PlantSurface, range: Range): void {
 
 const rearRanges: readonly Range[] = [
   // The two uphill rows leave angled cuts through to the next courtyard.
-  { x: -48, front: -451, width: 44, depth: 35, sill: 22, top: 35.8, divisions: 7, openings: 2, raisedWing: 2.7, yaw: 0.19 },
+  { x: -48, front: -493, width: 44, depth: 35, sill: 22, top: 35.8, divisions: 7, openings: 2, raisedWing: 2.7, yaw: 0.19 },
   { x: 2, front: -478, width: 53, depth: 35, sill: 23, top: 35.7, divisions: 9, openings: 3, yaw: -0.06 },
   { x: 56, front: -465, width: 52, depth: 36, sill: 24, top: 32.1, divisions: 8, openings: 2, raisedWing: 2.05, yaw: 0.09 },
-  { x: 104, front: -451, width: 47, depth: 33, sill: 22.5, top: 31.2, divisions: 8, yaw: -0.17 },
+  { x: 104, front: -451, width: 47, depth: 33, sill: 22.5, top: 18.8, divisions: 8, yaw: -0.17 },
   { x: 151, front: -444, width: 43, depth: 28, sill: 23.6, top: 34.6, divisions: 5, openings: 1, raisedWing: 3.4, yaw: -0.28 },
   { x: 186, front: -427, width: 30, depth: 30, sill: 25, top: 33.2, divisions: 4, yaw: -0.23 },
   { x: 235, front: -403, width: 51, depth: 46, sill: 25, top: 38.5, divisions: 7, openings: 2, yaw: -0.14 },
   { x: 273, front: -429, width: 45, depth: 41, sill: 29, top: 45.4, divisions: 5, yaw: -0.25 },
-  { x: -42, front: -417, width: 45, depth: 33, sill: 17.2, top: 27.1, divisions: 6, openings: 1, yaw: 0.16 },
+  { x: -42, front: -469, width: 45, depth: 33, sill: 17.2, top: 27.1, divisions: 6, openings: 1, yaw: 0.16 },
   { x: 10, front: -432, width: 50, depth: 31, sill: 16.6, top: 27.3, divisions: 9, openings: 4, yaw: -0.10 },
   { x: 67, front: -423, width: 50, depth: 23, sill: 18.8, top: 26.8, divisions: 8, yaw: 0.1 },
-  { x: 119, front: -419, width: 46, depth: 23, sill: 19.6, top: 27.7, divisions: 7, openings: 2, yaw: -0.14 },
+  { x: 119, front: -419, width: 46, depth: 23, sill: 19.6, top: 18.1, divisions: 7, openings: 2, yaw: -0.14 },
   { x: 166, front: -407, width: 53, depth: 30, sill: 20.1, top: 28.4, divisions: 9, raisedWing: 1.5, yaw: 0.10 },
   // Low, offset foreground ranges reveal their ends from different parts of the hall.
-  { x: -3, front: -402, width: 36, depth: 29, sill: 11.4, top: 20.4, divisions: 9, openings: 3, yaw: -0.23 },
-  { x: 42, front: -394, width: 36, depth: 22, sill: 9.1, top: 18.5, divisions: 9, openings: 2, raisedWing: 1.2, yaw: 0.19 },
-  { x: 75, front: -404, width: 28, depth: 20, sill: 10.2, top: 20.1, divisions: 7, openings: 1, yaw: -0.18 },
-  { x: 127, front: -393, width: 58, depth: 26, sill: 13.1, top: 22.2, divisions: 13, openings: 3, raisedWing: 1.5, yaw: -0.06 },
+  { x: -3, front: -402, width: 36, depth: 29, sill: 8.5, top: 16.8, divisions: 9, openings: 3, yaw: -0.23 },
+  { x: 42, front: -394, width: 36, depth: 22, sill: 7.2, top: 14.5, divisions: 9, openings: 2, raisedWing: 0.65, yaw: 0.19 },
+  { x: 75, front: -404, width: 28, depth: 20, sill: 7.4, top: 16.1, divisions: 7, openings: 1, yaw: -0.18 },
+  { x: 127, front: -393, width: 58, depth: 26, sill: 9.1, top: 17.5, divisions: 13, openings: 3, raisedWing: 0.75, yaw: -0.06 },
 ];
 
 function addPaleEave(surface: PlantSurface): void {
-  const add = volumeBuilder(surface, -44, -374.6, 0.17);
+  // A single view fixes angular size, not distance. Put the pavilion inland so
+  // its footing meets a broad grade instead of requiring a steep local mound.
+  const scale = 1.14;
+  const depth = (z: number) => 7 + (z - 7) * scale;
+  const height = (y: number) => 1.65 + (y - 1.65) * scale
+    + 1.1 * scale * MathUtils.smoothstep(y, 13, 22);
+  const volume = volumeBuilder(surface, -44 * scale, depth(-374.6), 0.17);
+  const add: AddVolume = ([left, right, front, back, bottom, top], color, shade) => {
+    volume([left * scale, right * scale, depth(front), depth(back), height(bottom), height(top)], color, shade);
+  };
   // The broader lower courses disappear into the gravel bank beside the pavilion.
-  addPlinth(add, [-61.4, -27, -375.35, -402.8, -1, 6.1], paleStone);
-  addPlinth(add, [-58.2, -31.2, -374, -402, -1, 8.9], paleStone);
+  addPlinth(add, [-58.4, -30, -385.35, -402.8, -1, 6.1], paleStone);
+  addPlinth(add, [-56.2, -33.2, -381, -402, -1, 8.9], paleStone);
+  addPlinth(add, [-54.2, -34.5, -375.9, -384, -1, 5.3], paleStone);
   add([-50.4, -42.1, -372.05, -376.2, 5.8, 7.05], paleStone, 1.02);
   add([-50.45, -42.05, -371.26, -375.3, 4.5, 5.8], paleStone, 0.96);
-  add([-53.75, -34.6, -376.25, -398.1, 7.7, 20.6], paleStone, 0.92);
-  add([-54.45, -52.05, -374.56, -397.9, 10.14, 22.7], paleStone, 1.04);
-  add([-36.2, -33.83, -374.7, -397.9, 10.14, 22.7], paleStone, 1.06);
+  add([-53.75, -34.6, -376.25, -398.1, 13.0, 20.6], paleStone, 0.92);
+  add([-53.75, -34.6, -384.2, -398.1, 5.0, 13.0], paleStone, 0.82);
+  add([-54.45, -53.7, -374.56, -397.9, -1, 22.7], paleStone, 1.04);
+  add([-34.58, -33.83, -374.7, -397.9, -1, 22.7], paleStone, 1.06);
   for (const x of [-49.5, -45.2, -41.0, -37.3]) {
-    add([x - 0.25, x + 0.25, -375.61, -397.5, 11.15, 21.4], paleStone);
+    add([x - 0.11, x + 0.11, -375.61, -397.5, -1, 21.4], paleStone);
   }
   add([-54.45, -33.83, -375.17, -398.3, 13.3, 13.71], paleStone, 1.13);
-  for (let course = 9.5; course < 20.4; course += 0.83) {
+  for (let course = 13.5; course < 20.4; course += 0.62) {
     add([-53.83, -34.48, -376.04, -398.24, course - 0.05, course + 0.05], paleStone, 0.79);
   }
   add([-54.8, -33.4, -375.1, -398.45, 20.6, 23.75], paleStone, 0.57);
@@ -216,10 +231,10 @@ function addCourtGalleries(surface: PlantSurface): void {
       add([left, right, front - 1.75, front - 2.0, course - 0.025, course + 0.025], stone, 0.70);
     }
     for (let x = left; x < right; x += 2.8) {
-      add([x, x + 0.18, front, front - 2.1, bottom, top - 0.5], stone, 0.91);
+      add([x, x + 0.07, front - 0.7, front - 2.1, bottom, top - 0.5], stone, 0.82);
     }
     for (let level = bottom + 1.65; level < top; level += 1.65) {
-      add([left, right, front + 0.13, front - 2.1, level - 0.16, level], stone, 0.98);
+      add([left, right, front + 0.13, front - 2.1, level - 0.20, level], terraceCourse, 1.02);
     }
     add([left - 0.4, right + 0.4, front + 0.42, front - 9.1, top - 0.5, top], roof, 1.03);
   }

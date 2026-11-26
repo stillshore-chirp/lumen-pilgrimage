@@ -33,7 +33,7 @@ const gravelBanks = [
 
 function shoreProfile(x: number, distance: number): number {
   const wetApron = MathUtils.lerp(-2.6, 1.55, MathUtils.smoothstep(distance, -23, -9));
-  const inlandGrade = 6.8 * MathUtils.smoothstep(distance, -6, 62)
+  const inlandGrade = 7.0 * MathUtils.smoothstep(distance, -6, 62)
     + 4.7 * MathUtils.smoothstep(distance, 28, 128);
   const bar = ridge(distance, -4.1 + 2.7 * Math.sin(x * 0.037), 4.5, 8.8)
     * (0.7 + 0.64 * Math.sin(x * 0.043 - 1.1) ** 2);
@@ -50,8 +50,8 @@ function shoreProfile(x: number, distance: number): number {
   const leftApron = 6.2 * (1 - MathUtils.smoothstep(x, -133, -35))
     * MathUtils.smoothstep(distance, -7, 31);
   // A low collar continues under the pale eave, with a lower runnel to its east.
-  const eaveApron = 11.8 * (1 - MathUtils.smoothstep(Math.abs(x + 45 - distance * 0.14), 8, 43))
-    * ridge(distance, 14, 48, 85);
+  const eaveApron = 3.2 * (1 - MathUtils.smoothstep(Math.abs(x + 45 - distance * 0.14), 14, 63))
+    * ridge(distance, 28, 34, 85);
   const runnel = 1.25 * Math.exp(-(((x + 5 - distance * 0.18) / 19) ** 2))
     * ridge(distance, 25, 29, 26);
   return LAKE_WATER_Y + wetApron + inlandGrade + bar + folds + rightApron + leftApron + eaveApron - runnel;
@@ -166,7 +166,7 @@ export function farShoreMaterial(layer: 'gravel' | 'masonry'): MeshStandardMater
             * (1.0 - smoothstep(10.0, 34.0 + 29.0 * drift, p.y));
           // Extinction belongs to the air at this position, not to the material
           // of the surface behind it. Keep the shared contact equally legible.
-          float air = valley * lowBank * 0.52 + westFoot * 0.23;
+          float air = valley * lowBank * 0.78 + westFoot * 0.30;
           fogFactor = 1.0 - (1.0 - fogFactor) * exp(-air);
           gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
         #else
