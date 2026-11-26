@@ -4,6 +4,7 @@ import {
   ATRIUM_DESTINATIONS, ATRIUM_ELEVATOR, ATRIUM_LEVELS, ATRIUM_SCULPTURE, ATRIUM_SOFA, ATRIUM_WALK_LEVEL,
   atriumDeckContains, atriumStairDistance, atriumStairHeight, atriumUpperStairHeight,
 } from './atriumLayout';
+import { ATRIUM_TENANT_ISLANDS } from './atriumTenantPlan';
 
 const railClearance = 0.20;
 const slabDepth = 0.49;
@@ -62,6 +63,11 @@ function hitsGroundFurnishing(x: number, z: number): boolean {
   return sofa || sculpture || cafe;
 }
 
+function hitsDisplayIsland(x: number, z: number): boolean {
+  return ATRIUM_TENANT_ISLANDS.some(({ center: [centerX, along], size: [width, depth] }) =>
+    Math.abs(x - centerX) < width / 2 + 0.16 && Math.abs(z + along) < depth / 2 + 0.16);
+}
+
 function blocksWalking(x: number, z: number, foot: number, previousFoot?: number): boolean {
   if (insideElevator(x, z)) return true;
   // Catch sideways crossings of the stair and balcony guards, including when jumping.
@@ -69,6 +75,8 @@ function blocksWalking(x: number, z: number, foot: number, previousFoot?: number
     const drop = previousFoot - atriumSupportAt(x, z, foot + 0.04);
     if (drop > 0.26 && (foot < previousFoot - 0.24 || drop > 1.58)) return true;
   }
+  // Keep ground movement out of the cases even at the apex of a jump. The galleries use their own layer.
+  if (foot < ATRIUM_LEVELS[0] && hitsDisplayIsland(x, z)) return true;
   return foot < 0.70 && hitsGroundFurnishing(x, z);
 }
 

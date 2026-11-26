@@ -10,9 +10,52 @@ import {
   ATRIUM_BOUNDS, ATRIUM_CAFE, ATRIUM_FIRST_BRIDGE, ATRIUM_FIRST_LEVEL_FORECOURT, ATRIUM_GALLERY_EDGE,
   ATRIUM_LEVELS, ATRIUM_LOUNGE, ATRIUM_REAR_GALLERY, ATRIUM_SKYLIGHT, ATRIUM_SOFA, atriumStairFrame,
 } from './atriumLayout';
+import { ATRIUM_TENANT_ISLANDS, ATRIUM_TENANT_LIGHTING, ATRIUM_TENANTS } from './atriumTenantPlan';
 
 const TILE_SIZE = 1.35;
 const lowStair = atriumStairFrame(5.8);
+
+function glsl(value: number): string {
+  return value.toFixed(3);
+}
+
+function tenantCctScale(id: string): number {
+  const cct = ATRIUM_TENANT_LIGHTING[id]?.cct ?? '';
+  if (cct.startsWith('2700')) return .90;
+  if (cct.startsWith('3400')) return 1.05;
+  if (cct.startsWith('3300')) return 1.02;
+  return 1;
+}
+
+const tenantSideBays = ATRIUM_TENANTS.filter(bay => bay.side !== 'rear');
+const tenantRearBays = ATRIUM_TENANTS.filter(bay => bay.side === 'rear');
+const tenantR1 = ATRIUM_TENANTS.find(bay => bay.id === 'R1');
+const tenantR1Lines = tenantR1 ? [
+  tenantR1.lights.find(light => light.kind === 'wash'),
+  tenantR1.lights.find(light => light.kind === 'accent'),
+  undefined,
+].map((light, index) => light
+  ? [tenantR1.span[0] + light.u, index === 0 ? .16 : .20, index === 0 ? .72 : .52]
+  : [tenantR1.span[1] - .45, .24, .38])
+  : [[20.0, .16, .72], [20.6, .20, .52], [28.1, .24, .38]];
+
+const tenantReflectionConstants = /* glsl */`
+  const vec4 atriumTenantSideBays[${tenantSideBays.length}] = vec4[${tenantSideBays.length}](${tenantSideBays.map(bay => {
+    const brightness = (bay.id === 'R1' ? .72 : bay.id === 'R2' ? .45 : .38) * tenantCctScale(bay.id);
+    return `vec4(${bay.side === 'west' ? -1 : 1}.0, ${glsl(bay.span[0])}, ${glsl(bay.span[1])}, ${glsl(brightness)})`;
+  }).join(', ')});
+  const vec4 atriumTenantRearBays[${tenantRearBays.length}] = vec4[${tenantRearBays.length}](${tenantRearBays.map(bay => {
+    const brightness = bay.id === 'F2' ? .66 : .45;
+    return `vec4(${glsl(bay.span[0])}, ${glsl(bay.span[1])}, ${glsl(bay.plane ?? 0)}, ${glsl(brightness)})`;
+  }).join(', ')});
+  const vec4 atriumTenantIslands[${ATRIUM_TENANT_ISLANDS.length}] = vec4[${ATRIUM_TENANT_ISLANDS.length}](${ATRIUM_TENANT_ISLANDS.map(island => {
+    const radius = Math.max(island.size[0], island.size[1]) * .52;
+    const brightness = island.id === 'I1' ? .30 : .38;
+    return `vec4(${glsl(island.center[0])}, ${glsl(island.center[1])}, ${glsl(radius)}, ${glsl(brightness)})`;
+  }).join(', ')});
+  const vec4 atriumTenantR1Lines[${tenantR1Lines.length}] = vec4[${tenantR1Lines.length}](${tenantR1Lines.map(([s, width, brightness]) =>
+    `vec4(${glsl(s)}, ${glsl(width)}, ${glsl(brightness)}, 0.0)`).join(', ')});
+`;
 
 const floorVertex = /* glsl */`
   varying vec3 atriumFloorPoint;
@@ -32,6 +75,65 @@ const floorFragment = /* glsl */`
 
   float atriumTileTone(vec2 tile) {
     return fract(sin(dot(tile, vec2(12.989, 78.233))) * 4375.683);
+  }
+
+${tenantReflectionConstants}
+
+  // XR has no second scene render for the floor. These bounded intersections
+  // keep the tenant openings, the R1 vertical bundle and the three islands
+  // visible in the same floor-facing reflection family as the PC mirror.
+  vec3 atriumTenantReflectedFixtures(vec3 point, vec3 ray) {
+    vec3 result = vec3(0.0);
+    if (atriumFixtureLight < 0.001) return result;
+    if (abs(ray.x) > 0.025) {
+      float sideSign = ray.x > 0.0 ? 1.0 : -1.0;
+      float sideT = (11.42 * sideSign - point.x) / ray.x;
+      if (sideT > 0.0) {
+        float hitS = -(point.z + ray.z * sideT);
+        float hitY = ray.y * sideT;
+        float visibleHeight = smoothstep(0.12, 0.56, hitY) * (1.0 - smoothstep(3.05, 4.15, hitY));
+        for (int i = 0; i < ${tenantSideBays.length}; ++i) {
+          vec4 bay = atriumTenantSideBays[i];
+          if (bay.x * sideSign < 0.0) continue;
+          float outside = max(bay.y - hitS, hitS - bay.z);
+          float inBay = 1.0 - smoothstep(0.06, 0.72, outside);
+          result += vec3(1.24, 0.79, 0.44) * bay.w * inBay * visibleHeight;
+        }
+      }
+    }
+    if (ray.x > 0.025) {
+      float tRight = (11.42 - point.x) / ray.x;
+      if (tRight > 0.0) {
+        float hitS = -(point.z + ray.z * tRight);
+        float hitY = ray.y * tRight;
+        float visibleHeight = smoothstep(0.18, 0.62, hitY) * (1.0 - smoothstep(3.10, 4.15, hitY));
+        for (int i = 0; i < ${tenantR1Lines.length}; ++i) {
+          vec4 line = atriumTenantR1Lines[i];
+          float lineBand = 1.0 - smoothstep(line.y, line.y + 0.42, abs(hitS - line.x));
+          result += vec3(1.45, 1.15, 0.82) * line.z * lineBand * visibleHeight;
+        }
+      }
+    }
+    if (abs(ray.z) > 0.025) {
+      for (int i = 0; i < ${tenantRearBays.length}; ++i) {
+        vec4 bay = atriumTenantRearBays[i];
+        float t = (-bay.z - point.z) / ray.z;
+        if (t <= 0.0) continue;
+        float hitX = point.x + ray.x * t;
+        float outside = max(bay.x - hitX, hitX - bay.y);
+        float inBay = 1.0 - smoothstep(0.08, 0.82, outside);
+        float hitY = ray.y * t;
+        float visibleHeight = smoothstep(0.16, 0.65, hitY) * (1.0 - smoothstep(3.0, 4.2, hitY));
+        result += vec3(1.16, 0.84, 0.59) * bay.w * inBay * visibleHeight;
+      }
+    }
+    for (int i = 0; i < ${ATRIUM_TENANT_ISLANDS.length}; ++i) {
+      vec4 island = atriumTenantIslands[i];
+      vec2 delta = point.xz - vec2(island.x, -island.y);
+      float islandPool = 1.0 - smoothstep(island.z * 0.30, island.z, length(delta));
+      result += vec3(1.25, 0.91, 0.62) * island.w * islandPool;
+    }
+    return result * atriumFixtureLight;
   }
 
   // Each rectangle lies inside one source slab. The three marble maps share the
@@ -99,7 +201,8 @@ const floorFragment = /* glsl */`
     float skylightGrid = 1.0 - 0.57 * max(atriumBand(fract(skylight.x / 1.4) - 0.50, 0.083),
       atriumBand(fract(skylight.y / 1.7) - 0.50, 0.081));
     vec3 cool = vec3(0.29, 0.58, 0.98) * opening * skylightGrid;
-    return (strips * 0.75 + glazing + 0.6 * rim) * warm * atriumFixtureLight + cool * atriumDaylight;
+    return (strips * 0.75 + glazing + 0.6 * rim) * warm * atriumFixtureLight
+      + atriumTenantReflectedFixtures(point, ray) + cool * atriumDaylight;
   }
 
   float atriumContact(vec2 p) {

@@ -1,7 +1,5 @@
 import {
   ATRIUM_BOUNDS,
-  ATRIUM_CAFE,
-  ATRIUM_CAFE_COUNTER,
   ATRIUM_LEVELS,
   ATRIUM_LOUNGE,
   ATRIUM_SKYLIGHT,
@@ -12,6 +10,10 @@ import {
   atriumUpperStairHeight,
   inAtriumRug,
 } from './atriumLayout';
+import {
+  ATRIUM_TENANT_COMMON, ATRIUM_TENANT_GLAZING_DEPTH, ATRIUM_TENANTS, tenantWidth, tenantWorldPoint,
+} from './atriumTenantPlan';
+import type { TenantBay, TenantWorldPoint } from './atriumTenantPlan';
 
 type MutablePoint = { x: number; y: number; z: number };
 export type AtriumPoint = Readonly<MutablePoint>;
@@ -36,6 +38,16 @@ type AtriumSoundPath = {
   reflections: [AtriumReflection, AtriumReflection];
 };
 
+type VerticalPanel = Readonly<{
+  axis: 'x' | 'z';
+  plane: number;
+  start: number;
+  end: number;
+  low: number;
+  high: number;
+  shelter: number;
+}>;
+
 export const ATRIUM_SOUND_SPEED = 343;
 export const ATRIUM_REFLECTION_MAX_DELAY = 0.18;
 // Design values informed by shopping-centre measurements in the attribution.
@@ -44,6 +56,48 @@ const SOFFIT_DEPTH = 0.49;
 const COVER_INSETS = [-0.9, -0.45, 0, 0.45, 0.9];
 const SKYLIGHT_COS = Math.cos(ATRIUM_SKYLIGHT.yaw);
 const SKYLIGHT_SIN = Math.sin(ATRIUM_SKYLIGHT.yaw);
+const GLAZING_SHELTER = 0.60;
+const WALL_SHELTER = 0.90;
+
+function tenantPanels(bay: TenantBay): VerticalPanel[] {
+  const faceAxis = bay.side === 'rear' ? 'z' : 'x';
+  const sideAxis = faceAxis === 'z' ? 'x' : 'z';
+  const panels: VerticalPanel[] = [];
+  const add = (axis: VerticalPanel['axis'], a: TenantWorldPoint, b: TenantWorldPoint,
+    low: number, high: number, shelter: number) => {
+    const along = axis === 'x' ? 'z' : 'x';
+    panels.push({ axis, plane: a[axis], start: Math.min(a[along], b[along]), end: Math.max(a[along], b[along]),
+      low, high, shelter });
+  };
+  const { portalHead } = bay.elevation;
+  const top = ATRIUM_TENANT_COMMON.soffit;
+  const [doorStart, doorEnd, recess] = bay.entry;
+  // Model the finished surfaces as thin panels, using the plan's clear opening and glazing plane.
+  for (const { u: [start, end], kind } of bay.frontage) {
+    const entrance = kind === 'door' || kind === 'open';
+    const d = entrance ? recess : kind === 'glass' ? ATRIUM_TENANT_GLAZING_DEPTH : 0;
+    const a = tenantWorldPoint(bay, start, d);
+    const b = tenantWorldPoint(bay, end, d);
+    add(faceAxis, a, b, entrance ? bay.entryHeight : 0, portalHead,
+      kind === 'glass' || kind === 'door' ? GLAZING_SHELTER : WALL_SHELTER);
+    add(faceAxis, a, b, portalHead, top, WALL_SHELTER);
+  }
+  // Short returns define the opening for oblique rays through the recessed entrance.
+  for (const [u, end] of [[doorStart, 1], [doorEnd, 0]] as const) {
+    const beside = bay.frontage.find(segment => Math.abs(segment.u[end] - u) < 1e-6);
+    const glass = beside?.kind === 'glass';
+    add(sideAxis, tenantWorldPoint(bay, u, glass ? ATRIUM_TENANT_GLAZING_DEPTH : 0),
+      tenantWorldPoint(bay, u, recess), 0, glass ? bay.entryHeight : portalHead,
+      glass ? GLAZING_SHELTER : WALL_SHELTER);
+  }
+  for (const edge of [0, tenantWidth(bay)]) {
+    add(sideAxis, tenantWorldPoint(bay, edge, 0), tenantWorldPoint(bay, edge, bay.depth), 0, bay.ceiling, WALL_SHELTER);
+  }
+  return panels;
+}
+
+const TENANT_PANELS = ATRIUM_TENANTS.flatMap(tenantPanels);
+const SERVICE_BAY = ATRIUM_TENANTS.find(bay => bay.id === 'R2')!;
 
 export const ATRIUM_AIR_SOURCES: readonly AtriumPoint[] = [
   { x: ATRIUM_BOUNDS.minX + 1.7, y: ATRIUM_LEVELS[0] - 0.62, z: -13.5 },
@@ -52,7 +106,7 @@ export const ATRIUM_AIR_SOURCES: readonly AtriumPoint[] = [
 ];
 
 export const ATRIUM_SERVICE_SOURCES: readonly AtriumPoint[] = [
-  { x: ATRIUM_CAFE.x + ATRIUM_CAFE_COUNTER.x, y: 0.65, z: ATRIUM_CAFE.z + ATRIUM_CAFE_COUNTER.z },
+  { ...tenantWorldPoint(SERVICE_BAY, 2.00, 4.52), y: 0.65 },
   // The storefront opening is the point where the filtered interior noise enters the gallery.
   { x: ATRIUM_BOUNDS.maxX - 0.03, y: ATRIUM_WALK_LEVEL + 1.15, z: -18.5 },
 ];
@@ -114,6 +168,44 @@ function slabShelter(x: number, y: number, z: number, toX: number, toY: number, 
   return shelter;
 }
 
+function propagationShelter(x: number, y: number, z: number, toX: number, toY: number, toZ: number): number {
+  let shelter = slabShelter(x, y, z, toX, toY, toZ);
+  const { minX, maxX, minZ } = ATRIUM_BOUNDS;
+  if (x >= minX && x <= maxX && z >= minZ && toX >= minX && toX <= maxX && toZ >= minZ) return shelter;
+  const dx = toX - x;
+  const dy = toY - y;
+  const dz = toZ - z;
+  for (const panel of TENANT_PANELS) {
+    if (panel.shelter <= shelter) continue;
+    const onX = panel.axis === 'x';
+    const t = onX ? (panel.plane - x) / dx : (panel.plane - z) / dz;
+    if (!(t > 0 && t < 1)) continue;
+    const height = y + dy * t;
+    const along = onX ? z + dz * t : x + dx * t;
+    if (height < panel.low || height > panel.high || along < panel.start || along > panel.end) continue;
+    shelter = panel.shelter;
+    if (shelter === WALL_SHELTER) return shelter;
+  }
+  return shelter;
+}
+
+function isFrontageOpening(surface: ReflectionSurface, x: number, y: number, z: number): boolean {
+  if (y >= ATRIUM_TENANT_COMMON.soffit) return false;
+  if (surface === 'rear-wall') {
+    for (const reveal of ATRIUM_TENANT_COMMON.rearReveals) {
+      if (x > reveal.x[0] && x < reveal.x[1] && y < reveal.head) return true;
+    }
+    return false;
+  }
+  if (surface !== 'left-wall' && surface !== 'right-wall') return false;
+  const side = surface === 'left-wall' ? 'west' : 'east';
+  for (const bay of ATRIUM_TENANTS) {
+    const u = -z - bay.span[0];
+    if (bay.side === side && u > bay.entry[0] && u < bay.entry[1] && y < bay.entryHeight) return true;
+  }
+  return false;
+}
+
 function directCutoff(distanceMetres: number, shelter: number): number {
   const air = 17_500 / (1 + distanceMetres / 24) ** 0.74;
   return Math.max(700, air * Math.exp(-2.75 * shelter));
@@ -148,6 +240,7 @@ function considerReflection(
   if (x < minX || x > maxX || z < minZ || z > maxZ || y < 0 || y > ATRIUM_SKYLIGHT.y) return;
   if (deck !== undefined && !atriumDeckContains(x, z, deck, -0.25)) return;
   if (surface === 'ceiling' && inSkylightOpening(x, z)) return;
+  if (isFrontageOpening(surface, x, y, z)) return;
   const distance = Math.hypot(source.x - listener.x + (axis === 'x' ? offset : 0),
     source.y - listener.y + (axis === 'y' ? offset : 0), source.z - listener.z + (axis === 'z' ? offset : 0));
   const excess = Math.max(0, distance - path.directDistance);
@@ -155,8 +248,8 @@ function considerReflection(
   if (delay > ATRIUM_REFLECTION_MAX_DELAY) return;
   const rug = surface === 'floor' ? 1 - smoothstep(0.83, 1.07, loungeRadius(x, z)) : 0;
   const edgeWeight = deck !== undefined && !atriumDeckContains(x, z, deck, 0.15) ? 0.56 : 1;
-  const reflectedShelter = Math.max(slabShelter(listener.x, listener.y, listener.z, x, y, z),
-    slabShelter(x, y, z, source.x, source.y, source.z));
+  const reflectedShelter = Math.max(propagationShelter(listener.x, listener.y, listener.z, x, y, z),
+    propagationShelter(x, y, z, source.x, source.y, source.z));
   const relative = coefficient * (1 - rug * 0.82) * edgeWeight * (1 - reflectedShelter * 0.76);
   const gain = relative * (2.2 / (2.2 + distance)) ** 0.74 * Math.exp(-excess * 0.046);
   const arrivals = path.reflections;
@@ -180,7 +273,7 @@ export function atriumSoundPath(
   listener: AtriumPoint, source: AtriumPoint, path = createAtriumSoundPath(),
 ): AtriumSoundPath {
   const directDistance = Math.hypot(listener.x - source.x, listener.y - source.y, listener.z - source.z);
-  const shelter = slabShelter(listener.x, listener.y, listener.z, source.x, source.y, source.z);
+  const shelter = propagationShelter(listener.x, listener.y, listener.z, source.x, source.y, source.z);
   const distanceGain = (2.2 / (2.2 + directDistance)) ** 0.74;
   path.directDistance = directDistance;
   path.shelter = shelter;

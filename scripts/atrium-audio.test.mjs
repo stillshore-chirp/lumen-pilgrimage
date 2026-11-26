@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
+import { extname } from 'node:path';
 import { test } from 'node:test';
 
 const src = new URL('../src/', import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const internal = context.parentURL?.startsWith(src) && specifier.startsWith('.') && !specifier.endsWith('.ts');
+    const internal = context.parentURL?.startsWith(src) && specifier.startsWith('.') && !extname(specifier);
     return nextResolve(internal ? `${specifier}.ts` : specifier, context);
   },
 });
@@ -21,15 +22,20 @@ const {
 const { createAtriumEquipmentLoop, createAtriumFootfall, createAtriumRoomTail } =
   await import('../src/coast/world/atrium/atriumAudioSamples.ts');
 const {
-  ATRIUM_BOUNDS, ATRIUM_CAFE, ATRIUM_CAFE_COUNTER, ATRIUM_GALLERY_EDGE,
+  ATRIUM_BOUNDS, ATRIUM_GALLERY_EDGE,
   ATRIUM_LEVELS, ATRIUM_LOUNGE, ATRIUM_SOFA, ATRIUM_WALK_LEVEL, atriumStairFrame, atriumUpperStairPoint,
 } = await import('../src/coast/world/atrium/atriumLayout.ts');
+const { ATRIUM_TENANTS, tenantWorldPoint } = await import('../src/coast/world/atrium/atriumTenantPlan.ts');
 hooks.deregister();
 
 const open = { x: 0, y: 1.65, z: -19 };
 const underGallery = { x: ATRIUM_BOUNDS.maxX - 1.7, y: 1.65, z: -19 };
 const sofa = { x: ATRIUM_SOFA.x, y: ATRIUM_SOFA.seatedEyeHeight, z: ATRIUM_SOFA.z };
 const upperGallery = { x: ATRIUM_BOUNDS.minX + 2.2, y: ATRIUM_WALK_LEVEL + 1.65, z: -44.1 };
+
+function tenantSoundPoint(bay, u, y, d) {
+  return { ...tenantWorldPoint(bay, u, d), y };
+}
 
 function checkHorizontalArrival(listener, source, surface) {
   const path = atriumSoundPath(listener, source);
@@ -74,7 +80,44 @@ test('a finite gallery slab shelters an elevated source and the lounge softens t
   const stone = checkHorizontalArrival({ ...sofa, z: sofa.z + 13 }, { ...rugSource, z: rugSource.z + 13 }, 'floor');
   assert.ok(rug.gain < stone.gain * 0.3);
   assert.ok(rug.cutoff < stone.cutoff * 0.4);
-  assert.equal(ATRIUM_SERVICE_SOURCES[0].z, ATRIUM_CAFE.z + ATRIUM_CAFE_COUNTER.z);
+});
+
+test('R2 equipment uses the same recessed opening and glazing as the storefront', () => {
+  assert.equal(ATRIUM_SERVICE_SOURCES.length, 2);
+  const source = ATRIUM_SERVICE_SOURCES[0];
+  assert.deepEqual(source, { x: 15.92, y: 0.65, z: -35.45 });
+  const cafe = ATRIUM_TENANTS.find(bay => bay.id === 'R2');
+  const throughOpening = atriumSoundPath(tenantSoundPoint(cafe, 4.0, 1.65, -2.2), source);
+  const throughGlass = atriumSoundPath(tenantSoundPoint(cafe, 1.32, 1.65, -2.2), source);
+  const throughWall = atriumSoundPath(tenantSoundPoint(cafe, -1, 1.65, -2.2), source);
+  assert.equal(throughOpening.shelter, 0);
+  assert.ok(throughGlass.shelter > 0 && throughGlass.shelter < throughWall.shelter);
+  assert.ok(throughGlass.gain < throughOpening.gain * 0.75);
+  assert.ok(throughGlass.cutoff < throughOpening.cutoff * 0.40);
+  assert.ok(throughWall.cutoff < throughGlass.cutoff);
+});
+
+test('the R4 entrance passes sound through its clear aperture, including recessed dimensions', () => {
+  const bay = ATRIUM_TENANTS.find(bay => bay.id === 'R4');
+  const source = tenantSoundPoint(bay, 1.7, 0.68, 4);
+  const straight = atriumSoundPath(tenantSoundPoint(bay, 1.7, 1.65, -2), source);
+  const glazed = atriumSoundPath(tenantSoundPoint(bay, 2.4, 1.65, -2), source);
+  assert.equal(straight.shelter, 0);
+  assert.ok(glazed.cutoff < straight.cutoff * 0.40);
+
+  const oblique = atriumSoundPath(tenantSoundPoint(bay, 1.7, 1.65, -1), tenantSoundPoint(bay, 2.25, 0.68, 1));
+  const lintel = atriumSoundPath(tenantSoundPoint(bay, 1.7, 2.6, -2), tenantSoundPoint(bay, 1.7, 2.6, 1));
+  assert.ok(oblique.shelter > 0, 'the glazing return crosses an oblique ray into the opening');
+  assert.ok(lintel.shelter > glazed.shelter, 'the solid lintel blocks a ray above the opening');
+});
+
+test('concourse side-wall reflections remain at fixed glazing and stop at the clear aperture', () => {
+  const bay = ATRIUM_TENANTS.find(bay => bay.id === 'R4');
+  const reachesSideWall = u => atriumSoundPath(tenantSoundPoint(bay, u, 1.65, -0.75),
+    tenantSoundPoint(bay, u, 1.55, -0.6)).reflections.some(reflection =>
+    reflection.surface === 'right-wall' && reflection.gain > 0);
+  assert.equal(reachesSideWall(1.3), false);
+  assert.equal(reachesSideWall(2.18), true);
 });
 
 test('atrium floor levels and footstep materials follow the shared plan', () => {

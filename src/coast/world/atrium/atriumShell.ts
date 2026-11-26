@@ -8,6 +8,9 @@ import {
   ATRIUM_LEVELS, ATRIUM_REAR_GALLERY, ATRIUM_STAIR_WEST_LINK, ATRIUM_UPPER_LANDING, ATRIUM_UPPER_STAIR,
   atriumFirstLevelInnerEdge,
 } from './atriumLayout';
+import {
+  ATRIUM_TENANT_COMMON, ATRIUM_TENANTS,
+} from './atriumTenantPlan';
 
 /**
  * The shell is deliberately independent from the concourse floor, furniture and
@@ -507,25 +510,73 @@ function addRearBridges(group: Group, materials: AtriumMaterials): void {
   }
 }
 
+function addGroundSideShell(group: Group, materials: AtriumMaterials, side: -1 | 1): void {
+  const wallThickness = .18;
+  const wallX = ATRIUM_TENANT_COMMON.existingPerimeterX;
+  const groundTop = ATRIUM_TENANT_COMMON.soffit;
+  const name = side < 0 ? 'West' : 'East';
+  const sideBays = ATRIUM_TENANTS
+    .filter(bay => bay.side === (side < 0 ? 'west' : 'east'))
+    .slice()
+    .sort((first, second) => first.span[0] - second.span[0]);
+  let cursor = ATRIUM_TENANT_COMMON.nearS;
+
+  const addRange = (startS: number, endS: number, label: string): void => {
+    if (endS <= startS) return;
+    const width = endS - startS;
+    const z = -(startS + endS) * .5;
+    addBox(group, materials.plaster, [side * wallX, groundTop * .5, z, wallThickness, groundTop, width],
+      `${name} ground side wall ${label}`);
+    // The dark strip is kept on the concourse-facing edge. Splitting both
+    // elements by bay span prevents one continuous backing wall from enclosing
+    // a neighboring tenant while preserving the existing upper shell.
+    addBox(group, materials.darkBronze, [side * (wallX - wallThickness * .5), groundTop * .5, z,
+      .028, groundTop - .24, width], `${name} ground vertical reveal ${label}`);
+  };
+
+  for (const bay of sideBays) {
+    if (bay.span[0] > cursor) addRange(cursor, bay.span[0], 'interstitial');
+    cursor = bay.span[1];
+  }
+  if (cursor < ATRIUM_TENANT_COMMON.rearS) addRange(cursor, ATRIUM_TENANT_COMMON.rearS, 'rear return');
+}
+
 function addOuterStructure(group: Group, materials: AtriumMaterials): void {
   const wallDepth = Math.abs(FRONT_Z - REAR_Z) + .3;
   const wallCenter = (FRONT_Z + REAR_Z) * .5;
-  for (const side of [-1, 1]) {
-    addBox(group, materials.plaster, [side * (OUTER_EDGE - .12), 8.52, wallCenter, .26, 17.04, wallDepth],
-      `${side < 0 ? 'West' : 'East'} outer atrium wall`);
-    // The lower route remains open.  Piers stop at the outer shop depth and
-    // never enter the walk bounds at abs(x) < 11.05.
+  const groundTop = ATRIUM_TENANT_COMMON.soffit;
+  for (const side of [-1, 1] as const) {
+    // Keep the upper wall continuous for the existing galleries. The ground
+    // course is supplied by the tenant-span segments below.
+    const upperHeight = 17.04 - groundTop;
+    addBox(group, materials.plaster, [side * (OUTER_EDGE - .12), groundTop + upperHeight * .5, wallCenter,
+      .26, upperHeight, wallDepth], `${side < 0 ? 'West' : 'East'} outer atrium upper wall`);
+    addGroundSideShell(group, materials, side);
+
+    // Piers crossing a ground-floor shop are removed from the lower course;
+    // their gallery-height shafts and trims remain in the established shell.
     const pierBoxes: BoxSpec[] = [];
+    const upperPierHeight = 16.90 - groundTop;
     for (let index = 0; index <= 4; index += 1) {
       const z = FRONT_Z - index * (Math.abs(FRONT_Z - REAR_Z) / 4);
-      pierBoxes.push([side * 14.54, 8.45, z, .42, 16.90, .48]);
+      pierBoxes.push([side * 14.54, groundTop + upperPierHeight * .5, z, .42, upperPierHeight, .48]);
       for (const y of [4.28, 8.88, 13.28]) {
         pierBoxes.push([side * 14.48, y, z, .58, .16, .66]);
       }
     }
-    addInstancedBoxes(group, materials.plasterLight, `${side < 0 ? 'West' : 'East'} outer column details`, pierBoxes);
-    addBox(group, materials.darkBronze, [side * (OUTER_EDGE - .245), 8.48, wallCenter, .035, 16.25, wallDepth - .35],
-      `${side < 0 ? 'West' : 'East'} outer wall vertical reveal`);
+    addInstancedBoxes(group, materials.plasterLight, `${side < 0 ? 'West' : 'East'} upper column details`, pierBoxes);
+
+    for (const relocation of ATRIUM_TENANT_COMMON.pierRelocations) {
+      if ((relocation.x < 0) !== (side < 0)) continue;
+      addBox(group, materials.plasterLight, [relocation.x, groundTop * .5, -relocation.groundS,
+        .58, groundTop, .66], `${side < 0 ? 'West' : 'East'} ${relocation.bay} relocated ground decorative pier`);
+      addBox(group, materials.bronzeLight, [relocation.x, groundTop - .10, -relocation.groundS,
+        .66, .10, .74], `${relocation.bay} ground pier upper trim`);
+    }
+
+    const upperRevealHeight = 16.25 - groundTop;
+    addBox(group, materials.darkBronze, [side * (OUTER_EDGE - .245), groundTop + upperRevealHeight * .5, wallCenter,
+      .035, upperRevealHeight, wallDepth - .35], `${side < 0 ? 'West' : 'East'} upper wall vertical reveal`);
   }
 
   // At +Z the end is a luminous entry/transom, with its pedestrian opening
@@ -544,29 +595,70 @@ function addOuterStructure(group: Group, materials: AtriumMaterials): void {
 function addPedestrianTermini(group: Group, materials: AtriumMaterials): void {
   // The recessed vestibules preserve the depth of the sightline past the glazed boundary.
   for (const [z, direction, label] of [[FRONT_Z + .17, 1, 'Front'], [REAR_Z - .17, -1, 'Rear']] as const) {
+    const rear = direction < 0;
     const insideFace = z - direction * .14;
     for (const side of [-1, 1]) {
-      addBox(group, materials.plaster, [side * 9.93, 2.48, z, 10.14, 4.96, .24], `${label} stone entrance wall`);
-      addBox(group, materials.plaster, [side * 4.83, 2.13, z + direction * 5.1, .22, 4.25, 10.2],
+      const entranceWallHeight = rear ? 4.96 - ATRIUM_TENANT_COMMON.soffit : 4.96;
+      const entranceWallY = rear ? ATRIUM_TENANT_COMMON.soffit + entranceWallHeight * .5 : 2.48;
+      addBox(group, materials.plaster, [side * 9.93, entranceWallY, z, 10.14, entranceWallHeight, .24], `${label} stone entrance wall`);
+      const sideWallHeight = rear ? 4.25 - ATRIUM_TENANT_COMMON.soffit : 4.25;
+      const sideWallY = rear ? ATRIUM_TENANT_COMMON.soffit + sideWallHeight * .5 : 2.13;
+      addBox(group, materials.plaster, [side * 4.83, sideWallY, z + direction * 5.1, .22, sideWallHeight, 10.2],
         `${label} vestibule side wall`);
-      addBox(group, materials.cove, [side * 4.48, 3.84, z + direction * 5.1, .10, .072, 10.1],
-        `${label} vestibule indirect lighting`);
+      if (!rear) {
+        addBox(group, materials.cove, [side * 4.48, 3.84, z + direction * 5.1, .10, .072, 10.1],
+          `${label} vestibule indirect lighting`);
+      }
     }
-    addBox(group, materials.limestone, [0, -.052, z + direction * 5.1, 9.70, .10, 10.3], `${label} vestibule floor`);
-    addBox(group, materials.ceiling, [0, 4.21, z + direction * 5.1, 9.68, .25, 10.3], `${label} vestibule ceiling`);
+    if (rear) {
+      // F1/F2 own the two rear sightline rectangles.  Split the old centre
+      // vestibule slabs at those rectangles so the authored FL+0 floor and
+      // soffit continuation meet it without coplanar duplicate faces.
+      const oldCenterS = -(z + direction * 5.1);
+      const oldStartS = oldCenterS - 5.15;
+      const oldEndS = oldCenterS + 5.15;
+      const f1 = ATRIUM_TENANT_COMMON.rearReveals.find(reveal => reveal.id === 'F1');
+      const f2 = ATRIUM_TENANT_COMMON.rearReveals.find(reveal => reveal.id === 'F2');
+      const firstBreak = f1?.x[1] ?? -4.3;
+      const secondBreak = f2?.x[0] ?? -1.16;
+      const f1Plane = ATRIUM_TENANTS.find(bay => bay.id === 'F1')?.plane ?? f1?.s[1] ?? oldStartS;
+      const f2Plane = ATRIUM_TENANTS.find(bay => bay.id === 'F2')?.plane ?? f2?.s[1] ?? oldStartS;
+      const slabRanges: readonly (readonly [number, number, number])[] = [
+        [-4.85, firstBreak, f1Plane],
+        [firstBreak, secondBreak, oldStartS],
+        [secondBreak, 4.85, f2Plane],
+      ];
+      for (const [x0, x1, startS] of slabRanges) {
+        const clippedStart = Math.max(oldStartS, Math.min(oldEndS, startS));
+        if (x1 <= x0 || oldEndS <= clippedStart) continue;
+        const depth = oldEndS - clippedStart;
+        const centerS = (clippedStart + oldEndS) * .5;
+        addBox(group, materials.limestone, [(x0 + x1) * .5, -.052, -centerS, x1 - x0, .10, depth],
+          `${label} vestibule floor split`);
+        addBox(group, materials.ceiling, [(x0 + x1) * .5, 4.21, -centerS, x1 - x0, .25, depth],
+          `${label} vestibule ceiling split`);
+      }
+    } else {
+      addBox(group, materials.limestone, [0, -.052, z + direction * 5.1, 9.70, .10, 10.3], `${label} vestibule floor`);
+      addBox(group, materials.ceiling, [0, 4.21, z + direction * 5.1, 9.68, .25, 10.3], `${label} vestibule ceiling`);
+    }
     addBox(group, materials.plaster, [0, 2.14, z + direction * 10.2, 9.7, 4.27, .19], `${label} vestibule far wall`);
     addBox(group, materials.plasterLight, [0, 2.14, z + direction * 10.09, 4.28, 3.62, .09], `${label} pale entry portal`);
-    addBox(group, materials.glass, [0, 2.28, insideFace - direction * .052, 8.42, 4.16, .026],
-      `${label} translucent terminus glazing`);
-    addBox(group, materials.limestone, [-4.72, 2.48, insideFace, .42, 4.78, .19], `${label} terminus west pier`);
-    addBox(group, materials.limestone, [4.72, 2.48, insideFace, .42, 4.78, .19], `${label} terminus east pier`);
+    if (!rear) {
+      addBox(group, materials.glass, [0, 2.28, insideFace - direction * .052, 8.42, 4.16, .026],
+        `${label} translucent terminus glazing`);
+      addBox(group, materials.limestone, [-4.72, 2.48, insideFace, .42, 4.78, .19], `${label} terminus west pier`);
+      addBox(group, materials.limestone, [4.72, 2.48, insideFace, .42, 4.78, .19], `${label} terminus east pier`);
+    }
     addBox(group, materials.plasterLight, [0, 4.93, insideFace, 10.28, .22, .22], `${label} terminus pale lintel`);
     addBox(group, materials.cove, [0, 4.78, insideFace - direction * .025, 7.42, .038, .042], `${label} terminus warm cove`);
-    const mullions: BoxSpec[] = [];
-    for (const x of [-3.15, -1.05, 1.05, 3.15]) {
-      mullions.push([x, 2.55, insideFace - direction * .068, .045, 3.82, .052]);
+    if (!rear) {
+      const mullions: BoxSpec[] = [];
+      for (const x of [-3.15, -1.05, 1.05, 3.15]) {
+        mullions.push([x, 2.55, insideFace - direction * .068, .045, 3.82, .052]);
+      }
+      addInstancedBoxes(group, materials.champagne, `${label} terminus vertical mullions`, mullions);
     }
-    addInstancedBoxes(group, materials.champagne, `${label} terminus vertical mullions`, mullions);
     for (const level of ATRIUM_LEVELS) {
       addBox(group, materials.plaster, [0, level + 2.04, z, 29.85, 4.42, .21], `${label} level return wall`);
       addBox(group, materials.bronze, [0, level + .28, insideFace, 22.65, .55, .11], `${label} horizontal return fascia`);
@@ -576,7 +668,67 @@ function addPedestrianTermini(group: Group, materials: AtriumMaterials): void {
           `${label} return wall joints`);
       }
     }
+
+    if (rear) {
+      const groundTop = ATRIUM_TENANT_COMMON.soffit;
+      const f1 = ATRIUM_TENANT_COMMON.rearReveals.find(reveal => reveal.id === 'F1');
+      const f2 = ATRIUM_TENANT_COMMON.rearReveals.find(reveal => reveal.id === 'F2');
+      if (f1 && f2) {
+        // Close only the old terminus portions outside the two authored
+        // rectangles. The openings remain clear from FL+0 to their recorded
+        // head heights; the centre interval is a stone sleeve, not an exterior
+        // view into the vestibule.
+        addBox(group, materials.limestone, [(-15 + f1.x[0]) * .5, groundTop * .5, z,
+          f1.x[0] + 15, groundTop, .24], 'Rear west ground stone return outside F1');
+        addBox(group, materials.limestone, [(f2.x[1] + 15) * .5, groundTop * .5, z,
+          15 - f2.x[1], groundTop, .24], 'Rear east ground stone return outside F2');
+        const centreWidth = f2.x[0] - f1.x[1];
+        if (centreWidth > 0) {
+          const centreS = Math.min(f1.floorStartS, f2.floorStartS) + .38;
+          addBox(group, materials.limestone, [(f1.x[1] + f2.x[0]) * .5, groundTop * .5, -centreS,
+            centreWidth, groundTop, .76], 'Rear F1-F2 central stone sleeve wall');
+        }
+      }
+    }
   }
+}
+
+function addRearTenantOpenings(group: Group, materials: AtriumMaterials): void {
+  const ceilingY = ATRIUM_TENANT_COMMON.soffit + .08;
+  for (const reveal of ATRIUM_TENANT_COMMON.rearReveals) {
+    const bay = ATRIUM_TENANTS.find(candidate => candidate.id === reveal.id && candidate.side === 'rear');
+    if (!bay) continue;
+    const [x0, x1] = reveal.x;
+    const floorStart = reveal.floorStartS;
+    const plane = bay.plane ?? reveal.s[1];
+    const openingDepth = plane - floorStart;
+    if (openingDepth <= 0 || x1 <= x0) continue;
+    const centerX = (x0 + x1) * .5;
+    const frontZ = -floorStart;
+    const depthCenterZ = -(floorStart + plane) * .5;
+    const width = x1 - x0;
+    const head = reveal.head;
+    addBox(group, materials.limestone, [centerX, -.052, depthCenterZ, width, .10, openingDepth],
+      `${reveal.id} FL+0 connected rear tenant floor`);
+    addBox(group, materials.ceiling, [centerX, ceilingY, depthCenterZ, width, .16, openingDepth],
+      `${reveal.id} rear tenant ceiling continuation`);
+
+    // A short jamb/header assembly leaves the common floor sightline open while
+    // retaining the stone sleeve at the old terminus.
+    const sleeveDepth = Math.min(.72, openingDepth * .45);
+    const sleeveCenterZ = -(floorStart + sleeveDepth * .5);
+    addBox(group, materials.limestone, [x0 - .09, head * .5, sleeveCenterZ, .18, head, sleeveDepth],
+      `${reveal.id} short west limestone sleeve`);
+    addBox(group, materials.limestone, [x1 + .09, head * .5, sleeveCenterZ, .18, head, sleeveDepth],
+      `${reveal.id} short east limestone sleeve`);
+    addBox(group, materials.plasterLight, [centerX, head + .06, frontZ + .02, width + .36, .12, .18],
+      `${reveal.id} rear reveal head +${reveal.head.toFixed(2)}`);
+    addBox(group, materials.champagne, [x0, head * .5, frontZ + .025, .035, head, .045],
+      `${reveal.id} rear reveal west glass jamb`);
+    addBox(group, materials.champagne, [x1, head * .5, frontZ + .025, .035, head, .045],
+      `${reveal.id} rear reveal east glass jamb`);
+  }
+
 }
 
 function addRecessedSpots(group: Group, materials: AtriumMaterials): void {
@@ -624,16 +776,22 @@ function addArchitecturalScreen(group: Group, materials: AtriumMaterials): void 
 }
 
 function addColumnDetails(group: Group, materials: AtriumMaterials): void {
+  const groundTop = ATRIUM_TENANT_COMMON.soffit;
+  const upperHeight = 16.72 - groundTop;
+  const upperCenter = groundTop + upperHeight * .5;
   for (const side of [-1, 1]) {
     for (const z of [-5.4, -17.0, -29.0, -41.0]) {
       const x = side * 13.55;
-      addBox(group, materials.limestone, [x, 8.45, z, .66, 16.72, .72], 'Architectural side column shaft');
-      addBox(group, materials.plasterLight, [x, .34, z, .92, .68, .98], 'Architectural side column base');
+      // These shafts belong to the upper gallery composition. Their former
+      // full-height ground portions crossed tenant rooms and are intentionally
+      // omitted; the relocated L1/L2 piers are authored from the JSON above.
+      addBox(group, materials.limestone, [x, upperCenter, z, .66, upperHeight, .72], 'Architectural upper side column shaft');
       addBox(group, materials.plasterLight, [x, 16.83, z, 1.02, .28, 1.08], 'Architectural side column capital');
       for (const y of [4.22, 8.82, 13.22]) {
         addBox(group, materials.bronzeLight, [x, y, z, .82, .10, .91], 'Architectural side column trim');
       }
-      addBox(group, materials.darkBronze, [side * (13.18), 8.55, z, .038, 15.52, .19], 'Architectural side column inset');
+      const insetHeight = 15.52 - groundTop;
+      addBox(group, materials.darkBronze, [side * (13.18), groundTop + insetHeight * .5, z, .038, insetHeight, .19], 'Architectural upper side column inset');
     }
   }
 }
@@ -659,6 +817,7 @@ export function buildAtriumShell(root: Group, stoneMap: Texture | null): Lightin
 
   addOuterStructure(group, materials);
   addPedestrianTermini(group, materials);
+  addRearTenantOpenings(group, materials);
   addColumnDetails(group, materials);
   for (const [index, floor] of ATRIUM_LEVELS.entries()) {
     for (const side of [-1, 1]) addUpperGallery(group, materials, side, index, floor, GALLERY_FRONT[index], REAR_Z);
