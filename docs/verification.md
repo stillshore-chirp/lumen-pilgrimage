@@ -12,7 +12,7 @@
 | 仮想モニター、WebXR | `npm run check` の後に `npm run test:monitor:browser` | 別タブの接続、合成メディアの伝送、表示・配置・音声、Fキーでの掴みと解放、模擬WebXRでの探索を確認します。OSの画面選択ダイアログは試験用に置き換えます。 |
 | 住戸または映画館 | `npm run check` の後に `npm run test:residence:browser` または `npm run test:cinema:browser` | 該当ワールドの画面操作とブラウザー描画を確認します。物理ディスプレイ、スピーカー、VR機器の出力品質は実機で別に確認します。 |
 | 商業アトリウム | `npm run check` の後に `npm run test:atrium:browser` | ソファ初期位置、立ち上がり、上階への移動、点灯による画面の変化を確認します。 |
-| 湖畔の広間 | `npm run check` の後に `npm run test:lake:browser` | 正面の昼夜、行灯と光源の持ち運び、両窓と背面の歩行境界、全方向の見え方、ワールド間の時刻、環境音と模擬WebXRを確認します。 |
+| 湖畔の広間 | `npm run check` の後に `npm run test:lake:browser` | 正面の昼夜、Fキーと模擬WebXRのグリップによる行灯と光源の持ち運び、両窓と背面の歩行境界、全方向の見え方、ワールド間の時刻、環境音と模擬WebXRを確認します。 |
 
 `npm run check` はローカルと CI のコードゲートです。ブラウザー試験と実機の画面共有・入力・音響は、それぞれ別の確認です。`validate:harness` は維持対象の各文書を README から辿れることも検査します。
 

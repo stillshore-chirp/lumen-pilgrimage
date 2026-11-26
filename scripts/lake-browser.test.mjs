@@ -3,9 +3,10 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
+import { Quaternion, Vector3 } from 'three';
 import { preview } from 'vite';
 import { installSimulatedXR } from './simulated-xr.mjs';
-import { LAKE_VIEW_FOV, LAKE_VIEW_VERTICAL_OFFSET } from '../src/coast/world/lake/lakeLayout.ts';
+import { LAKE_SPAWN, LAKE_VIEW_FOV, LAKE_VIEW_VERTICAL_OFFSET } from '../src/coast/world/lake/lakeLayout.ts';
 
 const screenshots = process.env.LAKE_SCREENSHOTS;
 const viewport = { width: 1440, height: 808 };
@@ -65,6 +66,9 @@ function observeAndon() {
   let view;
   let onScreen = true;
   window.andonDraw = null;
+  window.floatingMonitorDraw = null;
+  const toWorld = ([x, y, z]) => [0, 4, 8].map(i =>
+    view[i] * (x - view[12]) + view[i + 1] * (y - view[13]) + view[i + 2] * (z - view[14]));
 
   gl.getUniformLocation = function (program, name) {
     const location = locate.call(this, program, name);
@@ -82,8 +86,13 @@ function observeAndon() {
     // The sky submits the current pass's view matrix before the paper draws.
     // Three.js reuses the upload buffer across different matrix uniforms.
     if (uniform?.name === 'viewMatrix' && onScreen) view = matrix.slice();
-    if (uniform?.name === 'modelViewMatrix' && uniform.info.emissiveMap) {
-      uniform.info.paperPosition = [matrix[12], matrix[13], matrix[14]];
+    if (uniform?.name === 'modelViewMatrix') {
+      const position = [matrix[12], matrix[13], matrix[14]];
+      if (uniform.info.emissiveMap) uniform.info.paperPosition = position;
+      // The disconnected monitor is a unit quad scaled to 2.7 m by 2.7 × 9/16 m.
+      const isMonitorSize = Math.abs(Math.hypot(matrix[0], matrix[1], matrix[2]) - 2.7) < 0.001
+        && Math.abs(Math.hypot(matrix[4], matrix[5], matrix[6]) - 2.7 * 9 / 16) < 0.001;
+      uniform.info.monitorPosition = isMonitorSize ? position : undefined;
     }
     return setMatrix.call(this, location, transpose, matrix, ...rest);
   };
@@ -108,15 +117,16 @@ function observeAndon() {
     return bindFramebuffer.call(this, target, framebuffer);
   };
   gl.drawElements = function (mode, count, ...rest) {
-    // Each paper panel uses a 6-by-8 grid. The andon's point light has a 2.35 m cutoff.
-    if (onScreen && count === 6 * 8 * 6 && view && current?.paperPosition) {
-      const position = current[current.andonPosition];
-      const toWorld = ([x, y, z]) => [0, 4, 8].map(i =>
-        view[i] * (x - view[12]) + view[i + 1] * (y - view[13]) + view[i + 2] * (z - view[14]));
-      window.andonDraw = {
-        paper: toWorld(current.paperPosition),
-        light: position && toWorld(position),
-      };
+    if (onScreen && view && current) {
+      if (count === 6 && current.monitorPosition) window.floatingMonitorDraw = toWorld(current.monitorPosition);
+      // Each paper panel uses a 6-by-8 grid. The andon's point light has a 2.35 m cutoff.
+      if (count === 6 * 8 * 6 && current.paperPosition) {
+        const position = current[current.andonPosition];
+        window.andonDraw = {
+          paper: toWorld(current.paperPosition),
+          light: position && toWorld(position),
+        };
+      }
     }
     return draw.call(this, mode, count, ...rest);
   };
@@ -253,6 +263,17 @@ async function travel(page, world, name) {
   await dialog.waitFor({ state: 'hidden' });
 }
 
+function assertLightFollowsPaper({ paper, light }) {
+  assert.ok(Math.hypot(...light.map((value, i) => value - paper[i])) < 0.14,
+    'the rendered paper and point light remain together');
+}
+
+function controllerAim(origin, destination) {
+  const direction = new Vector3(...destination).sub(new Vector3(...origin)).normalize();
+  const { x, y, z, w } = new Quaternion().setFromUnitVectors(new Vector3(0, 0, -1), direction);
+  return { x, y, z, w };
+}
+
 test('lake hall starts at its photo comparison view and switches the sky to night', { timeout }, async t => {
   const { page, errors } = await newPage(t);
   await goToLake(page);
@@ -312,11 +333,6 @@ test('F carries the aimed night andon and leaves its paper and light at the new 
   const hint = page.locator('.coast-grab-hint[role="status"]');
   const pickup = hint.filter({ hasText: /^F 行灯を掴む$/ });
   const release = hint.filter({ hasText: /^F 行灯を置く$/ });
-  const assertLightFollowsPaper = ({ paper, light }) => {
-    assert.ok(Math.hypot(...light.map((value, i) => value - paper[i])) < 0.14,
-      'the rendered paper and point light remain together');
-  };
-
   await withPointerLock(page, async () => {
     await page.keyboard.down('w');
     await page.waitForFunction(() => window.lakeProbe.camera.z < 1.75);
@@ -469,6 +485,159 @@ test('a simulated XR viewer crosses the table footprint at standing height', { t
     return (eyePoses[0].y + eyePoses[320].y) / 2;
   });
   assert.ok(Math.abs(height - 1.65) < 0.05);
+  await action(page, 'VRを終了').click();
+  await page.waitForFunction(() => window.xrFixture.ends === 1);
+  assert.deepEqual(errors, []);
+});
+
+test('Quest Touch Plus grips, carries and sets the night andon down in simulated XR', { timeout }, async t => {
+  const { page, errors } = await newPage(t);
+  await page.addInitScript(installSimulatedXR);
+  await page.addInitScript(observeAndon);
+  await goToLake(page, '&time=night');
+  await page.waitForFunction(() => window.andonDraw?.light);
+  const original = await page.evaluate(() => window.andonDraw);
+  const [x, floorLightY, z] = original.light;
+  const change = value => page.evaluate(input => window.xrFixture.mutate(input), value);
+  const read = () => page.evaluate(() => {
+    const { eyePoses } = window.xrFixture;
+    return { andon: window.andonDraw, eyeX: (eyePoses[0].x + eyePoses[320].x) / 2 };
+  });
+  const gripPose = ([worldX, y, worldZ], walkedX = 0) => ({
+    position: { x: worldX - walkedX, y, z: worldZ - LAKE_SPAWN.z },
+  });
+  const aimPose = (origin, destination, walkedX = 0) => ({
+    ...gripPose(origin, walkedX), orientation: controllerAim(origin, destination),
+  });
+  const assertLightAt = (snapshot, expected, message) => {
+    assertLightFollowsPaper(snapshot.andon);
+    const distance = Math.hypot(...snapshot.andon.light.map((value, i) => value - expected[i]));
+    assert.ok(distance < 0.035, `${message} (distance ${distance.toFixed(3)} m)`);
+  };
+  const toggleMenu = async () => {
+    await change({ side: 'left', button: 4, pressed: true });
+    await change({ side: 'left', button: 4, pressed: false });
+  };
+
+  await action(page, 'VRを開始').click();
+  await page.waitForFunction(() => window.xrFixture.eyePoses[0] && window.xrFixture.eyePoses[320]);
+  const head = { x, z: z + 1.57 - LAKE_SPAWN.z, pitch: Math.atan2(original.paper[1] - 1.65, 1.57) };
+  await change({ head });
+  const reach = [x + 0.21, 0.84, z + 0.72];
+  await change({ side: 'right', gripSpace: gripPose([x + 0.12, 0.88, z + 0.60]),
+    targetRaySpace: aimPose(reach, [x + 0.4, 1, z]), squeeze: true });
+  assertLightAt(await read(), original.light, 'head aim alone cannot grab the andon');
+  await change({ side: 'right', squeeze: false });
+
+  await change({ head: { x: x - 0.42 }, side: 'right', targetRaySpace: aimPose(reach, original.light) });
+  await page.waitForFunction(() => window.xrFixture.hint?.includes('行灯を掴む'));
+  await change({ select: true });
+  await change({});
+  assertLightAt(await read(), original.light, 'the index trigger leaves the andon on the floor');
+  await toggleMenu();
+  await page.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
+  await change({ side: 'right', squeeze: true });
+  assertLightAt(await read(), original.light, 'the open menu blocks a grip');
+  await change({ side: 'right', squeeze: false });
+  await toggleMenu();
+
+  await change({ side: 'right', squeeze: true });
+  await page.waitForFunction(() => window.xrFixture.hint?.includes('行灯を置く'));
+  const grip = [x + 0.40, 1.10, z + 0.50];
+  const gripSpace = gripPose(grip);
+  gripSpace.orientation = { x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 };
+  await change({ side: 'right', gripSpace });
+  const carried = await read();
+  // The light is 20.5 cm above the base and the handle is about 47 cm above it.
+  const heldLight = [grip[0], grip[1] - 0.47 + floorLightY, grip[2]];
+  assertLightAt(carried, heldLight, 'the upright andon follows the grip pose');
+  const otherGrip = [grip[0] - 0.27, 1.02, grip[2] + 0.18];
+  await change({ side: 'left', gripSpace: gripPose(otherGrip),
+    targetRaySpace: aimPose(otherGrip, heldLight), squeeze: true });
+  assertLightAt(await read(), heldLight, 'the second hand does not take over the held andon');
+  await change({ side: 'left', squeeze: false });
+  assertLightAt(await read(), heldLight, 'releasing the other hand leaves the original grip holding the andon');
+  await change({ head: { x: x - 0.28 } });
+  const beforeWalk = await read();
+  assertLightAt(beforeWalk, heldLight, 'moving the head does not move the held andon');
+
+  await change({ side: 'left', axes: [1, 0], frames: 0 });
+  try {
+    await page.waitForFunction(eyeX => window.xrFixture.eyePoses[0].x > eyeX + 0.42, beforeWalk.eyeX);
+  } finally {
+    await change({ side: 'left', axes: [0, 0] });
+  }
+  const afterWalk = await read();
+  const walkedX = afterWalk.eyeX - beforeWalk.eyeX;
+  assertLightAt(afterWalk, [heldLight[0] + walkedX, heldLight[1], heldLight[2]], 'the held light moves with the walking rig');
+  await change({ side: 'right', squeeze: false });
+  const floor = [afterWalk.andon.light[0], floorLightY, afterWalk.andon.light[2]];
+  assertLightAt(await read(), floor, 'releasing the grip leaves the andon on the floor below the hand');
+  await change({ side: 'right', gripSpace: gripPose([x + 0.64, 0.88, z + 0.75], walkedX) });
+  assertLightAt(await read(), floor, 'the placed andon remains fixed when the right hand moves away');
+
+  const leftReach = [floor[0] - 0.14, 0.86, floor[2] + 0.62];
+  await change({ side: 'left', gripSpace: gripPose(leftReach, walkedX),
+    targetRaySpace: aimPose(leftReach, floor, walkedX), squeeze: true });
+  assertLightAt(await read(), [leftReach[0], leftReach[1] - 0.47 + floorLightY, leftReach[2]],
+    'the left grip can pick up the placed andon');
+  await change({ side: 'left', gripSpace: { tracked: false } });
+  const dropped = [leftReach[0], floorLightY, leftReach[2]];
+  assertLightAt(await read(), dropped, 'losing grip tracking sets the andon down');
+  await change({ side: 'left', gripSpace: { ...gripPose(leftReach, walkedX), tracked: true } });
+  assertLightAt(await read(), dropped, 'regaining tracking does not re-grab with the grip still pressed');
+  await change({ side: 'left', squeeze: false });
+
+  await action(page, '昼').click();
+  await page.waitForURL(url => url.searchParams.get('time') === 'day');
+  await page.evaluate(() => { window.andonDraw = null; });
+  await change({ side: 'left', targetRaySpace: aimPose(leftReach, dropped, walkedX), squeeze: true });
+  assert.equal(await page.evaluate(() => window.andonDraw), null, 'a daytime grip cannot bring the andon into view');
+  await change({ side: 'left', squeeze: false });
+  await action(page, '夜').click();
+  await page.waitForFunction(() => window.andonDraw?.light);
+  assertLightAt(await read(), dropped, 'the andon returns at the same floor position at night');
+
+  await action(page, 'VRを終了').click();
+  await page.waitForFunction(() => window.xrFixture.ends === 1);
+  assert.deepEqual(errors, []);
+});
+
+test('a disconnected floating monitor in front of the andon takes the simulated Quest grip', { timeout }, async t => {
+  const { page, errors } = await newPage(t);
+  await page.addInitScript(installSimulatedXR);
+  await page.addInitScript(observeAndon);
+  await goToLake(page, '&time=night');
+  await page.waitForFunction(() => window.andonDraw?.light);
+  await walk(page, 'w', () => window.lakeProbe.camera.z < 4.34);
+  await walk(page, 'd', () => window.lakeProbe.camera.x > 2.07);
+  const camera = await page.evaluate(() => window.lakeProbe.camera);
+  const panel = action(page, '仮想モニター');
+  await panel.click();
+  await action(page, 'モニターを表示').click();
+  await panel.click();
+  await action(page, 'VRを開始').click();
+  await page.waitForFunction(() => window.xrFixture.eyePoses[0] && window.xrFixture.eyePoses[320]);
+  const change = value => page.evaluate(input => window.xrFixture.mutate(input), value);
+  await change({ head: { z: -2.22, pitch: -0.55 } });
+  const read = () => page.evaluate(() => ({ monitor: window.floatingMonitorDraw, light: window.andonDraw?.light }));
+  await page.waitForFunction(() => window.floatingMonitorDraw && window.andonDraw?.light);
+  const start = await read();
+  const [x, y, z] = start.light;
+  assert.ok(start.monitor[2] > z + 0.5, 'the monitor is rendered in front of the andon');
+  const target = [x - camera.x, y, z - camera.z];
+  const origin = [x - camera.x, 1.30, start.monitor[2] + 0.30 - camera.z];
+  const [handX, handY, handZ] = origin;
+  const aim = { position: { x: handX, y: handY, z: handZ }, orientation: controllerAim(origin, target) };
+  const travelX = 0.72;
+  await change({ side: 'right', gripSpace: { position: aim.position }, targetRaySpace: aim, squeeze: true });
+  await change({ side: 'right', gripSpace: { position: { x: handX + travelX } } });
+  const dragged = await read();
+  const distance = (from, to) => Math.hypot(...from.map((value, i) => value - to[i]));
+  const movedMonitor = [start.monitor[0] + travelX, start.monitor[1], start.monitor[2]];
+  assert.ok(distance(dragged.monitor, movedMonitor) < 0.035, 'the rendered monitor follows the squeezing hand');
+  assert.ok(distance(dragged.light, start.light) < 0.035, 'the lamp behind the monitor stays on the floor');
+  await change({ side: 'right', squeeze: false });
   await action(page, 'VRを終了').click();
   await page.waitForFunction(() => window.xrFixture.ends === 1);
   assert.deepEqual(errors, []);

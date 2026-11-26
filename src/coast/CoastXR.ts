@@ -3,6 +3,8 @@ import { ImmersiveControls } from '../xr/ImmersiveControls';
 import { ImmersiveMenu, type ImmersiveMenuItem } from '../xr/ImmersiveMenu';
 import { ImmersiveSession } from '../xr/ImmersiveSession';
 import type { CoastControls } from './CoastControls';
+import type { DesktopGrabTarget, GrabOcclusion } from './DesktopGrab';
+import { WorldXRGrab } from './WorldXRGrab';
 
 interface Binding {
   readonly scene: Scene;
@@ -14,6 +16,8 @@ interface Binding {
   readonly interact: (viewer: PerspectiveCamera) => void;
   readonly blocking: () => boolean;
   readonly status: () => string;
+  readonly grabTargets?: readonly DesktopGrabTarget[];
+  readonly grabOccluded?: GrabOcclusion;
 }
 
 const UP = new Vector3(0, 1, 0);
@@ -32,6 +36,7 @@ export class CoastXR {
   private readonly navigationView = { yaw: 0, headOffset: this.headOffset };
   private readonly bodyOrigin = new Vector3();
   private readonly input = new ImmersiveControls();
+  private readonly worldGrab = new WorldXRGrab(this.rig);
   private menu?: ImmersiveMenu;
   private binding?: Binding;
   private active: XRSession | null = null;
@@ -55,8 +60,11 @@ export class CoastXR {
 
   get menuOpen(): boolean { return this.menu?.open ?? false; }
 
+  get isGrabbingWorldObject(): boolean { return this.worldGrab.isGrabbing; }
+
   bind(binding: Binding): void {
     this.binding = binding;
+    this.worldGrab.bind(binding.grabTargets, binding.grabOccluded);
     binding.scene.add(this.rig);
     if (this.menu) binding.scene.add(...this.menu.elements);
     this.camera.copy(binding.camera, false);
@@ -65,6 +73,7 @@ export class CoastXR {
   }
 
   relocate(): void {
+    this.worldGrab.release();
     this.anchorPending = true;
     this.tracked = false;
     this.previouslyTracked = false;
@@ -74,6 +83,7 @@ export class CoastXR {
 
   openMenu(title: string, items: readonly ImmersiveMenuItem[]): void {
     if (!this.tracked || !this.binding) return;
+    this.worldGrab.release();
     if (!this.menu) {
       this.menu = new ImmersiveMenu();
       this.binding.scene.add(...this.menu.elements);
@@ -88,11 +98,16 @@ export class CoastXR {
     this.input.pauseMovement();
   }
 
+  releaseUnavailableWorldGrab(): void {
+    this.worldGrab.releaseUnavailable();
+  }
+
   update(frame: XRFrame | undefined, dt: number): PerspectiveCamera {
     const binding = this.binding!;
     if (!this.active) return binding.camera;
     const reference = this.xr.getReferenceSpace();
     if (reference !== this.reference) {
+      this.worldGrab.release();
       this.reference?.removeEventListener('reset', this.onReferenceReset);
       this.reference = reference;
       this.reference?.addEventListener('reset', this.onReferenceReset);
@@ -129,9 +144,11 @@ export class CoastXR {
       this.updateViewer();
     }
 
+    const canGrab = !this.menuOpen && !binding.blocking();
+    const grabHint = canGrab ? this.worldGrab.update(frame, reference) : this.worldGrab.release();
     if (!this.menuOpen) {
-      const interaction = !binding.blocking() && binding.interaction(this.pose);
-      const hint = binding.status() || (interaction ? `右トリガー  ${interaction}` : '')
+      const interaction = canGrab && !grabHint && binding.interaction(this.pose);
+      const hint = binding.status() || grabHint || (interaction ? `右トリガー  ${interaction}` : '')
         || (performance.now() < this.hintsUntil ? OPEN_HINT : '');
       if (hint && !this.menu) {
         this.menu = new ImmersiveMenu();
@@ -153,6 +170,10 @@ export class CoastXR {
     if (session === this.active) return;
     this.active?.removeEventListener('select', this.onSelect);
     this.active?.removeEventListener('visibilitychange', this.onVisibility);
+    this.active?.removeEventListener('squeezestart', this.onSqueezeStart);
+    this.active?.removeEventListener('squeezeend', this.onSqueezeEnd);
+    this.active?.removeEventListener('inputsourceschange', this.onSourcesChange);
+    this.worldGrab.reset();
     this.reference?.removeEventListener('reset', this.onReferenceReset);
     this.reference = null;
     if (this.active && this.previouslyTracked) {
@@ -162,6 +183,9 @@ export class CoastXR {
     this.active = session;
     this.active?.addEventListener('select', this.onSelect);
     this.active?.addEventListener('visibilitychange', this.onVisibility);
+    this.active?.addEventListener('squeezestart', this.onSqueezeStart);
+    this.active?.addEventListener('squeezeend', this.onSqueezeEnd);
+    this.active?.addEventListener('inputsourceschange', this.onSourcesChange);
     this.binding?.controls.setDesktopInputEnabled(!session);
     this.relocate();
     this.input.reset();
@@ -175,6 +199,24 @@ export class CoastXR {
       || inputSource.gamepad?.mapping !== 'xr-standard' || !frame.getPose(inputSource.targetRaySpace, reference)) return;
     if (this.menu?.open) this.menu.handle(0, true);
     else binding.interact(this.pose);
+  };
+
+  private referenceForGrab(): XRReferenceSpace | null {
+    if (!this.tracked || this.menuOpen || !this.binding || this.binding.blocking()
+      || this.active?.visibilityState !== 'visible' || this.xr.getReferenceSpace() !== this.reference) return null;
+    return this.reference;
+  }
+
+  private readonly onSqueezeStart = (event: XRInputSourceEvent): void => {
+    if (event.frame.session === this.active) this.worldGrab.start(event, this.referenceForGrab());
+  };
+
+  private readonly onSqueezeEnd = (event: XRInputSourceEvent): void => {
+    if (event.frame.session === this.active) this.worldGrab.end(event, this.referenceForGrab());
+  };
+
+  private readonly onSourcesChange = ({ removed }: XRInputSourcesChangeEvent): void => {
+    this.worldGrab.removeSources(removed);
   };
 
   private readonly onVisibility = (): void => {
@@ -192,6 +234,7 @@ export class CoastXR {
   };
 
   private clearInput(): void {
+    this.worldGrab.release();
     this.tracked = false;
     this.input.reset();
     this.menu?.showHint(this.pose, '');

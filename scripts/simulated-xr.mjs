@@ -1,7 +1,7 @@
 export function installSimulatedXR() {
   const fixture = {
     requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
-    head: { x: 0, y: 1.65, z: 0, yaw: 0 }, eyePoses: {},
+    head: { x: 0, y: 1.65, z: 0, yaw: 0, pitch: 0 }, eyePoses: {},
   };
   window.xrFixture = fixture;
   const raf = window.requestAnimationFrame.bind(window);
@@ -67,8 +67,9 @@ export function installSimulatedXR() {
   ]);
 
   function viewPose() {
-    const { x, y, z, yaw } = fixture.head;
-    const center = new DOMMatrix().translate(x, y, z).rotate(0, yaw * 180 / Math.PI, 0);
+    const { x, y, z, yaw, pitch } = fixture.head;
+    const center = new DOMMatrix().translate(x, y, z)
+      .rotate(0, yaw * 180 / Math.PI, 0).rotate(pitch * 180 / Math.PI, 0, 0);
     const transform = { matrix: center.toFloat32Array() };
     const views = ['left', 'right'].map((eye, index) => ({
       eye, projectionMatrix,
@@ -77,19 +78,30 @@ export function installSimulatedXR() {
     return { transform, views };
   }
 
-  function controller(handedness) {
+  function controllerSpace(handedness) {
+    const position = { x: handedness === 'left' ? -.24 : .24, y: 1.3, z: -.23 };
+    const orientation = { x: 0, y: 0, z: 0, w: 1 };
     const transform = {
-      position: { x: handedness === 'left' ? -.24 : .24, y: 1.3, z: -.23 },
-      orientation: { x: 0, y: 0, z: 0, w: 1 },
+      position, orientation,
+      get matrix() {
+        const matrix = new DOMMatrix().translate(position.x, position.y, position.z);
+        const { x, y, z, w } = orientation;
+        const axisLength = Math.hypot(x, y, z);
+        if (axisLength) matrix.rotateAxisAngleSelf(x, y, z, 2 * Math.atan2(axisLength, w) * 180 / Math.PI);
+        return matrix.toFloat32Array();
+      },
     };
-    const space = { transform, emulatedPosition: false };
+    return { transform, emulatedPosition: false, tracked: true };
+  }
+
+  function controller(handedness) {
     return {
       handedness, targetRayMode: 'tracked-pointer', profiles: ['meta-quest-touch-plus'],
       gamepad: {
         mapping: 'xr-standard', axes: [0, 0, 0, 0],
         buttons: Array.from({ length: 7 }, () => ({ pressed: false, value: 0 })),
       },
-      gripSpace: space, targetRaySpace: space,
+      gripSpace: controllerSpace(handedness), targetRaySpace: controllerSpace(handedness),
     };
   }
 
@@ -99,7 +111,14 @@ export function installSimulatedXR() {
     async requestReferenceSpace() { return new EventTarget(); }
     updateRenderState() {}
     makeFrame() {
-      return { session: this, getViewerPose: viewPose, getPose: space => space };
+      return { session: this, getViewerPose: viewPose, getPose: space => space?.tracked === false ? null : space ?? null };
+    }
+    dispatchInput(type, inputSource) {
+      const frame = this.makeFrame();
+      if (type.startsWith('squeeze')) {
+        frame.getViewerPose = () => { throw new DOMException('', 'InvalidStateError'); };
+      }
+      this.dispatchEvent(Object.assign(new Event(type), { inputSource, frame }));
     }
     requestAnimationFrame(callback) {
       return raf(time => {
@@ -127,9 +146,20 @@ export function installSimulatedXR() {
     if (change.button !== undefined) source.gamepad.buttons[change.button] = {
       pressed: change.pressed, value: Number(change.pressed),
     };
-    if (change.select) session.dispatchEvent(Object.assign(new Event('select'), {
-      inputSource: session.inputSources[1], frame: session.makeFrame(),
-    }));
+    for (const name of ['gripSpace', 'targetRaySpace']) {
+      const pose = change[name];
+      if (!pose) continue;
+      const space = source[name];
+      if (pose.tracked !== undefined) space.tracked = pose.tracked;
+      Object.assign(space.transform.position, pose.position);
+      Object.assign(space.transform.orientation, pose.orientation);
+    }
+    if (change.select) session.dispatchInput('select', session.inputSources[1]);
+    if (change.squeeze !== undefined) {
+      source.gamepad.buttons[1] = { pressed: change.squeeze, value: Number(change.squeeze) };
+      if (!change.squeeze) session.dispatchInput('squeeze', source);
+      session.dispatchInput(change.squeeze ? 'squeezestart' : 'squeezeend', source);
+    }
     if (change.head) Object.assign(fixture.head, change.head);
     if (change.visibility) {
       session.visibilityState = change.visibility;
