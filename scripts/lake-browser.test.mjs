@@ -970,6 +970,15 @@ test('the twelve ceiling speakers play and stop koto from desktop and simulated 
   await page.addInitScript(observeOutput);
   await page.addInitScript(() => {
     localStorage.setItem('lumen-pilgrimage:sound', JSON.stringify({ environmentOn: false, footstepsOn: false, master: 1 }));
+    const resume = AudioContext.prototype.resume;
+    let rejected = false;
+    AudioContext.prototype.resume = function () {
+      if (!rejected) {
+        rejected = true;
+        return Promise.reject(new DOMException('Audio start was blocked', 'NotAllowedError'));
+      }
+      return resume.call(this);
+    };
     const NativePanner = window.PannerNode;
     window.ceilingPanners = [];
     window.PannerNode = class extends NativePanner {
@@ -985,15 +994,7 @@ test('the twelve ceiling speakers play and stop koto from desktop and simulated 
   await action(page, '環境設定').click();
   assert.equal(await koto.getAttribute('aria-pressed'), 'false');
   await koto.click();
-  await page.waitForFunction(() => window.lakeAudioProbe.peak() > 0.001);
-  assert.equal(await koto.getAttribute('aria-pressed'), 'true');
-  const speakers = await page.evaluate(() => window.ceilingPanners);
-  assert.equal(speakers.length, 12);
-  assert.equal(new Set(speakers.map(speaker => speaker.positionX)).size, 4);
-  assert.equal(new Set(speakers.map(speaker => speaker.positionZ)).size, 3);
-  assert.ok(speakers.every(speaker => speaker.panningModel === 'HRTF'));
-  await koto.click();
-  await page.waitForFunction(() => window.lakeAudioProbe.peak() < 0.00002);
+  await dialog.getByRole('status').waitFor();
   assert.equal(await koto.getAttribute('aria-pressed'), 'false');
   await dialog.getByRole('button', { name: '閉じる', exact: true }).click();
 
@@ -1017,12 +1018,25 @@ test('the twelve ceiling speakers play and stop koto from desktop and simulated 
   await page.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
   await choose('設定', '設定');
   await choose('湖畔の環境設定', '湖畔の環境設定');
-  await choose('琴を再生する');
+  await choose('琴を再生する（再試行）');
   await page.waitForFunction(() => window.xrFixture.selection === '琴を停止する' && window.lakeAudioProbe.peak() > 0.001);
   await choose('琴を停止する');
   await page.waitForFunction(() => window.xrFixture.selection === '琴を再生する' && window.lakeAudioProbe.peak() < 0.00002);
-  assert.equal(await page.evaluate(() => window.ceilingPanners.length), 12);
   await action(page, 'VRを終了').click();
   await page.waitForFunction(() => window.xrFixture.ends === 1);
+
+  await action(page, '環境設定').click();
+  await dialog.getByRole('status').waitFor({ state: 'hidden' });
+  await koto.click();
+  await page.waitForFunction(() => window.lakeAudioProbe.peak() > 0.001);
+  assert.equal(await koto.getAttribute('aria-pressed'), 'true');
+  const speakers = await page.evaluate(() => window.ceilingPanners);
+  assert.equal(speakers.length, 12);
+  assert.equal(new Set(speakers.map(speaker => speaker.positionX)).size, 4);
+  assert.equal(new Set(speakers.map(speaker => speaker.positionZ)).size, 3);
+  assert.ok(speakers.every(speaker => speaker.panningModel === 'HRTF'));
+  await koto.click();
+  await page.waitForFunction(() => window.lakeAudioProbe.peak() < 0.00002);
+  assert.equal(await koto.getAttribute('aria-pressed'), 'false');
   assert.deepEqual(errors, []);
 });

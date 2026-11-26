@@ -9,6 +9,35 @@ export interface LakeKotoControls {
   setKotoPlaying(value: boolean): Promise<void>;
 }
 
+export function createLakeKotoTransport(audio: LakeKotoControls) {
+  const events = new EventTarget();
+  let pending = false;
+  let failed = false;
+  const notify = () => events.dispatchEvent(new Event('change'));
+  return {
+    get playing() { return audio.kotoPlaying; },
+    get pending() { return pending; },
+    get failed() { return failed; },
+    observe(listener: () => void) { events.addEventListener('change', listener); },
+    async toggle() {
+      if (pending) return;
+      pending = true;
+      failed = false;
+      notify();
+      try {
+        await audio.setKotoPlaying(!audio.kotoPlaying);
+      } catch {
+        failed = true;
+      } finally {
+        pending = false;
+        notify();
+      }
+    },
+  };
+}
+
+type LakeKotoTransport = ReturnType<typeof createLakeKotoTransport>;
+
 function makeButton(text: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
@@ -16,7 +45,7 @@ function makeButton(text: string): HTMLButtonElement {
   return button;
 }
 
-export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () => void, koto?: LakeKotoControls) {
+export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () => void, koto?: LakeKotoTransport) {
   const element = document.createElement('div');
   element.className = 'coast-travel-panel';
   const trigger = makeButton('環境設定');
@@ -58,22 +87,12 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
   const audioStatus = document.createElement('p');
   audioStatus.className = 'lake-environment-audio-status';
   audioStatus.setAttribute('role', 'status');
+  audioStatus.textContent = '再生できませんでした。もう一度押してください。';
   audioStatus.hidden = true;
   if (koto && kotoButton) {
     switches.append(kotoButton);
-    kotoButton.addEventListener('click', async () => {
-      audioStatus.hidden = true;
-      kotoButton.disabled = true;
-      try {
-        await koto.setKotoPlaying(!koto.kotoPlaying);
-      } catch {
-        audioStatus.textContent = '再生できませんでした。もう一度押してください。';
-        audioStatus.hidden = false;
-      } finally {
-        kotoButton.disabled = false;
-        sync();
-      }
-    });
+    kotoButton.addEventListener('click', () => void koto.toggle());
+    koto.observe(syncKoto);
   }
 
   const sliders = document.createElement('div');
@@ -113,10 +132,17 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
   dialog.append(header, content);
   element.append(trigger, dialog);
 
+  function syncKoto(): void {
+    if (!koto || !kotoButton) return;
+    kotoButton.setAttribute('aria-pressed', String(koto.playing));
+    kotoButton.disabled = koto.pending;
+    audioStatus.hidden = !koto.failed;
+  }
+
   function sync(): void {
     const { state } = settings;
     for (const { button, key } of toggles) button.setAttribute('aria-pressed', String(state[key]));
-    if (koto && kotoButton) kotoButton.setAttribute('aria-pressed', String(koto.kotoPlaying));
+    syncKoto();
     for (const { input, output, key } of axes) {
       const value = state[key].toFixed(1);
       if (input.value !== value) input.value = value;
@@ -144,9 +170,7 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
 }
 
 export function createLakeEnvironmentXRItems(settings: LakeSettings,
-  open: (name: string, items: readonly ImmersiveMenuItem[]) => void, back: () => void, koto?: LakeKotoControls) {
-  let pending = false;
-  let failed = false;
+  open: (name: string, items: readonly ImmersiveMenuItem[]) => void, back: () => void, koto?: LakeKotoTransport) {
   function show(): void {
     const toggles = lakeToggleControls.map(({ key, label }) => ({
       label: () => `${label}  ${settings.state[key] ? '表示中' : '非表示'}`,
@@ -169,22 +193,12 @@ export function createLakeEnvironmentXRItems(settings: LakeSettings,
     }));
     const kotoRows: ImmersiveMenuItem[] = koto ? [{
       label: () => {
-        if (pending) return '琴を準備しています';
-        if (failed) return '琴を再生する（再試行）';
-        return koto.kotoPlaying ? '琴を停止する' : '琴を再生する';
+        if (koto.pending) return '琴を準備しています';
+        if (koto.failed) return '琴を再生する（再試行）';
+        return koto.playing ? '琴を停止する' : '琴を再生する';
       },
-      enabled: () => !pending,
-      invoke: async () => {
-        pending = true;
-        failed = false;
-        try {
-          await koto.setKotoPlaying(!koto.kotoPlaying);
-        } catch {
-          failed = true;
-        } finally {
-          pending = false;
-        }
-      },
+      enabled: () => !koto.pending,
+      invoke: () => void koto.toggle(),
     }] : [];
     open(label, [
       ...toggles, ...kotoRows, ...axes,
