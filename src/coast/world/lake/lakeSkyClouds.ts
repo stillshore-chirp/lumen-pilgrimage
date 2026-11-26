@@ -24,7 +24,7 @@ type CloudBank = {
 // through the ring while the lower, nearer clouds break up its feet.
 const banks: readonly CloudBank[] = [
   { tile: 'bank', center: [-125, 44, -344], size: [91, 54], opacity: 0.82, wind: 1.13 },
-  { tile: 'cluster', center: [-67, 27, -382], size: [106, 53], opacity: 0.74, wind: 1.27 },
+  { tile: 'cluster', center: [-180, 44, -525], size: [114, 62], opacity: 0.62, wind: 1.27 },
   { tile: 'bank', center: [74, 29, -403], size: [144, 44], opacity: 0.95, wind: 1.54 },
   { tile: 'chain', center: [221, 48, -365], size: [108, 69], opacity: 0.76, wind: 1.38 },
   { tile: 'chain', center: [-185, 106, -610], size: [210, 119], opacity: 0.94, wind: 2.06 },

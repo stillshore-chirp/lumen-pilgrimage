@@ -232,7 +232,9 @@ export function addLakeFarArchitecture(surface: PlantSurface): void {
     divisions: 5, yaw: 0.15, color: paleStone });
   addPlinth(add, [-113, -95.8, -358, -378.3, -1.2, 11.1], paleStone);
 
+  // The lower footing turns into the court while the shaft stands apart above it.
   addPlinth(detachedFace, [-94, -72.9, -392.1, -422, -1.3, 13.9]);
+  addPlinth(detachedFace, [-83.2, -65.7, -397.3, -424.7, -1.3, 11.7], darkStone);
   addShaft(detachedFace, {
     volume: [-89.9, -75.2, -394.7, -416.3, 12.2, 59.8], sill: 16.1, bays: 8, spacing: 2.5, setBack: 1.2,
     pierStops: [1, 4, 6],
