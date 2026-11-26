@@ -3,6 +3,7 @@ import { coastRandom } from '../../terrain';
 import { PlantSurface } from '../coastTreeMeshes';
 import { addLakeBankPines, type LakePine } from './lakeBasinPines';
 import { addRockMass, buildLakeStoneRing, lakeStoneMaterials, type RockMass } from './lakeBasinStone';
+import { addLakeFarArchitecture } from './lakeFarArchitecture';
 import { LAKE_TERRAIN, LAKE_WATER_Y } from './lakeLayout';
 
 type BankSide = -1 | 1;
@@ -252,7 +253,12 @@ function buildFarShore(root: Group, material: MeshStandardMaterial): void {
       const apron = MathUtils.lerp(-2.1, 2.15, MathUtils.smoothstep(bar, -22, -10));
       const bars = MathUtils.smoothstep(bar, -7, 12) * (1.45 + 1.25 * relief + 0.49 * wave);
       const plain = MathUtils.smoothstep(bar, 8, 73) * (2.1 + 4.6 * relief);
-      const y = LAKE_WATER_Y + apron + bars + plain;
+      // The dry gravel rises into a low apron under the central eave and a broader slope in the east.
+      const slope = MathUtils.smoothstep(bar, -7, 25) * (7.6 + 4.9 * MathUtils.smoothstep(x, 95, 240));
+      const fromEave = (x + 44) / 28;
+      const apronRelief = 11.4 * Math.exp(-fromEave * fromEave)
+        * MathUtils.smoothstep(bar, -5, 7) * (1 - MathUtils.smoothstep(bar, 22, 63));
+      const y = LAKE_WATER_Y + apron + bars + plain + slope + apronRelief;
       const dry = MathUtils.smoothstep(y, LAKE_WATER_Y, LAKE_WATER_Y + 0.48);
       const lee = MathUtils.smoothstep(bar, -4, 6) * MathUtils.smoothstep(wave, 0.05, 0.97);
       const exposedApron = dry * (1.0 - MathUtils.smoothstep(bar, -6, 10));
@@ -265,85 +271,6 @@ function buildFarShore(root: Group, material: MeshStandardMaterial): void {
     previous = row;
   }
   addMesh(root, ground, material, 'Pale alluvial terraces on the far shore');
-}
-
-type ShoreBuilding = readonly [x: number, z: number, width: number, depth: number, height: number, form: 'tower' | 'hall'];
-
-const distantBuildings: readonly ShoreBuilding[] = [
-  [-133, -411, 16.7, 21, 55, 'tower'],
-  [-117.2, -403, 16, 19, 67, 'tower'],
-  [-92, -415, 16.7, 20, 56, 'tower'],
-  [-66, -405, 32, 28, 13, 'hall'],
-  [-53, -431, 29, 19, 16, 'hall'],
-  [-27, -422, 27, 24, 10, 'hall'],
-  [14, -448, 42, 33, 17, 'hall'],
-  [62, -421, 31, 21, 13, 'hall'],
-  [103, -410, 27, 16, 13, 'hall'],
-  [132, -424, 35, 24, 16, 'hall'],
-  [221, -407, 19, 22, 47, 'tower'],
-  [242, -429, 35, 36, 22, 'hall'],
-  [274, -445, 31, 24, 24, 'hall'],
-];
-
-function buildFarSettlement(root: Group, material: MeshStandardMaterial): void {
-  const surface = new PlantSurface();
-  const point = new Vector3();
-  const random = coastRandom(27491);
-  const masonry = new Color(0x8e9699);
-  const glass = new Color(0x697e90);
-  const cap = new Color(0xa3a49e);
-  const frame = new Color(0xa0a8ab);
-  type Vertex = readonly [x: number, y: number, z: number];
-  const facet = (corners: readonly Vertex[], color: Color, shade = 1) => {
-    const [a, b, c, d] = corners.map(corner => surface.point(point.set(...corner), color, shade));
-    surface.triangle(a, b, c);
-    surface.triangle(b, d, c);
-  };
-  const face = (x: number, z: number, width: number, y: number, height: number, color: Color, shade = 1) =>
-    facet([[x, y, z], [x + width, y, z], [x, y + height, z], [x + width, y + height, z]], color, shade);
-  const block = (x: number, z: number, width: number, depth: number, y: number, height: number, color: Color, shade: number) => {
-    const east = x + width;
-    const back = z - depth;
-    const top = y + height;
-    face(x, z, width, y, height, color, shade);
-    facet([[east, y, z], [east, y, back], [east, top, z], [east, top, back]], color, shade * 0.83);
-    facet([[x, y, back], [x, y, z], [x, top, back], [x, top, z]], color, shade * 0.77);
-    facet([[east, y, back], [x, y, back], [east, top, back], [x, top, back]], color, shade * 0.73);
-    facet([[x, top, z], [east, top, z], [x, top, back], [east, top, back]], color, shade * 1.12);
-  };
-  for (const [x, z, width, depth, height, form] of distantBuildings) {
-    const tower = form === 'tower';
-    const shade = 0.8 + random() * 0.29;
-    const podium = tower ? 15.5 : 12.4;
-    const top = height + (tower ? 1 : 7);
-    block(x - 2.3, z + 2.7, width + 4.6, depth + 4.7, 2, podium - 2, masonry, shade);
-    block(x, z, width, depth, podium - 1, top - podium + 1, masonry, shade);
-    block(x - 0.18, z + 0.25, width + 0.36, depth + 0.45, top, tower ? 0.73 : 1.19, cap, shade);
-    block(x + width * 0.14, z - depth * 0.3, width * 0.65, depth * 0.46, top + 0.5,
-      tower ? 1.88 : 1.35, frame, shade * 0.93);
-    const columns = Math.round(width / (tower ? 2.6 : 5.5));
-    const bay = width / columns;
-    for (let column = 0; column < columns; column += 1) {
-      const jamb = x + bay * (column + 0.19);
-      face(jamb, z + 0.016, bay * 0.57, podium + 0.8, top - podium - 1.5,
-        glass, shade * (0.88 + random() * 0.25));
-      if (!tower) continue;
-      for (let level = podium + 2.6; level < top - 1.2; level += 3.45) {
-        face(jamb, z + 0.025, bay * 0.57, level, 0.49, frame, shade * (0.72 + random() * 0.20));
-      }
-    }
-    if (!tower) continue;
-    block(x + width - 0.24, z + 0.18, 0.46, depth + 0.34, podium, top - podium, frame, shade * 1.10);
-    for (let bay = 2.1; bay < depth - 0.9; bay += 2.78) {
-      const near = z - bay;
-      const far = near - 1.40;
-      const east = x + width + 0.013;
-      const west = x - 0.013;
-      facet([[east, podium, near], [east, podium, far], [east, top - 1, near], [east, top - 1, far]], glass, shade * 0.91);
-      facet([[west, podium, far], [west, podium, near], [west, top - 1, far], [west, top - 1, near]], glass, shade * 0.79);
-    }
-  }
-  addMesh(root, surface, material, 'Distant valley buildings and inset facades');
 }
 
 function addMesh(root: Group, surface: PlantSurface, material: MeshStandardMaterial, name: string): void {
@@ -377,6 +304,8 @@ export async function buildLakeBasin(root: Group): Promise<void> {
     vertexColors: true, roughness: 0.94, emissive: 0x756e60, emissiveIntensity: 0.055,
   });
   buildFarShore(root, sand);
-  buildFarSettlement(root, far);
+  const architecture = new PlantSurface();
+  addLakeFarArchitecture(architecture);
+  addMesh(root, architecture, far, 'Far shore walls, roof ledges and terraces');
   await addLakeBankPines(root, trees);
 }
