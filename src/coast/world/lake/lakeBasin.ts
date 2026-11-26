@@ -1,7 +1,7 @@
 import { Color, MathUtils, Mesh, Vector3, type Group, type MeshStandardMaterial } from 'three';
 import { coastRandom } from '../../terrain';
 import { PlantSurface } from '../coastTreeMeshes';
-import { addLakeBankPines, type LakePine } from './lakeBasinPines';
+import { addLakeBankVegetation, addLakeGroundCover, type LakePlant, type LakeGroundPatch } from './lakeVegetation';
 import { addRockMass, buildLakeStoneRing, lakeStoneMaterials, type RockMass } from './lakeBasinStone';
 import { addLakeFarArchitecture } from './lakeFarArchitecture';
 import { buildFarShoreSurface, farShoreMaterial } from './lakeFarShore';
@@ -156,17 +156,17 @@ const basinCliffs: readonly RockMass[] = [
   { x: 183, z: -556, radiusX: 72, radiusZ: 55, height: 45, yaw: 0.88, seed: 193, color: 0xa5b6c0, taper: 0.58, detail: 0.62 },
 ];
 
-const pines: readonly (Omit<LakePine, 'y'> & { y?: number })[] = [
-  { x: -33.2, y: 15.6, z: -50.8, height: 7.1, spread: 7.1, yaw: 0.51, seed: 90, form: 'broad' },
-  { x: -34.2, y: 7.9, z: -44.1, height: 5.4, spread: 4.98, yaw: 0.31, seed: 23 },
-  { x: -51.8, y: 16.8, z: -76.4, height: 5.1, spread: 5.26, yaw: 0.55, seed: 67 },
-  { x: -30.4, z: -41.8, height: 5.9, spread: 5.4, yaw: 0.98, seed: 73 },
-  { x: 46.9, z: -54, height: 9.1, spread: 7.5, yaw: 1.91, seed: 11, form: 'broad', windYaw: 2.84 },
-  { x: 41.5, z: -52.5, height: 6.1, spread: 5.5, yaw: -2.80, seed: 41, windYaw: 2.65 },
-  { x: 52, z: -67, height: 8.4, spread: 7.45, yaw: -0.61, seed: 42 },
-  { x: 250, y: 50, z: -322, height: 10.8, spread: 9.4, yaw: 3.86, seed: 9 },
-  { x: -58.6, y: 8.2, z: -180.8, height: 10.4, spread: 11.8, yaw: -0.88, seed: 14 },
-  { x: -62.7, y: 4.1, z: -215.8, height: 9.3, spread: 8.2, yaw: 1.09, seed: 16 },
+const bankTrees: readonly (Omit<LakePlant, 'y'> & { y?: number })[] = [
+  { x: -33.2, y: 15.6, z: -50.8, height: 7.1, spread: 7.1, yaw: 0.51, seed: 90, form: 'broadleaf' },
+  { x: -34.2, y: 7.9, z: -44.1, height: 5.4, spread: 4.98, yaw: 0.31, seed: 23, form: 'pine' },
+  { x: -51.8, y: 16.8, z: -76.4, height: 5.1, spread: 5.26, yaw: 0.55, seed: 67, form: 'pine' },
+  { x: -30.4, z: -41.8, height: 5.9, spread: 5.4, yaw: 0.98, seed: 73, form: 'broadleaf' },
+  { x: 46.9, z: -54, height: 9.1, spread: 7.5, yaw: 1.91, seed: 11, form: 'pine', windYaw: 2.84 },
+  { x: 41.5, z: -52.5, height: 6.1, spread: 5.5, yaw: -2.80, seed: 41, form: 'broadleaf', windYaw: 2.65 },
+  { x: 52, z: -67, height: 8.4, spread: 7.45, yaw: -0.61, seed: 42, form: 'pine' },
+  { x: 250, y: 50, z: -322, height: 10.8, spread: 9.4, yaw: 3.86, seed: 9, form: 'pine' },
+  { x: -58.6, y: 8.2, z: -180.8, height: 10.4, spread: 11.8, yaw: -0.88, seed: 14, form: 'broadleaf' },
+  { x: -62.7, y: 4.1, z: -215.8, height: 9.3, spread: 8.2, yaw: 1.09, seed: 16, form: 'pine' },
 ];
 
 function insideCliffFootprint(x: number, z: number): boolean {
@@ -183,9 +183,9 @@ function insideCliffFootprint(x: number, z: number): boolean {
   });
 }
 
-function addShoreDetails(ledges: Readonly<Record<BankSide, PlantSurface>>): LakePine[] {
+function addShoreDetails(ledges: Readonly<Record<BankSide, PlantSurface>>): LakePlant[] {
   const random = coastRandom(81557);
-  const trees = pines.map(pine => {
+  const trees: LakePlant[] = bankTrees.map(pine => {
     const side = pine.x < 0 ? -1 : 1;
     const distance = -pine.z;
     const x = Math.abs(pine.x);
@@ -217,17 +217,18 @@ function addShoreDetails(ledges: Readonly<Record<BankSide, PlantSurface>>): Lake
       const yaw = random() * 6.28;
       if (insideCliffFootprint(side * x, -distance)) continue;
       trees.push({ x: side * x, y: bankHeight(side, x, offset, distance) - 0.13,
-        z: -distance, height, spread, yaw, seed: 450 + grove * 11 + side });
+        z: -distance, height, spread, yaw, seed: 450 + grove * 11 + side,
+        form: grove % 4 === 0 ? 'pine' : height < 3.7 ? 'sapling' : 'broadleaf' });
     }
-    for (let scrub = 0; scrub < 9; scrub += 1) {
+    for (let scrub = 0; scrub < 19; scrub += 1) {
       const distance = 13 + random() * 72;
       const offset = 5.5 + random() * 7.1;
       const x = bankEdge(side, distance) + offset;
-      const height = 0.62 + random() * 1.4;
+      const height = 0.36 + random() * 0.92;
       const yaw = random() * 6.28;
       if (insideCliffFootprint(side * x, -distance)) continue;
       trees.push({ x: side * x, y: bankHeight(side, x, offset, distance) - 0.13,
-        z: -distance, height, spread: height * 1.31, yaw, seed: 823 + scrub * 19 + side });
+        z: -distance, height, spread: height * 1.52, yaw, seed: 823 + scrub * 19 + side, form: 'shrub' });
     }
   }
   return trees;
@@ -263,5 +264,25 @@ export async function buildLakeBasin(root: Group): Promise<void> {
   const architecture = new PlantSurface();
   addLakeFarArchitecture(architecture);
   addMesh(root, architecture, farShoreMaterial('masonry'), 'Far shore walls, roof ledges and terraces');
-  await addLakeBankPines(root, trees);
+  const ground = new PlantSurface();
+  const patches: LakeGroundPatch[] = [];
+  const random = coastRandom(31949);
+  for (const side of [-1, 1] as const) {
+    for (let island = 0; island < 186; island += 1) {
+      const distance = -3 + random() ** 1.28 * 128;
+      const offset = 0.9 + random() ** 1.4 * 27;
+      const x = side * (bankEdge(side, distance) + offset);
+      if (insideCliffFootprint(x, -distance)) continue;
+      patches.push({ x, z: -distance, radius: 0.45 + random() * 1.65, seed: 497 + island * 13 + side });
+    }
+  }
+  addLakeGroundCover(ground, patches, (x, z) => {
+    const side = x < 0 ? -1 : 1;
+    const distance = -z;
+    const offset = Math.abs(x) - bankEdge(side, distance);
+    if (offset < 0.4 || insideCliffFootprint(x, z)) return undefined;
+    const y = bankHeight(side, Math.abs(x), offset, distance);
+    return y > LAKE_WATER_Y + 0.18 ? y : undefined;
+  });
+  await addLakeBankVegetation(root, trees, ground);
 }
