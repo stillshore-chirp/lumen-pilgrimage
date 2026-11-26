@@ -36,11 +36,17 @@
 
 ## 光、空と湖
 
-昼は右手の低い角度から光が入る。湖へ向く軸に対する日射方向は `(0.89, 0.20, -0.37)` を正規化した値を使う。窓から床に届く光の奥行きと側壁が遮る範囲を合わせ、畳に斜めの明暗差をつくる。岩の節理と松の輪郭にも同じ光を使う。遠方には青灰色の空気遠近を増やし、岸の白い帯、岩の環、雲が重なる。積雲を異なる距離、速度と高さで移流させ、環の裾と背後を通る層を設ける。移動は固定視点の時間差画像で追う。天空色は既存の大気散乱モデルに湖の見え方を加え、積雲の光と陰、上空の筋状の雲を別の層に置く。 [Bruneton・Neyret, Precomputed Atmospheric Scattering](https://ebruneton.github.io/precomputed_atmospheric_scattering/index.html) · [WMO・積雲の陰影](https://cloudatlas.wmo.int/en/explanatory-remarks-and-special-clouds-cumulus.html)
+昼は右手の低い角度から光が入る。湖へ向く軸に対する日射方向は `(0.89, 0.20, -0.37)` を正規化した値を使う。窓から床に届く光の奥行きと側壁が遮る範囲を合わせ、畳に斜めの明暗差をつくる。岩の節理と松の輪郭にも同じ光を使う。遠方には青灰色の空気遠近を増やし、岸の白い帯、岩の環、雲が重なる。積雲を異なる距離、速度と高さで移流させ、環の裾と背後を通る層を設ける。遠い雲は正面の谷を通過する時刻をずらし、画角外で上流へ戻して補充する。固定視点の時間差と複数周回で、雲の移動と正面の雲量を確かめる。天空色は既存の大気散乱モデルに湖の見え方を加え、積雲の光と陰、上空の筋状の雲を別の層に置く。 [Bruneton・Neyret, Precomputed Atmospheric Scattering](https://ebruneton.github.io/precomputed_atmospheric_scattering/index.html) · [WMO・積雲の陰影](https://cloudatlas.wmo.int/en/explanatory-remarks-and-special-clouds-cumulus.html)
 
 夜は暗い天空に光量差のある星を分布させ、天の川は淡い帯で見えるようにする。雲が通過すれば背後の星が隠れ、遠くの空と水辺の輪郭は読み取れる。屋内の弱い灯りは眺めを邪魔しない範囲に置く。 [NASA・暗い場所での星空の見え方](https://science.nasa.gov/solar-system/skywatching/how-to-find-good-places-to-stargaze/)
 
-夜になると低卓の右脇の畳に木と和紙の行灯が現れる。既定の夜間照明では点灯し、照明設定で消灯や再点灯ができる。床に接する点を行灯の原点とし、外枠、和紙、持ち手と光源を一つの独立した親にまとめる。PCのFキーとQuestのグリップ操作ではこの親を動かし、行灯を立てたまま運ぶ。Questでは行灯の持ち手を追跡中のコントローラーの握り位置に合わせる。広間内の床に置き、足が壁や低卓と重なる位置では直近の有効な接地点に戻す。昼に切り替えると保持を解除して隠れ、再び夜になると置いた場所に現れる。 [三原市久井歴史民俗資料館・持ち手のある角行灯](https://www.city.mihara.hiroshima.jp/soshiki/50/168390.html) · [国立歴史民俗博物館・行灯の形状と材質](https://khirin.rekihaku.ac.jp/en/pid/nanto_kamidaira/nt0320.html) · [行灯の実装](../../src/coast/world/lake/lakeAndon.ts)
+夜になると低卓の右脇の畳に木と和紙の行灯が現れる。既定の夜間照明では点灯し、照明設定で消灯や再点灯ができる。床に接する点を行灯の原点とし、外枠、和紙、持ち手と光源を一つの独立した親にまとめる。PCのFキーとQuestのグリップ操作ではこの親を動かし、行灯を立てたまま運ぶ。Questでは行灯の持ち手を追跡中のコントローラーの握り位置に合わせる。広間の床と低卓の天板を支持面とする。底面全体が天板に収まり、盆栽の立体と重ならなければ天板へ置く。縁や壁で安定して置けない場合は直近の有効な支持面に戻す。昼に切り替えると保持を解除して隠れ、再び夜になると置いた場所に現れる。 [三原市久井歴史民俗資料館・持ち手のある角行灯](https://www.city.mihara.hiroshima.jp/soshiki/50/168390.html) · [国立歴史民俗博物館・行灯の形状と材質](https://khirin.rekihaku.ac.jp/en/pid/nanto_kamidaira/nt0320.html) · [行灯の実装](../../src/coast/world/lake/lakeAndon.ts)
+
+布団は低卓の左手にある畳へ敷く。敷布団は約1.02 × 2.02 mで、掛け布団、枕、縫い目を別の形として作る。昼夜を通じて出し入れでき、広間を歩いている途中で操作できる。 [布団の造形](../../src/coast/world/lake/lakeFuton.ts)
+
+湖の灯籠は木枠、紙、台を持ち、水面に沿って緩く漂う。近くの一基と対岸に続く群れで距離を読めるようにし、発光は夜を明るく、昼を控えめにする。灯りの直下は水の波で細く途切れる反射を描く。個体ごとの形と水面の反射は描画をまとめる。 [湖の灯籠](../../src/coast/world/lake/lakeFloatingLanterns.ts) · [内閣府・灯籠流し](https://www.gov-online.go.jp/eng/publicity/book/hlj/html/202207/202207_08_jp.html) · [Cox・Munkの水面傾斜の測定](https://opg.optica.org/josa/abstract.cfm?URI=josa-44-11-838)
+
+太陽と月は方位・高度を別々に指定する。日射方向は広間の陰影、空の明るい方向、水面の反射で共有する。太陽の高度を変えると天空の分布を調整する。色温度は既定の日射の近似を使う。月を隠すと円盤と月の周りの光、湖面の月光が消え、夜の背景と星が残る。 [空の描画](../../src/coast/world/lake/lakeSky.ts) · [水面の描画](../../src/coast/world/lake/lakeWaterShaders.ts)
 
 正面の低い視線では水が天空と岩峰を映す。窓辺で水を見下ろすと、浅瀬の水色、魚の輪郭、さざ波の移動が見分けられることを確かめる。遠い反射と近い透過は同じ水面を違う角度から見た結果として扱う。通常画面では景観と空に絞った縮小反射画像を間隔を空けて更新する。WebXRでは各眼の視線と面の法線から反射方向を近似し、追加のシーン描画を抑える。近景には透過越しに見える湖底と遊泳する魚を置く。 [水面の反射・透過](../../src/coast/world/lake/lakeWaterShaders.ts) · [専門書・視線角と反射率](../learning/lighting.md#水面の映り込みを視線角で読む)
 

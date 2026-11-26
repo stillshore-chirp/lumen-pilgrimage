@@ -1,4 +1,4 @@
-import { Group, Mesh, PlaneGeometry } from 'three';
+import { Box3, Group, Mesh, PlaneGeometry } from 'three';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { addLakeHallArrangement } from './lakeHallArrangement';
 import { addHallEnclosure } from './lakeHallEnclosure';
@@ -183,7 +183,7 @@ function addHallGlazing(hall: Group, materials: HallMaterials): void {
   for (const assembly of [frames, fascia, tracks, piers, ventBox, ventGrille]) assembly.finish();
 }
 
-function addLowTable(hall: Group, materials: HallMaterials): void {
+function addLowTable(hall: Group, materials: HallMaterials): Box3 {
   const { x, z, width, depth, topY } = LAKE_TABLE;
   const base = beginLakeHallAssembly(hall, 'Low table solid wood legs and apron', materials.timber, true);
   const top = beginLakeHallAssembly(hall, 'Oiled charcoal table top', materials.table, true);
@@ -198,7 +198,11 @@ function addLowTable(hall: Group, materials: HallMaterials): void {
   base.box([x, underside - .034, z], [width * .70, .068, depth * .63], 0, .86);
   base.finish();
   top.finish();
-  addLakeHallArrangement(hall);
+  const arrangement = new Group();
+  arrangement.name = 'Lake tabletop arrangement';
+  hall.add(arrangement);
+  addLakeHallArrangement(arrangement);
+  return new Box3().setFromObject(arrangement, true);
 }
 
 export function buildLakeHall(root: Group) {
@@ -210,9 +214,10 @@ export function buildLakeHall(root: Group) {
   addHallCeiling(hall, materials);
   addHallGlazing(hall, materials);
   addHallEnclosure(hall, materials);
-  addLowTable(hall, materials);
+  const arrangementBounds = addLowTable(hall, materials);
 
   return {
+    arrangementBounds,
     setTimeOfDay(time: CoastTimeOfDay, lampsOn = time === 'night'): void {
       const night = time === 'night';
       materials.ceiling.emissiveIntensity = night ? .024 : .38;

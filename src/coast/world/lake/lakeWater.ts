@@ -101,6 +101,7 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
   const frustum = new THREE.Frustum();
   const eye = new THREE.Vector3();
   const capturedEye = new THREE.Vector3();
+  const capturedLightDirection = new THREE.Vector3();
   const capturedProjection = new THREE.Matrix4();
   const viewport = new THREE.Vector4();
   const scissor = new THREE.Vector4();
@@ -108,6 +109,7 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
   let quality: CoastQuality = 'light';
   let lastCapture = -Infinity;
   let capturedNight = -1;
+  let capturedMoonVisibility = 1;
 
   function prepareRender(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera): void {
     if (renderer.xr.isPresenting || !surface.visible) {
@@ -128,10 +130,13 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
     }
 
     const night = atmosphere.night.value;
+    const lightDirection = atmosphere.sun.value;
+    const moonVisibility = night > 0.5 ? atmosphere.moonVisible.value : 1;
     const interval = REFLECTION_SIZES[quality].interval;
     const seconds = time.value;
-    // A lens shift, field-of-view change or resize changes both the mirror and its lookup.
-    if (night === capturedNight && seconds >= lastCapture && seconds - lastCapture < interval
+    // Camera optics change both the mirror and its lookup. Sky settings also invalidate the image.
+    if (night === capturedNight && lightDirection.equals(capturedLightDirection)
+      && moonVisibility === capturedMoonVisibility && seconds >= lastCapture && seconds - lastCapture < interval
       && capturedProjection.equals(camera.projectionMatrix) && capturedEye.distanceToSquared(eye) < 4) return;
 
     if (target.texture.type === THREE.HalfFloatType && !renderer.extensions.has('EXT_color_buffer_float')) {
@@ -182,6 +187,8 @@ export function buildLakeWater(scene: THREE.Scene, time: THREE.IUniform<number>,
     material.uniforms.uLiveReflection.value = 1;
     lastCapture = seconds;
     capturedNight = night;
+    capturedLightDirection.copy(lightDirection);
+    capturedMoonVisibility = moonVisibility;
     capturedEye.copy(eye);
     capturedProjection.copy(camera.projectionMatrix);
   }

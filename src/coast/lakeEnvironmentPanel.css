@@ -1,0 +1,83 @@
+.coast-travel-dialog.lake-environment-dialog {
+  inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) auto auto;
+  inline-size: min(400px, calc(100vw - 24px));
+  max-block-size: min(75dvh, 450px);
+  margin: 0;
+  padding: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.lake-environment-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coast-travel-dialog.lake-environment-dialog::backdrop {
+  background: transparent;
+}
+
+.lake-environment-dialog .coast-travel-heading {
+  margin: 0;
+}
+
+.lake-environment-dialog button {
+  min-block-size: 40px;
+}
+
+.lake-environment-dialog :focus-visible {
+  outline: 2px solid #c8eddf;
+  outline-offset: 2px;
+}
+
+.lake-environment-content {
+  padding: 2px 4px 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.lake-environment-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-end: 10px;
+}
+
+.lake-environment-axis {
+  display: grid;
+  grid-template-columns: 6.25em minmax(0, 1fr) 4em;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 36px;
+}
+
+.lake-environment-axis input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 32px;
+  margin: 0;
+  accent-color: #c8eddf;
+}
+
+.lake-environment-axis output {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.lake-environment-direction {
+  margin: 4px 0 10px;
+  color: #c1dfd7;
+  font-size: .85em;
+}
+
+@media (max-width: 540px) {
+  .coast-travel-dialog.lake-environment-dialog {
+    inset: auto 12px max(12px, env(safe-area-inset-bottom));
+    max-block-size: 58dvh;
+  }
+
+  .lake-environment-dialog button {
+    min-block-size: 44px;
+  }
+}

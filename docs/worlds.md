@@ -77,7 +77,7 @@
 
 ### 近接インタラクション
 
-WebXRでは、湖畔の行灯を指してコントローラーのグリップを握ると掴めます。指した先の判定に `targetRaySpace`、保持位置の追従に `gripSpace` を使います。行灯の手前に浮遊モニターが重なるときは、指した先の映像面を掴みます。スティック移動と旋回を反映したワールド座標で行灯を更新します。解放時は最後に置けた床位置に戻し、メニューを開いたときや追跡が途切れたときも同じように置きます。 [WebXR Device API](https://www.w3.org/TR/webxr/#xrinputsource-interface) · [VR探索の実装](../src/coast/CoastXR.ts)
+WebXRでは、湖畔の行灯を指してコントローラーのグリップを握ると掴めます。指した先の判定に `targetRaySpace`、保持位置の追従に `gripSpace` を使います。行灯の手前に浮遊モニターが重なるときは、指した先の映像面を掴みます。スティック移動と旋回を反映したワールド座標で行灯を更新します。解放時、メニューを開いたとき、追跡が途切れたときは、最後に置けた床または低卓の天板に着地します。 [WebXR Device API](https://www.w3.org/TR/webxr/#xrinputsource-interface) · [VR探索の実装](../src/coast/CoastXR.ts)
 
 デスクトップの `F` は、保持中の対象の解放、照準内で射程に入った対象の掴み、対応ワールドの自由飛行切り替えの順に扱います。掴みは、探索画面にフォーカスがあり、ダイアログや配置編集が閉じているときに受け付けます。ワールドは掴める対象の描画ルート、交差判定、射程と、床に置く場合の支持面を登録できます。照準は視野角と投影のずれを含む画面中央の視線を使い、手前の壁や閉じた扉で遮られない範囲の対象を選びます。保持は移動先への着地や XR 開始時に解除します。 [掴みの実装](../src/coast/DesktopGrab.ts)
 
@@ -145,6 +145,8 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 [配置定義](../src/coast/world/lake/lakeLayout.ts)を建築、移動、音の境界に使います。`hall` は正面の比較視点、`west-window` と `east-window` は室内から浅瀬を見下ろす位置です。旧い着地点IDからも同じ室内の窓辺へ移れます。[移動判定](../src/coast/world/lake/lakeNavigation.ts)は湖側の窓、背面と左右の壁で歩行を止めます。低卓の位置は通常操作でもWebXRでも通過できます。
 
 [広間](../src/coast/world/lake/lakeHall.ts)、[岩盆と石の環](../src/coast/world/lake/lakeBasin.ts)、[空と移流する雲](../src/coast/world/lake/lakeSky.ts)、[水面と水底](../src/coast/world/lake/lakeWater.ts)、[鳥と魚](../src/coast/world/lake/lakeWildlife.ts)を別々に編集できます。水面は通常画面で空と外の地形を縮小鏡映し、ヘッドセットの描画では各視点から方向を求めて反射を近似します。
+
+湖畔専用の設定は `lumen-pilgrimage:lake-settings` に保存します。布団と灯籠は既定で収納し、月は既定で表示します。太陽と月の方位・高度は時間帯ごとに保持し、対応する空、照明と水面反射へ適用します。月を隠すと円盤と反射が消え、夜の基礎照明は継続します。 [設定の実装](../src/coast/world/lake/lakeSettings.ts)
 
 [音響](../src/coast/world/lake/lakeAudio.ts)は水と鳥の距離、固定ガラスの遮蔽と両端の換気ルーバーを参照します。床の位置から畳と板の足音を選びます。形や寸法の根拠と確認条件は [湖畔の広間の設計](lake/lake-hall-design.md) にまとめています。
 

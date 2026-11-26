@@ -160,6 +160,7 @@ export const lakeWaterShader = {
       vec3 scatter = (1.0 - fresnel) * scattering / extinction * (1.0 - beam);
       vec3 tint = mix(uWaterTint, uWaterDeep, smoothstep(1.0, 9.0, path)) * uCoastSurfaceLight;
       float glint = waterSunGlint(normalToAir, view, uCoastSunDirection, 0.044 + 0.016 * broad);
+      glint *= mix(1.0, uCoastMoonVisible, uCoastNight);
       float alpha = 1.0 - transmitted;
       vec3 result = (reflected * fresnel + tint * scatter + uCoastSolarColor * glint * 0.54) / max(alpha, 0.02);
 

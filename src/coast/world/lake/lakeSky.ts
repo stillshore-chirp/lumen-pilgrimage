@@ -69,7 +69,7 @@ function createLakeStars(atmosphere: CoastAtmosphere, galaxy: ReturnType<typeof 
       void main() {
         vec2 offset = 2.0 * gl_PointCoord - 1.0;
         float radius = dot(offset, offset);
-        float moonSeparation = 1.0 - dot(vDirection, uCoastSunDirection);
+        float moonSeparation = 1.0 - dot(vDirection, uCoastSunDirection) * uCoastMoonVisible;
         if (radius >= 1.0 || moonSeparation <= 0.002) discard;
         float visibility = smoothstep(0.013, 0.23, vDirection.y)
           * smoothstep(0.002, 0.062, moonSeparation) * uStarVisibility;
@@ -129,6 +129,9 @@ export function buildLakeSky(root: THREE.Group | THREE.Scene, atmosphere: CoastA
   let disposed = false;
 
   return {
+    setMoonVisible(visible: boolean): void {
+      atmosphere.moonVisible.value = Number(visible);
+    },
     setTimeOfDay(time: CoastTimeOfDay): void {
       stars.visible = time === 'night' && atmosphere.starVisibility.value > 0;
     },
