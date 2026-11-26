@@ -20,18 +20,18 @@ function sceneGroup(scene: Scene, name: string): Group {
 
 export async function loadLakeScene(): Promise<ExplorationScene> {
   const scene = new Scene();
-  const fog = new FogExp2(0xa1bbd0, 0.00155);
+  const fog = new FogExp2(0x9cb3ca, 0.00162);
   scene.fog = fog;
   scene.background = new Color(0x96bad8);
-  const atmosphere = createCoastAtmosphere(new Vector3(0.58, 0.56, -0.55), {
+  const atmosphere = createCoastAtmosphere(new Vector3(0.89, 0.20, -0.37), {
     moonDirection: new Vector3(-0.67, 0.31, 0.67),
     nightHorizon: 0x111b2e,
     nightZenith: 0x070d1a,
   });
 
-  const ambient = new AmbientLight(0xffeee5);
-  const daylight = new HemisphereLight(0xe2efff, 0x9b8873);
-  const sun = new DirectionalLight(0xfff0d8);
+  const ambient = new AmbientLight(0xf1ebdf);
+  const daylight = new HemisphereLight(0xdceaff, 0xa5a3a1);
+  const sun = new DirectionalLight(0xfff3dc);
   sun.target.position.set(0, 0, -1.8);
   sun.shadow.camera.left = -26;
   sun.shadow.camera.right = 26;
@@ -40,7 +40,7 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   sun.shadow.camera.far = 145;
   sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.bias = -0.00024;
-  sun.shadow.normalBias = 0.026;
+  sun.shadow.normalBias = 0.016;
   sun.shadow.radius = 2.8;
   sun.shadow.autoUpdate = false;
   scene.add(ambient, daylight, sun, sun.target);
@@ -48,9 +48,12 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   const hallGroup = sceneGroup(scene, 'Lakeside hall');
   const basinGroup = sceneGroup(scene, 'Rock basin and stone ring');
   const wildlifeGroup = sceneGroup(scene, 'Birds and shallow-water fish');
-  const lamps = [-18.8, 18.8].map(x => {
-    const lamp = new PointLight(0xffc793, 0, 7, 2);
-    lamp.position.set(x, 0.82, 10.6);
+  const lampMounts = [
+    [-14.4, 2.50, 15.35], [0, 3.35, 15.62], [14.4, 2.50, 15.35],
+  ] as const;
+  const lamps = lampMounts.map(([x, y, z]) => {
+    const lamp = new PointLight(0xffd2a2, 0, 8, 2);
+    lamp.position.set(x, y, z);
     hallGroup.add(lamp);
     return lamp;
   });
@@ -67,18 +70,18 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   function updateLighting(): void {
     const night = time === 'night';
     const lampsOn = mode === 'on' || (mode === 'auto' && night);
-    ambient.intensity = night ? 0.050 : 0.14;
-    daylight.color.setHex(night ? 0x839cd3 : 0xe2efff);
-    daylight.groundColor.setHex(night ? 0x635568 : 0x9b8873);
-    daylight.intensity = night ? 0.42 : 0.90;
-    sun.color.setHex(night ? 0xabc4f4 : 0xfff0d8);
-    sun.intensity = night ? 0.32 : 2.45;
+    ambient.intensity = night ? 0.075 : 0.22;
+    daylight.color.setHex(night ? 0x93aad6 : 0xdceaff);
+    daylight.groundColor.setHex(night ? 0x655d69 : 0xa5a3a1);
+    daylight.intensity = night ? 0.49 : 0.92;
+    sun.color.setHex(night ? 0xabc4f4 : 0xfff3dc);
+    sun.intensity = night ? 0.33 : 2.9;
     sun.position.copy(atmosphere.sun.value).multiplyScalar(68).add(sun.target.position);
     sun.castShadow = !night;
     sun.shadow.needsUpdate = true;
-    fog.color.setHex(night ? 0x102036 : 0xa1bbd0);
-    fog.density = night ? 0.00158 : 0.00155;
-    for (const lamp of lamps) lamp.intensity = lampsOn ? 2.1 : 0;
+    fog.color.setHex(night ? 0x13243a : 0x9cb3ca);
+    fog.density = night ? 0.00151 : 0.00162;
+    for (const lamp of lamps) lamp.intensity = lampsOn ? 3.5 : 0;
     hall.setTimeOfDay(time, lampsOn);
   }
 

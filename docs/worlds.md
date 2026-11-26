@@ -61,7 +61,7 @@
 | 住戸 | 平面の東座標を `x`、北座標を `-z` とし、仕上げ床は `y=0`。街路は住戸床から246 m下です。 |
 | 映画館 | 幕面は `z=0`、客席方向は `+z`。段床、車いすスペース、出口は同じ配置データを使います。 |
 | 商業アトリウム | 正面通路の比較点を原点に、ソファと曲階段へ向かう方向を `-z`。上階の回廊は `y=9.15` m。 |
-| 湖畔の広間 | 広間と縁側の床が `y=0`、湖が `y=-0.82` m。湖に向かう方向は `-z`。 |
+| 湖畔の広間 | 広間の床が `y=0`、湖が `y=-0.82` m。湖に向かう方向は `-z`。 |
 
 立位の眼高は1.65 m、しゃがみは1.15 mです。共通歩行は6.4 m/s、水面の遊泳は4.1 m/s、潜水は3.6 m/s、自由飛行は20.5 m/sです。商業アトリウムと湖畔の広間では歩行とジャンプで移動します。屋内では移動経路に沿って支持面、壁、開口と天井の高さを確認します。住戸、映画館、商業アトリウム、湖畔の広間は各ワールドの歩行速度を使います。 [移動制御](../src/coast/CoastControls.ts) · [利用者向け操作表](exploration.md)
 
@@ -138,11 +138,11 @@
 
 ### 湖畔の広間
 
-[配置定義](../src/coast/world/lake/lakeLayout.ts)を建築、移動、音の境界に使います。`hall` は正面の比較視点、`west-veranda` と `east-veranda` は湖の浅瀬を見られる位置です。[移動判定](../src/coast/world/lake/lakeNavigation.ts)は窓と卓、両端の縁側、手すりの境界を扱います。
+[配置定義](../src/coast/world/lake/lakeLayout.ts)を建築、移動、音の境界に使います。`hall` は正面の比較視点、`west-window` と `east-window` は室内から浅瀬を見下ろす位置です。旧い着地点IDからも同じ室内の窓辺へ移れます。[移動判定](../src/coast/world/lake/lakeNavigation.ts)は湖側の窓、背面と左右の壁で歩行を止めます。低卓の位置は通常操作でもWebXRでも通過できます。
 
 [広間](../src/coast/world/lake/lakeHall.ts)、[岩盆と石の環](../src/coast/world/lake/lakeBasin.ts)、[空と移流する雲](../src/coast/world/lake/lakeSky.ts)、[水面と水底](../src/coast/world/lake/lakeWater.ts)、[鳥と魚](../src/coast/world/lake/lakeWildlife.ts)を別々に編集できます。水面は通常画面で空と外の地形を縮小鏡映し、ヘッドセットの描画では各視点から方向を求めて反射を近似します。
 
-[音響](../src/coast/world/lake/lakeAudio.ts)は水と鳥の距離、窓の遮蔽と両側の開口を参照します。床の位置から畳と板の足音を選びます。形や寸法の根拠と確認条件は [湖畔の広間の設計](lake/lake-hall-design.md) にまとめています。
+[音響](../src/coast/world/lake/lakeAudio.ts)は水と鳥の距離、固定ガラスの遮蔽と両端の換気ルーバーを参照します。床の位置から畳と板の足音を選びます。形や寸法の根拠と確認条件は [湖畔の広間の設計](lake/lake-hall-design.md) にまとめています。
 
 ## 共通の変更経路
 

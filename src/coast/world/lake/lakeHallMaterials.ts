@@ -4,6 +4,29 @@ import {
 } from 'three';
 import { LAKE_GLAZING, LAKE_HALL } from './lakeLayout';
 
+// The panes are visually clear. Sample a broad sky reflection only along rays that reach the aperture.
+const windowReflection = `
+  uniform float windowLight;
+
+  float lakeWindowWeight(vec3 worldPoint, vec3 reflectedRay) {
+    float t = (${LAKE_HALL.frontZ} - worldPoint.z) / min(-0.001, reflectedRay.z);
+    vec3 hit = worldPoint + t * reflectedRay;
+    float mask = smoothstep(0.018, 0.22, hit.y);
+    mask *= 1.0 - smoothstep(${LAKE_GLAZING.headY - .6}, ${LAKE_GLAZING.headY}, hit.y);
+    mask *= 1.0 - smoothstep(${LAKE_GLAZING.halfWidth - .5}, ${LAKE_GLAZING.halfWidth}, abs(hit.x));
+    return mask * smoothstep(0.01, 0.25, -reflectedRay.z);
+  }
+`;
+
+const reflectedSky = `
+  vec3 eye = normalize(vViewPosition);
+  vec3 worldPoint = cameraPosition + (vec4(-vViewPosition, 0.0) * viewMatrix).xyz;
+  vec3 reflectedRay = inverseTransformDirection(reflect(-eye, normal), viewMatrix);
+  vec3 worldNormal = inverseTransformDirection(geometryNormal, viewMatrix);
+  float fresnel = .04 + .96 * pow(clamp(1.0 - dot(normal, eye), 0.0, 1.0), 5.0);
+  float sheen = smoothstep(.35, .95, worldNormal.y) * fresnel * lakeWindowWeight(worldPoint, reflectedRay) * windowLight;
+`;
+
 function fabricMap(kind: 'rush' | 'binding', relief: boolean): DataTexture {
   const size = 256;
   const pixels = new Uint8Array(size * size * 4);
@@ -11,17 +34,18 @@ function fabricMap(kind: 'rush' | 'binding', relief: boolean): DataTexture {
   const threads = isRush ? 48 : 32;
 
   for (let row = 0; row < size; row += 1) {
-    const across = row / size * threads;
+    const across = row / size * threads + .10 * Math.sin(row * .22);
     const reed = .5 - .5 * Math.cos(across * 2 * Math.PI);
     const strand = Math.floor(across);
-    const hue = ((strand * 29 + 7) % 31) / 30 - .5;
+    const strandNoise = Math.sin(strand * 127.1 + 43.7) * 43758.5453;
+    const hue = strandNoise - Math.floor(strandNoise) - .5;
     for (let column = 0; column < size; column += 1) {
       const along = column / size * 32;
       const warp = Math.cos((along + strand) * Math.PI);
-      const cross = isRush ? reed * (.8 + .2 * warp) : reed * (.61 + .39 * warp);
+      const cross = isRush ? reed * (.72 + .28 * warp) : reed * (.61 + .39 * warp);
       const fibre = ((column * 93 + row * 61 + column * row * 7) % 37) / 36 - .5;
-      const shade = isRush ? 221 + 24 * cross + 18 * hue + 12 * fibre : 175 + 58 * cross + 18 * fibre;
-      const value = relief ? 58 + 169 * cross + 12 * fibre : shade;
+      const shade = isRush ? 210 + 22 * cross + 23 * hue + 14 * fibre : 168 + 58 * cross + 18 * fibre;
+      const value = relief ? 66 + 144 * cross + 16 * fibre : shade;
       const index = (row * size + column) * 4;
       pixels[index] = pixels[index + 1] = pixels[index + 2] = value;
       pixels[index + 3] = 255;
@@ -32,7 +56,7 @@ function fabricMap(kind: 'rush' | 'binding', relief: boolean): DataTexture {
   texture.name = `${kind} ${relief ? 'relief' : 'weave'}`;
   texture.colorSpace = relief ? NoColorSpace : SRGBColorSpace;
   texture.wrapS = texture.wrapT = RepeatWrapping;
-  texture.repeat.set(isRush ? 9 : 54, isRush ? 8 : 45);
+  texture.repeat.set(isRush ? 8 : 44, isRush ? 7 : 44);
   texture.anisotropy = 8;
   texture.generateMipmaps = true;
   texture.minFilter = LinearMipmapLinearFilter;
@@ -63,94 +87,112 @@ export function createLakeHallMaterials() {
     roughnessMap: texture('walnut-roughness', 1.68, .84),
   };
   const ceiling = new MeshStandardMaterial({
-    ...walnut, name: 'Oiled ceiling boards', color: 0xacaaa4, roughness: .93,
-    emissive: 0x756a61, emissiveIntensity: .26, vertexColors: true,
+    ...walnut, name: 'Oiled ceiling boards', color: 0xb7afa4, roughness: .91,
+    emissive: 0xf4e7d6, emissiveMap: walnut.map, emissiveIntensity: .38, vertexColors: true,
   });
   const lattice = new MeshStandardMaterial({
-    ...walnut, name: 'Ceiling lattice', color: 0x989188, roughness: .94,
-    emissive: 0x61574e, emissiveIntensity: .22, vertexColors: true,
+    ...walnut, name: 'Ceiling lattice', color: 0x988d80, roughness: .94,
+    emissive: 0xd4c5b1, emissiveMap: walnut.map, emissiveIntensity: .22, vertexColors: true,
   });
   const plaster = new MeshStandardMaterial({
-    name: 'Ochre mineral plaster', color: 0xb6a899, roughness: .94,
-    normalMap: texture('plaster-normal', 1.44, 1.44), vertexColors: true,
+    name: 'Natural mineral plaster', color: 0xc8bcaa, roughness: .94,
+    map: texture('plaster-color', 2.02, 2.02, true), normalMap: texture('plaster-normal', 2.02, 2.02), vertexColors: true,
   });
   plaster.normalScale.set(.30, .30);
+  const windowLight = { value: 1 };
   const boards = new MeshPhysicalMaterial({
-    ...oak, name: 'Brushed oak floorboards', color: 0xbdb9b7, roughness: .88, clearcoat: .09,
-    clearcoatRoughness: .65, vertexColors: true,
+    ...oak, name: 'Taupe brushed oak floorboards', color: 0xcac7c3, roughness: .85, clearcoat: .12,
+    clearcoatRoughness: .54, vertexColors: true,
   });
   boards.onBeforeCompile = shader => {
-    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+    shader.uniforms.windowLight = windowLight;
+    shader.fragmentShader = (windowReflection + shader.fragmentShader).replace('#include <map_fragment>', `
       #include <map_fragment>
       float woodTone = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(woodTone), 0.72);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(woodTone), 0.82);
+    `).replace('#include <opaque_fragment>', `
+      ${reflectedSky}
+      float grain = dot(texture2D(map, vMapUv).rgb, vec3(.2126, .7152, .0722));
+      outgoingLight += vec3(.345, .357, .363) * (0.55 + 1.25 * grain) * sheen;
+      #include <opaque_fragment>
     `);
   };
   boards.customProgramCacheKey = () => 'lake-hall-neutral-oak';
 
-  const tableWindowLight = { value: 1 };
   const table = new MeshPhysicalMaterial({
-    ...walnut, name: 'Indigo-oiled table top', color: 0x88949d, roughness: .62, clearcoat: .39,
-    clearcoatRoughness: .37, emissive: 0x455c70, emissiveIntensity: .18, vertexColors: true,
+    ...walnut, name: 'Charcoal-oiled tabletop', color: 0x525250, roughness: .60, clearcoat: .31,
+    clearcoatRoughness: .31, vertexColors: true,
   });
   table.onBeforeCompile = shader => {
-    shader.uniforms.tableWindowLight = tableWindowLight;
-    shader.fragmentShader = `uniform float tableWindowLight;
-${shader.fragmentShader}`.replace('#include <opaque_fragment>', `
-      // The tabletop sees a broad window-shaped source reflected in its varnish.
-      vec3 eye = normalize(vViewPosition);
-      vec3 reflectedRay = inverseTransformDirection(reflect(-eye, normal), viewMatrix);
-      vec3 tablePoint = cameraPosition + (vec4(-vViewPosition, 0.0) * viewMatrix).xyz;
-      float t = (${LAKE_HALL.frontZ} - tablePoint.z) / min(-0.001, reflectedRay.z);
-      vec3 windowPoint = tablePoint + t * reflectedRay;
-      float windowMask = smoothstep(0.0, 1.2, windowPoint.y);
-      windowMask *= 1.0 - smoothstep(${LAKE_GLAZING.headY - 1}, ${LAKE_GLAZING.headY}, windowPoint.y);
-      windowMask *= 1.0 - smoothstep(${LAKE_GLAZING.halfWidth - 3}, ${LAKE_GLAZING.halfWidth}, abs(windowPoint.x));
-      windowMask *= smoothstep(0.0, 0.24, -reflectedRay.z);
-      vec3 tableNormal = inverseTransformDirection(geometryNormal, viewMatrix);
-      float varnish = smoothstep(0.35, 0.95, tableNormal.y) * smoothstep(0.25, 0.92, 1.0 - dot(normal, eye));
-      float grain = dot(texture2D(map, vMapUv).rgb, vec3(0.2126, 0.7152, 0.0722));
-      outgoingLight += vec3(0.070, 0.103, 0.139) * varnish * windowMask * (0.55 + 2.2 * grain) * tableWindowLight;
+    shader.uniforms.windowLight = windowLight;
+    shader.fragmentShader = (windowReflection + shader.fragmentShader).replace('#include <opaque_fragment>', `
+      ${reflectedSky}
+      float grain = dot(texture2D(map, vMapUv).rgb, vec3(.2126, .7152, .0722));
+      outgoingLight += vec3(.306, .405, .500) * (0.45 + 2.15 * grain) * sheen;
       #include <opaque_fragment>
     `);
   };
   table.customProgramCacheKey = () => 'lake-hall-table-window-light';
+
+  const paperGrain = texture('linen-color', 1.37, 1.37, true);
+  const paperNormal = texture('linen-normal', 1.37, 1.37);
+  const paper = new MeshStandardMaterial({
+    name: 'Fixed kozo paper panels', color: 0xe0ceb3, map: paperGrain, normalMap: paperNormal,
+    roughness: .97, vertexColors: true,
+  });
+  const lamp = new MeshStandardMaterial({
+    name: 'Warm recessed kozo diffusers', color: 0xe4d2b7, map: paperGrain, normalMap: paperNormal,
+    emissive: 0xffcb91, emissiveMap: paperGrain, emissiveIntensity: 0, roughness: .94, vertexColors: true,
+  });
+  paper.normalScale.set(.17, .17);
+  lamp.normalScale.set(.15, .15);
+
+  const tatami = new MeshStandardMaterial({
+    name: 'Woven rush mat', color: 0xd4c5a5, map: fabricMap('rush', false), bumpMap: fabricMap('rush', true),
+    bumpScale: .00028, roughness: .95, vertexColors: true,
+  });
+  tatami.onBeforeCompile = shader => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <aomap_fragment>', `
+      // Pale rush catches direct sunlight while the backing remains in the cooler room fill.
+      reflectedLight.directDiffuse *= 1.85;
+      reflectedLight.indirectDiffuse *= vec3(.66, .75, .94);
+      #include <aomap_fragment>
+    `);
+  };
+  tatami.customProgramCacheKey = () => 'lake-hall-woven-rush-light';
 
   return {
     ceiling,
     lattice,
     plaster,
     timber: new MeshStandardMaterial({
-      ...walnut, name: 'Charcoal-stained structural timber', color: 0x70665d, roughness: .91, vertexColors: true,
+      ...walnut, name: 'Charcoal-stained structural timber', color: 0x786c60, roughness: .91, vertexColors: true,
     }),
     panel: new MeshStandardMaterial({
-      ...walnut, name: 'Smoked wood wall panels', color: 0xc2a384, roughness: .90, vertexColors: true,
+      ...walnut, name: 'Smoked wood wall panels', color: 0x9e8a75, roughness: .92, vertexColors: true,
     }),
     boards,
-    veranda: new MeshStandardMaterial({
-      ...oak, name: 'Weathered veranda boards', color: 0x9b8c78, roughness: 1, vertexColors: true,
+    joinery: new MeshStandardMaterial({
+      ...walnut, name: 'Oiled joinery', color: 0xb49b7f, roughness: .87, vertexColors: true,
     }),
     foundation: new MeshStandardMaterial({ name: 'Shadowed basalt base', color: 0x3c3d3c, roughness: 1, vertexColors: true }),
-    tatami: new MeshStandardMaterial({
-      name: 'Woven rush mat', color: 0xc6ba9f, map: fabricMap('rush', false), bumpMap: fabricMap('rush', true),
-      bumpScale: .00043, roughness: .95, vertexColors: true,
-    }),
+    tatami,
     binding: new MeshStandardMaterial({
-      name: 'Indigo-black cloth binding', color: 0x33404a, map: fabricMap('binding', false),
+      name: 'Indigo-black cloth binding', color: 0x3c4851, map: fabricMap('binding', false),
       roughness: .91, vertexColors: true,
     }),
     table,
-    tableWindowLight,
+    windowLight,
     rail: new MeshStandardMaterial({
       name: 'Patinated dark metal', color: 0x3d3d3d, metalness: .54, roughness: .74, vertexColors: true,
     }),
     glazing: new MeshPhysicalMaterial({
       name: 'Low-reflection lake-facing glazing', color: 0xb7cad2, roughness: .2,
-      metalness: .04, transparent: true, opacity: .032, depthWrite: false, side: DoubleSide,
+      metalness: .04, transparent: true, opacity: .018, depthWrite: false, side: DoubleSide,
     }),
-    lamp: new MeshStandardMaterial({
-      name: 'Kozo paper light diffuser', color: 0xd5bfa1, emissive: 0xe5a468, emissiveIntensity: .02,
-      roughness: .91, vertexColors: true,
-    }),
+    paper,
+    lamp,
   };
 }
+
+export type HallMaterials = ReturnType<typeof createLakeHallMaterials>;

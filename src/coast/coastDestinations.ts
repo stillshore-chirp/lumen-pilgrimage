@@ -55,5 +55,9 @@ export const EXPLORATION_WORLDS = [
 ] as const satisfies readonly { id: ExplorationWorldId; label: string; places: readonly CoastDestination[] }[];
 
 export function findDestination(worldId: string, placeId: string | null): CoastDestination | undefined {
+  if (worldId === 'lake') {
+    if (placeId === 'west-veranda') placeId = 'west-window';
+    if (placeId === 'east-veranda') placeId = 'east-window';
+  }
   return EXPLORATION_WORLDS.find(world => world.id === worldId)?.places.find(place => place.id === placeId);
 }

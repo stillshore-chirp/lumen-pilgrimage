@@ -1,4 +1,5 @@
-import { BoxGeometry, Float32BufferAttribute, Mesh, type Group, type Material } from 'three';
+import { BoxGeometry, ExtrudeGeometry, Float32BufferAttribute, Mesh, Shape,
+  type BufferGeometry, type Group, type Material } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 type XYZ = readonly [x: number, y: number, z: number];
@@ -8,10 +9,9 @@ const axes = [0, 1, 2] as const;
 
 /** Build one draw per material and assembly, with metre-scaled grain and separate shadow casters. */
 export function beginLakeHallAssembly(root: Group, name: string, material: Material, castsShadow = false) {
-  const parts: BoxGeometry[] = [];
+  const parts: BufferGeometry[] = [];
 
-  function box(centre: XYZ, size: XYZ, grainAxis: Axis = 0, tone = 1, uvOffset = 0) {
-    const geometry = new BoxGeometry(...size);
+  function add(geometry: BufferGeometry, centre: XYZ, size: XYZ, grainAxis: Axis, tone: number, uvOffset: number) {
     const { position, uv, normal } = geometry.attributes;
     const tint = new Float32Array(position.count * 3);
     for (let index = 0; index < position.count; index += 1) {
@@ -30,6 +30,28 @@ export function beginLakeHallAssembly(root: Group, name: string, material: Mater
     parts.push(geometry);
   }
 
+  function box(centre: XYZ, size: XYZ, grainAxis: Axis = 0, tone = 1, uvOffset = 0) {
+    add(new BoxGeometry(...size), centre, size, grainAxis, tone, uvOffset);
+  }
+
+  // Slabs in an assembly share all attributes and can be batched independently of square stock.
+  function slab(centre: XYZ, size: XYZ, bevel: number, grainAxis: Axis = 0, tone = 1, uvOffset = 0) {
+    const [width, height, depth] = size;
+    const halfX = width / 2 - bevel;
+    const halfZ = depth / 2 - bevel;
+    const profile = new Shape();
+    profile.moveTo(-halfX, -halfZ);
+    profile.lineTo(halfX, -halfZ);
+    profile.lineTo(halfX, halfZ);
+    profile.lineTo(-halfX, halfZ);
+    profile.closePath();
+    const geometry = new ExtrudeGeometry(profile, {
+      depth: height - 2 * bevel, bevelEnabled: true, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2,
+    });
+    geometry.rotateX(-Math.PI / 2).translate(0, bevel - height / 2, 0);
+    add(geometry, centre, size, grainAxis, tone, uvOffset);
+  }
+
   function finish() {
     const geometry = mergeGeometries(parts);
     parts.forEach(part => part.dispose());
@@ -42,7 +64,7 @@ export function beginLakeHallAssembly(root: Group, name: string, material: Mater
     return mesh;
   }
 
-  return { box, finish };
+  return { box, slab, finish };
 }
 
 export type LakeHallAssembly = ReturnType<typeof beginLakeHallAssembly>;
