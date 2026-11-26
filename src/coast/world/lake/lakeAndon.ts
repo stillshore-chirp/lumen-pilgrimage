@@ -168,6 +168,7 @@ export function buildLakeAndon(parent: Group): { grabTarget: DesktopGrabTarget; 
       label: '行灯',
       object: root,
       reach: 2.25,
+      xrGripAnchor: bend.getPoint(0.5),
       available: () => root.visible,
       hitDistance(ray) {
         root.updateWorldMatrix(true, false);

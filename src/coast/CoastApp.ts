@@ -106,6 +106,7 @@ export class CoastApp {
   private readonly up = new Vector3();
   private readonly controls: CoastControls;
   private readonly desktopGrab: DesktopGrab;
+  private readonly grabOccluded: ReturnType<typeof createDesktopGrabOcclusion>;
   private readonly grabHint: HTMLElement;
   private readonly travel: ReturnType<typeof createCoastTravelPanel>;
   private readonly travelDialog: HTMLDialogElement;
@@ -159,7 +160,8 @@ export class CoastApp {
       : lake ? new PerspectiveCamera(LAKE_VIEW_FOV, 1, 0.10, 2400)
       : new PerspectiveCamera(60, 1, residence || cinema ? 0.08 : 0.12, residence ? 43500 : cinema ? 110 : 2500);
     if (lake) this.camera.setViewOffset(1, 1, 0, LAKE_VIEW_VERTICAL_OFFSET, 1, 1);
-    this.desktopGrab = new DesktopGrab(this.camera, this.world.grabTargets, createDesktopGrabOcclusion(this.world.scene));
+    this.grabOccluded = createDesktopGrabOcclusion(this.world.scene);
+    this.desktopGrab = new DesktopGrab(this.camera, this.world.grabTargets, this.grabOccluded);
     this.time = initialRoute.time;
     const destination = findDestination(this.worldId, initialRoute.placeId);
     this.world.setTimeOfDay(this.time);
@@ -367,6 +369,9 @@ export class CoastApp {
     this.unsubscribeXR = this.bindXRStatus();
     this.xr.bind({
       scene: this.world.scene, camera: this.camera, controls: this.controls,
+      grabTargets: this.world.grabTargets,
+      grabOccluded: (ray, target, distance) => this.monitor?.interceptsGrip(ray, distance) === true
+        || this.grabOccluded(ray, target, distance),
       openMenu: () => this.openXRMenu(),
       onMenuOpen: () => {
         this.monitor?.closePanel();
@@ -714,6 +719,7 @@ export class CoastApp {
     this.time = time;
     this.world.setTimeOfDay(time);
     this.desktopGrab.update();
+    this.xr.releaseUnavailableWorldGrab();
     this.audio.setTimeOfDay?.(time);
     this.travel.setTimeOfDay(time);
   }
@@ -852,7 +858,7 @@ export class CoastApp {
     this.seatTransition?.update(dt);
     const viewer = this.xr.update(frame, dt);
     if (!immersive) this.desktopGrab.update();
-    const allowGrab = this.xr.hasTracking && !this.xr.menuOpen && !this.sceneDialogOpen()
+    const allowGrab = this.xr.hasTracking && !this.xr.isGrabbingWorldObject && !this.xr.menuOpen && !this.sceneDialogOpen()
       && !this.loadingTravel && !this.seatTransition?.active;
     if (!allowGrab) this.monitor?.releaseGrab();
     this.monitor?.update(viewer, allowGrab ? frame : undefined);

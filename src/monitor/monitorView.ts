@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Vector2, type Scene, type WebGLRenderer } from 'three';
+import { PerspectiveCamera, Vector2, type Raycaster, type Scene, type WebGLRenderer } from 'three';
 import { MonitorAudio, type MonitorAudioMode } from './monitorAudio';
 import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
 import { MonitorObject, type MonitorTheater } from './monitorObject';
@@ -203,6 +203,11 @@ export class MonitorView {
   }
 
   get isGrabbing(): boolean { return this.xr.isGrabbing; }
+
+  interceptsGrip(ray: Raycaster, distance: number): boolean {
+    const hit = this.screen.intersect(ray);
+    return hit !== undefined && hit.distance < distance;
+  }
 
   releaseGrab(): void { this.xr.release(); }
 

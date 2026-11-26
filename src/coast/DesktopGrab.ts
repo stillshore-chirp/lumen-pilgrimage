@@ -1,9 +1,14 @@
 import { Quaternion, Raycaster, Vector2, Vector3, type Object3D, type PerspectiveCamera } from 'three';
+import { FloorGrabPosition, setGrabWorldPosition } from './floorGrabPosition';
+
+export type GrabOcclusion = (ray: Raycaster, target: Object3D, distance: number) => boolean;
 
 export interface DesktopGrabTarget {
   readonly label: string;
   readonly object: Object3D;
   readonly reach: number;
+  // Object-local anchor that a tracked controller can carry.
+  readonly xrGripAnchor?: Vector3;
   available(): boolean;
   hitDistance(ray: Raycaster): number | undefined;
   // Return a world-space floor height where the object can rest.
@@ -17,7 +22,7 @@ export class DesktopGrab {
   private readonly ray = new Raycaster();
   private readonly position = new Vector3();
   private readonly right = new Vector3();
-  private readonly floorPosition = new Vector3();
+  private readonly floorGrab = new FloorGrabPosition();
   private readonly cameraOffset = new Vector3();
   private readonly cameraRotationOffset = new Quaternion();
   private readonly rotation = new Quaternion();
@@ -27,7 +32,7 @@ export class DesktopGrab {
   constructor(
     private readonly camera: PerspectiveCamera,
     private readonly targets: readonly DesktopGrabTarget[] = [],
-    private readonly isOccluded?: (ray: Raycaster, target: Object3D, distance: number) => boolean,
+    private readonly isOccluded?: GrabOcclusion,
   ) {}
 
   toggle(extraTarget?: DesktopGrabTarget): boolean {
@@ -38,12 +43,11 @@ export class DesktopGrab {
     const target = this.pick(extraTarget);
     if (!target) return false;
     this.held = target;
-    target.object.getWorldPosition(this.position);
     if (target.floorHeight) {
-      this.floorPosition.copy(this.position);
-      this.floorPosition.y = target.floorHeight(this.position.x, this.position.z) ?? this.position.y;
+      this.floorGrab.begin(target);
       this.update();
     } else {
+      target.object.getWorldPosition(this.position);
       this.camera.worldToLocal(this.cameraOffset.copy(this.position));
       this.camera.getWorldQuaternion(this.cameraRotationOffset).invert();
       this.cameraRotationOffset.multiply(target.object.getWorldQuaternion(this.rotation));
@@ -71,31 +75,21 @@ export class DesktopGrab {
       const sideOffset = Math.min(0.25, 0.25 / this.camera.projectionMatrix.elements[0]);
       this.position.addScaledVector(this.right, sideOffset);
       this.position.y -= 0.35;
-      const floorY = target.floorHeight(this.position.x, this.position.z);
-      if (floorY !== undefined) {
-        this.floorPosition.set(this.position.x, floorY, this.position.z);
-        this.position.y = Math.max(this.position.y, floorY + 0.18);
-      }
-      target.constrainCarry?.(this.position);
+      this.floorGrab.carry(target, this.position, 0.18);
     } else {
       this.camera.localToWorld(this.position.copy(this.cameraOffset));
       this.camera.getWorldQuaternion(this.rotation).multiply(this.cameraRotationOffset);
       const parent = target.object.parent;
       if (parent) this.rotation.premultiply(parent.getWorldQuaternion(this.parentRotation).invert());
       target.object.quaternion.copy(this.rotation);
+      setGrabWorldPosition(target.object, this.position);
     }
-    this.setWorldPosition(target.object, this.position);
   }
 
   release(target?: DesktopGrabTarget): void {
     if (!this.held || (target && target !== this.held)) return;
-    if (this.held.floorHeight) this.setWorldPosition(this.held.object, this.position.copy(this.floorPosition));
+    if (this.held.floorHeight) this.floorGrab.release(this.held);
     this.held = undefined;
-  }
-
-  private setWorldPosition(object: Object3D, position: Vector3): void {
-    if (object.parent) object.parent.worldToLocal(position);
-    object.position.copy(position);
   }
 
   private aim(): void {
