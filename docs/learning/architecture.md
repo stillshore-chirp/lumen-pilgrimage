@@ -14,6 +14,8 @@
 
 寸法線は、後工程が参照する関係を固定するための線である。まずプロジェクト原点、方位、基準階の仕上げ床、構造グリッドを定める。次に、全体寸法、グリッド間隔、開口の位置、仕上げ間寸法、歩行面の高さを区別して記す。例えば「床から天井まで3,600 mm」と「スラブ上端から上階スラブ上端まで4,200 mm」は異なる高さである。前者は視覚的な室内寸法、後者は階高の基準である。寸法の種類を混ぜると、3D化したときに床厚や天井懐が消える。
 
+透明な建具では、共用側の完成面、板の芯、枠の見込み、室内の有効範囲の始点を分ける。完成面から室内へ板厚を伸ばせば、芯はその半分だけ奥へ移る。完成面を示した図へ板芯の座標を渡すと、見えるガラスと反射計算の面、下枠を受ける床端がずれる。光の遮蔽、音の反射、歩行の境界、床や枠の支持には、基準面と厚さの向きを合わせて渡す。薄板として音や光を近似する場合も、どの面を代表にしたかを明示すれば、形状を直した影響を追える。
+
 同じ基準は、図面とデータモデルの間にも必要になる。buildingSMART の IFC 4.3 は、サイト、建物、階、空間のような空間構造を階層として扱い、物理要素を一つの空間構造へ格納する関係を定義している。[IFC 4.3.2.0「Spatial Structure」](https://standards.buildingsmart.org/IFC/DEV/IFC4_3/HTML/concepts/Object_Connectivity/Spatial_Structure/content.html) の説明に従えば、柱や梁を階と空間の階層へ結び付けることで、部材の場所と全体構成を同じ情報として扱える。`IfcBuildingStorey` には階の基準高さがあり、構造スラブ上端、階の総高さ、スラブ下面までの高さを分けて記録できる。[IfcBuildingStorey](https://standards.buildingsmart.org/IFC/RELEASE/IFC4/ADD2_TC1/HTML/schema/ifcproductextension/lexical/ifcbuildingstorey.htm) の「Semantic definitions」「Figure 148 — Building storey elevations」が示す区別である。
 
 ワールドのデータでは、建物、階、空間、部材の所属を定める。床、開口、階段、手すり、座席を共通の座標から描画・衝突・音響へ渡すと、階の高さを動かした影響を各機能でたどれる。
@@ -65,6 +67,14 @@
 視線の幾何から求まるのは、橋が可視となる条件である。実際に方向の手掛かりになるかは、表示の画角、光、輪郭、頭部運動と合わせて評価する。Gath-Moradらは69人が参加するデスクトップVR実験で、目的地の可視性が上下階を移動する判断や探索行動に影響することを示した。この結果を、入口や踊り場で何が見えるかを検討する根拠に使える。 [Gath-Morad et al., Visibility matters during wayfinding in the vertical](https://www.nature.com/articles/s41598-021-98439-1)
 
 ワールドでの評価点は、入口、最初の分岐、目的地の正面、階段の踊り場、橋の中央に置く。各点から「次に進める場所」「次の階の目的地」「戻れる方向」を見て、視線の先に床、手すり、柱、照明など意味のある形があるかを確認する。見通しを作るために壁を透明にしすぎると、空間の境界が消える。境界を保つために壁を厚くしすぎると、目的地が見えず探索が停滞する。開口の位置、柱の太さ、床端の高さを数値で変え、視界と境界が同時に成立する範囲を探す。
+
+## 比較写真と滞在視線を別の主視点にする
+
+写真と比べるカメラは、部材の位置、比率、輪郭、重なりを確かめるために置く。滞在する人の視線は、座る、立ち上がる、横へ歩くという用途から決まる。両者が逆向きなら、それぞれを設計の主視点として扱う。写真に合う一枚があっても、座った正面が未用途の壁で終われば、滞在場所の設計は残っている。各視点の位置、向き、目高、画角を定め、写真側で守る構成と、滞在側で見渡せる場所を同じ平面・断面へ重ねる。
+
+前景・中景・遠景には、距離に加えて用途を与える。前景の床と縁は足元の支持と立ち上がる余白を示し、中景の店先や席はそこで何ができるかを示す。遠景には次に向かう場所、または留まって眺める終端を置く。上階も窓の反復だけにせず、床の厚みと奥の部屋の用途が読み取れるようにする。距離や高さの違う要素が役割を持てば、物品数を増やさずに、見回した先の空間をつなげられる。これは構成を考えるための設計方針であり、配置だけで美観や静穏を保証するものではない。
+
+見える目的地と、歩いて入れる場所は区別する。[Hölscherら（2006）の方法と建築分析](https://www.uni-giessen.de/de/fbz/fb06/psychologie/abt/kognition/forschung/publikationen/Datein/Publikationen_PDFs/HMVBK_JEP.pdf)では、初訪問者と既知の訪問者各6人に複雑な会議施設の経路課題を課し、階ごとの不一致、階段への見通し、公私領域の区別などを分析した。単一施設の少人数調査から装飾量や快適性の最適値は定まらないが、視界に入る行き先と経路・領域を照合する理由になる。鑑賞専用の庭や閉じた部屋は、枠、巾木、建具、連続する床端で止まる理由を示し、その奥は見せる範囲まで床・壁・天井をつなぐ。写真の反対方向に用途と閉鎖面を設ける個別の設計例は、[ソファ正面の施設設計](../atrium/sofa-facing-facility-design.md)に示す。
 
 ## 階段の蹴上げ、踏み幅、頭上の余裕
 
@@ -135,6 +145,7 @@
 - [UK Ministry of Housing, Approved Document K,「K1 – Stairs and ladders」](https://assets.publishing.service.gov.uk/media/60d5bdcde90e07716f516cfd/Approved_Document_K.pdf) — §§1.2–1.3、1.11、1.25–1.27、1.34–1.36、Table 1.1、Diagrams 1.9–1.13。階段寸法・頭上クリアランス・手すり・曲線踏面の測り方。
 - [W. Zhao, J. Kang, H. Jin, “Effects of geometry on the sound field in atria,” *Building Simulation* 10, 25–39 (2017)](https://discovery.ucl.ac.uk/id/eprint/10052476/) — アトリウムの長さ、高さ、アスペクト比、天窓形状が音圧と残響時間へ与える影響。
 - [M. Gath-Morad et al., “Visibility matters during wayfinding in the vertical,” *Scientific Reports* 11, 18980 (2021)](https://doi.org/10.1038/s41598-021-98439-1) — 多層VR環境で目的地の可視性と上下移動の判断を調べた実験。
+- [C. Hölscher et al., “Up the down staircase: Wayfinding strategies in multi-level buildings,” *Journal of Environmental Psychology* 26, 284–299 (2006)](https://www.uni-giessen.de/de/fbz/fb06/psychologie/abt/kognition/forschung/publikationen/Datein/Publikationen_PDFs/HMVBK_JEP.pdf) — §2、§5.1、§6。実施設の経路課題、公私領域・上下階・階段の建築分析と一般化の限界。
 - [M. Pharr, W. Jakob, G. Humphreys, *Physically Based Rendering: From Theory to Implementation*, 4th ed., §4.2](https://pbr-book.org/4ed/Radiometry,_Spectra,_and_Color/Working_with_Radiometric_Integrals) — 入射放射輝度、余弦項、立体角による照度計算。
 
 ---

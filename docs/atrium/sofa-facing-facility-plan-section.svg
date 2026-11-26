@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1400" viewBox="0 0 1900 1400">
+<title>ソファ正面施設の独自設計・平面と断面</title>
+<desc>仮想施設の設計ドラフト。地上平面、上階終端立面、ソファから庭への長手断面。全寸法はメートル。</desc>
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#25464c"/></marker><pattern id="h" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 8L8 0" stroke="#d2dcd9" stroke-width="1"/></pattern></defs>
+<style>text{font-family:"Hiragino Kaku Gothic ProN","Noto Sans CJK JP",sans-serif;fill:#283432;font-size:17px} .small{font-size:14px} .title{font-size:30px;font-weight:700}.head{font-size:22px;font-weight:700}.dim{stroke:#58706c;stroke-width:1;fill:none;marker-start:url(#a);marker-end:url(#a)}.wall{fill:#bcb6aa;stroke:#625d53;stroke-width:1.5}.glass{stroke:#2c8e9a;stroke-width:4;fill:none}.floor{fill:#e9e2d5;stroke:#8f887a;stroke-width:1.5}.sight{stroke:#b35240;stroke-width:2;stroke-dasharray:9 6;fill:none;marker-end:url(#a)}</style>
+<rect width="1900" height="1400" fill="#faf9f5"/>
+<text x="45.0" y="48.0" class="title" text-anchor="start">ソファ正面施設｜光庭とコモンズ</text>
+<text x="45.0" y="80.0" class="" text-anchor="start">設計ドラフト・レビュー待ち 2026-11-27　｜　単位m　｜　原画にない +Z 側は独自設計</text>
+<text x="45.0" y="109.0" class="small" text-anchor="start">建築・内装担当の自作図。実装・法令適合・構造計算・植栽育成の確認図ではない。</text>
+<text x="52.0" y="155.0" class="head" text-anchor="start">1｜地上階平面</text>
+<text x="52.0" y="182.0" class="small" text-anchor="start">+Z ↑ / +X →</text>
+<rect x="179.80" y="391.00" width="410.40" height="613.80" class="floor"/>
+<rect x="297.70" y="202.90" width="174.60" height="187.38" class="wall"/>
+<rect x="300.04" y="206.14" width="169.92" height="181.62" class="floor"/>
+<line x1="304.36" y1="390.28" x2="465.64" y2="390.28" class="glass"/>
+<polygon points="370.60,313.60 385.00,330.70 431.80,327.10 449.80,299.20 437.20,252.40 385.00,263.20" fill="#b5c09c" stroke="#6b7b5a" stroke-width="2"/>
+<circle cx="403.00" cy="292.00" r="13.50" fill="#7e9672" stroke="#536e4c" stroke-width="2"/>
+<rect x="391.30" y="280.30" width="23.40" height="23.40" class="" fill="none"/>
+<rect x="179.80" y="396.40" width="410.40" height="36.00" class="" fill="url(#h)"/>
+<rect x="192.40" y="432.40" width="36.00" height="498.60" class="" fill="url(#h)"/>
+<rect x="541.60" y="432.40" width="36.00" height="498.60" class="" fill="url(#h)"/>
+<rect x="86.56" y="412.96" width="96.48" height="218.88" class="wall"/>
+<rect x="89.80" y="416.20" width="90.00" height="212.40" class="" fill="#e1d2b7"/>
+<line x1="179.80" y1="628.60" x2="179.80" y2="416.20" class="glass"/>
+<rect x="586.96" y="412.96" width="103.68" height="218.88" class="wall"/>
+<rect x="590.20" y="416.20" width="97.20" height="212.40" class="" fill="#dedad0"/>
+<line x1="590.20" y1="628.60" x2="590.20" y2="416.20" class="glass"/>
+<rect x="143.80" y="553.00" width="14.40" height="57.60" class="wall"/>
+<rect x="137.50" y="513.40" width="11.70" height="27.00" class="wall"/>
+<rect x="96.10" y="513.40" width="7.20" height="100.80" class="wall"/>
+<rect x="611.80" y="481.00" width="16.20" height="57.60" class="wall"/>
+<rect x="626.20" y="439.60" width="12.60" height="25.20" class="wall"/>
+<rect x="673.90" y="441.40" width="7.20" height="100.80" class="wall"/>
+<rect x="295.45" y="969.70" width="81.90" height="19.80" class="wall"/>
+<circle cx="336.40" cy="979.60" r="5" fill="#b35240"/>
+<line x1="336.40" y1="979.60" x2="336.40" y2="210.10" class="sight"/>
+<text x="326.4" y="1011.6" class="small" text-anchor="middle">S 眼高1.20 / T 1.65</text>
+<text x="326.4" y="1035.6" class="small" text-anchor="middle">ソファは位置・向き維持</text>
+<circle cx="385.00" cy="445.00" r="5" fill="#25464c"/>
+<line x1="385.00" y1="445.00" x2="385.00" y2="526.00" class="dim"/>
+<text x="394.9" y="499.0" class="small" text-anchor="start">C 原画照合 -Z</text>
+<text x="55.0" y="463.0" class="small" text-anchor="start">W 装丁・書籍</text>
+<text x="55.0" y="485.0" class="small" text-anchor="start">内法5.00×11.80</text>
+<text x="615.0" y="463.0" class="small" text-anchor="start">E 生活工芸</text>
+<text x="615.0" y="485.0" class="small" text-anchor="start">内法5.40×11.80</text>
+<text x="385.0" y="221.0" class="small" text-anchor="middle">G 固定ガラス越しの光庭</text>
+<text x="385.0" y="422.3" class="small" text-anchor="middle">z3.040 完成面 / 歩行端z3</text>
+<text x="385.0" y="333.0" class="small" text-anchor="middle">床のまま</text>
+<text x="331.0" y="238.0" class="small" text-anchor="middle">保守帯</text>
+<line x1="179.80" y1="895.00" x2="590.20" y2="895.00" class="dim"/>
+<text x="385.0" y="884.0" class="small" text-anchor="middle">既存共用床 幅22.80</text>
+<line x1="300.04" y1="178.60" x2="469.96" y2="178.60" class="dim"/>
+<text x="385.0" y="168.6" class="small" text-anchor="middle">庭内法 9.44</text>
+<line x1="485.80" y1="387.76" x2="485.80" y2="206.14" class="dim"/>
+<text x="489.4" y="301.0" class="small" text-anchor="start">10.09</text>
+<text x="52.0" y="1100.0" class="small" text-anchor="start">共用床の主通路：目標1.80以上。東西帯2.00。</text>
+<text x="52.0" y="1125.0" class="small" text-anchor="start">新店・庭・上階室への歩行拡張は行わない。</text>
+<text x="52.0" y="1150.0" class="small" text-anchor="start">閉じた外ガラスと移動境界をそろえる。</text>
+<text x="52.0" y="1190.0" class="head" text-anchor="start">凡例</text>
+<line x1="52.00" y1="1218.00" x2="105.00" y2="1218.00" class="glass"/>
+<text x="120.0" y="1224.0" class="small" text-anchor="start">固定ガラス・閉じた建具</text>
+<line x1="52.00" y1="1250.00" x2="105.00" y2="1250.00" class="sight"/>
+<text x="120.0" y="1256.0" class="small" text-anchor="start">着座主視線 +Z</text>
+<rect x="52.00" y="1272.00" width="55.00" height="22.00" class="" fill="url(#h)"/>
+<text x="120.0" y="1289.0" class="small" text-anchor="start">予約する通過帯</text>
+<text x="52.0" y="1330.0" class="small" text-anchor="start">平面・断面の詳細数値は同名の設計本文を正本とする。</text>
+<text x="810.0" y="155.0" class="head" text-anchor="start">2｜終端立面（Sから +Z）</text>
+<rect x="876.80" y="178.30" width="866.40" height="651.70" class="wall"/>
+<rect x="1130.64" y="674.77" width="358.72" height="155.23" class="floor"/>
+<line x1="1139.76" y1="681.04" x2="1480.24" y2="681.04" class="glass"/>
+<line x1="1139.76" y1="825.44" x2="1480.24" y2="825.44" class="glass"/>
+<line x1="1480.24" y1="825.44" x2="1480.24" y2="681.04" class="glass"/>
+<line x1="1395.12" y1="825.44" x2="1395.12" y2="681.04" class="glass"/>
+<line x1="1310.00" y1="825.44" x2="1310.00" y2="681.04" class="glass"/>
+<line x1="1224.88" y1="825.44" x2="1224.88" y2="681.04" class="glass"/>
+<line x1="1139.76" y1="825.44" x2="1139.76" y2="681.04" class="glass"/>
+<ellipse cx="1272.00" cy="733.10" rx="28.50" ry="26.60" fill="#8ca17e"/>
+<line x1="1272.00" y1="816.70" x2="1272.00" y2="750.20" class="" stroke="#6a6652" stroke-width="2"/>
+<rect x="1173.20" y="816.70" width="167.20" height="13.30" class="" fill="#a9b78d"/>
+<rect x="973.70" y="510.80" width="672.60" height="146.30" class="floor"/>
+<rect x="1505.70" y="567.80" width="129.20" height="89.30" fill="#b8a386" stroke="#837a68" stroke-width="1"/><rect x="1249.20" y="628.60" width="140.60" height="3.04" fill="#bca88c" stroke="#837a68" stroke-width="1"/><rect x="1378.40" y="631.64" width="5.70" height="25.46" fill="#796f60" stroke="#837a68" stroke-width="1"/><rect x="1254.90" y="631.64" width="5.70" height="25.46" fill="#796f60" stroke="#837a68" stroke-width="1"/><rect x="985.10" y="615.30" width="131.10" height="38.00" fill="#a8b2ae" stroke="#837a68" stroke-width="1"/><rect x="1505.70" y="634.87" width="129.20" height="1.33" fill="#847761" stroke="#837a68" stroke-width="1"/><rect x="1505.70" y="613.97" width="129.20" height="1.33" fill="#847761" stroke="#837a68" stroke-width="1"/><rect x="1505.70" y="593.07" width="129.20" height="1.33" fill="#847761" stroke="#837a68" stroke-width="1"/><rect x="1505.70" y="572.17" width="129.20" height="1.33" fill="#847761" stroke="#837a68" stroke-width="1"/>
+<line x1="1646.30" y1="651.40" x2="1646.30" y2="523.34" class="glass"/>
+<line x1="1564.60" y1="651.40" x2="1564.60" y2="523.34" class="glass"/>
+<line x1="1494.68" y1="651.40" x2="1494.68" y2="523.34" class="glass"/>
+<line x1="1484.04" y1="651.40" x2="1484.04" y2="523.34" class="glass"/>
+<line x1="1397.40" y1="651.40" x2="1397.40" y2="523.34" class="glass"/>
+<line x1="1310.00" y1="651.40" x2="1310.00" y2="523.34" class="glass"/>
+<line x1="1222.60" y1="651.40" x2="1222.60" y2="523.34" class="glass"/>
+<line x1="1135.96" y1="651.40" x2="1135.96" y2="523.34" class="glass"/>
+<line x1="1125.32" y1="651.40" x2="1125.32" y2="523.34" class="glass"/>
+<line x1="1055.40" y1="651.40" x2="1055.40" y2="523.34" class="glass"/>
+<line x1="973.70" y1="651.40" x2="973.70" y2="523.34" class="glass"/>
+<line x1="973.70" y1="651.40" x2="1646.30" y2="651.40" class="glass"/>
+<line x1="973.70" y1="523.34" x2="1646.30" y2="523.34" class="glass"/>
+<rect x="963.06" y="657.10" width="693.88" height="18.62" class="wall"/>
+<text x="1770.0" y="626.7" class="small" text-anchor="start">2F 読書サロン</text>
+<rect x="973.70" y="337.90" width="672.60" height="144.40" class="floor"/>
+<rect x="1519.00" y="442.40" width="102.60" height="39.90" fill="#c0b9a5" stroke="#837a68" stroke-width="1"/><rect x="1340.40" y="389.20" width="114.00" height="93.10" fill="#a29177" stroke="#837a68" stroke-width="1"/><rect x="1165.60" y="446.20" width="102.60" height="36.10" fill="#d6ccba" stroke="#837a68" stroke-width="1"/><rect x="990.80" y="375.90" width="121.60" height="60.80" fill="#b4aca0" stroke="#837a68" stroke-width="1"/>
+<line x1="1646.30" y1="476.60" x2="1646.30" y2="348.54" class="glass"/>
+<line x1="1564.60" y1="476.60" x2="1564.60" y2="348.54" class="glass"/>
+<line x1="1494.68" y1="476.60" x2="1494.68" y2="348.54" class="glass"/>
+<line x1="1484.04" y1="476.60" x2="1484.04" y2="348.54" class="glass"/>
+<line x1="1397.40" y1="476.60" x2="1397.40" y2="348.54" class="glass"/>
+<line x1="1310.00" y1="476.60" x2="1310.00" y2="348.54" class="glass"/>
+<line x1="1222.60" y1="476.60" x2="1222.60" y2="348.54" class="glass"/>
+<line x1="1135.96" y1="476.60" x2="1135.96" y2="348.54" class="glass"/>
+<line x1="1125.32" y1="476.60" x2="1125.32" y2="348.54" class="glass"/>
+<line x1="1055.40" y1="476.60" x2="1055.40" y2="348.54" class="glass"/>
+<line x1="973.70" y1="476.60" x2="973.70" y2="348.54" class="glass"/>
+<line x1="973.70" y1="476.60" x2="1646.30" y2="476.60" class="glass"/>
+<line x1="973.70" y1="348.54" x2="1646.30" y2="348.54" class="glass"/>
+<rect x="963.06" y="482.30" width="693.88" height="18.62" class="wall"/>
+<text x="1770.0" y="451.9" class="small" text-anchor="start">3F 工芸資料</text>
+<rect x="973.70" y="185.90" width="672.60" height="129.20" class="floor"/>
+<rect x="1505.70" y="206.80" width="127.30" height="106.40" fill="#aba59a" stroke="#837a68" stroke-width="1"/><rect x="1165.60" y="212.50" width="288.80" height="102.60" fill="#ac997c" stroke="#837a68" stroke-width="1"/><rect x="990.80" y="279.00" width="117.80" height="32.30" fill="#aaa99b" stroke="#837a68" stroke-width="1"/><rect x="1624.07" y="206.80" width="1.33" height="106.40" fill="#807c73" stroke="#837a68" stroke-width="1"/><rect x="1608.87" y="206.80" width="1.33" height="106.40" fill="#807c73" stroke="#837a68" stroke-width="1"/><rect x="1593.67" y="206.80" width="1.33" height="106.40" fill="#807c73" stroke="#837a68" stroke-width="1"/><rect x="1578.47" y="206.80" width="1.33" height="106.40" fill="#807c73" stroke="#837a68" stroke-width="1"/><rect x="1563.27" y="206.80" width="1.33" height="106.40" fill="#807c73" stroke="#837a68" stroke-width="1"/><rect x="1548.07" y="206.80" width="1.33" height="106.40" fill="#807c73" stroke="#837a68" stroke-width="1"/><rect x="1532.87" y="206.80" width="1.33" height="106.40" fill="#807c73" stroke="#837a68" stroke-width="1"/><rect x="1517.67" y="206.80" width="1.33" height="106.40" fill="#807c73" stroke="#837a68" stroke-width="1"/>
+<line x1="1646.30" y1="309.40" x2="1646.30" y2="201.10" class="glass"/>
+<line x1="1564.60" y1="309.40" x2="1564.60" y2="201.10" class="glass"/>
+<line x1="1494.68" y1="309.40" x2="1494.68" y2="201.10" class="glass"/>
+<line x1="1484.04" y1="309.40" x2="1484.04" y2="201.10" class="glass"/>
+<line x1="1397.40" y1="309.40" x2="1397.40" y2="201.10" class="glass"/>
+<line x1="1310.00" y1="309.40" x2="1310.00" y2="201.10" class="glass"/>
+<line x1="1222.60" y1="309.40" x2="1222.60" y2="201.10" class="glass"/>
+<line x1="1135.96" y1="309.40" x2="1135.96" y2="201.10" class="glass"/>
+<line x1="1125.32" y1="309.40" x2="1125.32" y2="201.10" class="glass"/>
+<line x1="1055.40" y1="309.40" x2="1055.40" y2="201.10" class="glass"/>
+<line x1="973.70" y1="309.40" x2="973.70" y2="201.10" class="glass"/>
+<line x1="973.70" y1="309.40" x2="1646.30" y2="309.40" class="glass"/>
+<line x1="973.70" y1="201.10" x2="1646.30" y2="201.10" class="glass"/>
+<rect x="963.06" y="315.10" width="693.88" height="18.62" class="wall"/>
+<text x="1770.0" y="284.7" class="small" text-anchor="start">4F 小サロン</text>
+<rect x="1646.30" y="182.10" width="10.64" height="647.90" class="wall"/>
+<rect x="1484.04" y="182.10" width="10.64" height="647.90" class="wall"/>
+<rect x="1125.32" y="182.10" width="10.64" height="647.90" class="wall"/>
+<rect x="963.06" y="182.10" width="10.64" height="647.90" class="wall"/>
+<text x="828.0" y="825.0" class="small" text-anchor="start">FL 0.00</text>
+<text x="828.0" y="652.1" class="small" text-anchor="start">FL 4.55</text>
+<text x="828.0" y="477.3" class="small" text-anchor="start">FL 9.15</text>
+<text x="828.0" y="310.1" class="small" text-anchor="start">FL 13.55</text>
+<text x="1310.0" y="870.0" class="small" text-anchor="middle">固定面の奥に4.40 mの部屋。柱・床端・奥壁・天井まで制作。</text>
+<text x="810.0" y="925.0" class="head" text-anchor="start">3｜長手断面　主視線 x=-2.70</text>
+<rect x="815.00" y="1318.00" width="924.00" height="2.52" class="wall"/>
+<rect x="1511.78" y="1229.59" width="211.89" height="2.62" class="wall"/>
+<rect x="1723.67" y="1232.21" width="4.20" height="85.78" class="wall"/>
+<line x1="1508.84" y1="1315.48" x2="1508.84" y2="1235.68" class="glass"/>
+<rect x="1511.78" y="1222.45" width="92.40" height="9.24" class="wall"/>
+<rect x="1604.18" y="1141.60" width="4.20" height="80.85" class="wall"/>
+<rect x="1511.78" y="1139.08" width="96.60" height="2.52" class="wall"/>
+<line x1="1508.84" y1="1219.30" x2="1508.84" y2="1148.53" class="glass"/>
+<rect x="1511.78" y="1125.85" width="92.40" height="9.24" class="wall"/>
+<rect x="1604.18" y="1046.05" width="4.20" height="79.80" class="wall"/>
+<rect x="1511.78" y="1043.53" width="96.60" height="2.52" class="wall"/>
+<line x1="1508.84" y1="1122.70" x2="1508.84" y2="1052.98" class="glass"/>
+<rect x="1511.78" y="1033.45" width="92.40" height="9.24" class="wall"/>
+<rect x="1604.18" y="962.05" width="4.20" height="71.40" class="wall"/>
+<rect x="1511.78" y="959.53" width="96.60" height="2.52" class="wall"/>
+<line x1="1508.84" y1="1030.30" x2="1508.84" y2="968.98" class="glass"/>
+<rect x="1578.35" y="1310.65" width="91.35" height="7.35" class="" fill="#d8e0ca"/>
+<rect x="1609.85" y="1311.70" width="27.30" height="13.65" class="" fill="#a5b78f"/>
+<text x="1623.5" y="1301.2" class="small" text-anchor="middle">植栽は +X 側（投影）</text>
+<circle cx="821.30" cy="1292.80" r="4" fill="#b35240"/>
+<line x1="821.30" y1="1292.80" x2="1723.67" y2="1292.80" class="sight"/>
+<circle cx="821.30" cy="1283.35" r="4" fill="#667e92"/>
+<line x1="821.30" y1="1283.35" x2="1723.67" y2="1283.35" class="sight"/>
+<text x="833.3" y="1276.3" class="small" text-anchor="start">T 1.65</text>
+<text x="833.3" y="1315.8" class="small" text-anchor="start">S 1.20</text>
+<line x1="821.30" y1="1357.00" x2="1508.84" y2="1357.00" class="dim"/>
+<text x="1165.1" y="1349.0" class="small" text-anchor="middle">S→固定面 32.74</text>
+<line x1="1511.78" y1="1015.00" x2="1604.18" y2="1015.00" class="dim"/>
+<text x="1558.0" y="1007.0" class="small" text-anchor="middle">上階奥行4.40</text>
+<text x="1775.0" y="1225.2" class="small" text-anchor="end">庭天井4.085</text>
+<text x="1775.0" y="1390.0" class="small" text-anchor="end">厚さ・支持は模型の設計値。部材強度の保証ではない。</text>
+<rect x="1511.78" y="1231.69" width="92.40" height=".525" fill="#eee7d9"/>
+<rect x="1511.78" y="1135.09" width="92.40" height=".525" fill="#eee7d9"/>
+<rect x="1511.78" y="1042.69" width="92.40" height=".525" fill="#eee7d9"/>
+<rect x="840" y="960" width="460" height="300" fill="#faf9f5" stroke="#c6c5ba"/>
+<text x="855" y="986" class="head">床端の納まり（縦を拡大）</text>
+<rect x="985" y="1020" width="270" height="88" class="wall"/>
+<rect x="985" y="1108" width="270" height="5" fill="#eee7d9" stroke="#8f887a"/>
+<rect x="965" y="1020" width="20" height="98" fill="#8e8576"/>
+<text x="855" y="1043" class="small">FL 4.550</text>
+<text x="1000" y="1066" class="small">床板 .440 m</text>
+<text x="855" y="1103" class="small">下面4.110</text>
+<text x="1000" y="1140" class="small">仕上25 mm → 下面4.085</text>
+<text x="855" y="1170" class="small">床端帯：見付 .490 → 下端4.060</text>
+<text x="855" y="1192" class="small">完成面z3.040 / 板は +Z に14 mm</text>
+<text x="855" y="1216" class="small">框見込み70 mm / 内法始点z3.180</text>
+<text x="855" y="1242" class="small">G2本体は非梁部の設備箱へ（本文参照）</text>
+</svg>

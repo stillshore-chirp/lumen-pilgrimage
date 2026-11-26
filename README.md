@@ -35,6 +35,7 @@ Meta Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、「VRを
 | 70階住戸の間取りと窓からの眺望 | [基本設計](docs/residence/residence-70f-design.md) · [寸法入り設計図 PDF](docs/residence/residence-70f-drawings.pdf) |
 | 映画館シアター（大）の客席・光・音の計画 | [基本設計 PDF](docs/cinema/cinema-floor-plan.pdf) · [音響・照明設計 PDF](docs/cinema/cinema-light-sound-design.pdf) |
 | 商業アトリウム1階の店舗内装 | [詳細設計](docs/atrium/tenant-interior-design.md) · [寸法図 PDF](docs/atrium/tenant-interior-drawings.pdf) |
+| 商業アトリウムのソファ正面 | [光庭・専門店・上階コモンズの施設設計](docs/atrium/sofa-facing-facility-design.md) |
 | 湖畔の広間の配置と環境設計 | [湖畔の広間の設計](docs/lake/lake-hall-design.md) |
 | 建築・造形・照明・音響を学ぶ | [専門書「歩ける空間の設計」](docs/learning/README.md) |
 | テストの実行、実機での確認、配布ビルド | [検証と配布ビルド](docs/verification.md) |

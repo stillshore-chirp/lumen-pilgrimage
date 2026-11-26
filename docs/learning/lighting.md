@@ -114,6 +114,18 @@ $$
 
 レイヤーの強さを決める順番は、まず対象面、次に光の方向、最後に色である。暖色にしたコーブ光が壁を照らさず器具だけを見せるなら、原因は色相より先に器具の位置、遮蔽、壁の法線、面積にある。天窓を青くしたのに上部へ光が回らないなら、空の色を飽和させる前に、天窓の開口、ガラスの透過、空の輝度、サンプル経路を確認する。
 
+### 保全の条件と観賞の目的を分ける
+
+植物を含む室内では、枝葉を見せる光と、個体を長期に維持する光を別の条件として定める。UF/IFASの室内フィカス技術資料p.2は、生産時の遮光条件を変えた9品種を室内50/100 foot-candlesで1年間評価した結果を述べ、100〜200 foot-candlesでの利用にも生産・順化の条件を付ける。Aliiには50 foot-candlesの記載もあり、数値だけを全ての個体の必要量や最適値へ置き換えられない。明暗に順応した人が葉を読めることも、その植物に十分な光がある証拠にはならない。 [UF/IFAS ENH879, p.2「Production」「Shipping and Interior Care」](https://ask.ifas.ufl.edu/publication/EP136/pdf)
+
+観賞中の点灯、保守点検、保全のための継続運転は、目的と継続時間が異なる。系統ごとに照らす面と運転する条件を決め、昼夜の表示や全消灯操作との関係を明確にする。短い点検点灯を、日次の育成光周期として扱わない。植物の光環境には光源のスペクトル、葉面での光合成光量子束密度（PPFD）、日積算光量（DLI）などが関わり、視感度に基づく照度と色温度だけでは決まらない。Purdue Extensionの技術資料pp.1–2も、人の視覚を基準にした測光量、光量子による瞬時値、一日に受ける積算量を区別する。この区別を使い、同資料の温室作物向け目標値は観賞庭へ流用しない。未校正の描画で置いた照度の開始目標、画面上の明暗、実施設で測定した量を分ければ、観賞の露出調整で生育条件まで満たしたと誤認せずに済む。[Purdue Extension・測光量と光量子の指標](https://www.extension.purdue.edu/extmedia/ho/ho-238-w.pdf)と、系統・運用を分けた[ソファ正面の施設設計](../atrium/sofa-facing-facility-design.md)を参照できる。
+
+### 配光と影を断面へ戻す
+
+配光を円錐で近似するとき、全角は光軸をはさんだ広がり、半角は光軸から片側の縁までの角度である。器具資料と描画側がどちらを使うかを確かめ、光源、照射中心、対象の上端・下端・左右端を同じ断面へ置く。光軸と確認点へ向かう線分の角度を比べれば、中心だけを狙って葉や展示物の上端を外す配置に気づける。実物の向きと遮蔽物も加えて検図するが、代表点が円錐内にあることは実配光、面の照度均斉、葉の相互遮蔽まで確認した結果ではない。
+
+直達光による影には、光源から受照面へ至る経路上の遮蔽物が必要になる。木より奥の器具がさらに奥の壁を照らす配置なら、その木を同じ器具による壁の枝影の根拠にはできない。Wardの原著§3.3は、受照点から光源が見えるかを影の光線で判定し、大きい光源や近い光源には複数の標本を用いる方法を説明する。一本の線分を使う断面検図は光路の成立を調べる初期判断であり、面光源の半影まで求める計算ではない。光源の位置、遮蔽物、受照面がつながるところに影を生じさせ、器具の点消灯でもその関係を保つ。 [Ward, 1994, §3.3](https://radsite.lbl.gov/radiance/papers/sg94.1/light.html)
+
 ## 天空モデルとRadianceでの評価
 
 [CIEの「Spatial distribution of daylight — CIE standard general sky」](https://www.cie.co.at/publications/spatial-distribution-daylight-cie-standard-general-sky-0) は、全天空の輝度分布を天候・気候・太陽位置に応じた複数の分布として扱う。標準は天頂輝度に対する相対分布を定義し、天頂輝度または水平照度を与えて絶対輝度へ拡張する。晴天、曇天、中間の条件を変えると、空の方向別の輝度に応じて受照分布が変わる。太陽の直射も、入射角と遮蔽に応じて室内の明暗を変える。
@@ -187,6 +199,8 @@ Radianceの結果は、窓の汚れ、実際の反射率、遮光設備の状態
 - [CIE, Spatial distribution of daylight — CIE standard general sky](https://www.cie.co.at/publications/spatial-distribution-daylight-cie-standard-general-sky-0) — CIE標準天空の相対輝度分布。
 - [Gregory J. Ward, The RADIANCE Lighting Simulation and Rendering System](https://radsite.lbl.gov/radiance/papers/sg94.1/paper.html)、[Radiance detailed description](https://radsite.lbl.gov/radiance/refer/long.html)、[GENSKY manual](https://radsite.lbl.gov/radiance/man_html/gensky.1.html) — Radianceの光線追跡、入力、天空生成、計算上の限界。
 - [Blender Manual, Displays and Views](https://docs.blender.org/manual/id/5.0/render/color_management/displays_views.html)、[OpenEXR, Scene-Linear Image Representation](https://openexr.com/en/latest/SceneLinear.html)、[ACES, Output Transforms](https://docs.acescentral.com/system-components/output-transforms/)、[ACES, Tone Mapping](https://docs.acescentral.com/system-components/output-transforms/technical-details/tone-mapping/) — 露出、scene-referred、表示変換、トーンマッピング。
+- [J. Chen et al., UF/IFAS ENH879, Cultural Guidelines for Commercial Production of Interiorscape Ficus](https://ask.ifas.ufl.edu/publication/EP136/pdf) — p.2「Production」「Shipping and Interior Care」。生産・順化条件と室内照度を分けた評価。観賞用の描画目標や全植物の必要照度を定める資料ではない。
+- [A. P. Torres & R. G. Lopez, Purdue Extension HO-238-W, Measuring Daily Light Integral in a Greenhouse](https://www.extension.purdue.edu/extmedia/ho/ho-238-w.pdf) — pp.1–2「Measuring Light」「Daily Light Integral」。測光量と光量子による瞬時値・日積算量の区別。温室作物向け目標値は観賞庭へ流用しない。
 
 数値例、アトリウムの寸法、開始照度、露出スイープは説明のための設定であり、法規・規格・特定レンダラーの既定値を意味しない。規格値を適用する場合は、対象用途、版、地域、設備条件を別途確認する。図はこの章の説明用に作成したオリジナルSVGで、外部画像や参照写真は使用していない。
 
