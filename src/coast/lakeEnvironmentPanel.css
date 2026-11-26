@@ -71,6 +71,11 @@
   font-size: .85em;
 }
 
+.lake-environment-audio-status {
+  margin: 0 0 8px;
+  color: #f0c8a8;
+}
+
 @media (max-width: 540px) {
   .coast-travel-dialog.lake-environment-dialog {
     inset: auto 12px max(12px, env(safe-area-inset-bottom));

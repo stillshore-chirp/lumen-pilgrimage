@@ -4,6 +4,11 @@ import './lakeEnvironmentPanel.css';
 
 const label = '湖畔の環境設定';
 
+export interface LakeKotoControls {
+  readonly kotoPlaying: boolean;
+  setKotoPlaying(value: boolean): Promise<void>;
+}
+
 function makeButton(text: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
@@ -11,7 +16,7 @@ function makeButton(text: string): HTMLButtonElement {
   return button;
 }
 
-export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () => void) {
+export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () => void, koto?: LakeKotoControls) {
   const element = document.createElement('div');
   element.className = 'coast-travel-panel';
   const trigger = makeButton('環境設定');
@@ -49,6 +54,27 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
     switches.append(button);
     return { button, key };
   });
+  const kotoButton = koto && makeButton('琴の演奏');
+  const audioStatus = document.createElement('p');
+  audioStatus.className = 'lake-environment-audio-status';
+  audioStatus.setAttribute('role', 'status');
+  audioStatus.hidden = true;
+  if (koto && kotoButton) {
+    switches.append(kotoButton);
+    kotoButton.addEventListener('click', async () => {
+      audioStatus.hidden = true;
+      kotoButton.disabled = true;
+      try {
+        await koto.setKotoPlaying(!koto.kotoPlaying);
+      } catch {
+        audioStatus.textContent = '再生できませんでした。もう一度押してください。';
+        audioStatus.hidden = false;
+      } finally {
+        kotoButton.disabled = false;
+        sync();
+      }
+    });
+  }
 
   const sliders = document.createElement('div');
   sliders.className = 'lake-environment-sliders';
@@ -83,13 +109,14 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
   directionHint.textContent = '方位は正面が0°、右が90°。';
   const reset = makeButton('太陽と月を既定に戻す');
   reset.addEventListener('click', () => { settings.resetSky(); sync(); });
-  content.append(switches, sliders, directionHint, reset);
+  content.append(switches, audioStatus, sliders, directionHint, reset);
   dialog.append(header, content);
   element.append(trigger, dialog);
 
   function sync(): void {
     const { state } = settings;
     for (const { button, key } of toggles) button.setAttribute('aria-pressed', String(state[key]));
+    if (koto && kotoButton) kotoButton.setAttribute('aria-pressed', String(koto.kotoPlaying));
     for (const { input, output, key } of axes) {
       const value = state[key].toFixed(1);
       if (input.value !== value) input.value = value;
@@ -117,7 +144,9 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
 }
 
 export function createLakeEnvironmentXRItems(settings: LakeSettings,
-  open: (name: string, items: readonly ImmersiveMenuItem[]) => void, back: () => void) {
+  open: (name: string, items: readonly ImmersiveMenuItem[]) => void, back: () => void, koto?: LakeKotoControls) {
+  let pending = false;
+  let failed = false;
   function show(): void {
     const toggles = lakeToggleControls.map(({ key, label }) => ({
       label: () => `${label}  ${settings.state[key] ? '表示中' : '非表示'}`,
@@ -138,8 +167,27 @@ export function createLakeEnvironmentXRItems(settings: LakeSettings,
         ]);
       },
     }));
+    const kotoRows: ImmersiveMenuItem[] = koto ? [{
+      label: () => {
+        if (pending) return '琴を準備しています';
+        if (failed) return '琴を再生する（再試行）';
+        return koto.kotoPlaying ? '琴を停止する' : '琴を再生する';
+      },
+      enabled: () => !pending,
+      invoke: async () => {
+        pending = true;
+        failed = false;
+        try {
+          await koto.setKotoPlaying(!koto.kotoPlaying);
+        } catch {
+          failed = true;
+        } finally {
+          pending = false;
+        }
+      },
+    }] : [];
     open(label, [
-      ...toggles, ...axes,
+      ...toggles, ...kotoRows, ...axes,
       { label: '太陽と月を既定に戻す', invoke: () => settings.resetSky() },
       { label: '設定に戻る', invoke: back },
     ]);

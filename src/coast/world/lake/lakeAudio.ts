@@ -1,5 +1,5 @@
 import type { Vector3 } from 'three';
-import type { CoastMovement } from '../../CoastControls';
+import { EYE_HEIGHT, type CoastMovement } from '../../CoastControls';
 import { BIRD_CALL_RANGE, type CoastBirdCue, type CoastBirdSpecies } from '../../coastBirdCue';
 import { connectExplorationOutput } from '../../explorationOutput';
 import { DEFAULT_EXPLORATION_MIX, explorationSoundGain, type ExplorationMix } from '../../explorationSound';
@@ -122,7 +122,7 @@ export class LakeAudio {
   private context?: AudioContext;
   private koto?: LakeKoto;
   private kotoRequest = 0;
-  private listenerPosition: LakePoint = { x: LAKE_SPAWN.x, y: 1.65, z: LAKE_SPAWN.z };
+  private listenerPosition: LakePoint = { x: LAKE_SPAWN.x, y: EYE_HEIGHT, z: LAKE_SPAWN.z };
   private master?: GainNode;
   private buses?: Record<MixSound, GainNode>;
   private output: readonly AudioNode[] = [];

@@ -3,7 +3,7 @@ import {
 } from 'three';
 import { CoastAudio } from './CoastAudio';
 import { CoastXR } from './CoastXR';
-import { createLakeEnvironmentPanel, createLakeEnvironmentXRItems } from './LakeEnvironmentPanel';
+import { createLakeEnvironmentPanel, createLakeEnvironmentXRItems, type LakeKotoControls } from './LakeEnvironmentPanel';
 import type { ImmersiveMenuItem } from '../xr/ImmersiveMenu';
 import { renderImmersiveStatus } from '../xr/ImmersiveSession';
 import { CoastControls, type CoastMovement, type CoastNavigation } from './CoastControls';
@@ -67,6 +67,7 @@ export type ExplorationScene = {
   readonly residenceControls?: readonly ResidenceControlSection[];
   readonly cinemaControls?: CinemaControls;
   readonly lakeSettings?: LakeSettings;
+  readonly lakeKoto?: LakeKotoControls;
 } & (
   | { readonly id: 'coast'; readonly navigation?: never }
   | { readonly id: Exclude<ExplorationWorldId, 'coast'>; readonly navigation: CoastNavigation }
@@ -340,9 +341,9 @@ export class CoastApp {
       this.lakePanel = createLakeEnvironmentPanel(loaded.lakeSettings, () => {
         this.monitor?.closePanel();
         this.controls.releaseInput();
-      });
+      }, loaded.lakeKoto);
       this.openLakeXRSettings = createLakeEnvironmentXRItems(loaded.lakeSettings,
-        (name, items) => this.xr.openMenu(name, items), () => this.openXRSettings());
+        (name, items) => this.xr.openMenu(name, items), () => this.openXRSettings(), loaded.lakeKoto);
       actions.append(this.lakePanel.element);
     }
     this.monitorBinding = this.bindMonitor(actions);

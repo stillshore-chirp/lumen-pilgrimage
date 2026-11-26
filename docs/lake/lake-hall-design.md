@@ -60,6 +60,10 @@
 
 湖岸の水と間を空けた鳥の声を空間に置く。室内にはガラスを透過する成分と、近い側の換気ルーバーから届く成分が重なる。距離、透過と回り込みの経路の違いに応じ、音量、音色、到来方向と遅れを変える。比較時は音源と全体音量を固定する。 [専門書・開口と固定ガラス](../learning/acoustics.md#開口と固定ガラスの経路を確かめる) · [湖畔の経路計算](../../src/coast/world/lake/lakeAudioAcoustics.ts)
 
+天井の高さ8.10 mに、横4基を奥行3列に並べて計12基の音源とする。各位置へ同じ演奏を送り、聴取者に近い音源の寄与を大きくする。位置と向きから到来方向が変わる。同じ信号の重なりで出力が過度に増えないよう全体を抑え、広間の境界では室内側から音を絞る。 [W3C・Web Audioの空間音響](https://www.w3.org/TR/webaudio/#Spatialization) · [天井音源と琴の再生](../../src/coast/world/lake/lakeKoto.ts)
+
+39秒の演奏は平調子をもとに作曲した。爪が弦を弾く瞬間、弦の倍音の減衰、胴と内部の空気の響きを合成する。押し手は発音後に音高が連続して上がるように作る。譜面と音源は広間用に制作した。 [Coaldrakeら・弦と爪のモデル](https://pub.dega-akustik.de/ISMA2019/data/articles/000063.pdf) · [Coaldrake・箏の胴の振動](https://pubmed.ncbi.nlm.nih.gov/33261375/) · [西口ら・押し手の計測](https://www.jstage.jst.go.jp/article/jasj/77/10/77_634/_article/-char/ja) · [譜面と音源の合成](../../src/coast/world/lake/lakeKotoScore.ts)
+
 ## 素材と確認方法
 
 参照画像は構図と制作寸法を検討するために読み取った。配布素材はプロジェクト内の出典を確認した木、岩、雲、録音と、このワールド用に実装する立体や手続き素材を使用する。木・石・雲・録音の利用条件は各素材の記録を参照する。研究資料は設計の根拠として参照する。 [木材](../../public/residence-materials/ATTRIBUTION.md) · [石灰岩](../../public/coast-materials/ATTRIBUTION.md) · [湖畔の雲と松](../../public/lake-materials/ATTRIBUTION.md) · [録音](../../public/coast-audio/ATTRIBUTION.md)
