@@ -13,7 +13,7 @@
 | 映画館と仮想モニター | 映画館の設計資料は[平面図](cinema/cinema-floor-plan.pdf)と[光・音の設計](cinema/cinema-light-sound-design.pdf)。仮想モニターの映像は接続した配信元から実行時に受け取ります。 | 映画館の形状・仕上げ・空調音は [`src/coast/world/cinema/`](../src/coast/world/cinema/) で生成。モニターの面と接続映像は [`monitorObject.ts`](../src/monitor/monitorObject.ts) で生成・表示します。 |
 | 映画館の測定済みHRTF | [`public/cinema-audio/`](../public/cinema-audio/) のMIT KEMAR由来48 kHz・144 tap配布表。出典・利用条件・加工・バイナリ表仕様は[HRTFのクレジット](../public/cinema-audio/ATTRIBUTION.md)に記録します。 | [`prepare-cinema-hrtf.py`](../scripts/prepare-cinema-hrtf.py) が公式compact archiveから規則的な角度表を再生成します。上映側の読込・畳み込みは映画館の音響実装が所有します。 |
 | 商業アトリウム | [床材の取得と加工](../public/atrium-materials/ATTRIBUTION.md) · [合成環境音の内訳](../public/atrium-audio/ATTRIBUTION.md)。 | [建築・展示と音の編集先](worlds.md#商業アトリウム)。環境音の生成は [`atriumAudioSamples.ts`](../src/coast/world/atrium/atriumAudioSamples.ts)。 |
-| 湖畔の広間 | [雲と黒松の出典・生成と変換](../public/lake-materials/ATTRIBUTION.md)。木材と岩は既存の仕上げ材・景観素材を使用。 | [湖畔の広間の設計](lake/lake-hall-design.md) · [地形・空・建築の編集先](worlds.md#湖畔の広間)。 |
+| 湖畔の広間 | [雲と植生の出典・生成と変換](../public/lake-materials/ATTRIBUTION.md)。小葉の[編集元PNG](../assets/lake-materials/lake-broadleaf-clusters.png)を保持。木材と岩は既存の仕上げ材・景観素材を使用。 | [植生の形態と配置](lake/lake-hall-design.md#植生の形態と配置)、[樹木・低木・地被](../src/coast/world/lake/lakeVegetation.ts)、[卓上の有花枝](../src/coast/world/lake/lakeHallArrangement.ts) · [ワールドの編集先](worlds.md#湖畔の広間)。 |
 
 ### 画像・3Dモデル・録音の再作成
 

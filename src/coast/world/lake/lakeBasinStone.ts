@@ -90,11 +90,11 @@ function stoneMaterial(map: Texture, ring: boolean): MeshStandardMaterial {
             abs(fract(strike.y * 0.31 + coastNoise(strike * vec2(0.72, 0.12)) * 0.47) - 0.5)))
             * smoothstep(0.45, 0.79, weathering);
           float lichen = smoothstep(0.23, 0.83, rockNormal.y)
-            * smoothstep(0.34, 0.80, weathering * 0.56 + faceTone * 0.29 + scanHeight * 0.43)
+            * smoothstep(0.49, 0.87, weathering * 0.56 + faceTone * 0.29 + scanHeight * 0.43)
             * smoothstep(${LAKE_WATER_Y}, 0.5, stone.y) * (1.0 - smoothstep(22.0, 43.0, stone.y));
           exposedRock *= (0.66 + faceTone * 0.29 + weathering * 0.40 - fault * 0.29)
             * mix(vec3(0.86, 0.94, 1.07), vec3(1.14, 1.04, 0.91), weathering);
-          exposedRock = mix(exposedRock, exposedRock * vec3(0.53, 0.68, 0.31), 0.86 * lichen);
+          exposedRock = mix(exposedRock, exposedRock * vec3(0.70, 0.79, 0.63), 0.40 * lichen);
           surfaceHeight += 0.10 * faceTone + 0.038 * weathering - 0.055 * fault;
         }
         diffuseColor.rgb *= exposedRock * mix(vec3(1.0), vec3(0.46, 0.54, 0.59), wetness);
