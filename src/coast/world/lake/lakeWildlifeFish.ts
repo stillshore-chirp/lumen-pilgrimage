@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createLakeFishMotion } from './lakeFishMotion';
+import { createLakeFishMotion, type FishStart } from './lakeFishMotion';
 
 type Point = [number, number, number];
 type FishPigment = { belly: number; back: number; patch: number; fin: number; pattern: number };
@@ -12,12 +12,28 @@ const pigments: readonly FishPigment[] = [
   { belly: 0xc4b88c, back: 0x6e7861, patch: 0xa49b68, fin: 0x6c775e, pattern: 4.5 },
 ];
 
-const fishInPatch = [
-  { size: 1.0, beatRate: 1.28, atNight: true, x: -.90, z: 1.12, depth: .33 },
-  { size: .79, beatRate: 1.46, atNight: true, x: .76, z: .71, depth: .47 },
-  { size: .91, beatRate: 1.32, atNight: false, x: .94, z: -.94, depth: .38 },
-  { size: .72, beatRate: 1.51, atNight: false, x: -.87, z: -1.13, depth: .50 },
-] as const;
+type LakeFish = FishStart & { size: number; atNight: boolean };
+
+const fishStarts: readonly LakeFish[] = [
+  { home: 'west', x: -18.9, z: -12.9, depth: .34, yaw: -1.41, size: .96, beatRate: 1.28, roaming: 0, atNight: true },
+  { home: 'west', x: -17.4, z: -15.6, depth: .47, yaw: 1.66, size: .75, beatRate: 1.46, roaming: 0, atNight: true },
+  { home: 'west', x: -21.0, z: -16.7, depth: .38, yaw: .81, size: .85, beatRate: 1.36, roaming: .67, atNight: false },
+  { home: 'west', x: -15.0, z: -12.7, depth: .50, yaw: -1.75, size: .70, beatRate: 1.51, roaming: .37, atNight: false },
+  { home: 'east', x: 17.9, z: -13.0, depth: .33, yaw: 1.39, size: .90, beatRate: 1.32, roaming: 0, atNight: true },
+  { home: 'east', x: 16.1, z: -16.7, depth: .45, yaw: -1.30, size: .77, beatRate: 1.43, roaming: 0, atNight: true },
+  { home: 'east', x: 20.4, z: -15.4, depth: .38, yaw: -.72, size: .82, beatRate: 1.39, roaming: .64, atNight: false },
+  { home: 'east', x: 14.3, z: -13.0, depth: .48, yaw: 1.85, size: .73, beatRate: 1.52, roaming: .40, atNight: false },
+  { home: 'front', x: -10.8, z: -20.8, depth: .30, yaw: 1.24, size: .97, beatRate: 1.33, roaming: 0, atNight: true },
+  { home: 'front', x: -4.1, z: -23.9, depth: .43, yaw: -1.91, size: .76, beatRate: 1.43, roaming: .54, atNight: false },
+  { home: 'front', x: -.6, z: -22.1, depth: .32, yaw: 1.82, size: .91, beatRate: 1.29, roaming: 0, atNight: true },
+  { home: 'front', x: 5.7, z: -21.0, depth: .39, yaw: -1.86, size: .86, beatRate: 1.38, roaming: 0, atNight: true },
+  { home: 'front', x: 11.8, z: -26.5, depth: .47, yaw: -1.12, size: .80, beatRate: 1.42, roaming: .40, atNight: false },
+  { home: 'front', x: 2.9, z: -31.2, depth: .49, yaw: 1.98, size: .72, beatRate: 1.54, roaming: .31, atNight: false },
+  { home: 'offshore', x: -13.3, z: -35.0, depth: .51, yaw: 2.28, size: .89, beatRate: 1.32, roaming: .32, atNight: false },
+  { home: 'offshore', x: -7.6, z: -40.6, depth: .66, yaw: .97, size: .79, beatRate: 1.43, roaming: .66, atNight: false },
+  { home: 'offshore', x: 6.5, z: -37.5, depth: .62, yaw: -1.82, size: .94, beatRate: 1.30, roaming: .30, atNight: false },
+  { home: 'offshore', x: 14.0, z: -43.8, depth: .76, yaw: -1.09, size: .83, beatRate: 1.38, roaming: .60, atNight: false },
+];
 
 const profile = new THREE.SplineCurve([
   [0, -.516], [.026, -.49], [.047, -.384], [.083, -.255],
@@ -117,15 +133,15 @@ export function buildLakeFish(root: THREE.Group, seed = Math.floor(Math.random()
   root.add(group);
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .68, side: THREE.DoubleSide });
   const colors = pigments.map(createFishGeometry);
-  const motion = createLakeFishMotion(fishInPatch, seed);
-  const fish = ['west', 'east'].flatMap((side, patch) => fishInPatch.map((slot, i) => {
-    const mesh = new THREE.Mesh(colors[(i + patch) % colors.length], material);
-    mesh.name = 'lake-fish-' + side + '-' + (i + 1);
+  const motion = createLakeFishMotion(fishStarts, seed);
+  const fish = fishStarts.map((slot, i) => {
+    const mesh = new THREE.Mesh(colors[i % colors.length], material);
+    mesh.name = `lake-fish-${slot.home}-${i + 1}`;
     mesh.scale.setScalar(slot.size);
     group.add(mesh);
-    const { current, previous } = motion.fish[patch * fishInPatch.length + i];
+    const { current, previous } = motion.fish[i];
     return { mesh, sway: mesh.morphTargetInfluences!, atNight: slot.atNight, current, previous };
-  }));
+  });
   const { lerp } = THREE.MathUtils;
 
   return function swim(elapsed: number, night: boolean): void {
