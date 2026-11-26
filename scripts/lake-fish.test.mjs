@@ -30,7 +30,7 @@ function shoal(t, seed) {
   return { swim, fish };
 }
 
-function windowCamera({ x, z, yaw, pitch }) {
+function destinationCamera({ x, z, yaw, pitch }) {
   const camera = new PerspectiveCamera(layout.LAKE_VIEW_FOV, 16 / 9, .1, 2400);
   camera.position.set(x, 1.65, z);
   camera.rotation.set(pitch, yaw, 0, 'YXZ');
@@ -41,10 +41,10 @@ function windowCamera({ x, z, yaw, pitch }) {
   return camera;
 }
 
-test('fish explore the visible shallows for four minutes without repeating the former circuits', t => {
+test('fish use the connected shallows and offshore reach without repeating the former circuits', t => {
   // This seed formerly let an oncoming fish's separation force push the third east fish backward.
   const { fish, swim } = shoal(t, 978983473);
-  const cameras = layout.LAKE_DESTINATIONS.slice(1).map(windowCamera);
+  const cameras = layout.LAKE_DESTINATIONS.map(destinationCamera);
   const scene = new Scene();
   const atmosphere = createCoastAtmosphere(COAST_SUN_DIRECTION);
   const water = buildLakeWater(scene, { value: 0 }, atmosphere);
@@ -56,12 +56,18 @@ test('fish explore the visible shallows for four minutes without repeating the f
   });
   const downward = new Raycaster(undefined, new Vector3(0, -1, 0));
   const sample = new Vector3();
+  const counts = cameras.map(() => ({ day: 0, night: 0 }));
+  const atNight = new Set();
+  swim(0, true);
+  for (const mesh of fish) if (mesh.visible) atNight.add(mesh);
+  swim(0, false);
   const measurements = fish.map(mesh => ({
     last: mesh.position.clone(), yaw: mesh.rotation.y, speeds: { min: Infinity, max: 0 },
-    paths: [], windowSamples: 0, joined: false, apart: false,
+    paths: [], joined: false, apart: false,
   }));
   const fps = 30;
   const interval = fps / 2;
+  let crossedIntoOpenWater = 0;
   const frames = 240 * fps;
   let nearestEncounter = Infinity;
 
@@ -81,29 +87,48 @@ test('fish explore the visible shallows for four minutes without repeating the f
       }
       data.last.copy(mesh.position);
       data.yaw = mesh.rotation.y;
-      const side = Math.floor(i / 4);
       let nearestNeighbor = Infinity;
-      for (let j = side * 4; j < side * 4 + 4; j++) {
+      for (let j = 0; j < fish.length; j++) {
         if (i !== j) nearestNeighbor = Math.min(nearestNeighbor, mesh.position.distanceTo(fish[j].position));
       }
       nearestEncounter = Math.min(nearestEncounter, nearestNeighbor);
-      data.joined ||= nearestNeighbor < 1.48;
+      data.joined ||= nearestNeighbor < 1.7;
       data.apart ||= nearestNeighbor > 2.2;
 
       if (frame % interval !== 0) continue;
       data.paths.push(mesh.position.clone());
-      sample.copy(mesh.position).project(cameras[side]);
-      if (Math.abs(sample.x) < 1 && Math.abs(sample.y) < 1 && Math.abs(sample.z) < 1) data.windowSamples++;
+      for (const [index, camera] of cameras.entries()) {
+        // Check the viewing ray at the plane of the front facade as well as the frustum.
+        const sightline = (layout.LAKE_HALL.frontZ - camera.position.z) / (mesh.position.z - camera.position.z);
+        sample.copy(camera.position).lerp(mesh.position, sightline);
+        if (Math.abs(sample.x) >= layout.LAKE_GLAZING.halfWidth - .15 || sample.y < .05) continue;
+        sample.copy(mesh.position).project(camera);
+        if (Math.max(Math.abs(sample.x), Math.abs(sample.y)) < .96 && Math.abs(sample.z) < 1) {
+          counts[index].day++;
+          if (atNight.has(mesh)) counts[index].night++;
+        }
+      }
 
-      downward.ray.origin.set(mesh.position.x, layout.LAKE_WATER_Y, mesh.position.z);
-      const bottom = downward.intersectObject(bed)[0].point.y;
       mesh.updateMatrix();
       const vertices = mesh.geometry.getAttribute('position').count;
+      let shallowestZ = -Infinity;
+      let lowestY = Infinity;
       for (let vertex = 0; vertex < vertices; vertex++) {
         mesh.getVertexPosition(vertex, sample).applyMatrix4(mesh.matrix);
-        assert.ok(sample.y > bottom + .025 && sample.y < layout.LAKE_WATER_Y - .025,
-          `${mesh.name} passed through the shallow bed or water surface`);
-        assert.ok(sample.z < layout.LAKE_HALL.frontZ - 3, `${mesh.name} reached the hall foundations`);
+        shallowestZ = Math.max(shallowestZ, sample.z);
+        lowestY = Math.min(lowestY, sample.y);
+        assert.ok(sample.y < layout.LAKE_WATER_Y - .025, `${mesh.name} broke through the water surface`);
+      }
+      assert.ok(shallowestZ < layout.LAKE_HALL.frontZ - 3, `${mesh.name} reached the hall foundations`);
+      downward.ray.origin.set(mesh.position.x, layout.LAKE_WATER_Y, shallowestZ);
+      const bottom = downward.intersectObject(bed)[0].point.y;
+      assert.ok(lowestY > bottom + .025, `${mesh.name} crossed the lake bed`);
+    }
+    if (frame % interval === 0) {
+      for (const [index, { day, night }] of counts.entries()) {
+        assert.ok(day >= 5 && night >= 2, `too few observable fish at ${layout.LAKE_DESTINATIONS[index].id} (${day} day, ${night} night at ${frame / fps}s)`);
+        counts[index].day = 0;
+        counts[index].night = 0;
       }
     }
   }
@@ -112,13 +137,18 @@ test('fish explore the visible shallows for four minutes without repeating the f
     const { min, max } = data.speeds;
     assert.ok(max > min + .32, `${fish[i].name} should glide and accelerate (range ${min.toFixed(2)}–${max.toFixed(2)} m/s)`);
     assert.ok(data.joined && data.apart, 'fish should sometimes draw near and sometimes separate');
-    assert.ok(data.windowSamples >= data.paths.length * .97, 'fish should remain observable from the window');
+    const x = data.paths.map(p => p.x);
+    const z = data.paths.map(p => p.z);
+    assert.ok(Math.max(...x) - Math.min(...x) > 6 && Math.max(...z) - Math.min(...z) > 4,
+      'the fish should explore a wider area than its previous patch');
+    if (Math.max(...z) > -27 && Math.min(...z) < -35) crossedIntoOpenWater++;
     // The previous west and east circuits repeated at about 17 s and 15.5 s.
     const delay = i < 4 ? 34 : 31;
     const distances = data.paths.slice(delay).map((position, sample) => position.distanceTo(data.paths[sample]));
     assert.ok(distances.reduce((sum, distance) => sum + distance, 0) / distances.length > 1.5,
       'fish returned to the same route after one former loop');
   }
+  assert.ok(crossedIntoOpenWater >= 2, 'fish should pass between the shallows and offshore water');
   assert.ok(nearestEncounter > .99, `closest centres only ${nearestEncounter.toFixed(3)} m apart`);
 });
 
@@ -133,7 +163,7 @@ test('variable frames and switching to night retain continuous fish motion', t =
     time = Math.min(12, time + steps[frame++ % steps.length]);
     const night = time > 2 && time < 11;
     irregular.swim(time, night);
-    assert.equal(irregular.fish.filter(mesh => mesh.visible).length, night ? 4 : 8);
+    assert.equal(irregular.fish.filter(mesh => mesh.visible).length, night ? 7 : 18);
   }
   for (const [i, mesh] of irregular.fish.entries()) {
     assert.ok(mesh.position.distanceTo(even.fish[i].position) < 1e-8);
