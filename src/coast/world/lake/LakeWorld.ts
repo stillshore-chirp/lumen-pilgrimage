@@ -47,7 +47,6 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   scene.add(ambient, daylight, sun, sun.target);
 
   const hallGroup = sceneGroup(scene, 'Lakeside hall');
-  const andon = buildLakeAndon(hallGroup);
   const basinGroup = sceneGroup(scene, 'Rock basin and stone ring');
   const wildlifeGroup = sceneGroup(scene, 'Birds and shallow-water fish');
   const lampMounts = [
@@ -61,6 +60,7 @@ export async function loadLakeScene(): Promise<ExplorationScene> {
   });
 
   const [hall] = await Promise.all([buildLakeHall(hallGroup), buildLakeBasin(basinGroup)]);
+  const andon = buildLakeAndon(hallGroup, hall.arrangementBounds);
   const sky = buildLakeSky(scene, atmosphere);
   const wildlife = buildLakeWildlife(wildlifeGroup);
   const elapsed = { value: 0 };
