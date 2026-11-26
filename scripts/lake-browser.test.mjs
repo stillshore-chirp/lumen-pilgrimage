@@ -455,25 +455,27 @@ test('a failed lake scene load has a world-specific message and a recovery link'
 test('the indoor window bays and back wall bound walking, with time retained across worlds',
   { timeout }, async t => {
     const { page, errors } = await newPage(t);
+    await page.addInitScript(observeWindowView);
     await goToLake(page);
-    await walk(page, 'w', () => window.lakeProbe.camera.z < -1.1);
-    assert.ok(Math.abs((await page.evaluate(() => window.lakeProbe.camera)).y - 1.65) < 0.04);
+    await page.waitForFunction(() => Boolean(window.lakeProbe.windowView));
+    await walk(page, 'w', () => window.lakeProbe.windowView.position.z < -1.1);
+    assert.ok(Math.abs(await page.evaluate(() => window.lakeProbe.windowView.position.y) - 1.65) < 0.04);
     for (const side of [
-      { label: '西の窓辺', id: 'west-window', x: -18.7, key: 'a', wall: () => window.lakeProbe.camera.x < -21.2 },
-      { label: '東の窓辺', id: 'east-window', x: 18.7, key: 'd', wall: () => window.lakeProbe.camera.x > 21.2 },
+      { label: '西の窓辺', id: 'west-window', x: -18.7, key: 'a', wall: () => window.lakeProbe.windowView.position.x < -21.2 },
+      { label: '東の窓辺', id: 'east-window', x: 18.7, key: 'd', wall: () => window.lakeProbe.windowView.position.x > 21.2 },
     ]) {
       await travel(page, '湖畔の広間', '広間の中央');
       await walk(page, side.key, side.wall, true);
-      assert.ok(Math.abs(await page.evaluate(() => window.lakeProbe.camera.x)) <= 21.401);
+      assert.ok(Math.abs(await page.evaluate(() => window.lakeProbe.windowView.position.x)) <= 21.401);
       await travel(page, '湖畔の広間', side.label);
       await page.waitForURL(url => url.searchParams.get('place') === side.id);
       await page.waitForFunction(x => {
-        const p = window.lakeProbe.camera;
+        const p = window.lakeProbe.windowView.position;
         return Math.hypot(p.x - x, p.y - 1.65, p.z + 5.1) < 0.05;
       }, side.x);
       if (screenshots) await capture(page, `lake-${side.id}-day`);
-      await walk(page, 'w', () => window.lakeProbe.camera.z < -5.83, true);
-      assert.ok((await page.evaluate(() => window.lakeProbe.camera.z)) >= -6.001);
+      await walk(page, 'w', () => window.lakeProbe.windowView.position.z < -5.83, true);
+      assert.ok((await page.evaluate(() => window.lakeProbe.windowView.position.z)) >= -6.001);
       if (screenshots) {
         await withPointerLock(page, async () => {
           await turn(page, 1428, -186);
@@ -481,14 +483,14 @@ test('the indoor window bays and back wall bound walking, with time retained acr
           await turn(page, -1428, 186);
         });
       }
-      await walk(page, 's', () => window.lakeProbe.camera.z > -3.9);
-      const inside = await page.evaluate(() => window.lakeProbe.camera);
+      await walk(page, 's', () => window.lakeProbe.windowView.position.z > -3.9);
+      const inside = await page.evaluate(() => window.lakeProbe.windowView.position);
       assert.ok(Math.abs(inside.y - 1.65) < 0.04);
     }
 
     await travel(page, '湖畔の広間', '広間の中央');
-    await walk(page, 's', () => window.lakeProbe.camera.z > 15.92, true);
-    assert.ok((await page.evaluate(() => window.lakeProbe.camera.z)) <= 16.201);
+    await walk(page, 's', () => window.lakeProbe.windowView.position.z > 15.92, true);
+    assert.ok((await page.evaluate(() => window.lakeProbe.windowView.position.z)) <= 16.201);
     if (screenshots) {
       await capture(page, 'lake-hall-from-rear');
       await withPointerLock(page, async () => {
