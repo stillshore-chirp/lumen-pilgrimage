@@ -20,8 +20,8 @@ export type LakeGroundHeight = (x: number, z: number) => number | undefined;
 const up = new Vector3(0, 1, 0);
 const xAxis = new Vector3(1, 0, 0);
 const barkTint = new Color(0x9a9386);
-const needleTint = new Color(0xd6e1cc);
-const leafTint = new Color(0xdde3c6);
+const needleTint = new Color(0xffffff);
+const leafTint = new Color(0xffffff);
 const tau = Math.PI * 2;
 const pineTiles: readonly FoliageTile[] = [
   [39 / 1254, 123 / 1254, 609 / 1254, 560 / 1254],
@@ -80,43 +80,47 @@ function addFoliagePatch(surface: PlantSurface, center: Vector3, width: number, 
   const across = new Vector3().crossVectors(along, up).normalize().applyAxisAngle(along, roll);
   const normal = new Vector3().crossVectors(across, along).normalize();
   const [left, top, right, bottom] = tile;
-  let previous: number[] = [];
-  for (const v of [0, 0.5, 1]) {
-    const row = [0, 0.5, 1].map(u => {
-      const bow = Math.sin(u * Math.PI) * Math.sin(v * Math.PI) * depth * 0.13;
-      const point = center.clone().addScaledVector(along, (u - 0.5) * width)
-        .addScaledVector(across, (v - 0.5) * depth).addScaledVector(normal, bow);
-      return surface.point(point, tint, shade * (0.91 + v * 0.15),
-        left + u * (right - left), 1 - top - v * (bottom - top));
-    });
-    for (let i = 0; i < 2 && previous.length; i += 1) {
-      surface.triangle(previous[i], row[i], previous[i + 1]);
-      surface.triangle(previous[i + 1], row[i], row[i + 1]);
-    }
-    previous = row;
+  const point = (u: number, v: number) => {
+    const bow = Math.sin(u * Math.PI) * Math.sin(v * Math.PI) * depth * 0.13;
+    const position = center.clone().addScaledVector(along, (u - 0.5) * width)
+      .addScaledVector(across, (v - 0.5) * depth).addScaledVector(normal, bow);
+    return surface.point(position, tint, shade * (0.91 + v * 0.15),
+      left + u * (right - left), 1 - top - v * (bottom - top));
+  };
+  // Edge midpoints were collinear with their corners. A four-triangle fan keeps the same
+  // patch outline, UV boundary and central bow with half as many foliage triangles.
+  const corners = [point(0, 0), point(1, 0), point(1, 1), point(0, 1)];
+  const middle = point(0.5, 0.5);
+  for (let edge = 0; edge < corners.length; edge += 1) {
+    surface.triangle(corners[edge], middle, corners[(edge + 1) % corners.length]);
   }
 }
 
 function addCrownPad(surface: PlantSurface, center: Vector3, radius: number, heading: number,
   seed: number, pine: boolean, shade: number): void {
   const random = coastRandom(seed);
-  const count = pine ? 13 : 17;
+  const count = radius < 0.36 ? 9 : radius < 0.72 ? 15 : pine ? 25 : 29;
   const tint = pine ? needleTint : leafTint;
   const tiles = pine ? pineTiles : leafTiles;
   for (let cluster = 0; cluster < count; cluster += 1) {
     const angle = cluster * GOLDEN_ANGLE + heading;
     const radial = Math.sqrt((cluster + 0.35) / count);
+    const lens = Math.sqrt(1 - radial * radial);
     const point = center.clone().addScaledVector(plantDirection(angle), radius * radial)
-      .addScaledVector(up, radius * (0.18 * (1 - radial * radial) + (random() - 0.5) * 0.11));
-    const width = radius * (pine ? 0.55 : 0.62) * (0.78 + random() * 0.35);
-    const direction = heading + (random() - 0.5) * 2.2;
+      .addScaledVector(up, radius * (0.11 * lens + (random() - 0.5) * 0.54 * lens));
+    const width = radius * (pine ? 0.70 : 0.74) * (0.78 + random() * 0.35);
+    const direction = angle + (random() - 0.5) * 0.8;
     const tile = tiles[Math.floor(random() * tiles.length)];
-    // Small intersecting branchlets make a shallow volume, with a ragged edge and visible undersides.
-    addFoliagePatch(surface, point, width, width * (pine ? 0.65 : 0.82), direction,
-      (random() - 0.5) * 0.35, (random() - 0.5) * 0.52, tile, tint, shade);
-    addFoliagePatch(surface, point.clone().addScaledVector(up, -width * 0.08), width * 0.93,
-      width * (pine ? 0.47 : 0.68), direction + 1.05, 0.15,
-      (cluster % 2 ? -1 : 1) * (0.65 + random() * 0.37), tile, tint, shade * 0.84);
+    // Horizontal branchlets fill the top and underside. Upright and oblique clusters fill the
+    // shallow lens's edge, which would disappear into a line from the low reference viewpoint.
+    addFoliagePatch(surface, point, width, width * 0.76, direction,
+      (random() - 0.5) * 0.42, (random() - 0.5) * 0.56, tile, tint, shade);
+    addFoliagePatch(surface, point.clone().addScaledVector(up, -width * 0.035), width,
+      width * 0.77, direction + 0.34, (random() - 0.5) * 0.34,
+      (cluster % 2 ? -1 : 1) * (1.40 + random() * 0.22), tile, tint, shade * 0.88);
+    addFoliagePatch(surface, point.clone().addScaledVector(up, width * 0.07), width * 0.91,
+      width * 0.73, direction + 1.33, (cluster % 2 ? -1 : 1) * 0.61,
+      (random() - 0.5) * 1.25, tile, tint, shade * 1.02);
   }
 }
 
@@ -170,19 +174,25 @@ function growBroadleaf({ wood, leaves }: LakePlantSurfaces, plant: LakePlant): v
   const sapling = form === 'sapling';
   const origin = new Vector3(x, y, z);
   const wind = plantDirection(plant.windYaw ?? yaw);
-  const thick = height * (shrub ? 0.017 : sapling ? 0.021 : 0.032);
+  const thick = height * (shrub ? 0.017 : sapling ? 0.021 : 0.027);
   const forkLevel = shrub ? 0.08 : 0.23;
   const fork = origin.clone().addScaledVector(up, height * forkLevel).addScaledVector(wind, height * 0.065);
-  addStem(wood, [origin.clone().addScaledVector(up, -0.08), origin, fork],
-    [thick * 1.22, thick * 1.37, thick * 0.82], shrub ? 5 : 10, yaw);
+  const trunkTop = fork.clone().addScaledVector(up, height * 0.09).addScaledVector(wind, height * 0.018);
+  const middle = origin.clone().lerp(fork, 0.56).addScaledVector(plantDirection(yaw + 1.8), height * 0.024);
+  addStem(wood, [origin.clone().addScaledVector(up, -0.08), origin, middle, fork, trunkTop],
+    [thick * 1.22, thick * 1.37, thick, thick * 0.78, thick * 0.20], shrub ? 5 : 10, yaw);
   const mainCount = shrub ? 5 : 4;
   for (let main = 0; main < mainCount; main += 1) {
     const angle = yaw + main * GOLDEN_ANGLE + (random() - 0.5) * 0.38;
     const direction = plantDirection(angle);
     const span = spread * (0.47 + random() * 0.15);
     const branchTop = height * (0.65 + random() * 0.14);
-    const limb = (t: number) => fork.clone().addScaledVector(direction, span * t)
-      .addScaledVector(up, (branchTop - height * forkLevel) * (t * 1.22 - t * t * 0.22))
+    const start = fork.clone().lerp(trunkTop, main * 0.24);
+    const across = plantDirection(angle + Math.PI * 0.5);
+    const crooked = (random() - 0.5) * span * 0.37;
+    const limb = (t: number) => start.clone().addScaledVector(direction, span * t)
+      .addScaledVector(up, (branchTop - start.y + y) * (t * 1.22 - t * t * 0.22))
+      .addScaledVector(across, crooked * Math.sin(t * 3.5))
       .addScaledVector(wind, height * 0.035 * Math.sin(t * Math.PI));
     const radius = thick * (0.69 + random() * 0.12);
     addStem(wood, [0, 0.24, 0.49, 0.76, 1].map(limb), [1, 0.78, 0.56, 0.32, 0.04].map(r => radius * r),
@@ -225,7 +235,7 @@ export function buildLakePlantSurfaces(plants: readonly LakePlant[]): LakePlantS
 // Ground samples are evaluated for every blade, including its endpoints, so mat islands follow the bank.
 export function addLakeGroundCover(surface: PlantSurface, patches: readonly LakeGroundPatch[],
   heightAt: LakeGroundHeight): void {
-  const tint = new Color(0x63744b);
+  const tint = new Color(0x53664b);
   const shadeTint = new Color(0x465a37);
   for (const patch of patches) {
     const random = coastRandom(patch.seed);
@@ -245,8 +255,9 @@ export function addLakeGroundCover(surface: PlantSurface, patches: readonly Lake
       const tipY = heightAt(x + dx, z + dz);
       if (tipY === undefined) continue;
       const base = new Vector3(x, y - 0.015, z);
-      const mid = base.clone().addScaledVector(plantDirection(heading), length * 0.51)
-        .addScaledVector(up, 0.06 + random() * 0.12);
+      const middleY = heightAt(x + dx * 0.51, z + dz * 0.51);
+      if (middleY === undefined) continue;
+      const mid = new Vector3(x + dx * 0.51, middleY + 0.06 + random() * 0.12, z + dz * 0.51);
       const tip = new Vector3(x + dx, tipY + 0.025 + random() * 0.04, z + dz);
       const across = plantDirection(heading + Math.PI * 0.5).multiplyScalar(half);
       const shade = 0.76 + random() * 0.45;
@@ -282,9 +293,20 @@ async function loadVegetationMaps(): Promise<{ bark: Texture; needles: Texture; 
 export async function addLakeBankVegetation(root: Group, plants: readonly LakePlant[], ground: PlantSurface): Promise<void> {
   const maps = await loadVegetationMaps();
   const bark = new MeshStandardMaterial({ map: maps.bark, vertexColors: true, roughness: 0.96 });
-  const foliage = (map: Texture) => new MeshStandardMaterial({
-    map, alphaTest: 0.36, alphaToCoverage: true, vertexColors: true, roughness: 0.93, side: DoubleSide,
-  });
+  const foliage = (map: Texture) => {
+    const material = new MeshStandardMaterial({
+      map, alphaTest: 0.24, alphaToCoverage: true, vertexColors: true, roughness: 1, side: DoubleSide,
+    });
+    material.onBeforeCompile = shader => {
+      // The atlas carries photographed-style local shadows. Compress their contrast slightly
+      // before physical lighting. White vertex tints preserve the atlas's albedo; the foliage
+      // remains lit by the scene's day/night light, with no emissive term.
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        diffuseColor.rgb = diffuseColor.rgb * 1.05 + vec3(0.025, 0.027, 0.019);
+      `);
+    };
+    return material;
+  };
   const needles = foliage(maps.needles);
   const leaves = foliage(maps.leaves);
   for (const [index, name] of ['West bank', 'East bank', 'Distant ridge'].entries()) {
