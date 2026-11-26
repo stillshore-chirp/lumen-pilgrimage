@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "check": "npm run build && npm run validate:harness && npm run test:coast && npm run test:monitor && npm run test:residence && npm run test:cinema && npm run test:atrium",
+    "check": "npm run build && npm run validate:harness && npm run test:coast && npm run test:monitor && npm run test:residence && npm run test:cinema && npm run test:atrium && npm run test:lake",
     "test:coast": "node --test scripts/coast-controls.test.mjs scripts/coast-terrain.test.mjs scripts/coast-acoustics.test.mjs scripts/exploration-route.test.mjs",
     "test:coast:browser": "node --test scripts/coast-browser.test.mjs",
     "test:monitor": "node --test scripts/monitor-signaling.test.mjs scripts/monitor-session.test.mjs scripts/monitor-capture.test.mjs scripts/monitor-pose.test.mjs scripts/monitor-xr.test.mjs scripts/monitor-audio.test.mjs",
@@ -18,6 +18,8 @@
     "test:cinema:browser": "node --test --test-concurrency=1 scripts/cinema-browser.test.mjs scripts/cinema-audio.test.mjs scripts/cinema-movie-video.test.mjs scripts/cinema-screening.browser.test.mjs",
     "test:atrium": "node --test scripts/atrium-navigation.test.mjs scripts/atrium-audio.test.mjs",
     "test:atrium:browser": "node --test scripts/atrium-browser.test.mjs",
+    "test:lake": "node --test scripts/lake-navigation.test.mjs scripts/lake-audio.test.mjs",
+    "test:lake:browser": "node --test scripts/lake-browser.test.mjs",
     "validate:harness": "node --test scripts/validate-harness.test.mjs && node scripts/validate-harness.mjs"
   },
   "dependencies": {

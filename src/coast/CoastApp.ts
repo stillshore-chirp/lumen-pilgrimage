@@ -18,6 +18,7 @@ import { createResidenceControlPanel, type ResidenceControl, type ResidenceContr
 import type { CoastTimeOfDay } from './world/coastAtmosphere';
 import { cinemaLightingModes, createCinemaPanel, type CinemaControls } from './world/cinema/CinemaPanel';
 import { createCinemaSeatTransition } from './world/cinema/cinemaSeatTransition';
+import { LAKE_VIEW_FOV } from './world/lake/lakeLayout';
 import { disposeSceneDrawables } from './disposeSceneDrawables';
 import { bindWorldLightingControl, worldLightingChoices, type WorldLightingControl } from './WorldLightingControl';
 import './coast.css';
@@ -70,6 +71,7 @@ export async function loadExplorationScene(worldId: ExplorationWorldId): Promise
     case 'residence': return (await import('./world/residence/ResidenceWorld')).loadResidenceScene();
     case 'cinema': return (await import('./world/cinema/CinemaWorld')).loadCinemaScene();
     case 'atrium': return (await import('./world/atrium/AtriumWorld')).loadAtriumScene();
+    case 'lake': return (await import('./world/lake/LakeWorld')).loadLakeScene();
     case 'overlook': return (await import('./world/overlook/OverlookWorld')).loadOverlookScene();
     case 'coast': return { id: 'coast', world: new CoastWorld(), audio: new CoastAudio() };
   }
@@ -140,6 +142,7 @@ export class CoastApp {
     const residence = this.worldId === 'residence';
     const cinema = this.worldId === 'cinema';
     const atrium = this.worldId === 'atrium';
+    const lake = this.worldId === 'lake';
     const allowFlight = loaded.navigation?.allowFlight !== false;
     this.world = loaded.world;
     if (cinema) this.seatTransition = createCinemaSeatTransition(this.world.scene);
@@ -147,13 +150,14 @@ export class CoastApp {
     this.interaction = loaded.interaction;
     this.camera = atrium ? new PerspectiveCamera(42, 1, 0.08, 92)
       : overlook ? new PerspectiveCamera(54, 1, 0.20, 43500)
+      : lake ? new PerspectiveCamera(LAKE_VIEW_FOV, 1, 0.10, 2400)
       : new PerspectiveCamera(60, 1, residence || cinema ? 0.08 : 0.12, residence ? 43500 : cinema ? 110 : 2500);
     this.time = initialRoute.time;
     const destination = findDestination(this.worldId, initialRoute.placeId);
     this.world.setTimeOfDay(this.time);
     this.audio.setTimeOfDay?.(this.time);
     this.world.setQuality(this.quality);
-    this.canvasLabel = residence || cinema || atrium ? `${description.label}の探索画面`
+    this.canvasLabel = residence || cinema || atrium || lake ? `${description.label}の探索画面`
       : overlook ? '丘陵の展望デッキの探索画面' : '海岸、森、湖と山の探索画面';
     const canvas = this.renderer.domElement;
 
@@ -217,6 +221,8 @@ export class CoastApp {
       ? 'ファストトラベルで席を選べます。上映設定から試映、仮想モニターからスクリーンへ投影できます。'
       : atrium
       ? 'ソファから立ち上がり、ショーウィンドウの前と大階段から続く上階の回廊を散策できます。'
+      : lake
+      ? '広間の左右から縁側に出られます。水面を見下ろすと魚が泳ぎ、夜に切り替えると星が見えます。'
       : residence
       ? '南の大窓から都心を見下ろせます。主寝室のバルコニーに近づくと、Eキーで引戸を開閉できます。'
       : overlook
@@ -727,6 +733,10 @@ export class CoastApp {
     if (this.worldId === 'atrium') {
       light.title = '石床、ガラス、照明を保ち、床の反射を軽く描画';
       high.title = '石目と照明の映り込みを細かく描画';
+    }
+    if (this.worldId === 'lake') {
+      light.title = '湖面の反射と室内の影を軽く描画';
+      high.title = '湖面の反射と室内の影を細かく描画';
     }
     const apply = (quality: CoastQuality) => {
       this.quality = quality;

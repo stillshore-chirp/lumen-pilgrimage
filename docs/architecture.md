@@ -18,7 +18,7 @@ flowchart LR
   main -->|通常の探索| app["CoastApp"]
   url -->|ワールド読込後: place / time| app
   main -->|monitor=sender| sender["配信ページ"]
-  assets["静的配布物<br/>dist/ の HTML・JS・public 素材"] --> worlds["5つのワールド<br/>coast / overlook / residence / cinema / atrium"]
+  assets["静的配布物<br/>dist/ の HTML・JS・public 素材"] --> worlds["6つのワールド<br/>coast / overlook / residence / cinema / atrium / lake"]
   app --> worlds
   worlds --> scene["各ワールドの描画・環境音"]
 

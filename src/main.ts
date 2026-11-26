@@ -1,6 +1,7 @@
 import { RESIDENCE_LABEL } from './coast/world/residence/residenceFloor';
 import { CINEMA_LABEL } from './coast/world/cinema/cinemaLayout';
 import { ATRIUM_LABEL } from './coast/world/atrium/atriumLayout';
+import { LAKE_LABEL } from './coast/world/lake/lakeLayout';
 import { parseStartupRoute } from './coast/explorationRoute';
 
 const mount = document.querySelector<HTMLDivElement>('#app');
@@ -10,7 +11,8 @@ if (!mount) {
 
 const route = parseStartupRoute(location.search);
 const name = route.worldId === 'overlook' ? '丘陵展望台' : route.worldId === 'residence' ? RESIDENCE_LABEL :
-  route.worldId === 'cinema' ? CINEMA_LABEL : route.worldId === 'atrium' ? ATRIUM_LABEL : null;
+  route.worldId === 'cinema' ? CINEMA_LABEL : route.worldId === 'atrium' ? ATRIUM_LABEL :
+  route.worldId === 'lake' ? LAKE_LABEL : null;
 try {
   if (route.monitorSender) {
     const { mountMonitorSender } = await import('./monitor/monitorSender');
