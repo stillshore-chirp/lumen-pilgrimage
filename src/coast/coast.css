@@ -348,6 +348,8 @@
   }
 
   .coast-settings {
+    /* At 16px, fit the sound action's text plus its fixed padding and border on one line. */
+    --control-action: 7.5em;
     flex-shrink: 1;
   }
 }
