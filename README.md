@@ -63,6 +63,7 @@ Meta Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、「VRを
 
 | 作業 | 読む文書 |
 | --- | --- |
+| 調査・設計・制作を始め、レビュー・完了を判定する | [全関連分野の必須工程](docs/agent-harness.md#専門分野の業務工程) · [段階判定](docs/agent-harness.md#進行段階の確認) |
 | 開発環境を用意して作業を再開する | [開発環境と起動](docs/development.md) |
 | コードを変更・レビューする | [コーディング規約](docs/coding-standards.md) |
 | ワールドの構成、到着地点、移動と昼夜の引き継ぎを変更する | [ワールド案内](docs/worlds.md) · [実装設計](docs/architecture.md) |
