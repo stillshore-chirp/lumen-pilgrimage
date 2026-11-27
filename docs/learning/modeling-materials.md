@@ -122,6 +122,14 @@ p ≈ f s / z
 
 なお `p` は正面に近い面の概算であり、床を斜めに見る場合の実際のテクセルフットプリントはUV微分と面の向きで変わる。この概算はテクセル密度と実形状の使い分けに役立つ。
 
+### 面の寸法と模様の周期を結び付ける
+
+単位boxを非等方に拡大した壁へ、そのまま0–1のUVを使うと円い孔も縦長になる。textureのrepeatだけを大きくしても、異なる寸法の面では実寸がそろわない。映画館の[平面吸音パネル](../../src/coast/world/cinema/cinemaFinishes.ts)は、instanceの局所X/Y/Z軸の長さから各面の幅と高さを求め、`UV × 面の寸法[m] × 周期数[cycle/m]`をmapとbumpへ同じく一度適用する。samplerのrepeatは1に保つ。
+
+[実寸UVの実装](../../src/coast/world/cinema/cinemaMetricUv.ts)では、X法線の面にZ/Y、Y法線の面にX/Z、Z法線の面にX/Yの寸法を使う。対象はunit BoxGeometry、直交した正のinstance scale、meshと親のunit scaleに限定する。回転したinstanceでも局所軸の長さは変わらない。親の追加scale、shear、丸い座席や筐体へこの式をそのまま適用せず、その形状の実寸とUVを別に定める。
+
+この壁の周期は8個×16mm=128mm、7.8125cycle/mである。生成式は各16texelのセルで半径2.4texel未満を暗い芯、半径3.25texel未満までを周縁の陰影として描く。1texelが1mmに対応するため、芯の名目径は4.8mm相当、周縁を含む名目外径は6.5mm相当となる。高品質時のbump振幅は0.8mmである。これは離散画素で表す不透明面の模様で、実際に背後へ抜ける開口や製品の孔寸法ではない。UVの実寸を直しても、円が数texelしかなければ近接で四角く見えるため、密度、輪郭の面積sampling、遠景のmipを別に確認する。形状を回し、同じ距離・光・bumpで比較してから、実際の照明shaderとの併用と連続移動を確認する。[照明・UVの検査](../../scripts/cinema-lighting.test.mjs)は、両hookの合成、map/bumpの同座標、品質切替と復元も扱う。
+
 ## GGX、Fresnel、metal-roughness の意味
 
 PBRのパラメータは、微小面の向きの分布、遮蔽、入射角による反射率を表す。glTF の金属・誘電体モデルは、正の値、相反性、エネルギー保存を満たすBRDFを基本原則としている。[glTF 2.0 仕様 Appendix B](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) には、GGX と Schlick の式が実装可能な形で掲載されている。

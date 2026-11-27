@@ -3,6 +3,7 @@ import {
   RepeatWrapping, RGBAFormat, UnsignedByteType, InstancedMesh, Object3D,
   type BufferGeometry, type Group, type Material,
 } from 'three';
+import { applyCinemaMetricBoxUv } from './cinemaMetricUv';
 
 export type CinemaBox = readonly [
   x: number, y: number, z: number, width: number, height: number, depth: number, yaw?: number,
@@ -72,7 +73,8 @@ export function cinemaFinishes() {
     if (radius < 3.25) return 151 + (y % 16 < 8 ? 38 : 0) + grain * 10;
     return 223 + grain * 21;
   });
-  perforations.repeat.set(9, 11);
+  // Eight 16 mm cells per period. This texture belongs only to the flat wall panels.
+  perforations.repeat.set(1, 1);
 
   const material = (color: number, roughness = 0.8, metalness = 0) =>
     new MeshStandardMaterial({ color, roughness, metalness });
@@ -82,6 +84,7 @@ export function cinemaFinishes() {
   const matte = material(0x101114, 0.97);
   const drape = new MeshStandardMaterial({ color: 0x19191c, map: weave, roughness: 1 });
   const acoustic = new MeshStandardMaterial({ color: 0x393b3a, map: perforations, roughness: 0.93 });
+  applyCinemaMetricBoxUv(acoustic, 1 / (8 * .016));
   const carpet = new MeshStandardMaterial({ color: 0x342d2e, map: carpetGrain, roughness: 0.98 });
   const aisle = new MeshStandardMaterial({ color: 0x51413a, map: carpetGrain, roughness: 0.98 });
   const protection = material(0x272529, 0.75);
@@ -98,7 +101,7 @@ export function cinemaFinishes() {
         { surface: seatFabric, texture: weave, scale: 0.012 },
         { surface: carpet, texture: carpetGrain, scale: 0.018 },
         { surface: aisle, texture: carpetGrain, scale: 0.020 },
-        { surface: acoustic, texture: perforations, scale: 0.010 },
+        { surface: acoustic, texture: perforations, scale: 0.0008 },
       ];
       for (const { surface, texture, scale } of surfaces) {
         const map = high ? texture : null;

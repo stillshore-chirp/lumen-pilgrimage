@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { Camera, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Scene, Texture } from 'three';
+import {
+  BoxGeometry, Camera, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
+  PlaneGeometry, Scene, ShaderLib, Texture, UniformsUtils, Vector3,
+} from 'three';
 
 const source = new URL('../src/coast/world/cinema/', import.meta.url).href;
 const hooks = registerHooks({
@@ -11,6 +14,8 @@ const hooks = registerHooks({
   },
 });
 const { createCinemaLighting } = await import('../src/coast/world/cinema/cinemaLighting.ts');
+const { cinemaFinishes } = await import('../src/coast/world/cinema/cinemaFinishes.ts');
+const { applyCinemaMetricBoxUv } = await import('../src/coast/world/cinema/cinemaMetricUv.ts');
 const {
   bakeCinemaLightTransport, cinemaLightQuality, cinemaPictureOpening, cinemaProjectionFalloff, cinemaScreenLevels,
   CINEMA_LIGHT_BOUNCE, CINEMA_LIGHT_CROWN, CINEMA_ROOM_RETURN,
@@ -232,5 +237,76 @@ test('lamp ramps, display resumption and emergency keep the picture state consis
     permanent.dispose();
     cove.dispose();
     frame.dispose();
+  }
+});
+
+test('metric panel UVs keep a 16 mm pitch after nonuniform and rotated instance transforms', () => {
+  const geometry = new BoxGeometry();
+  const origin = new Vector3();
+  const u = new Vector3();
+  const v = new Vector3();
+  for (const scale of [[1, 1, 1], [2.91, 14, .18]]) {
+    for (const angle of [0, .64]) {
+      const matrix = new Matrix4().makeRotationY(angle).scale(new Vector3(...scale));
+      const lengths = [0, 1, 2].map(axis => new Vector3().setFromMatrixColumn(matrix, axis).length());
+      for (let face = 0; face < 6; face += 1) {
+        const dimensions = face < 2 ? [lengths[2], lengths[1]] : face < 4 ? [lengths[0], lengths[2]] : [lengths[0], lengths[1]];
+        origin.fromBufferAttribute(geometry.attributes.position, face * 4).applyMatrix4(matrix);
+        u.fromBufferAttribute(geometry.attributes.position, face * 4 + 1).applyMatrix4(matrix);
+        v.fromBufferAttribute(geometry.attributes.position, face * 4 + 2).applyMatrix4(matrix);
+        const pitches = [u.distanceTo(origin), v.distanceTo(origin)]
+          .map((length, axis) => length / (8 * 7.8125 * dimensions[axis]));
+        for (const pitch of pitches) assert.ok(Math.abs(pitch - .016) < 1e-12);
+      }
+    }
+  }
+  geometry.dispose();
+});
+
+test('metric panel maps and bumps retain cinema lighting hooks across quality changes', () => {
+  const finish = cinemaFinishes();
+  const panel = finish.acoustic;
+  assert.throws(() => applyCinemaMetricBoxUv(panel, 7.8125), /already configured/);
+  assert.deepEqual(panel.map.repeat.toArray(), [1, 1]);
+  assert.deepEqual(finish.seatFabric.map.repeat.toArray(), [3.75, 4.25]);
+  assert.deepEqual(finish.carpet.map.repeat.toArray(), [1, 1]);
+  const legacy = new MeshStandardMaterial({ map: finish.seatFabric.map });
+  assert.throws(() => applyCinemaMetricBoxUv(legacy, 1), /unit sampler repeat/);
+  const metricCompile = panel.onBeforeCompile;
+  const metricKey = panel.customProgramCacheKey();
+  const geometry = new BoxGeometry();
+  const group = new Group();
+  group.add(new InstancedMesh(geometry, panel, 1));
+  const lights = createCinemaLighting(new Scene(), group);
+  try {
+    for (const high of [false, true, false, true]) {
+      finish.setHighDetail(high);
+      assert.equal(panel.bumpMap, high ? panel.map : null);
+      if (high) assert.equal(panel.bumpScale, .0008);
+      const shader = {
+        uniforms: UniformsUtils.clone(ShaderLib.standard.uniforms),
+        vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader,
+      };
+      panel.onBeforeCompile(shader, undefined);
+      assert.equal(shader.vertexShader.split('uniform float cinemaMetricCycles;').length - 1, 1);
+      assert.equal(shader.uniforms.cinemaMetricCycles.value, 7.8125);
+      assert.ok(shader.vertexShader.includes('vMapUv = (mapTransform'));
+      assert.ok(shader.vertexShader.includes('vBumpMapUv = (bumpMapTransform'));
+      assert.ok(shader.vertexShader.includes('cinemaWorld ='));
+      assert.ok(shader.fragmentShader.includes('cinemaArchitecturalLight'));
+      assert.equal(panel.customProgramCacheKey(), `${metricKey}|cinema-lit-surfaces-v1`);
+    }
+  } finally {
+    lights.dispose();
+    assert.equal(panel.onBeforeCompile, metricCompile);
+    legacy.dispose();
+    geometry.dispose();
+    const textures = new Set();
+    for (const material of Object.values(finish)) if (material instanceof MeshStandardMaterial) {
+      if (material.map) textures.add(material.map);
+      material.dispose();
+    }
+    for (const texture of textures) texture.dispose();
+    finish.box.dispose();
   }
 });
