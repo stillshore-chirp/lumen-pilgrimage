@@ -9,7 +9,7 @@ import {
   CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, cinemaGroundHeight,
 } from './cinemaLayout';
 import { createCinemaSeats } from './cinemaSeats';
-import { CINEMA_RENDER_SPEAKERS } from './cinemaSpeakers';
+import { createCinemaSpeakerEquipment } from './cinemaSpeakerEquipment';
 
 type CinemaQuality = 'light' | 'high';
 
@@ -211,23 +211,7 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
 
 function addAuditoriumEquipment(group: Group, finish: CinemaFinishes): void {
   const cabinets: CinemaBox[] = [];
-  const grilles: CinemaBox[] = [];
-  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'side')) {
-    const [x, y, z] = speaker.position;
-    const sign = x < 0 ? -1 : 1;
-    cabinets.push([x + sign * 0.388, y + 0.015, z, 0.75, 0.92, 0.61]);
-    grilles.push([x, y, z, 0.038, 0.78, 0.51]);
-  }
-  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'top')) {
-    const [x, y, z] = speaker.position;
-    cabinets.push([x, y + 0.229, z, 0.61, 0.43, 0.77]);
-    grilles.push([x, y, z, 0.53, 0.034, 0.65]);
-  }
-  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'rear')) {
-    const [x, y, z] = speaker.position;
-    cabinets.push([x, y + 0.02, z + 0.331, 0.62, 0.91, 0.63]);
-    grilles.push([x, y, z, 0.52, 0.76, 0.038]);
-  }
+  createCinemaSpeakerEquipment(group);
   const surrounds: CinemaBox[] = [];
   const inner: CinemaBox[] = [];
   const panes: CinemaBox[] = [];
@@ -245,8 +229,7 @@ function addAuditoriumEquipment(group: Group, finish: CinemaFinishes): void {
     lenses.push([x, PROJECTION_Y, 54.033, 0.315, 0.224, 0.026]);
     panes.push([x, PROJECTION_Y, 53.998, WINDOW_WIDTH, WINDOW_HEIGHT, 0.016]);
   }
-  cinemaBoxes(group, 'Ceiling and surround loudspeaker cabinets', finish.box, finish.darkSteel, cabinets);
-  cinemaBoxes(group, 'Sound equipment grilles', finish.box, finish.acoustic, grilles);
+  cinemaBoxes(group, 'Projection equipment cabinets', finish.box, finish.darkSteel, cabinets);
   cinemaBoxes(group, 'Recessed projection window frames', finish.box, finish.darkSteel, surrounds);
   cinemaBoxes(group, 'Dark projection booth wall', finish.box, finish.matte, inner);
   const glass = new MeshStandardMaterial({ color: 0x64838c, roughness: 0.21, metalness: 0.24, transparent: true, opacity: 0.28, depthWrite: false });

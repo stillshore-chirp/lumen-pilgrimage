@@ -122,6 +122,8 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 [CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)が座席移動、上映、館内照明、空間音響をまとめます。[cinemaNavigation.ts](../src/coast/world/cinema/cinemaNavigation.ts)は座席背面と通路の歩行判定を同じ配置から作ります。映画館内の歩行は3.2 m/sです。背もたれは歩行を止め、上から越えることもできます。飛行中もスクリーン手前と客席側の外周で止まり、天井と梁の下まで上昇できます。
 
+側壁・後壁・天井のスピーカーと支持材への接近は、[筐体と取付の共通形状](cinema/cinema-speaker-mounts.md)を接触判定の基準にします。放射面の中心と向きは音響定義に合わせ、室全体の移動範囲を機器の高さで切り詰めません。飛行時の接触には、共通Controlsが頭部中心のYとクリアランスを渡す3D経路判定（[共通飛行の更新 #286](https://github.com/stillshore-chirp/lumen-pilgrimage/issues/286)）が必要です。2引数の呼び出しだけでは機器との接触を判定できず、この版では共通更新の統合後の実動確認が残っています。
+
 出口の扉と表示灯は館内の造作です。館外への移動はファストトラベルで行います。
 
 着地点は中段中央、前方中央、後方側席、車いす席です。中段中央（R09）の床高は3.25 mで、座位からの幕幅は水平約48°、幕中央への仰角は約9°です。後方側席（R20）の床高は7.39 mで、幕中央への仰角は約1.4°です。横通路の床高は前から0、2.80、5.655、7.39 mです。R08・R15の車いすスペースと左右の扉までは、横通路を通じて同じ高さの床でつながります。同一ワールド内の座席移動は[cinemaSeatTransition.ts](../src/coast/world/cinema/cinemaSeatTransition.ts)で画面を覆う遷移をはさみます。現行の寸法・配置は[基本設計PDF](cinema/cinema-floor-plan.pdf)、照明と音響の設計は[設計PDF](cinema/cinema-light-sound-design.pdf)を参照してください。

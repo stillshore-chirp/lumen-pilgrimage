@@ -85,6 +85,7 @@ CC0の解釈は [CC0 1.0 Legal Code](https://creativecommons.org/publicdomain/ze
 | 都心70階の住戸 | [`public/residence-materials/`](../public/residence-materials/) の仕上げ材と [`public/residence-audio/`](../public/residence-audio/) の電子レンジ完了音。出典と条件は[住戸の仕上げ材](../public/residence-materials/ATTRIBUTION.md)・[住戸の録音](../public/residence-audio/ATTRIBUTION.md)。交通音は展望台と同じ `distant-traffic.ogg` を使います。 | 平面・壁・開口は [`residencePlan.ts`](../src/coast/world/residence/residencePlan.ts)、材料は [`residenceMaterials.ts`](../src/coast/world/residence/residenceMaterials.ts)、都市と交通音は [`residenceCity.ts`](../src/coast/world/residence/residenceCity.ts)・[`residenceAudio.ts`](../src/coast/world/residence/residenceAudio.ts)。 |
 | 映画館と仮想モニター | 映画館の設計資料は[平面図](cinema/cinema-floor-plan.pdf)と[光・音の設計](cinema/cinema-light-sound-design.pdf)。仮想モニターの映像は接続した配信元から実行時に受け取ります。 | 映画館の形状・仕上げ・空調音は [`src/coast/world/cinema/`](../src/coast/world/cinema/) で生成。モニターの面と接続映像は [`monitorObject.ts`](../src/monitor/monitorObject.ts) で生成・表示します。 |
 | 映画館の測定済みHRTF | [`public/cinema-audio/`](../public/cinema-audio/) のMIT KEMAR由来48 kHz・144 tap配布表。出典・利用条件・加工・バイナリ表仕様は[HRTFのクレジット](../public/cinema-audio/ATTRIBUTION.md)に記録します。 | [`prepare-cinema-hrtf.py`](../scripts/prepare-cinema-hrtf.py) が公式compact archiveから規則的な角度表を再生成します。上映側の読込・畳み込みは映画館の音響実装が所有します。 |
+| 映画館の機器形状が使うソフトウェア | Three.js 0.184.0のMITライセンス全文と版・hashを[`public/licenses/`](../public/licenses/ATTRIBUTION.md)へ保存し、ビルドでは`dist/licenses/`へ同梱します。 | [`prepare-cinema-code-licenses.mjs`](../scripts/prepare-cinema-code-licenses.mjs)が実際のインストール済みpackageのLICENSEをバイト同一で転記。丸角筐体・支持・取付の[現行設計](cinema/cinema-speaker-mounts.md)から参照します。 |
 | 商業アトリウム | [床材の取得と加工](../public/atrium-materials/ATTRIBUTION.md) · [合成環境音の内訳](../public/atrium-audio/ATTRIBUTION.md)。 | [建築・展示と音の編集先](worlds.md#商業アトリウム)。環境音の生成は [`atriumAudioSamples.ts`](../src/coast/world/atrium/atriumAudioSamples.ts)。 |
 | 湖畔の広間 | [雲と植生の出典・生成と変換](../public/lake-materials/ATTRIBUTION.md)。小葉の[編集元PNG](../assets/lake-materials/lake-broadleaf-clusters.png)を保持。箏の加工単音と39秒生成曲は[音声クレジット](../public/lake-audio/ATTRIBUTION.md)・[採否台帳](../assets/lake-audio/sample-manifest.json)へ対応付け。木材と岩は既存の仕上げ材・景観素材を使用。 | [植生の形態と配置](lake/lake-hall-design.md#植生の形態と配置)、[樹木・低木・地被](../src/coast/world/lake/lakeVegetation.ts)、[卓上の有花枝](../src/coast/world/lake/lakeHallArrangement.ts) · [ワールドの編集先](worlds.md#湖畔の広間)。 |
 
@@ -197,8 +198,8 @@ PY
 
 | 資料 | 内容と位置づけ |
 | --- | --- |
-| [映画館の平面図](cinema/cinema-floor-plan.pdf) | 客席、スクリーン、出入口、主要寸法を示す6ページの設計資料。 |
-| [映画館の光・音の設計](cinema/cinema-light-sound-design.pdf) | 投影光、室内反射、座席位置ごとの音響を扱う8ページの設計資料。 |
+| [映画館の平面図](cinema/cinema-floor-plan.pdf) | 客席、スクリーン、出入口、主要寸法を示す7ページの設計資料。 |
+| [映画館の光・音の設計](cinema/cinema-light-sound-design.pdf) | 投影光、室内反射、座席位置ごとの音響を扱う9ページの設計資料。 |
 | [70階住戸の設計仕様](residence/residence-70f-design.md) と [図面](residence/residence-70f-drawings.pdf) | 現行住戸の設計正本。図面は平面、眺望断面、街区、茶室と書斎の詳細を収めた4ページです。 |
 | [50階住戸の設計案](residence/residence-50f-design.md) と [図面](residence/residence-50f-drawings.pdf) | 過去の設計記録です。現在の住戸実装の正本ではありません。 |
 

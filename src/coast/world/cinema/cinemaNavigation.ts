@@ -3,6 +3,7 @@ import {
   CINEMA_BOUNDS, CINEMA_CEILING_BAFFLES, CINEMA_CEILING_COFFERS, CINEMA_DESTINATIONS, CINEMA_PLACES,
   CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN, CINEMA_SEAT_BACK_CUSHION, CINEMA_SEAT_BACK_SHELL, cinemaGroundHeight,
 } from './cinemaLayout';
+import { cinemaSpeakerEquipmentBlocked } from './cinemaSpeakerGeometry';
 
 const seatBacks = CINEMA_ROWS.map(row => ({
   z: row.z,
@@ -27,6 +28,8 @@ export const cinemaNavigation: CoastNavigation = {
   spawn: CINEMA_DESTINATIONS[0],
   groundHeight: (x, z) => Math.max(cinemaGroundHeight(x, z), chairTop(x, z)),
   blocksWalking: (x, z, foot) => z < CINEMA_SCREEN.z + .58 || foot < chairTop(x, z),
+  blocksFlight: (x, z, eyeY?: number, clearance = .25) => z < CINEMA_SCREEN.z + .58
+    || (eyeY !== undefined && cinemaSpeakerEquipmentBlocked(x, eyeY, z, clearance)),
   flightCeiling: CINEMA_ROOM_HEIGHT,
   ceilingHeight(x, z) {
     let ceiling = CINEMA_ROOM_HEIGHT;
