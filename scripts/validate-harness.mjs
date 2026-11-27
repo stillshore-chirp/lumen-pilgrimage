@@ -14,6 +14,14 @@ const workflowTemplates = [
   '.github/pull_request_template.md',
   'plans/TEMPLATE.md'
 ];
+const worldQualityHeading = 'ワールドの初回提示の品質基準';
+const worldWorkflowHeadings = [
+  '参考画像の段階的解析',
+  'ワールド全域の先行設計',
+  '粗い3Dモデルと独立設計レビュー',
+  '制作候補と最終版の全方向検証'
+];
+const worldEvidenceHeading = '参考画像・ワールド制作の工程証拠';
 const errors = [];
 
 function repositoryPath(path) {
@@ -55,11 +63,12 @@ function anchor(heading) {
     .replace(/\s+/g, '-');
 }
 
-function withoutFencedCode(source) {
+function visibleMarkdown(source) {
   const lines = source.split(/(\r\n|\n|\r)/);
   let openFence;
+  let inComment = false;
   for (let index = 0; index < lines.length; index += 2) {
-    const line = lines[index];
+    let line = lines[index];
     if (openFence) {
       lines[index] = ' '.repeat(line.length);
       const closing = line.match(/^ {0,3}(`+|~+)[ \t]*$/)?.[1];
@@ -69,6 +78,17 @@ function withoutFencedCode(source) {
       continue;
     }
 
+    let cursor = 0;
+    while (cursor < line.length) {
+      const start = inComment ? cursor : line.indexOf('<!--', cursor);
+      if (start < 0) break;
+      const closing = line.indexOf('-->', inComment ? start : start + 4);
+      const end = closing < 0 ? line.length : closing + 3;
+      line = line.slice(0, start) + ' '.repeat(end - start) + line.slice(end);
+      inComment = closing < 0;
+      cursor = end;
+    }
+    lines[index] = line;
     const opening = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
     if (!opening || (opening[1][0] === '`' && opening[2].includes('`'))) {
       continue;
@@ -79,16 +99,32 @@ function withoutFencedCode(source) {
   return lines.join('');
 }
 
-function headingAnchors(source) {
-  const anchors = new Set();
+function markdownHeadings(source) {
+  const headings = [];
   const counts = new Map();
-  for (const [, heading] of withoutFencedCode(source).matchAll(/^#{1,6}[ \t]+(.+)$/gm)) {
+  for (const match of visibleMarkdown(source).matchAll(/^(#{1,6})[ \t]+(.+)$/gm)) {
+    const heading = match[2].replace(/[ \t]+#+[ \t]*$/, '').trim();
     const base = anchor(heading);
     const count = counts.get(base) ?? 0;
-    anchors.add(count === 0 ? base : `${base}-${count}`);
+    headings.push({
+      title: heading, level: match[1].length, index: match.index,
+      end: match.index + match[0].length, anchor: count === 0 ? base : `${base}-${count}`
+    });
     counts.set(base, count + 1);
   }
-  return anchors;
+  return headings;
+}
+
+function headingAnchors(source) {
+  return new Set(markdownHeadings(source).map(heading => heading.anchor));
+}
+
+function markdownSection(source, title, level) {
+  const headings = markdownHeadings(source);
+  const heading = headings.find(candidate => candidate.title === title && candidate.level === level);
+  if (!heading) return undefined;
+  const next = headings.find(candidate => candidate.index > heading.index && candidate.level <= level);
+  return source.slice(heading.end, next?.index ?? source.length);
 }
 
 function linkDestination(raw) {
@@ -98,46 +134,172 @@ function linkDestination(raw) {
   return angle?.[1] ?? plain?.[1] ?? '';
 }
 
-function checkLinks(doc, source) {
-  const targets = new Set();
-  for (const [index, line] of withoutFencedCode(source).split(/\r?\n/).entries()) {
+function withoutInlineCode(source) {
+  const delimiters = [...source.matchAll(/`+/g)];
+  let visible = source;
+  for (let index = 0; index < delimiters.length; index += 1) {
+    const opening = delimiters[index];
+    const closingIndex = delimiters.findIndex((candidate, candidateIndex) => candidateIndex > index && candidate[0] === opening[0]);
+    if (closingIndex < 0) continue;
+    const closing = delimiters[closingIndex];
+    const end = closing.index + closing[0].length;
+    visible = visible.slice(0, opening.index)
+      + visible.slice(opening.index, end).replace(/[^\r\n]/g, ' ') + visible.slice(end);
+    index = closingIndex;
+  }
+  return visible;
+}
+
+function indentation(whitespace, start = 0) {
+  let column = start;
+  for (const character of whitespace) column += character === '\t' ? 4 - column % 4 : 1;
+  return column - start;
+}
+
+function withoutIndentedCode(source) {
+  // Maintained documents use paragraphs, ATX headings and ordinary bullet/numbered
+  // lists. List content indentation is relative to its marker; four spaces alone
+  // do not make a code block while a paragraph is continuing.
+  const lines = source.split(/(\r\n|\n|\r)/);
+  const listIndents = [];
+  let paragraph = false;
+  for (let index = 0; index < lines.length; index += 2) {
+    const line = lines[index];
+    if (!line.trim()) {
+      paragraph = false;
+      continue;
+    }
+    const whitespace = line.match(/^[ \t]*/)[0];
+    const indent = indentation(whitespace);
+    const content = line.slice(whitespace.length);
+    const marker = content.match(/^([-+*]|\d{1,9}[.)])([ \t]+|$)/);
+    const heading = /^#{1,6}(?:[ \t]+|$)/.test(content);
+    const separator = /^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,}|=+[ \t]*)$/.test(content);
+    const wasInList = listIndents.length > 0;
+    // An unindented line may continue a list paragraph without repeating its indent.
+    if (!(paragraph && !marker && !heading && !separator)) {
+      while (listIndents.length && indent < listIndents.at(-1)) listIndents.pop();
+    }
+    const relativeIndent = indent - (listIndents.at(-1) ?? 0);
+    if (relativeIndent >= 4 && !paragraph) {
+      lines[index] = ' '.repeat(line.length);
+      continue;
+    }
+    if (relativeIndent >= 4) continue;
+    if (heading || separator) {
+      paragraph = false;
+      continue;
+    }
+    const body = marker ? content.slice(marker[0].length) : '';
+    const mayStartList = marker && (!paragraph || wasInList
+      || (body && (/^[-+*]$/.test(marker[1]) || /^1[.)]$/.test(marker[1]))));
+    if (mayStartList) {
+      const padding = indentation(marker[2], indent + marker[1].length) || 1;
+      listIndents.push(indent + marker[1].length + (padding > 4 ? 1 : padding));
+      if (padding > 4 && body) lines[index] = ' '.repeat(line.length);
+      paragraph = Boolean(body) && padding <= 4 && !/^#{1,6}(?:[ \t]+|$)/.test(body);
+    } else {
+      paragraph = true;
+    }
+  }
+  return lines.join('');
+}
+
+function* markdownLinks(source) {
+  const visible = withoutInlineCode(withoutIndentedCode(visibleMarkdown(source)));
+  for (const [index, line] of visible.split(/\r?\n/).entries()) {
     const starts = /!?\[[^\]\n]*\]\(/g;
     for (const start of line.matchAll(starts)) {
+      if ((line.slice(0, start.index).match(/\\+$/)?.[0].length ?? 0) % 2 === 1) continue;
       const destinationStart = start.index + start[0].length;
       const destinationEnd = line.indexOf(')', destinationStart);
-      const description = `${doc}:${index + 1}: invalid repository link`;
-      if (destinationEnd < 0) {
+      yield {
+        reference: destinationEnd < 0 ? '' : linkDestination(line.slice(destinationStart, destinationEnd)),
+        line: index + 1, image: start[0].startsWith('!')
+      };
+    }
+  }
+}
+
+function checkLinks(doc, source) {
+  const targets = new Set();
+  for (const { reference, line } of markdownLinks(source)) {
+    const description = `${doc}:${line}: invalid repository link`;
+    if (!reference) {
+      errors.push(description);
+      continue;
+    }
+    const repositoryWebLink = reference.startsWith(repositoryWebRoot);
+    if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(reference) && !repositoryWebLink) {
+      continue;
+    }
+    try {
+      // Conversation templates need absolute GitHub links after insertion.
+      // Validate this repository's main links against the candidate local tree.
+      const url = repositoryWebLink
+        ? new URL(reference.slice(repositoryWebRoot.length), pathToFileURL(root + sep))
+        : new URL(reference, pathToFileURL(resolve(root, doc)));
+      const target = repositoryPath(fileURLToPath(url));
+      const fragment = decodeURIComponent(url.hash.slice(1));
+      if (fragment && target.endsWith('.md') && !headingAnchors(read(target)).has(fragment)) {
         errors.push(description);
         continue;
       }
-      const reference = linkDestination(line.slice(destinationStart, destinationEnd));
-      if (!reference) {
-        errors.push(description);
-        continue;
-      }
-      const repositoryWebLink = reference.startsWith(repositoryWebRoot);
-      if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(reference) && !repositoryWebLink) {
-        continue;
-      }
-      try {
-        // Conversation templates need absolute GitHub links after insertion.
-        // Validate this repository's main links against the candidate local tree.
-        const url = repositoryWebLink
-          ? new URL(reference.slice(repositoryWebRoot.length), pathToFileURL(root + sep))
-          : new URL(reference, pathToFileURL(resolve(root, doc)));
-        const target = repositoryPath(fileURLToPath(url));
-        const fragment = decodeURIComponent(url.hash.slice(1));
-        if (fragment && target.endsWith('.md') && !headingAnchors(read(target)).has(fragment)) {
-          errors.push(description);
-          continue;
-        }
-        targets.add(relative(root, target).split(sep).join('/'));
-      } catch {
-        errors.push(description);
-      }
+      targets.add(relative(root, target).split(sep).join('/'));
+    } catch {
+      errors.push(description);
     }
   }
   return targets;
+}
+
+function hasSectionLink(doc, source, target, heading) {
+  const base = 'https://harness.invalid/repository/';
+  for (const { reference, image } of markdownLinks(source)) {
+    if (!reference || image) continue;
+    const repositoryWebLink = reference.startsWith(repositoryWebRoot);
+    if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(reference) && !repositoryWebLink) continue;
+    try {
+      const url = repositoryWebLink
+        ? new URL(reference.slice(repositoryWebRoot.length), base)
+        : new URL(reference, new URL(doc, base));
+      if (url.origin === new URL(base).origin && decodeURIComponent(url.pathname) === `/repository/${target}`
+        && decodeURIComponent(url.hash.slice(1)) === anchor(heading)) return true;
+    } catch { /* Malformed destinations are reported by the repository link check. */ }
+  }
+  return false;
+}
+
+// This checks the maintained workflow's structure and navigation, not its evidence or quality.
+export function validateWorldWorkflow(documents) {
+  const failures = [];
+  const quality = markdownSection(documents.get(harnessGuide) ?? '', worldQualityHeading, 3);
+  if (quality === undefined) failures.push(`${harnessGuide}: missing world workflow heading ${worldQualityHeading}`);
+  for (const heading of worldWorkflowHeadings) {
+    if (markdownSection(quality ?? '', heading, 4) === undefined) {
+      failures.push(`${harnessGuide}: missing world workflow subsection ${heading}`);
+    }
+  }
+  for (const heading of [worldQualityHeading, worldWorkflowHeadings[1]]) {
+    if (!hasSectionLink('AGENTS.md', documents.get('AGENTS.md') ?? '', harnessGuide, heading)) {
+      failures.push(`AGENTS.md: missing world workflow link to ${harnessGuide}#${anchor(heading)}`);
+    }
+  }
+  for (const doc of workflowTemplates) {
+    const evidence = markdownSection(documents.get(doc) ?? '', worldEvidenceHeading, 3);
+    if (evidence === undefined) failures.push(`${doc}: missing world workflow heading ${worldEvidenceHeading}`);
+    for (const heading of worldWorkflowHeadings) {
+      if (!hasSectionLink(doc, evidence ?? '', harnessGuide, heading)) {
+        failures.push(`${doc}: missing world workflow link to ${harnessGuide}#${anchor(heading)}`);
+      }
+    }
+  }
+  const verification = markdownSection(documents.get('docs/verification.md') ?? '', 'ワールド制作の検証記録', 2);
+  if (verification === undefined) failures.push('docs/verification.md: missing world workflow heading ワールド制作の検証記録');
+  if (markdownSection(verification ?? '', 'ハーネスの机上適用検証', 3) === undefined) {
+    failures.push('docs/verification.md: missing world workflow subsection ハーネスの机上適用検証');
+  }
+  return failures;
 }
 
 function field(frontmatter, key) {
@@ -190,6 +352,7 @@ function run() {
     : [];
 
   const links = new Map();
+  const documents = new Map();
   for (const doc of [...currentDocs, ...supplementaryDocs, ...skills]) {
     let source;
     try {
@@ -198,6 +361,7 @@ function run() {
       errors.push(`${doc}: cannot read required document`);
       continue;
     }
+    documents.set(doc, source);
     links.set(doc, checkLinks(doc, source));
     for (const [, name] of source.matchAll(/\bnpm run ([\w:-]+)/g)) {
       if (!Object.hasOwn(scripts, name)) {
@@ -208,6 +372,7 @@ function run() {
       checkSkill(doc, source);
     }
   }
+  errors.push(...validateWorldWorkflow(documents));
 
   for (const [doc, targets] of [
     ['AGENTS.md', [harnessGuide, documentationStructure]],
@@ -235,9 +400,11 @@ function run() {
   console.log(`✓ harness: ${currentDocs.length} maintained documents, ${supplementaryDocs.length} historical/plan documents and ${skills.length} skills validated`);
 }
 
-try {
-  run();
-} catch {
-  console.error('Harness check could not read package.json or the repository skill directory.');
-  process.exitCode = 1;
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  try {
+    run();
+  } catch {
+    console.error('Harness check could not read package.json or the repository skill directory.');
+    process.exitCode = 1;
+  }
 }
