@@ -454,6 +454,29 @@ test('a connected route links the lobby, dwelling rooms and kitchen with furnitu
   assert.equal(connected(21.94, 12.94), false);
 });
 
+test('the east bedrooms are separate rooms with their own hall entrances', () => {
+  const nav = navigation(true);
+  for (const east of [19.35, 20.5, 22.2]) {
+    assert.equal(blocked(nav, east, 9.95), true, `The bedroom partition is open at E${east}`);
+  }
+  assertClearRoute(nav, [[17.6, 10.8], [18.38, 10.8], [18.38, 9.95], [18.38, 8.9], [20, 8.9]]);
+  assertClearRoute(nav, [[17.6, 10.8], [18.11, 10.8], [18.11, 11.6], [18.11, 13], [19.55, 13]]);
+
+  const shell = createResidenceShell(materials);
+  shell.group.updateMatrixWorld(true);
+  for (const height of [.45, 1.65, 2.7]) {
+    const ray = new Raycaster(new Vector3(20.5, height, -9.1), new Vector3(0, 0, -1), 0, 1.7);
+    const hit = ray.intersectObject(shell.group, true)[0];
+    assert.ok(hit, `No visible separation at eye height ${height}`);
+    assert.ok(Math.abs(hit.point.z + 9.88) < 1e-5, `The wall mesh and navigation disagree at ${height}`);
+  }
+  const eastWindowWall = RESIDENCE_WALLS.find(wall => wall.axis === 'n' && wall.fixed === 22.8 && wall.from === 0);
+  assert.ok(eastWindowWall);
+  assert.ok(eastWindowWall.openings.every(opening => opening.to < 9.88 || opening.from > 10.02),
+    'The partition terminates on the solid facade band instead of a glass pane');
+  shell.dispose();
+});
+
 test('tea room and study retain a continuous entry and their own interior layout', () => {
   const area = ([west, south, east, north]) => (east - west) * (north - south);
   assert.equal(RESIDENCE_ROOMS.find(room => room.id === '04').label, '茶室04');

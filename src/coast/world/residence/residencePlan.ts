@@ -197,7 +197,7 @@ export const RESIDENCE_WALLS: readonly ResidenceWall[] = [
     { kind: 'gallery-slide', id: 'foyer-gallery', label: '玄関前室の引戸', from: 11.07, to: 12.73, bottom: 0, top: 2.55 },
   ]),
   wall('n', 12.8, 11.6, 15.6),
-  wall('e', 9.95, 12.8, 19, 'interior', [door('bedroom-02', '寝室02の扉', 17.9, 18.86, bedroomSwing)]),
+  wall('e', 9.95, 12.8, 22.8, 'interior', [door('bedroom-02', '寝室02の扉', 17.9, 18.86, bedroomSwing)]),
   wall('n', 19, 9.95, 11.6),
   wall('e', 6.65, 17.35, 22.8),
   wall('n', 17.35, 6.65, 9.95),
