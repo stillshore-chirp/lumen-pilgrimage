@@ -6,3 +6,6 @@ src/coast/world/lake/koto*.ts text eol=lf
 public/lake-audio/samples/bank.json text eol=lf
 public/lake-audio/*.wav binary
 public/lake-audio/samples/*.wav binary
+public/lake-audio/samples/sustain/*.wav binary
+assets/lake-audio/history/*.wav binary
+assets/lake-audio/history/inputs/*.mjs text eol=lf

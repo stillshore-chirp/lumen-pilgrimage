@@ -4,7 +4,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { renderPhysicalKotoNote } from '../src/coast/world/lake/kotoPhysicalModel.ts';
-import { renderHybridKotoNote } from '../src/coast/world/lake/kotoSampleModel.ts';
+import { renderHybridKotoNote, renderSampleKotoNote } from '../src/coast/world/lake/kotoSampleModel.ts';
+import { applyKotoExcitationColor } from '../src/coast/world/lake/kotoExcitationColor.ts';
 import { renderKotoPerformance } from '../src/coast/world/lake/kotoPerformance.ts';
 import { decodeMonoWav, resample, signalStats } from './koto-analysis.mjs';
 
@@ -39,24 +40,33 @@ export function decodePcm24(wav) {
   return { sampleRate: wav.readUInt32LE(24), samples: Float32Array.from({ length: frames }, (_, i) => wav.readIntLE(44 + i * 3, 3) / 8388608) };
 }
 
-export async function prepareKotoPerformance({ method = 'hybrid', internalSampleRate = 48000 } = {}) {
-  if (!['physical', 'hybrid'].includes(method) || ![48000, 96000].includes(internalSampleRate)) {
-    throw new RangeError('Choose physical/hybrid and a validated 48000/96000 internal rate.');
+export async function prepareKotoPerformance({ method = 'sample-sustain-color', internalSampleRate = 48000, sampleBankPath } = {}) {
+  const recorded = method === 'sample-sustain' || method === 'sample-sustain-color';
+  if (!['physical', 'hybrid', 'sample-sustain', 'sample-sustain-color'].includes(method)
+    || ![48000, 96000].includes(internalSampleRate) || (recorded && internalSampleRate !== 48000)) {
+    throw new RangeError('Choose a supported method and its validated internal rate.');
   }
   const inputs = ['scripts/prepare-koto-performance.mjs', 'scripts/koto-analysis.mjs',
-    'src/coast/world/lake/kotoPhysicalModel.ts', 'src/coast/world/lake/kotoPerformance.ts'];
+    'src/coast/world/lake/kotoPerformance.ts'];
+  if (!recorded) inputs.push('src/coast/world/lake/kotoPhysicalModel.ts');
+  if (method === 'sample-sustain-color') inputs.push('src/coast/world/lake/kotoExcitationColor.ts');
   const bank = [];
   const sourceIds = new Set();
-  if (method === 'hybrid') {
-    inputs.push('src/coast/world/lake/kotoSampleModel.ts', 'public/lake-audio/samples/bank.json');
+  if (method === 'hybrid' || recorded) {
+    const bankPath = sampleBankPath ?? (recorded
+      ? 'public/lake-audio/samples/sustain/bank.json' : 'public/lake-audio/samples/bank.json');
+    if (bankPath.startsWith('/') || bankPath.split(/[\\/]/).includes('..')
+      || !bankPath.startsWith('public/lake-audio/samples/')) throw new Error('Invalid production bank path.');
+    inputs.push('src/coast/world/lake/kotoSampleModel.ts', bankPath);
     const ledger = JSON.parse(await readFile(resolve(root, 'assets/lake-audio/sample-manifest.json')));
-    const metadata = JSON.parse(await readFile(resolve(root, 'public/lake-audio/samples/bank.json')));
+    const metadata = JSON.parse(await readFile(resolve(root, bankPath)));
+    if (!Array.isArray(metadata.samples) || metadata.samples.length === 0) throw new Error('Empty production bank.');
     for (const item of metadata.samples) {
       if (item.path !== item.path.split(/[\\/]/).at(-1)) throw new Error('Invalid sample path.');
-      const path = `public/lake-audio/samples/${item.path}`;
+      const path = `${dirname(bankPath).replaceAll('\\', '/')}/${item.path}`;
       const bytes = await readFile(resolve(root, path));
       if (hash(bytes) !== item.sha256) throw new Error('Sample bank input changed.');
-      const sourceId = `freesound-${item.sourceId}`;
+      const sourceId = String(item.sourceId).startsWith('freesound-') ? item.sourceId : `freesound-${item.sourceId}`;
       if (!ledger.sources.some(source => source.id === sourceId && source.status === 'adopted' && source.license.spdx === 'CC0-1.0')) {
         throw new Error('Production input is not an adopted CC0 source.');
       }
@@ -67,9 +77,18 @@ export async function prepareKotoPerformance({ method = 'hybrid', internalSample
   const inputHashes = Object.fromEntries(await Promise.all(inputs.map(async path => [path, hash(await readFile(resolve(root, path)))])));
   const diagnostics = [];
   const renderer = method === 'physical' ? renderPhysicalKotoNote : (note, rate) => {
-    const result = renderHybridKotoNote(note, bank, renderPhysicalKotoNote, rate);
-    diagnostics.push(result.diagnostics);
-    return result.samples;
+    const result = recorded ? renderSampleKotoNote(note, bank, rate)
+      : renderHybridKotoNote(note, bank, renderPhysicalKotoNote, rate);
+    if (method !== 'sample-sustain-color') {
+      diagnostics.push(result.diagnostics);
+      return result.samples;
+    }
+    const color = applyKotoExcitationColor(result.samples, note.velocity, rate);
+    diagnostics.push({ ...result.diagnostics, relativeExcitation: {
+      bypassed: color.bypassed, latencyFrames: color.latencyFrames,
+      processedFrames: color.processedFrames, tailFramesClipped: color.tailFramesClipped,
+    } });
+    return color.samples;
   };
   const start = performance.now();
   const cpu = process.cpuUsage();
@@ -93,7 +112,8 @@ export async function prepareKotoPerformance({ method = 'hybrid', internalSample
   if (changed.length) throw new Error('Production inputs changed during rendering.');
   const output = 'public/lake-audio/koto-performance.wav';
   const evidence = {
-    schemaVersion: 1, method, qualityStatus: 'technical-selection-human-listening-pending',
+    schemaVersion: 1, method, qualityStatus: recorded
+      ? 'timeboxed-delivery-human-quality-not-certified' : 'historical-model-comparison-only',
     internalSampleRate, sampleRate: 48000, channels: 1, frames: decoded.samples.length,
     durationSeconds: 39, pcmBits: 24, dither: { type: 'TPDF', seed: 0x6b6f746f },
     targetRmsDbfs: -24, samplePeakLimitDbfs: -3, gain, gainDb: 20 * Math.log10(gain),
@@ -102,10 +122,14 @@ export async function prepareKotoPerformance({ method = 'hybrid', internalSample
     raw, delivered: signalStats(decoded.samples),
     quantization: { maximumAbsoluteError: maximumError, rmsErrorDbfs: 10 * Math.log10(errorEnergy / levelled.length) },
     diagnosticsSummary: { notes: diagnostics.length,
-      physicalFallbackNotes: diagnostics.filter(item => item.method === 'physical-fallback').length },
+      physicalFallbackNotes: diagnostics.filter(item => item.method === 'physical-fallback').length,
+      relativeExcitationNotes: diagnostics.filter(item => item.relativeExcitation && !item.relativeExcitation.bypassed).length,
+      clippedFilterTails: diagnostics.reduce((sum, item) => sum + (item.relativeExcitation?.tailFramesClipped ?? 0), 0) },
     performance: { wallMs: performance.now() - start, cpu: process.cpuUsage(cpu),
       retainedPcmBytes: rendered.byteLength, arrayBuffersDeltaBytes: process.memoryUsage().arrayBuffers - beforeMemory.arrayBuffers },
-    unperformed: ['human-listening', 'verified-thirteen-string-recording-identity', 'physical-headphone-calibration'],
+    limitations: recorded ? ['Recorded tails include bounded offline time modification, not the original future decay.',
+      'Relative contact colour is a design assumption, not measured velocity layers or body identification.'] : [],
+    unperformed: ['human-listening-of-final-delivery', 'verified-thirteen-string-recording-identity', 'physical-headphone-calibration'],
   };
   await mkdir(resolve(root, 'public/lake-audio'), { recursive: true });
   await writeFile(resolve(root, output), wav);
@@ -115,7 +139,8 @@ export async function prepareKotoPerformance({ method = 'hybrid', internalSample
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const result = await prepareKotoPerformance({ method: process.argv[2] ?? 'hybrid', internalSampleRate: Number(process.argv[3] ?? 48000) });
+    const result = await prepareKotoPerformance({ method: process.argv[2] ?? 'sample-sustain-color',
+      internalSampleRate: Number(process.argv[3] ?? 48000), sampleBankPath: process.argv[4] });
     console.log(JSON.stringify({ method: result.method, internalSampleRate: result.internalSampleRate,
       output: result.output, delivered: { peakDbfs: result.delivered.samplePeakDbfs, rmsDbfs: result.delivered.rmsDbfs },
       qualityStatus: result.qualityStatus, wallMs: result.performance.wallMs }));

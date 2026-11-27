@@ -4,6 +4,8 @@
 
 ## 開く
 
+今回の最終配布音源を、現在稼働中の試聴室で聴く場合は [現31音声の比較](http://127.0.0.1:4191/tools/koto-audition.html?manifest=/artifacts/koto-recorded-sustain-trial/current-manifest.json) を開きます。このlocalhost URLは開発サーバーが稼働している端末専用です。初期表示は現在の39秒曲、表示上の聴感判定は未評価です。
+
 リポジトリの依存を準備し、比較音声を `artifacts/koto-study/` に生成した後、`npm run dev` を起動して表示されたローカルURLの `/tools/koto-audition.html` を開きます。通常の本番ビルドはこのHTMLを入口に含めず、比較WAVも `public/` には置きません。音声がまだ生成されていなければ、読み込み失敗の案内と再読み込みボタンが出ます。
 
 別の比較データを使うときは、同じサーバー上のパスを `?manifest=/artifacts/別の比較/manifest.json` に指定します。外部オリジン、認証情報付きURL、データURL、リダイレクトは読み込みません。音声・図の相対パスはmanifestの場所から解決します。Vite開発サーバー以外へ比較データを配布するときは、素材ごとの権利・配布条件を先に確認してください。
@@ -50,3 +52,5 @@
 `KOTO_STUDY_MANIFEST=/absolute/path/manifest.json` を付けると、生成済みの実音源と図を読み、乾音と湖畔の実Web Audio出力を追加確認します。このときだけ、指定したmanifestのディレクトリを試験用Viteサーバーの読み出し対象に加えます。研究生成器を同時に実行せず、固定したスナップショットを使います。実音源の再生も、人間による試聴済みの記録には変換しません。
 
 既に稼働している試聴室を直接確認するときは、`KOTO_AUDITION_ORIGIN=http://127.0.0.1:4191` と、そのサーバーが配信するmanifestの実ファイルを `KOTO_STUDY_MANIFEST` に指定します。新しいサーバーは起動せず、実サーバーの `/artifacts/koto-study/manifest.json` と指定ファイルのhashが一致すること、初期選択の再生、配布候補のカードだけを押したときの39秒への切り替え、実出力を確認します。
+
+今回の区切りの配布音源を比較するには、[配送用の比較包装](../../scripts/koto-delivery-audition.mjs)を `node --experimental-transform-types scripts/koto-delivery-audition.mjs /private/tmp/lumen-koto-recorded-sustain-trial artifacts/koto-recorded-sustain-trial` で実行し、試聴室に `?manifest=/artifacts/koto-recorded-sustain-trial/current-manifest.json` を指定します。入力は凍結した30音声のディレクトリです。元のmanifest・音声・数値を保持して現在の配布WAVを追加し、現入力hashと過去の生成時の来歴を分けて記録します。所有者の終了合意は音質合格を意味せず、人間の聴感は未評価です。

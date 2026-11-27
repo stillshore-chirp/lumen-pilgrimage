@@ -176,7 +176,7 @@ const samples = renderPhysicalKotoNote({
 
 ## 不採用実験の再現
 
-[任意R&Dツール](../../scripts/research/koto-identifiability/README.md)に、二モード推定と固定胴/励振の識別実験の自作スクリプト、固定した任意Python依存、入力hashと主要測定のsnapshotを置く。通常のnpm・ブラウザー・音源生成には接続しない。151 Hz実験は同梱音声で再現できる。6根実験は全録音比較が作る私有240 Hzを含むbankが必要で、未提供入力を自動取得しない。パッケージ化時は構文/importと保存結果の整合を確認し、全探索を再実行したとは記録しない。
+[任意R&Dツール](../../scripts/research/koto-identifiability/README.md)に、二モード推定と固定胴/励振の識別実験の自作スクリプト、固定した任意Python依存、入力hashと主要測定のsnapshotを置く。通常のnpm・ブラウザー・音源生成には接続しない。151 Hz実験は同梱音声で再現できる。6根実験には、現在同梱した `public/lake-audio/samples/recorded-bank.json` を指定できる。240 Hzは研究時点では私有候補だったが、終了時の採用記録・権利確認を経て同梱した。パッケージ化時は構文/importと保存結果の整合を確認し、全探索を再実行したとは記録しない。
 
 ## 権利確認と残る範囲
 

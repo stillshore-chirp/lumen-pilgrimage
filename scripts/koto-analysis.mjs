@@ -448,10 +448,17 @@ async function loadProduction(evidencePath, physical) {
     || evidence.durationSeconds !== 39 || evidence.inputHashes?.[modelPath] !== physical?.sourceHashes[modelPath]) {
     throw new Error('Production evidence does not match the current 96 kHz candidate');
   }
-  if (evidence.output?.path !== 'public/lake-audio/koto-performance.wav') throw new Error('Unexpected production audio path');
+  const historical = evidence.historicalRecord;
+  const expectedOutput = historical ? 'assets/lake-audio/history/koto-performance-hybrid96.wav'
+    : 'public/lake-audio/koto-performance.wav';
+  if (evidence.output?.path !== expectedOutput) throw new Error('Unexpected production audio path');
+  const sourceHashes = {};
   for (const [path, digest] of Object.entries(evidence.inputHashes)) {
+    const actualPath = historical?.inputSnapshots?.[path] ?? path;
     if (path.startsWith('/') || path.split(/[\\/]/).includes('..')
-      || hash(await readFile(resolve(root, path))) !== digest) throw new Error('Production input closure changed');
+      || actualPath.startsWith('/') || actualPath.split(/[\\/]/).includes('..')
+      || hash(await readFile(resolve(root, actualPath))) !== digest) throw new Error('Production input closure changed');
+    sourceHashes[actualPath] = digest;
   }
   const wavPath = resolve(root, evidence.output.path);
   const wav = await readFile(wavPath);
@@ -460,9 +467,11 @@ async function loadProduction(evidencePath, physical) {
   if (decoded.sampleRate !== ANALYSIS_RATE || decoded.samples.length !== ANALYSIS_RATE * 39) {
     throw new Error('Production WAV layout does not match the study');
   }
-  const method = { id: 'production96', label: `本番候補・${evidence.method}・96 kHz内部→48 kHz配布`,
-    status: evidence.qualityStatus, nativeSampleRate: ANALYSIS_RATE, internalSampleRate: 96000,
-    sourceHashes: evidence.inputHashes, onlyCases: ['score-39'], score: true,
+  const method = { id: 'production96', label: historical ? '旧候補・ハイブリッド（箏の同定未達）'
+    : `本番候補・${evidence.method}・96 kHz内部→48 kHz配布`,
+    status: historical ? 'previous-candidate-instrument-identity-unmet' : evidence.qualityStatus,
+    nativeSampleRate: ANALYSIS_RATE, internalSampleRate: 96000,
+    sourceHashes, onlyCases: ['score-39'], score: true,
     productionEvidence: { path: evidencePath, sha256: hash(bytes), deliveredWavSha256: evidence.output.sha256,
       pcmBits: evidence.pcmBits, gainDb: evidence.gainDb, unperformed: evidence.unperformed },
     inputArtifacts: [{ path: evidencePath, sha256: hash(bytes), snapshot: 'production/production.json' },
@@ -470,7 +479,8 @@ async function loadProduction(evidencePath, physical) {
     renderCase: () => decoded.samples.slice(),
     performanceEvidence: { ...evidence.performance, origin: 'offline-production-generation',
       cpuUserMs: evidence.performance.cpu.user / 1000, cpuSystemMs: evidence.performance.cpu.system / 1000 },
-    limitations: ['Delivered 24-bit PCM including its fixed gain and dither; matched playback uses the same score RMS/peak rules. Human listening remains pending.'],
+    limitations: historical ? ['所有者の試聴でギターとして知覚された旧候補。最終版の音質合格を示す音声ではありません。']
+      : ['Delivered 24-bit PCM including its fixed gain and dither; matched playback uses the same score RMS/peak rules. Human listening remains pending.'],
   };
   return method;
 }

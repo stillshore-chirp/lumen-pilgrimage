@@ -2,6 +2,23 @@
 
 この文書は乾音の測定条件・比較ファイル・数値の解釈の正本です。音色・演奏・室内伝搬を分け、数値の合格を人間の自然さ・美しさの合格へ読み替えません。設計上の要求は [Issue #275](https://github.com/stillshore-chirp/lumen-pilgrimage/issues/275)、室内の音源配置は [広間の設計](lake-hall-design.md#生き物と音)、再生実装は [LakeKoto](../../src/coast/world/lake/lakeKoto.ts) を参照します。
 
+## 今回の区切りの最終測定
+
+対象は [現生成記録](../../assets/lake-audio/production.json) の `sample-sustain-color`、SHA-256 `f03afd345cf9e24e20bdae9c266548a703126541be73b86e748ebea44e05bb0d`。以下の初回hybrid・64音声の測定は比較履歴であり、現在の配布音と混同しない。初回WAVと入力2ファイルのsnapshotは [history](../../assets/lake-audio/history/hybrid96-production.json) に保存し、元hashを維持する。
+
+| 条件 | 実測結果・範囲 |
+| --- | --- |
+| 配布信号 | 39秒・48 kHz・mono・24-bit、1,872,000 frame、5,616,044 byte、非有限値0 |
+| 全曲gain/peak/RMS/DC | 固定gain −4.192 dB、peak −3.951、RMS −24.000、DC −100.53 dBFS |
+| 量子化と研究出力の照合 | 全frameを最終試作raw×固定gainと比較。最大差1.7742×10⁻⁷（2/8388608以内）、誤差RMS −144.50 dBFS |
+| 奏法 | 曲内押し手4件の音高誤差 +0.103/−1.826/+0.524/+0.075 cent。固定到達窓＋20 msの各1 msでエネルギーあり。消音134.8 dB、未消音対照も非無音 |
+| 強弱 | 0.6は完全bypass。接触幅比に由来する仮定のFIRを±3 dBへ制限。48 kHz/73 tap、0.75 ms遅延。測定velocity層・胴IRとは区別 |
+| aliasの限定検査 | 独立20 kHz入力の有限時間加工＋5半音移調で折返し抑圧 −79.44 dB。実録全帯域のalias分離測定とは呼ばない |
+| オフライン性能 | 1.654秒、CPU user1.615秒/system0.112秒、保持PCM7.488 MB。処理中ArrayBuffer差34.50 MB。実行時合成ではない |
+| 新payloadのブラウザー | native44.1/48 kHz decode、3秒×8位置/向きの非有限値0、peak0.07736–0.12807。79秒・2周の継ぎ目差0、停止後peak0、周回energy差9.86×10⁻⁹ dB |
+
+新payloadの短時間実出力と2周を確認し、変更のないロード/12基graph/解放の構造gateを継承した。先行候補の156秒・CPU測定を新payloadで再実施したとは記録しない。有限尾加工は実物の将来波形を復元せず、保持窓との違い・微細な周期性増加が残る。最終音源の人間による箏同定・自然さは未評価であり、終了合意による配送完了と音質合格を分ける。
+
 ## 測定前に固定した条件
 
 旧音源は revision `375c3b7a2d77f3cae2420e5b3ca7c2f4e8bba597` の `lakeKotoScore.ts` です。24 kHz・39秒・13弦の加算合成を変更せず、Git blobとbyte一致する [fixture](../../scripts/fixtures/lakeKotoLegacy.ts) を読み、一時ディレクトリにも保存します。単音測定だけはTypeScriptを一時変換し、private関数をstaging上でexportします。本番コードには測定用exportを足しません。新方式は48 kHzで生成します。旧音源はBlackman窓sinc補間（左右32 tap、cutoff=元Nyquistの94%）で48 kHzへ変換し、元の12 kHz超の帯域が復元しないことを記録します。
@@ -102,7 +119,7 @@ node scripts/koto-analysis.mjs /private/tmp/lumen-koto-evaluation public/lake-au
 ```sh
 node scripts/koto-analysis.mjs /private/tmp/lumen-koto-evaluation public/lake-audio/samples/bank.json \
   --reuse /private/tmp/lumen-koto-evaluation-source5e1ad728 \
-  --production assets/lake-audio/production.json
+  --production assets/lake-audio/history/hybrid96-production.json
 ```
 
 `--production`は、生成済みの96 kHz本番候補の記録・全入力hash・配布WAV hashを照合して取り込みます。解析CLIで同じ全曲を96 kHz再生成することはありません。7つに増えた測定器テストは、24-bit PCMの復号と、物理sourceの変更が独立した純sampleの証拠を失効させないこと、case・基準・bank・sample DSPの変更が再利用を拒否することも確認します。

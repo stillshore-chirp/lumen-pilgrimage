@@ -18,7 +18,7 @@ const FROZEN_INPUTS = {
   'src/coast/world/lake/kotoSampleModel.ts': '6ca104c08eff9885b1e031633f1e11904f26611a2fd15e6c591b9159592aea95',
   'src/coast/world/lake/kotoPerformance.ts': '9369a44f18b55e54412301a332e1446c30720bcbbab3fd767b7b73d2440e02bd',
   'public/lake-audio/samples/bank.json': '0e7d90f2665021b985809c611d94c5dd4aed1c45e4341b4263cd16f287afc686',
-  'public/lake-audio/koto-performance.wav': 'c73976efaa69ff309fdb66e765acad4e46c08770e850f0c3997ad78d909838c2',
+  'assets/lake-audio/history/koto-performance-hybrid96.wav': 'c73976efaa69ff309fdb66e765acad4e46c08770e850f0c3997ad78d909838c2',
 };
 export const FIT_CRITERIA = Object.freeze({
   minimumWindowPoints: 6, minimumAmplitudeR2: 0.8, maximumPhaseRmsRadians: 0.35,

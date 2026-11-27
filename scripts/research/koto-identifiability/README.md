@@ -11,7 +11,7 @@ python3.13 -m venv /path/to/research-venv
 /path/to/research-venv/bin/python -m pip install -r scripts/research/koto-identifiability/requirements.txt
 ```
 
-`matrix_pencil.py` の既定入力はリポジトリの `public/lake-audio/samples/bank.json` と、そこにある `low-151.wav` です。commuted実験は同梱5根に加えて、研究時の**私有240 Hz根**を含む6根bankが必要です。240 Hz音声・私有bankは同梱しません。[全録音比較](../../../docs/lake/koto-instrument-design.md#自然減衰だけを使う全録音の比較)の生成器が作るlocal bankのパスを、必ず引数で指定してください。確認済み入力がなければこの実験は実行できず、スクリプトは未提供入力を取得しません。
+`matrix_pencil.py` の既定入力はリポジトリの `public/lake-audio/samples/bank.json` と、そこにある `low-151.wav` です。commuted実験は240 Hz根を含む同梱6根 `public/lake-audio/samples/recorded-bank.json` を引数で指定します。研究時点は私有候補でしたが、今回の終了時に権利・加工経路を台帳へ登録して同梱しました。
 
 入力は48 kHz・mono・PCM16、bank形式は `samples` 配列に `id`、`path`、`rootFrequency`、`durationSeconds`、`fadeOutSeconds` を持つJSONです。WAVのpathはbankからの相対パスです。commutedの6 IDは `low-151`、`mid-319`、`mid-452`、`high-640`、`high-792`、`low-240-candidate`。私有の5根コピーを使う場合も、同梱版とのhash一致を [measurement-snapshot.json](measurement-snapshot.json) で照合できます。
 
@@ -21,7 +21,7 @@ python3.13 -m venv /path/to/research-venv
 
 ```sh
 /path/to/research-venv/bin/python scripts/research/koto-identifiability/matrix_pencil.py --output /path/to/results/matrix.json
-/path/to/research-venv/bin/python scripts/research/koto-identifiability/commuted.py --bank /path/to/provided-six-root-bank/bank.json --output /path/to/results/commuted.json
+/path/to/research-venv/bin/python scripts/research/koto-identifiability/commuted.py --bank public/lake-audio/samples/recorded-bank.json --output /path/to/results/commuted.json
 ```
 
 出力には入力hash、使用環境、窓とモデル条件、予測誤差、極や係数を含みます。`matrix.json` はpencil・安定1/2 mode・学習窓の感度・接続末尾の数値、`commuted.json` は部分音特徴とleave-one-root/lossの解析を `study`、rootとwindowの同時holdoutを `joint` に保存します。入力音や元の比較manifestは上書きしません。
@@ -52,4 +52,4 @@ python3.13 -m venv /path/to/research-venv
 
 [measurement-snapshot.json](measurement-snapshot.json) は過去の測定を小さく抜き出した1件です。入力hash、使用version・環境、主要誤差、不採用理由だけを保持し、録音・原著本文・全学習データを含みません。パッケージ化では全探索を再実行せず、構文/import、元スクリプトの数値関数のAST、既存結果との整合を一度確認しました。異なるBLASや環境でのbit一致は保証しません。
 
-この研究のJSONや数値は人間の箏同定・自然さ・美しさの合格を代行しません。私有240 Hz入力なしで6根実験を再現したことにしないでください。
+この研究のJSONや数値は人間の箏同定・自然さ・美しさの合格を代行しません。同梱入力と保存値のhashを照合し、全探索を再実行した範囲と保存結果の確認を区別してください。

@@ -28,7 +28,11 @@ test('PCM24 preserves a known signal within two quantization steps with reproduc
 
 test('the distributed performance matches its recorded inputs, hash, duration and signal gates', async () => {
   const evidence = JSON.parse(await readFile(resolve(root, 'assets/lake-audio/production.json')));
-  assert.equal(evidence.qualityStatus, 'technical-selection-human-listening-pending');
+  assert.equal(evidence.qualityStatus, 'timeboxed-delivery-human-quality-not-certified');
+  assert.equal(evidence.method, 'sample-sustain-color');
+  assert.equal(evidence.diagnosticsSummary.notes, 48);
+  assert.equal(evidence.diagnosticsSummary.physicalFallbackNotes, 0);
+  assert.equal(evidence.diagnosticsSummary.clippedFilterTails, 0);
   for (const [path, expected] of Object.entries(evidence.inputHashes)) {
     assert.equal(hash(await readFile(resolve(root, path))), expected, `production input changed: ${path}`);
   }

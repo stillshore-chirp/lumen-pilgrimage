@@ -16,7 +16,7 @@ const FROZEN = {
   'src/coast/world/lake/kotoPhysicalModel.ts': '0f9fe7cd79f40e6e5f117070f59051837b9a74c2e8622d5eb7d3f8912367be2a',
   'src/coast/world/lake/kotoPerformance.ts': '9369a44f18b55e54412301a332e1446c30720bcbbab3fd767b7b73d2440e02bd',
   'public/lake-audio/samples/bank.json': '0e7d90f2665021b985809c611d94c5dd4aed1c45e4341b4263cd16f287afc686',
-  'public/lake-audio/koto-performance.wav': 'c73976efaa69ff309fdb66e765acad4e46c08770e850f0c3997ad78d909838c2',
+  'assets/lake-audio/history/koto-performance-hybrid96.wav': 'c73976efaa69ff309fdb66e765acad4e46c08770e850f0c3997ad78d909838c2',
 };
 const SOURCE_SHA = '133eff375b227d0d2480bec544cbaa535994adf8cbeb5708235d8c73c5c47430';
 const NEW_CASES = ['low-normal', 'mid-normal', 'high-normal', 'melody', 'press-one', 'press-two', 'damped', 'score-39'];

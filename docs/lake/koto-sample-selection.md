@@ -26,7 +26,7 @@
 
 | 候補・原出典 | 確認できたこと | 不採用理由・残る条件 |
 | --- | --- | --- |
-| [RutgerMuller Session 2](https://freesound.org/people/RutgerMuller/sounds/365215/) / [Session 3](https://freesound.org/people/RutgerMuller/sounds/365242/) | 個別HTMLがCC0 1.0へリンク。本人の即興演奏・収録状況を説明し、公式プロフィールもCC0公開を裏付ける。公式の圧縮プレビューを部分取得できた。 | **5加工単音として採用**。権利・倫理と技術比較の判断であり、人間の最終音質は未判定。弦数未確認。圧縮・短い余韻・収録条件の制約を保持する。 |
+| [RutgerMuller Session 2](https://freesound.org/people/RutgerMuller/sounds/365215/) / [Session 3](https://freesound.org/people/RutgerMuller/sounds/365242/) | 個別HTMLがCC0 1.0へリンク。本人の即興演奏・収録状況を説明し、公式プロフィールもCC0公開を裏付ける。公式の圧縮プレビューを部分取得できた。 | **初回5単音と追加240 Hz cutを採用**。同じ2出典から有限時間処理した4根を今回配送へ使用。終了合意は音質合格ではなく、弦数・収録層・人間の混入確認の未確認を保持。 |
 | [yukinisuzume公式](https://yukinisuzume.seesaa.net/) 2007年7月24日・2009年8月1日 | 十三本の弦、十二平均律、一音一サンプル、本人の演奏・サンプリングという説明。 | **今回不採用**。公式は独自の利用条件でありCC0明示がない。転載のCC BY表示をCC0へ読み替えず、音声未取得。 |
 | [Unreal Instruments: Koto](https://sfzinstruments.github.io/folk/koto/) | 十三弦KOTO、48 kHz FLACの案内。 | **今回不採用**。索引のライセンスはCustom。CC0の確認なし、音声未取得。 |
 | [World Strings, Real Recordings](https://lilambdcrossing.itch.io/world-strings-real-recordings) | 原出典を追える複数ライセンスの素材集。 | **今回不採用**。箏はTorsodogのCC BY 3.0であり、ほかの素材に対するCC0表示は箏に及ばない。音声未取得。 |
@@ -66,15 +66,19 @@ Session 2/3のページは、原WAVのボタンにログインが必要と表示
 
 単音候補の自動screenは、直前の静かな区間、推定発音位置、初期73–253 msの基音周辺の倍音energy比98.46–99.91%を利用しています。これは発音・倍音構造に関する補助情報であり、声・他音楽・第三者実演が存在しない証明ではありません。人間による混入確認・聴感評価は未実施です。一次出典と自動screenに矛盾する具体的兆候は現時点で確認していませんが、後に第三者音・特徴的なフレーズ等の混入が分かったcutは不採用へ戻し、依存する生成音を更新します。
 
-純サンプル方式は押し手を含む最大調音幅±5半音の範囲に限り、A3・B♭3を含む全39秒曲を純サンプルとして成立済みとはしません。hybridは録音の高域attackを約75 msまで使い、約145 msまでに物理合成へ渡します。人間が自然な箏と評価したこと、十三弦の実録音と確認したこと、原WAVを取得したことはいずれも意味しません。[台帳](../../assets/lake-audio/sample-manifest.json)の `adopted` は、この権利・倫理と加工単音の同梱の判定です。5 WAVと共有bank、加工・比較・演奏コードを実ファイルへ対応付けています。同梱生成曲も、次節の出力と元出典IDへ登録しています。
+初回5根による純サンプル方式は、押し手を含む最大調音幅±5半音の範囲に限り、A3・B♭3を含む全39秒曲を成立済みとはしませんでした。初回hybridは録音の高域attackを約75–145 msで物理方式へ渡す比較履歴です。追加240 Hzを含む現在の4根方式とは区別します。人間が自然な箏と評価したこと、十三弦の実録音と確認したこと、原WAVを取得したことはいずれも意味しません。[台帳](../../assets/lake-audio/sample-manifest.json)の `adopted` は、この権利・倫理と加工単音の同梱の判定です。5 WAVと共有bank、加工・比較・演奏コードを実ファイルへ対応付けています。同梱生成曲も、次節の出力と元出典IDへ登録しています。
 
-## 同梱生成曲の採用範囲
+## 追加240 Hzと現在の配送
 
-[39秒の生成曲](../../public/lake-audio/koto-performance.wav)を **暫定技術選択・最終音質未判定**として同梱します。[生成記録](../../assets/lake-audio/production.json)は `freesound-365215` / `freesound-365242` の加工単音と全入力hash、[音声台帳](../../assets/lake-audio/sample-manifest.json)の `generatedAssets` は実出力hash・bytes・生成スクリプトを対応付けます。実ファイルは48 kHz・mono・24-bit PCM・39秒で、96 kHz内部のhybrid生成から変換したものです。
+追加の `low-240` は確認済み365242の38.769–39.580秒、channel 0、元decode SHA `133eff375b227d0d2480bec544cbaa535994adf8cbeb5708235d8c73c5c47430` からの切出しです。0.811秒、DC除去・0.5 ms開始fade・55 ms終端fade・初回bankと共通のgainを含み、[原6根bank](../../public/lake-audio/samples/recorded-bank.json)へ元フレームと加工値を残します。新規の録音者や出典は採用していません。
 
-[独自の演奏入力](../../src/coast/world/lake/kotoPerformance.ts)による48発音のうち、4発音は対象サンプルの音域外のため録音attackを使わない物理方式です。利用可能な音では加工録音の短い高域attackを物理モデルと接続し、原即興の音列や演奏タイミングをコピーしません。この生成・同梱用途は上記の権利・倫理判定と本人のcreative-remixの意思に整合すると判断します。
+最大peakが約481 Hzでも、240/720/1200 Hzの系列と周期が240 Hz rootを支持したため、この根を使用します。これらは音高screenであり、単一弦、第三者音の不存在、実物十三弦、録音者の権利を追加で証明するものではありません。権利・倫理は同じ原出典のCC0と本人の自己即興・加工希望の根拠を再利用します。
 
-生成は[加工スクリプト](../../scripts/prepare-koto-performance.mjs)、同梱再生は[読込モジュール](../../src/coast/world/lake/lakeKotoAsset.ts)、方式別の研究比較は[解析CLI](../../scripts/koto-analysis.mjs)が担当します。単音bankの権利条件と、十三弦の個体未確認・圧縮音・収録条件・原単音の人間による混入確認未実施は生成曲にも引き継ぎます。生成曲の所有者による初回試聴と未達は[音源設計](koto-instrument-design.md#所有者による初回試聴と再設計の判断)に記録しています。数値、配布、再生の成立を最終的な自然さの合格にはしません。
+現在は240/452/638/792 Hzの4根を使います。[処理bank](../../public/lake-audio/samples/sustain/bank.json)は、240のtailの要求1.175倍、452/638の要求3倍を上限とした有限atempo処理、792の時間伸長なし、各実出力長・hashを区別して記録します。有限時間加工は録音されなかった自然な余韻の回復ではありません。[相対励振FIR](../../src/coast/world/lake/kotoExcitationColor.ts)は仮定したτ–velocity関係による自作補正で、実測velocity層や同定body IRではありません。FFmpegはオフライン処理ツールだけに使用し、GPL buildの実行ファイルやライブラリを配布せず、CC0原録音とは別に版・hash・commandを台帳へ記録します。
+
+[同梱39秒曲](../../public/lake-audio/koto-performance.wav)は `sample-sustain-color` / 48 kHz・mono・24-bit PCMです。[生成記録](../../assets/lake-audio/production.json)の元出典ID、入力hash、全48発音、相対FIR44発音、fallbackなしを実配布hashへ対応付けます。原即興のフレーズや音列は転用せず、[独自の演奏入力](../../src/coast/world/lake/kotoPerformance.ts)を使います。初回hybridと当時の入力・生成記録は[履歴](../../assets/lake-audio/history/hybrid96-production.json)へ残し、現在の採用と混同しません。
+
+所有者は今回の改良turnをここで区切り配送することを指示しました。これは最終の自然さ・一つの箏としての音色が人間に合格と評価された記録ではありません。以前のhybrid等への否定的な音色評価は保持します。十三弦の個体、録音強弱層、収音条件の同一性、人間による第三者混入確認は未確認であり、終了合意を理由に確認済みへ変更しません。詳細な配布・加工対応は[クレジット](../../public/lake-audio/ATTRIBUTION.md)と[台帳](../../assets/lake-audio/sample-manifest.json)を参照します。
 
 ## 加工・配布・使用の設計
 
