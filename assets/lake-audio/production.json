@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "method": "sample-sustain-color",
+  "qualityStatus": "timeboxed-delivery-human-quality-not-certified",
+  "internalSampleRate": 48000,
+  "sampleRate": 48000,
+  "channels": 1,
+  "frames": 1872000,
+  "durationSeconds": 39,
+  "pcmBits": 24,
+  "dither": {
+    "type": "TPDF",
+    "seed": 1802466415
+  },
+  "targetRmsDbfs": -24,
+  "samplePeakLimitDbfs": -3,
+  "gain": 0.6171822345900505,
+  "gainDb": -4.191731669370003,
+  "inputHashes": {
+    "scripts/prepare-koto-performance.mjs": "86f9d557d976cd3637bbf25af165ef20e098a6ce9648ce1b40770f58ba40df16",
+    "scripts/koto-analysis.mjs": "63b91261e52d12038324fe9583e2ef8abaef2de99e05b63195888755379f6ea0",
+    "src/coast/world/lake/kotoPerformance.ts": "9369a44f18b55e54412301a332e1446c30720bcbbab3fd767b7b73d2440e02bd",
+    "src/coast/world/lake/kotoExcitationColor.ts": "8041c5a7307769857809310951b3105263219613edd485da0e6e4f81c1b47bb5",
+    "src/coast/world/lake/kotoSampleModel.ts": "6ca104c08eff9885b1e031633f1e11904f26611a2fd15e6c591b9159592aea95",
+    "public/lake-audio/samples/sustain/bank.json": "fd8eea7fe7869a3a6d96b61c56ec217fd06e342095e2e6f525a59153169026f8",
+    "public/lake-audio/samples/sustain/mid-452.float.wav": "c3eb5ce0b831d5816f26bae99316dc0c463e9d366dfaff9c817bddcf74df81ef",
+    "public/lake-audio/samples/sustain/high-640.float.wav": "6ace7ccf8de212386ba8a4e89bfd37d80dbd13f557881c8c176f065abae8c318",
+    "public/lake-audio/samples/sustain/high-792.float.wav": "125b9fcfd1e5c7bd0e42e59c9749cf01b316165b992d6e1dec3a0ae3ccf106ba",
+    "public/lake-audio/samples/sustain/low-240-candidate.float.wav": "2fb588368b2248daeec3df36ff172f03760e41c6fd0576774332328e7d795875"
+  },
+  "sourceIds": [
+    "freesound-365215",
+    "freesound-365242"
+  ],
+  "output": {
+    "path": "public/lake-audio/koto-performance.wav",
+    "sha256": "f03afd345cf9e24e20bdae9c266548a703126541be73b86e748ebea44e05bb0d",
+    "bytes": 5616044
+  },
+  "raw": {
+    "frames": 1872000,
+    "durationSeconds": 39,
+    "nonFiniteCount": 0,
+    "samplePeak": 1.0281176567077637,
+    "samplePeakDbfs": 0.24085635417828727,
+    "rms": 0.10223193558046799,
+    "rmsDbfs": -19.808268330629996,
+    "mean": -0.00001524509721043216,
+    "absoluteDcDbfs": -96.33739604018038,
+    "crestDb": 20.049124684808284,
+    "maxAdjacentDelta": 0.11188502609729767,
+    "maxDeltaAtSeconds": 19.678416666666667,
+    "loopSeamDelta": 0,
+    "loopSeamDbfs": -180,
+    "final50msRmsDbfs": -180
+  },
+  "delivered": {
+    "frames": 1872000,
+    "durationSeconds": 39,
+    "nonFiniteCount": 0,
+    "samplePeak": 0.6345360279083252,
+    "samplePeakDbfs": -3.950874286907224,
+    "rms": 0.06309573446061746,
+    "rmsDbfs": -23.999999998265714,
+    "mean": -0.000009409172030595633,
+    "absoluteDcDbfs": -100.5289718212826,
+    "crestDb": 20.04912571135849,
+    "maxAdjacentDelta": 0.06905341148376465,
+    "maxDeltaAtSeconds": 19.678416666666667,
+    "loopSeamDelta": 0,
+    "loopSeamDbfs": -180,
+    "final50msRmsDbfs": -144.4727373011459
+  },
+  "quantization": {
+    "maximumAbsoluteError": 1.7741695046424866e-7,
+    "rmsErrorDbfs": -144.49556445761274
+  },
+  "diagnosticsSummary": {
+    "notes": 48,
+    "physicalFallbackNotes": 0,
+    "relativeExcitationNotes": 44,
+    "clippedFilterTails": 0
+  },
+  "performance": {
+    "wallMs": 1654.3677089999999,
+    "cpu": {
+      "user": 1614663,
+      "system": 111514
+    },
+    "retainedPcmBytes": 7488000,
+    "arrayBuffersDeltaBytes": 34498227
+  },
+  "limitations": [
+    "Recorded tails include bounded offline time modification, not the original future decay.",
+    "Relative contact colour is a design assumption, not measured velocity layers or body identification."
+  ],
+  "unperformed": [
+    "human-listening-of-final-delivery",
+    "verified-thirteen-string-recording-identity",
+    "physical-headphone-calibration"
+  ]
+}

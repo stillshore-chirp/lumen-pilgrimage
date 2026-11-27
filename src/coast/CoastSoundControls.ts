@@ -12,6 +12,8 @@ const worldSounds: Record<ExplorationWorldId, readonly ExplorationSound[]> = {
   overlook: ['birds', 'insects', 'traffic'],
   residence: ['traffic', 'wind', 'doors', 'appliances'],
   cinema: ['preview', 'wind'],
+  atrium: ['crowd', 'appliances'],
+  lake: ['water', 'birds'],
 };
 
 const soundLabels: Record<ExplorationSound, string> = {
@@ -22,8 +24,9 @@ const soundLabels: Record<ExplorationSound, string> = {
   traffic: '交通音',
   doors: '戸の開閉音',
   appliances: '設備音',
-  preview: '試映音',
+  preview: '上映音',
   footsteps: '歩行音',
+  crowd: '館内のざわめき',
 };
 
 function volumeRow(id: string, label: string, max: number, action = ''): string {
@@ -43,13 +46,15 @@ export function bindCoastSoundControls(
   onMasterVolume: (volume: number) => void,
 ) {
   const adjustableSounds = ['footsteps', ...worldSounds[world]] as const;
+  const labels: Partial<Record<ExplorationSound, string>> = world === 'cinema' ? { wind: '換気音' }
+    : world === 'atrium' ? { crowd: '店舗の設備音', appliances: '共用部の換気音' } : {};
   panel.insertAdjacentHTML('beforeend', `
     <div class="coast-sound">
       ${volumeRow('coast-volume', '全体音量', 300, '<button type="button" class="coast-audio"></button>')}
       <details class="coast-sound-details">
         <summary>種類別の音量</summary>
         ${adjustableSounds.map(kind => volumeRow(
-          `coast-sound-${kind}`, kind === 'wind' && world === 'cinema' ? '換気音' : soundLabels[kind], 100,
+          `coast-sound-${kind}`, labels[kind] ?? soundLabels[kind], 100,
           kind === 'footsteps' ? '<button type="button" class="coast-footsteps-audio"></button>' : '',
         )).join('')}
       </details>

@@ -265,6 +265,21 @@
   transform: translate(-50%, -50%);
 }
 
+.coast-grab-hint {
+  position: absolute;
+  bottom: calc(50% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  padding: 6px 12px;
+  border: 1px solid #bfe2dc65;
+  border-radius: 7px;
+  background: #102728ed;
+  color: #f6fbf7;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
 .coast-interact {
   position: absolute;
   inset: calc(50% + 30px) auto auto 50%;
@@ -282,7 +297,8 @@
   cursor: pointer;
 }
 
-.coast-locked .coast-reticle {
+.coast-locked .coast-reticle,
+.coast-grab-hint:not([hidden]) + .coast-reticle {
   display: block;
 }
 
@@ -332,6 +348,8 @@
   }
 
   .coast-settings {
+    /* At 16px, fit the sound action's text plus its fixed padding and border on one line. */
+    --control-action: 7.5em;
     flex-shrink: 1;
   }
 }
@@ -462,6 +480,23 @@
 .cinema-screening-dialog button:disabled {
   opacity: .5;
   cursor: default;
+}
+
+.cinema-local-screening-seek input[type="range"] {
+  flex: 1;
+  min-inline-size: 8rem;
+  accent-color: #bfe2dc;
+}
+
+.cinema-local-screening-time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cinema-local-screening-status {
+  margin: 0;
+  color: #d9e9e4;
+  line-height: 1.5;
 }
 
 .coast-travel-dialog section {

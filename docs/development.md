@@ -13,6 +13,8 @@ npm run dev
 
 Vite が表示した URL を Chrome で開きます。入り江から始まり、丘陵展望台、住戸、映画館はファストトラベルか `?world=overlook`、`?world=residence`、`?world=cinema` で直接開けます。操作の入口は[README](../README.md#起動と操作)、ビルド後のプレビューは[運用ガイド](operations.md)にあります。
 
+材質・照明と分離した色出力の切り分けには、独立した `/tools/xr-color-probe.html` を開きます。通常ゲームから読み込まず、追加依存もありません。開発サーバーと配布ビルドの両方で同じ入口を使えます。[XR色診断の手順と取得範囲](verification.md#xr色診断)を参照してください。
+
 ## 技術と検証ツール
 
 バージョンは [`package-lock.json`](../package-lock.json) の解決値です。[`package.json`](../package.json) は npm スクリプトと依存宣言の正本です。
@@ -29,7 +31,7 @@ Vite が表示した URL を Chrome で開きます。入り江から始まり�
 | WebRTC | [`monitorSession.ts`](../src/monitor/monitorSession.ts) が画面・音声を端末間で直接送ります。ペアリングは Vite の[シグナリング middleware](../server/virtual-monitor-signaling.mjs)を使い、STUN/TURN を設定していないため、別端末同士は直接到達できる必要があります。詳しくは[仮想モニター技術仕様](monitor.md)を参照してください。 |
 | WebXR | [`ImmersiveSession.ts`](../src/xr/ImmersiveSession.ts) が `immersive-vr` を検査し、`local-floor` を必須、手の追跡を任意として開始します。操縦とヘッドセット追跡は [`CoastXR.ts`](../src/coast/CoastXR.ts) が接続します。入力試験は模擬で、実機確認は[検証ガイド](verification.md#別端末とvr)に分けてあります。 |
 
-主な入口は [`package.json`](../package.json) の `dev`、`build`、`check`、`validate:harness`、領域別テストです。GitHub Actions の [CI ワークフロー](../.github/workflows/ci.yml)は `main` への push または pull request で Node.js 22 を用意し、`npm ci` と `npm run check` を実行します。細かなブラウザー試験と実機確認の条件は[検証と配布ビルド](verification.md)に集約しています。
+主な入口は [`package.json`](../package.json) の `dev`、`build`、`check:affected`、全検査の`check`、`validate:harness`、領域別テストです。GitHub Actions の [CI ワークフロー](../.github/workflows/ci.yml)は `main` への push または pull request で Node.js 22 を用意し、`npm ci` と `npm run check:affected -- --ci` を実行します。CIの比較元と[選択理由・結果](verification.md#変更影響によるゲート選択)を残し、非対象の検査を実行しません。細かなブラウザー試験と実機確認の条件は[検証と配布ビルド](verification.md)に集約しています。
 
 ## どこを編集するか
 
@@ -46,14 +48,16 @@ Vite が表示した URL を Chrome で開きます。入り江から始まり�
 | 仮想モニターのセッション確立 | [`virtual-monitor-signaling.mjs`](../server/virtual-monitor-signaling.mjs) と [`vite.config.mjs`](../vite.config.mjs) |
 | 配布時に読む画像・音声・地理データ | `public/**`。制作・検証の案内は[素材ガイド](assets.md)、出典と再配布条件は各 `ATTRIBUTION.md` が正本です。 |
 | 自動試験 | [`scripts/`](../scripts/) の `*.test.mjs` と [`package.json`](../package.json) のスクリプト |
+| 独立したXR色診断 | [`tools/xr-color-probe.html`](../tools/xr-color-probe.html)、[`src/tools/XRColorProbe.ts`](../src/tools/XRColorProbe.ts)。[`vite.config.mjs`](../vite.config.mjs)の独立HTML entryとしてビルドし、[`scripts/xr-color-probe-browser.mjs`](../scripts/xr-color-probe-browser.mjs)を既存monitor browser gateから実行します。 |
 
 起動と責務のつながりは[設計](architecture.md)、操作と利用者向けの設定は[探索ガイド](exploration.md)にあります。編集前に[文書の責務と更新基準](documentation-structure.md)で対象の正本を選び、仕様・操作・素材に影響する場合は対応する文書も更新してください。
 
 ## 通常の変更手順
 
-1. [コーディング規約](coding-standards.md)、[`package.json`](../package.json)、対象に近い実装・テストを確認し、変更する契約を[文書の責務と更新基準](documentation-structure.md)で特定します。
-2. 変更と同じ責務の試験を更新します。入力、移動、地形、描画、音響、ワールド切替では [AGENTS.md の検証条件](../AGENTS.md#検証)も確認してください。
-3. 受け入れ条件に応じて `npm run check` と対象ブラウザー試験を選びます。詳細な実行条件は[検証ガイド](verification.md)を使い、同じ長時間試験を重複させません。
-4. 文書・リンクを変えた場合は `npm run validate:harness` を実行します。静的検査が示すのはリンクや記載された npm スクリプトの整合性です。動作や実機の証明には使いません。
+1. 作業開始時点のブランチ・HEAD・未コミット変更と有効な指示を確認します。[文書の責務と更新基準](documentation-structure.md)から最新正本を特定し、[専門分野の業務工程](agent-harness.md#専門分野の業務工程)に従って要求、関連分野、再利用できる調査と追加調査を整理します。
+2. [Issueテンプレート](../.github/ISSUE_TEMPLATE/change.md)に対象・根拠・未解決事項を記録し、制作前に設計と受け入れ条件・検証方法を確定します。調査・設計の詳細は正本へ置き、Issueから参照します。計画を残す場合は[作業計画テンプレート](../plans/TEMPLATE.md)を使います。
+3. [コーディング規約](coding-standards.md)、[`package.json`](../package.json)、対象に近い実装・テストを確認し、設計を制作・実装へ反映します。同じ責務の試験を更新し、入力、移動、地形、描画、音響、ワールド切替では [AGENTS.md の検証条件](../AGENTS.md#検証)も確認します。
+4. [検証ガイド](verification.md)に従い、受け入れ条件ごとに直接評価できる方法を実施します。コード変更の `npm run check:affected` と、必要時の `--browser` で選んだブラウザー試験、文書変更の `npm run validate:harness` を選び、同じ長時間試験を重複させません。静的検査を研究の妥当性や体験品質・実機の証明には使いません。
+5. [PRテンプレート](../.github/pull_request_template.md)と[段階判定](agent-harness.md#進行段階の確認)で、根拠から成果物・結果の対応、未達と未検証、分野間の整合を照合します。不足を補ってからReady・マージ・完了を判断し、未達は元の条件のまま引き継ぎます。
 
 ツールの実行入口はリポジトリの `package.json` と GitHub Actions の CI です。人の承認者、デプロイ権限、公開用の認証情報はリポジトリ内で定義されていません。リモート操作の権限は作業環境と対象サービスの設定に従います。

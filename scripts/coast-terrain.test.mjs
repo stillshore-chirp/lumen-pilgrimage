@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
+import { Texture, Vector4 } from 'three';
 import { COAST_SUN_DIRECTION } from '../src/coast/world/coastAtmosphere.ts';
 import { PRIMARY_RAINBOW_ANGLE } from '../src/coast/world/coastSprayRainbow.ts';
 import {
@@ -9,14 +10,55 @@ import {
 } from '../src/coast/terrain.ts';
 
 const acousticsUrl = new URL('../src/coast/coastAcoustics.ts', import.meta.url).href;
+const overlookUrl = new URL('../src/coast/world/overlook/overlookTerrain.ts', import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (context.parentURL === overlookUrl && specifier === '../coastNoise') return nextResolve('../coastNoise.ts', context);
     const path = specifier === './terrain' && context.parentURL === acousticsUrl ? './terrain.ts' : specifier;
     return nextResolve(path, context);
   },
 });
 const { airCutoff, soundReach, terrainOcclusion, waterReflection } = await import(acousticsUrl);
+const { createOverlookSurface } = await import(overlookUrl);
 hooks.deregister();
+
+test('the overlook terrain tiles preserve every face, vertex and normal', () => {
+  const streets = { texture: new Texture(), bounds: new Vector4(-10, -10, 10, 10) };
+  const heightAt = (x, z) => 50 + 10 * Math.sin(x / 150) * Math.cos(z / 150);
+  const whole = createOverlookSurface(heightAt, streets, { value: 0 });
+  const tiled = createOverlookSurface(heightAt, streets, { value: 0 }, { value: 0 });
+  try {
+    const base = whole.group.children[0].geometry;
+    const tiles = tiled.group.children.map(child => child.geometry);
+    assert.ok(tiles.length > 1);
+    const faceOrder = new Map();
+    for (let i = 0; i < base.index.count; i += 6) faceOrder.set(base.index.array[i], i);
+    for (const tile of tiles) {
+      const { start, count } = tile.drawRange;
+      assert.ok(count > 0 && count % 6 === 0);
+      assert.ok(tile.boundingSphere.radius > 0);
+      for (let i = start; i < start + count; i += 6) {
+        const cell = tile.index.array[i];
+        const original = faceOrder.get(cell);
+        if (original === undefined) assert.fail(`Unknown or duplicate terrain cell ${cell}`);
+        for (let vertex = 0; vertex < 6; vertex += 1) {
+          if (tile.index.array[i + vertex] !== base.index.array[original + vertex]) {
+            assert.fail(`Terrain cell ${cell} changed topology`);
+          }
+        }
+        faceOrder.delete(cell);
+      }
+    }
+    assert.equal(faceOrder.size, 0);
+    for (const attribute of ['position', 'normal', 'color']) {
+      assert.deepEqual(tiles[0].getAttribute(attribute).array, base.getAttribute(attribute).array);
+    }
+  } finally {
+    whole.dispose();
+    tiled.dispose();
+    streets.texture.dispose();
+  }
+});
 
 test('the coast contains a dry approach, tidal edge, and submerged seabed', () => {
   const { x, z } = SPAWN;

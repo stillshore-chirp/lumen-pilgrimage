@@ -30,6 +30,14 @@ function readTlsOptions() {
 
 export default defineConfig(({ command }) => ({
   plugins: [virtualMonitorSignalingPlugin()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        xrColorProbe: fileURLToPath(new URL('./tools/xr-color-probe.html', import.meta.url)),
+      },
+    },
+  },
   server: {
     host: 'localhost',
     // Vite's CORS middleware runs before the signaling plugin.

@@ -145,6 +145,7 @@ export class MonitorXR {
   release(): void {
     this.holders.length = 0;
     this.grab = null;
+    if (this.guide) this.guide.sprite.visible = false;
     for (const input of this.inputs.values()) {
       input.pending = false;
       input.beam.visible = false;

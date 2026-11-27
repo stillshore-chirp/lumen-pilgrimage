@@ -169,6 +169,9 @@ const towersVertex = /* glsl */`
     float roof = max(normal.y, 0.0);
     vec3 daylight = vec3(0.57, 0.65, 0.75) + sun * vec3(0.97, 0.86, 0.69) + roof * 0.19;
     vec3 nightlight = vec3(0.028, 0.036, 0.047) + roof * 0.027;
+    #ifdef NEAR_CITY_NIGHT_VIEW
+      nightlight += vec3(0.026, 0.035, 0.048);
+    #endif
     vCityColor = color * mix(daylight, nightlight, uNight);
     vFacade = cityFacade;
     vLightSeed = cityLightSeed;
@@ -292,19 +295,35 @@ const blocksVertex = /* glsl */`
   ${nearCityNight}
   void main() {
     vec3 p = position * cityScale;
+    vec3 shapeNormal = normal;
+    #ifdef CITY_VISIBLE_FLAT_FACES
+      // Unit model axes recover city coordinates, including the residence's reflected Z.
+      vec3 toEye = cameraPosition - (modelMatrix * vec4(cityCenter, 1.0)).xyz;
+      vec2 eye = vec2(dot(toEye, modelMatrix[0].xyz), dot(toEye, modelMatrix[2].xyz));
+      vec2 localEye = vec2(eye.x * cityHeading.x - eye.y * cityHeading.y,
+        eye.x * cityHeading.y + eye.y * cityHeading.x);
+      // Rotating a wall by half a turn also preserves the winding of its triangles.
+      float side = mix(-1.0, 1.0, step(0.0, dot(shapeNormal.xz, localEye)));
+      p.xz *= side;
+      shapeNormal.xz *= side;
+    #endif
     vec3 cityPosition = cityCenter + vec3(
       p.x * cityHeading.x + p.z * cityHeading.y,
       p.y,
       p.z * cityHeading.x - p.x * cityHeading.y
     );
-    vec3 localNormal = normalize(normal / cityScale);
+    vec3 localNormal = normalize(shapeNormal / cityScale);
     vec3 n = localNormal;
     n = vec3(n.x * cityHeading.x + n.z * cityHeading.y, n.y, n.z * cityHeading.x - n.x * cityHeading.y);
     float facing = max(0.0, dot(n, uCitySun));
     float roof = smoothstep(0.18, 0.77, n.y);
     vec3 day = cityColor * (vec3(0.53, 0.62, 0.73) + facing * vec3(0.86, 0.78, 0.65) + roof * 0.10);
     day *= mix(0.54, 1.0, smoothstep(0.0, 0.46, position.y + roof * 0.2));
-    vec3 dark = cityColor * (vec3(0.015, 0.020, 0.028) + roof * 0.016) + vec3(0.001, 0.0016, 0.0025);
+    vec3 nightSky = vec3(0.015, 0.020, 0.028) + roof * 0.016;
+    #ifdef NEAR_CITY_NIGHT_VIEW
+      nightSky += vec3(0.021, 0.027, 0.038);
+    #endif
+    vec3 dark = cityColor * nightSky + vec3(0.001, 0.0016, 0.0025);
     vCityColor = mix(day, dark, uNight);
     float across = abs(localNormal.x) > 0.5 ? p.z : p.x;
     vBlockFace = vec4(across * cityWindowScale + cityVariant * 81.0, p.y * 0.254,
@@ -475,6 +494,15 @@ function flatGeometry(): THREE.BufferGeometry {
   const indices = Array.from(geometry.index!.array).filter((_, i) => i < 18 || i >= 24);
   geometry.setIndex(indices);
   geometry.clearGroups();
+  return geometry;
+}
+
+function visibleFlatGeometry(flat: THREE.BufferGeometry): THREE.BufferGeometry {
+  // Roof and one face per horizontal axis. The vertex shader selects the facing walls.
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', flat.getAttribute('position'));
+  geometry.setAttribute('normal', flat.getAttribute('normal'));
+  geometry.setIndex(Array.from(flat.index!.array).filter((_, i) => i < 6 || (i >= 12 && i < 24)));
   return geometry;
 }
 
@@ -688,6 +716,9 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
   };
   const defines = options.nearCityNightView ? { NEAR_CITY_NIGHT_VIEW: 1 } : {};
   const blockMaterial = new THREE.ShaderMaterial({ uniforms, defines, vertexShader: blocksVertex, fragmentShader: blocksFragment });
+  const flatMaterial = new THREE.ShaderMaterial({
+    uniforms, defines: { ...defines, CITY_VISIBLE_FLAT_FACES: 1 }, vertexShader: blocksVertex, fragmentShader: blocksFragment,
+  });
   const skylineMaterial = new THREE.ShaderMaterial({ uniforms, defines, vertexShader: towersVertex, fragmentShader: towersFragment });
   const pointsMaterial = new THREE.ShaderMaterial({
     uniforms: { ...uniforms, uCityPixelFactor: { value: 1 } },
@@ -996,10 +1027,10 @@ export function createOverlookCity(heightAt: (x: number, z: number) => number, o
     }
 
     const flat = flatGeometry();
-    const shapes = { flat, pitched: pitchedGeometry(), terraced: terracedGeometry(flat) };
+    const shapes = { flat: visibleFlatGeometry(flat), pitched: pitchedGeometry(), terraced: terracedGeometry(flat) };
     for (const [key, buildings] of buildingTiles) {
       const form = key.split(':', 2)[1] as BuildingForm;
-      const mesh = createBlocks(buildings, blockMaterial, shapes[form]);
+      const mesh = createBlocks(buildings, form === 'flat' ? flatMaterial : blockMaterial, shapes[form]);
       (key[0] === '1' ? extraRoofs : group).add(mesh);
     }
     const canopy = canopyGeometry();

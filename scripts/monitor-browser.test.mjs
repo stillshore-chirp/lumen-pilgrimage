@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
 import { preview } from 'vite';
+import { installSimulatedXR } from './simulated-xr.mjs';
+import { runXRColorProbeBrowserTests } from './xr-color-probe-browser.mjs';
 import { CINEMA_DESTINATIONS, cinemaGroundHeight } from '../src/coast/world/cinema/cinemaLayout.ts';
 
 const timeout = 90_000;
@@ -30,6 +32,10 @@ after(async () => {
   } finally {
     await server?.close();
   }
+});
+
+test('the independent XR color probe preserves measured and unavailable results', { timeout }, async t => {
+  await runXRColorProbeBrowserTests(t, { browser, url, screenshotDirectory });
 });
 
 function installSyntheticCapture() {
@@ -132,6 +138,16 @@ function observeAudio() {
       return listener && [listener.positionX.value, listener.positionY.value, listener.positionZ.value,
         listener.forwardX.value, listener.forwardY.value, listener.forwardZ.value];
     },
+    placement() {
+      const entry = contexts.find(({ hasStream, panners }) => hasStream && panners.length);
+      if (!entry) return null;
+      const listener = entry.context.listener;
+      const [source] = entry.panners;
+      return {
+        eye: [listener.positionX.value, listener.positionY.value, listener.positionZ.value],
+        source: [source.positionX.value, source.positionY.value, source.positionZ.value],
+      };
+    },
     monitorResume: 'native',
     heldResumeInUserGesture: false,
     rejectedResumeInUserGesture: false,
@@ -205,167 +221,6 @@ function observeAudio() {
     }
     return connect.call(this, destination, ...args);
   };
-}
-
-function installSimulatedXR({ supported = true, profile = 'meta-quest-touch-plus' } = {}) {
-  const fixture = {
-    supported, checks: 0, requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
-    head: { x: 0, y: 1.65, z: 0, yaw: 0 }, eyePoses: {},
-  };
-  window.xrFixture = fixture;
-  const raf = window.requestAnimationFrame.bind(window);
-  const cancelRaf = window.cancelAnimationFrame.bind(window);
-  let presenting = false;
-  let inXRFrame = false;
-  let viewX = 0;
-
-  const gl = WebGL2RenderingContext.prototype;
-  const drawElements = gl.drawElements;
-  gl.drawElements = function (...args) {
-    if (inXRFrame) ++fixture.xrDraws;
-    else if (presenting) ++fixture.strayDraws;
-    else ++fixture.desktopDraws;
-    return drawElements.apply(this, args);
-  };
-  gl.makeXRCompatible = async () => {};
-  const viewport = gl.viewport;
-  gl.viewport = function (x, ...rest) {
-    viewX = x;
-    return viewport.call(this, x, ...rest);
-  };
-  const locateUniform = gl.getUniformLocation;
-  const setMatrix = gl.uniformMatrix4fv;
-  const viewMatrices = new WeakSet();
-  gl.getUniformLocation = function (program, name) {
-    const location = locateUniform.call(this, program, name);
-    if (name === 'viewMatrix' && location) viewMatrices.add(location);
-    return location;
-  };
-  gl.uniformMatrix4fv = function (location, transpose, matrix, ...rest) {
-    if (inXRFrame && viewMatrices.has(location) && matrix.length === 16) {
-      fixture.eyePoses[viewX] = {
-        x: -(matrix[0] * matrix[12] + matrix[1] * matrix[13] + matrix[2] * matrix[14]),
-        y: -(matrix[4] * matrix[12] + matrix[5] * matrix[13] + matrix[6] * matrix[14]),
-        z: -(matrix[8] * matrix[12] + matrix[9] * matrix[13] + matrix[10] * matrix[14]),
-        yaw: Math.atan2(matrix[2], matrix[0]),
-      };
-    }
-    return setMatrix.call(this, location, transpose, matrix, ...rest);
-  };
-  const fillText = CanvasRenderingContext2D.prototype.fillText;
-  CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
-    if (this.canvas.width === 960 && this.canvas.height === 680) {
-      if (y === 58 && x === 34) fixture.menuTitle = text;
-      if (text.startsWith('›  ')) fixture.selection = text.slice(3);
-    }
-    if (this.canvas.width === 960 && this.canvas.height === 104) fixture.hint = text;
-    return fillText.call(this, text, x, y, ...rest);
-  };
-  Object.defineProperty(window, 'XRWebGLBinding', { value: undefined, configurable: true });
-  window.XRWebGLLayer = class {
-    framebuffer = null;
-    framebufferWidth = 640;
-    framebufferHeight = 480;
-    getViewport({ eye }) {
-      return { x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 };
-    }
-  };
-
-  const projectionMatrix = new Float32Array([
-    1.3, 0, 0, 0, 0, 1.73, 0, 0, 0, 0, -1.001, -1, 0, 0, -.2, 0,
-  ]);
-
-  function viewPose() {
-    const { x, y, z, yaw } = fixture.head;
-    const center = new DOMMatrix().translate(x, y, z).rotate(0, yaw * 180 / Math.PI, 0);
-    const transform = { matrix: center.toFloat32Array() };
-    const views = ['left', 'right'].map((eye, index) => ({
-      eye, projectionMatrix,
-      transform: { matrix: center.translate(index === 0 ? -.032 : .032, 0, 0).toFloat32Array() },
-    }));
-    return { transform, views };
-  }
-
-  function controller(handedness) {
-    const transform = {
-      position: { x: handedness === 'left' ? -.24 : .24, y: 1.3, z: -.23 },
-      orientation: { x: 0, y: 0, z: 0, w: 1 },
-    };
-    const space = { transform, emulatedPosition: false };
-    return {
-      handedness, targetRayMode: 'tracked-pointer', profiles: [profile],
-      gamepad: {
-        mapping: 'xr-standard', axes: [0, 0, 0, 0],
-        buttons: Array.from({ length: 7 }, () => ({ pressed: false, value: 0 })),
-      },
-      gripSpace: space, targetRaySpace: space,
-    };
-  }
-
-  class Session extends EventTarget {
-    inputSources = [controller('left'), controller('right')];
-    visibilityState = 'visible';
-    async requestReferenceSpace() { return new EventTarget(); }
-    updateRenderState() {}
-    makeFrame() {
-      return { session: this, getViewerPose: viewPose, getPose: space => space };
-    }
-    requestAnimationFrame(callback) {
-      return raf(time => {
-        presenting = inXRFrame = true;
-        try {
-          callback(time, this.makeFrame());
-          ++fixture.frames;
-        } finally {
-          inXRFrame = false;
-        }
-      });
-    }
-    cancelAnimationFrame(id) { cancelRaf(id); }
-    async end() {
-      ++fixture.ends;
-      presenting = false;
-      this.dispatchEvent(new Event('end'));
-    }
-  }
-
-  fixture.mutate = async change => {
-    const { session } = fixture;
-    const source = session?.inputSources.find(({ handedness }) => handedness === change.side);
-    if (change.axes) source.gamepad.axes.splice(2, 2, ...change.axes);
-    if (change.button !== undefined) source.gamepad.buttons[change.button] = {
-      pressed: change.pressed, value: Number(change.pressed),
-    };
-    if (change.select) session.dispatchEvent(Object.assign(new Event('select'), {
-      inputSource: session.inputSources[1], frame: session.makeFrame(),
-    }));
-    if (change.head) Object.assign(fixture.head, change.head);
-    if (change.visibility) {
-      session.visibilityState = change.visibility;
-      session.dispatchEvent(new Event('visibilitychange'));
-    }
-    const before = fixture.frames;
-    if (!change.select) {
-      while (fixture.frames < before + (change.frames ?? 2)) await new Promise(raf);
-    }
-  };
-
-  const xr = new EventTarget();
-  xr.isSessionSupported = async () => {
-    ++fixture.checks;
-    return fixture.supported;
-  };
-  xr.requestSession = async (mode, features) => {
-    ++fixture.requests;
-    fixture.features = { mode, ...features };
-    fixture.activations.push(navigator.userActivation.isActive);
-    if (fixture.denyNext) {
-      fixture.denyNext = false;
-      throw new DOMException('', 'NotAllowedError');
-    }
-    return fixture.session = new Session();
-  };
-  Object.defineProperty(navigator, 'xr', { value: xr });
 }
 
 async function newPage() {
@@ -698,6 +553,127 @@ test('separate tabs pair with approval, render native WebRTC media and control a
   }
 });
 
+test('F carries a floating monitor on the desktop and leaves its video and sound at the released pose', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  const errors = [];
+  viewer.on('pageerror', () => errors.push('viewer'));
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture), sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers), viewer.addInitScript(observeAudio), viewer.addInitScript(installSimulatedXR),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    await viewer.goto(url.href);
+    const panel = button(viewer, '仮想モニター');
+    const canvas = viewer.locator('canvas.coast-view');
+    const mode = viewer.locator('.coast-mode');
+    const hint = viewer.locator('.coast-grab-hint[role="status"]');
+    const pickup = hint.filter({ hasText: /^F 浮遊モニターを掴む$/ });
+    const release = hint.filter({ hasText: /^F 浮遊モニターを置く$/ });
+    const distance = (a, b) => Math.hypot(...a.map((value, i) => value - b[i]));
+    const pose = () => viewer.evaluate(() => window.monitorSound.placement());
+    const moveRight = async ({ eye }) => {
+      await viewer.keyboard.down('d');
+      try {
+        await viewer.waitForFunction(previous => {
+          const position = window.monitorSound.placement()?.eye;
+          return position && Math.hypot(position[0] - previous[0], position[2] - previous[2]) > 0.65;
+        }, eye);
+      } finally {
+        await viewer.keyboard.up('d');
+      }
+    };
+
+    await panel.click();
+    await button(viewer, 'モニターを表示').click();
+    const input = viewer.getByRole('textbox', { name: '接続コード' });
+    const initialMode = await mode.textContent();
+    await input.press('f');
+    assert.equal(await input.inputValue(), 'f');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    await input.clear();
+
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    await viewer.getByRole('combobox', { name: 'モニターの音響' }).selectOption('spatial');
+    await button(viewer, 'モニター音声').click();
+    await viewer.waitForFunction(() => {
+      const pose = window.monitorSound.placement();
+      return pose && Math.hypot(...pose.source.map((value, i) => value - pose.eye[i])) > 3;
+    });
+
+    const edit = button(viewer, '配置を編集');
+    await edit.click();
+    const beforeEdit = await pose();
+    await canvas.focus();
+    await viewer.keyboard.press('f');
+    assert.equal(await edit.getAttribute('aria-pressed'), 'true');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    assert.ok(distance((await pose()).source, beforeEdit.source) < 0.02);
+    await edit.click();
+    await panel.click();
+    await canvas.focus();
+    await pickup.waitFor();
+    assert.equal(await viewer.evaluate(() => document.pointerLockElement), null);
+    const initial = await pose();
+    const initialPixels = await screenPixels(viewer);
+    assert.ok(initialPixels.count > 2_000);
+
+    await viewer.keyboard.press('f');
+    await release.waitFor();
+    await moveRight(await pose());
+    const carried = await pose();
+    const carriedPixels = await screenPixels(viewer, 'monitor-desktop-carried');
+    assert.ok(distance(carried.source, initial.source) > 0.5, 'the spatial source travels with the player');
+    assert.ok(carriedPixels.count > 2_000 && Math.abs(carriedPixels.x - initialPixels.x) < 24,
+      'the rendered video stays in front of the moving player');
+
+    await viewer.keyboard.press('f');
+    await release.waitFor({ state: 'hidden' });
+    const placed = await pose();
+    assert.ok(distance(placed.source, carried.source) < 0.2, 'releasing keeps the carried world position');
+    await moveRight(placed);
+    const walked = await pose();
+    const placedPixels = await screenPixels(viewer, 'monitor-desktop-placed');
+    assert.ok(distance(walked.source, placed.source) < 0.02, 'the spatial source stays at the released position');
+    assert.ok(placedPixels.count > 2_000 && placedPixels.x < carriedPixels.x - 32,
+      'after release, walking shifts the stationary video across the view');
+    assert.equal(await mode.textContent(), initialMode);
+
+    // Reset to the wider default distance used by portrait canvases.
+    await viewer.setViewportSize({ width: 540, height: 900 });
+    await panel.click();
+    await button(viewer, '位置・サイズを戻す').click();
+    await panel.click();
+    await canvas.focus();
+    await pickup.waitFor();
+    const portrait = await pose();
+    assert.ok(distance(portrait.source, portrait.eye) > 4.5);
+    await viewer.keyboard.press('f');
+    await release.waitFor();
+
+    await button(viewer, 'VRを開始').click();
+    await viewer.waitForFunction(() => window.xrFixture.frames > 3 && window.xrFixture.xrDraws > 0);
+    const immersive = await pose();
+    await canvas.focus();
+    await viewer.keyboard.press('f');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    assert.ok(distance((await pose()).source, immersive.source) < 0.02);
+    await button(viewer.locator('.coast-xr-entry'), 'VRを終了').click();
+    await viewer.waitForFunction(() => window.xrFixture.ends === 1);
+    await canvas.focus();
+    await pickup.waitFor();
+    assert.deepEqual(errors, []);
+  } finally {
+    await Promise.all([sender.context().close(), viewer.context().close()]);
+  }
+});
+
 test('the audio toggle cancels and retries a pending start, and begins off after a new pairing', { timeout }, async () => {
   const sender = await newPage();
   const viewer = await newPage();
@@ -1008,7 +984,9 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     };
     await pressXRMenu();
     await viewer.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
-    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '設定']) await xrMenuStep(label);
+    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '商業アトリウム', '湖畔の広間', '設定']) {
+      await xrMenuStep(label);
+    }
     await xrInput({ select: true });
     await viewer.waitForFunction(() => window.xrFixture.menuTitle === '設定');
     for (const label of ['歩行音', '昼', '夜', 'ワールド照明', '仮想モニター']) await xrMenuStep(label);
@@ -1511,6 +1489,8 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await step(1, '丘陵展望台');
     await step(1, '都心の70階住戸');
     await step(1, '映画館シアター（大）');
+    await step(1, '商業アトリウム');
+    await step(1, '湖畔の広間');
     await step(1, '設定');
     await choose();
     await waitForMenu('設定');
@@ -1534,6 +1514,8 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await step(1, '丘陵展望台');
     await step(1, '都心の70階住戸');
     await step(1, '映画館シアター（大）');
+    await step(1, '商業アトリウム');
+    await step(1, '湖畔の広間');
     await step(1, '設定');
     await step(1, 'VRを終了');
     const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
@@ -1541,6 +1523,275 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await button(page, 'VRを開始').waitFor();
     await page.waitForFunction(draws => window.xrFixture.desktopDraws > draws && window.xrFixture.ends === 1, desktopDraws);
     assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('XR quality adjusts both layer types and survives travel and desktop return', { timeout }, async () => {
+  for (const layer of ['projection', 'base']) {
+    const page = await newPage();
+    try {
+      await page.addInitScript(installSimulatedXR, layer);
+      await page.goto(new URL('?world=residence&place=living-theater&time=night', url).href);
+      await button(page, 'VRを開始').click();
+      await page.waitForFunction(() => window.xrFixture.eyePoses[320] && window.xrFixture.xrDraws > 0);
+      const foveation = () => page.evaluate(() => ({
+        value: window.xrFixture.layer.fixedFoveation, scale: window.xrFixture.scaleFactor,
+      }));
+      assert.deepEqual(await foveation(), { value: .5, scale: 1 }, layer);
+      const change = input => page.evaluate(value => window.xrFixture.mutate(value), input);
+      await change({ side: 'left', button: 4, pressed: true });
+      await change({ side: 'left', button: 4, pressed: false });
+      const next = async expected => {
+        await change({ side: 'right', axes: [0, 1] });
+        await page.waitForFunction(label => window.xrFixture.selection?.startsWith(label), expected);
+        await change({ side: 'right', axes: [0, 0] });
+      };
+      const seek = async expected => {
+        // Drive the real menu with controller input; world-specific items may precede the target.
+        for (let step = 0; step < 12; step++) {
+          if (await page.evaluate(label => window.xrFixture.selection?.startsWith(label), expected)) return;
+          await change({ side: 'right', axes: [0, 1] });
+          await change({ side: 'right', axes: [0, 0] });
+        }
+        assert.fail(`XR menu item was not reached: ${expected}`);
+      };
+      await seek('設定');
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.menuTitle === '設定');
+      await seek('描画品質');
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.menuTitle === '描画品質'
+        && window.xrFixture.selection === '軽量（選択中）　周辺の描画負荷を抑える');
+      await next('高品質');
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.selection === '高品質（選択中）　周辺の細部を保つ');
+      assert.deepEqual(await foveation(), { value: .25, scale: 1 }, layer);
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      if (layer === 'projection') {
+        for (let presses = 0; presses < 2; presses++) {
+          await change({ side: 'left', button: 4, pressed: true });
+          await change({ side: 'left', button: 4, pressed: false });
+        }
+        await page.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル'
+          && window.xrFixture.selection === '入り江と山道');
+        await change({ select: true });
+        await page.waitForFunction(() => window.xrFixture.menuTitle === '入り江と山道');
+        await change({ select: true });
+        await page.waitForURL(address => address.searchParams.get('world') === 'coast');
+        assert.deepEqual(await foveation(), { value: .25, scale: 1 }, 'travel preserves the projection layer quality');
+        assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+        assert.equal(await page.evaluate(() => window.xrFixture.requests), 1, 'travel continues the current session');
+      }
+      const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
+      await button(page.locator('.coast-xr-entry'), 'VRを終了').click();
+      await page.waitForFunction(draws => window.xrFixture.ends === 1 && window.xrFixture.desktopDraws > draws, desktopDraws);
+      await page.waitForFunction(width => document.querySelector('canvas.coast-view').width === width, viewport.width);
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      await button(page, '軽量').click();
+      await page.waitForFunction(width => document.querySelector('canvas.coast-view').width === width, Math.floor(viewport.width * .8));
+    } finally {
+      await page.close();
+    }
+  }
+});
+
+function observeShaderPreparation(supportsParallel) {
+  const completion = 0x91b1;
+  const probe = window.shaderPreparation = { allow: false, polls: 0, links: 0, firstUses: 0, throwCompletion: false };
+  const gl = WebGL2RenderingContext.prototype;
+  const extension = gl.getExtension;
+  const parameter = gl.getProgramParameter;
+  const link = gl.linkProgram;
+  const info = gl.getProgramInfoLog;
+  gl.getExtension = function (name) {
+    if (name === 'KHR_parallel_shader_compile') return supportsParallel ? { COMPLETION_STATUS_KHR: completion } : null;
+    return extension.call(this, name);
+  };
+  gl.getProgramParameter = function (program, pname) {
+    if (pname === completion) {
+      probe.polls++;
+      if (probe.throwCompletion) throw new Error('Synthetic shader completion failure');
+      return probe.allow;
+    }
+    return parameter.call(this, program, pname);
+  };
+  gl.linkProgram = function (program) {
+    probe.links++;
+    return link.call(this, program);
+  };
+  gl.getProgramInfoLog = function (program) {
+    probe.firstUses++;
+    return info.call(this, program);
+  };
+}
+
+test('the residence prepares the first interior view before starting projection XR by day and night', { timeout }, async () => {
+  for (const time of ['day', 'night']) {
+    const page = await newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    try {
+      await page.addInitScript(installSimulatedXR, 'projection');
+      await page.addInitScript(observeShaderPreparation, true);
+      await page.goto(new URL(`?world=residence&place=living-window&time=${time}`, url).href);
+      const entry = button(page, 'VRを開始');
+      await page.waitForFunction(() => window.shaderPreparation.polls > 0);
+      assert.equal(await entry.isDisabled(), true);
+      assert.equal(await page.locator('#coast-xr-status').textContent(), 'VRの描画を準備しています。');
+      assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+      await button(page, '高品質').click();
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      assert.equal(await entry.isDisabled(), true, 'Quality changes preserve the preparation gate');
+
+      await page.evaluate(() => { window.shaderPreparation.allow = true; });
+      await entry.click();
+      await page.waitForFunction(() => window.xrFixture.eyePoses[320] && window.xrFixture.frames >= 5);
+      const result = await page.evaluate(async () => {
+        const probe = window.shaderPreparation;
+        const { links, firstUses } = probe;
+        const fixture = window.xrFixture;
+        const before = fixture.eyePoses[0].yaw;
+        await fixture.mutate({ head: { yaw: Math.PI }, frames: 5 });
+        const after = fixture.eyePoses[0].yaw;
+        return { links: probe.links - links, firstUses: probe.firstUses - firstUses,
+          turned: Math.cos(before - after) < -.99, activation: fixture.activations };
+      });
+      assert.deepEqual(result, { links: 0, firstUses: 0, turned: true, activation: [true] }, time);
+
+      if (time === 'night') {
+        const travel = page.getByRole('dialog', { name: 'ファストトラベル' });
+        await button(page, 'ファストトラベル').click();
+        await button(travel, '入り江の浜').click();
+        await page.waitForURL(address => address.searchParams.get('world') === 'coast');
+        assert.equal(await button(page, 'VRを終了').isEnabled(), true);
+        assert.deepEqual(await page.evaluate(() => [window.xrFixture.requests, window.xrFixture.ends]), [1, 0]);
+      }
+
+      const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
+      await button(page, 'VRを終了').click();
+      await page.waitForFunction(draws => window.xrFixture.desktopDraws > draws && window.xrFixture.ends === 1, desktopDraws);
+      assert.equal(await entry.isEnabled(), true);
+      assert.deepEqual(errors, []);
+    } finally {
+      await page.close();
+    }
+  }
+});
+
+test('the residence prepares the first projection XR turn without parallel shader compilation support', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await page.addInitScript(installSimulatedXR, 'projection');
+    await page.addInitScript(observeShaderPreparation, false);
+    await page.goto(new URL('?world=residence&place=living-window&time=night', url).href);
+    const entry = button(page, 'VRを開始');
+    await page.waitForFunction(() => document.querySelector('#coast-xr-status')?.textContent === 'VRの描画を準備しています。'
+      && document.querySelector('.coast-xr-entry button')?.disabled);
+    await entry.click();
+    await page.waitForFunction(() => window.xrFixture.frames > 4 && window.xrFixture.eyePoses[320]);
+    const result = await page.evaluate(async () => {
+      const probe = window.shaderPreparation;
+      const { links, firstUses } = probe;
+      const fixture = window.xrFixture;
+      const before = fixture.eyePoses[0].yaw;
+      await fixture.mutate({ head: { yaw: Math.PI }, frames: 5 });
+      return {
+        polls: probe.polls, links: probe.links - links, firstUses: probe.firstUses - firstUses,
+        turned: Math.cos(before - fixture.eyePoses[0].yaw) < -.99, activation: fixture.activations,
+      };
+    });
+    assert.deepEqual(result, { polls: 0, links: 0, firstUses: 0, turned: true, activation: [true] });
+    await button(page, 'VRを終了').click();
+    await button(page, 'VRを開始').waitFor();
+  } finally {
+    await page.close();
+  }
+});
+
+async function exposeResidencePreparationReset(page) {
+  await page.route('**/assets/CoastApp-*.js', async route => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const prepare = 'this.world.prepareRender?.(';
+    assert.equal(source.split(prepare).length - 1, 1, 'The preparation reset fixture needs one render hook');
+    const hook = 'window.resetResidenceShaderPreparation??=(()=>{this.residenceShaders.reset();this.syncXRStatus()}),';
+    await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
+  });
+}
+
+test('residence shader timeout and completion errors require preparation retry before a fresh XR start', { timeout }, async () => {
+  for (const failure of ['timeout', 'exception']) {
+    const page = await newPage();
+    try {
+      await page.addInitScript(installSimulatedXR, 'projection');
+      await page.addInitScript({ content: `(${observeShaderPreparation.toString()})(true);
+        window.shaderPreparation.throwCompletion = ${failure === 'exception'};` });
+      await page.goto(new URL('?world=residence&place=living-window&time=night', url).href);
+      await button(page, '描画準備をやり直す').waitFor();
+      assert.match(await page.locator('#coast-xr-status').textContent(), /描画を準備できませんでした/);
+      assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+      await button(page, '高品質').click();
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      assert.equal(await button(page, '描画準備をやり直す').isEnabled(), true,
+        'Quality remains usable without clearing the failed preparation state');
+      await page.evaluate(() => {
+        window.shaderPreparation.allow = true;
+        window.shaderPreparation.throwCompletion = false;
+      });
+      await button(page, '描画準備をやり直す').click();
+      assert.equal(await page.evaluate(() => window.xrFixture.requests), 0,
+        'Preparation retry must not request a session during the same click');
+      await button(page, 'VRを開始').click();
+      await page.waitForFunction(() => window.xrFixture.frames > 4 && window.xrFixture.eyePoses[320]);
+      assert.equal(await page.evaluate(() => window.xrFixture.requests), 1);
+      await button(page, 'VRを終了').click();
+    } finally {
+      await page.close();
+    }
+  }
+});
+
+test('residence preparation gates a denied XR retry while preserving the active session exit', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await page.addInitScript(installSimulatedXR, 'projection');
+    await page.addInitScript({ content: `(${observeShaderPreparation.toString()})(true);
+      window.shaderPreparation.allow = true;` });
+    await exposeResidencePreparationReset(page);
+    await page.goto(new URL('?world=residence&place=living-window&time=day', url).href);
+    await page.evaluate(() => { window.xrFixture.denyNext = true; });
+    await button(page, 'VRを開始').click();
+    await page.locator('#coast-xr-status').filter({ hasText: /機器の接続と許可/ }).waitFor();
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 1);
+
+    const waiting = await page.evaluate(() => {
+      window.shaderPreparation.allow = false;
+      window.resetResidenceShaderPreparation();
+      const entry = document.querySelector('.coast-xr-entry button');
+      return { disabled: entry.disabled, label: entry.textContent,
+        status: document.querySelector('#coast-xr-status').textContent };
+    });
+    assert.deepEqual(waiting, { disabled: true, label: 'VRを開始', status: 'VRの描画を準備しています。' });
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 1);
+    await page.evaluate(() => { window.shaderPreparation.allow = true; });
+    await page.waitForFunction(() => !document.querySelector('.coast-xr-entry button').disabled);
+    assert.match(await page.locator('#coast-xr-status').textContent(), /機器の接続と許可/,
+      'The session-start failure remains distinct from preparation failure');
+    await button(page, 'VRを開始').click();
+    await page.waitForFunction(() => window.xrFixture.frames > 4 && window.xrFixture.eyePoses[320]);
+
+    const active = await page.evaluate(() => {
+      window.shaderPreparation.allow = false;
+      window.resetResidenceShaderPreparation();
+      const entry = document.querySelector('.coast-xr-entry button');
+      return { disabled: entry.disabled, label: entry.textContent };
+    });
+    assert.deepEqual(active, { disabled: false, label: 'VRを終了' });
+    await button(page, 'VRを終了').click();
+    await page.waitForFunction(() => window.xrFixture.ends === 1);
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 2);
   } finally {
     await page.close();
   }
@@ -1938,6 +2189,54 @@ test('PCVR rechecks Link without opening XR, then uses one tracked desktop sessi
     assert.equal(await button(page, '軽量').getAttribute('aria-pressed'), 'true');
     assert.equal(await canvas.evaluate(view => view === window.pcViewerCanvas), true);
     assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('PCVR reconnection retains residence shader preparation, retry, and session exit gates', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await exposeResidencePreparationReset(page);
+    await page.addInitScript(installSimulatedXR, { layerType: 'projection', supported: false, profile: 'oculus-touch' });
+    await page.addInitScript(observeShaderPreparation, true);
+    await page.goto(new URL('?vr=pc&world=residence&place=living-window&time=night', url).href);
+    await button(page, 'VRの接続を再確認').waitFor();
+    assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+    await page.evaluate(() => { window.xrFixture.supported = true; });
+    await button(page, 'VRの接続を再確認').click();
+    await page.waitForFunction(() => window.shaderPreparation.polls > 0);
+    assert.equal(await button(page, 'VRを開始').isDisabled(), true);
+    assert.equal(await page.locator('#coast-xr-status').textContent(), 'VRの描画を準備しています。');
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+
+    await page.evaluate(() => { window.shaderPreparation.throwCompletion = true; });
+    await button(page, '描画準備をやり直す').waitFor();
+    assert.match(await page.locator('#coast-xr-status').textContent(), /描画を準備できませんでした/);
+    await page.evaluate(() => {
+      window.shaderPreparation.throwCompletion = false;
+      window.shaderPreparation.allow = true;
+      window.xrFixture.denyNext = true;
+    });
+    await button(page, '描画準備をやり直す').click();
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 0,
+      'Reconnection and preparation retry must not start XR');
+    await button(page, 'VRを開始').click();
+    await page.locator('#coast-xr-status').filter({ hasText: /VRを開始できませんでした.*Meta Horizon Link/ }).waitFor();
+    await button(page, 'VRを開始').click();
+    await page.waitForFunction(() => window.xrFixture.eyePoses[320] && window.xrFixture.xrDraws > 0);
+    assert.equal(await page.evaluate(() => window.xrFixture.layer.fixedFoveation), .25);
+    await page.evaluate(() => {
+      window.shaderPreparation.allow = false;
+      window.resetResidenceShaderPreparation();
+    });
+    assert.equal(await button(page, 'VRを終了').isEnabled(), true,
+      'Shader preparation cannot block an active session from ending');
+    await button(page, 'VRを終了').click();
+    await page.waitForFunction(() => window.xrFixture.ends === 1);
+    assert.equal(await button(page, 'VRを開始').isDisabled(), true);
+    assert.equal(await page.locator('#coast-xr-status').textContent(), 'VRの描画を準備しています。');
+    assert.deepEqual(await page.evaluate(() => window.xrFixture.activations), [true, true]);
   } finally {
     await page.close();
   }
