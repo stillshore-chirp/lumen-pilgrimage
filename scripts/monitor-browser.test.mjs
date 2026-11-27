@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
 import { preview } from 'vite';
+import { installSimulatedXR } from './simulated-xr.mjs';
 import { CINEMA_DESTINATIONS, cinemaGroundHeight } from '../src/coast/world/cinema/cinemaLayout.ts';
 
 const timeout = 90_000;
@@ -132,6 +133,16 @@ function observeAudio() {
       return listener && [listener.positionX.value, listener.positionY.value, listener.positionZ.value,
         listener.forwardX.value, listener.forwardY.value, listener.forwardZ.value];
     },
+    placement() {
+      const entry = contexts.find(({ hasStream, panners }) => hasStream && panners.length);
+      if (!entry) return null;
+      const listener = entry.context.listener;
+      const [source] = entry.panners;
+      return {
+        eye: [listener.positionX.value, listener.positionY.value, listener.positionZ.value],
+        source: [source.positionX.value, source.positionY.value, source.positionZ.value],
+      };
+    },
     monitorResume: 'native',
     heldResumeInUserGesture: false,
     rejectedResumeInUserGesture: false,
@@ -205,193 +216,6 @@ function observeAudio() {
     }
     return connect.call(this, destination, ...args);
   };
-}
-
-function installSimulatedXR(layerType = 'base') {
-  const fixture = {
-    requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
-    head: { x: 0, y: 1.65, z: 0, yaw: 0 }, eyePoses: {},
-  };
-  window.xrFixture = fixture;
-  const raf = window.requestAnimationFrame.bind(window);
-  const cancelRaf = window.cancelAnimationFrame.bind(window);
-  let presenting = false;
-  let inXRFrame = false;
-  let viewX = 0;
-
-  const gl = WebGL2RenderingContext.prototype;
-  const drawElements = gl.drawElements;
-  gl.drawElements = function (...args) {
-    if (inXRFrame) ++fixture.xrDraws;
-    else if (presenting) ++fixture.strayDraws;
-    else ++fixture.desktopDraws;
-    return drawElements.apply(this, args);
-  };
-  gl.makeXRCompatible = async () => {};
-  const viewport = gl.viewport;
-  gl.viewport = function (x, ...rest) {
-    viewX = x;
-    return viewport.call(this, x, ...rest);
-  };
-  const locateUniform = gl.getUniformLocation;
-  const setMatrix = gl.uniformMatrix4fv;
-  const viewMatrices = new WeakSet();
-  gl.getUniformLocation = function (program, name) {
-    const location = locateUniform.call(this, program, name);
-    if (name === 'viewMatrix' && location) viewMatrices.add(location);
-    return location;
-  };
-  gl.uniformMatrix4fv = function (location, transpose, matrix, ...rest) {
-    if (inXRFrame && viewMatrices.has(location) && matrix.length === 16) {
-      fixture.eyePoses[viewX] = {
-        x: -(matrix[0] * matrix[12] + matrix[1] * matrix[13] + matrix[2] * matrix[14]),
-        y: -(matrix[4] * matrix[12] + matrix[5] * matrix[13] + matrix[6] * matrix[14]),
-        z: -(matrix[8] * matrix[12] + matrix[9] * matrix[13] + matrix[10] * matrix[14]),
-        yaw: Math.atan2(matrix[2], matrix[0]),
-      };
-    }
-    return setMatrix.call(this, location, transpose, matrix, ...rest);
-  };
-  const fillText = CanvasRenderingContext2D.prototype.fillText;
-  CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
-    if (this.canvas.width === 960 && this.canvas.height === 680) {
-      if (y === 58 && x === 34) fixture.menuTitle = text;
-      if (text.startsWith('›  ')) fixture.selection = text.slice(3);
-    }
-    if (this.canvas.width === 960 && this.canvas.height === 104) fixture.hint = text;
-    return fillText.call(this, text, x, y, ...rest);
-  };
-  const framebufferWidth = 640;
-  const framebufferHeight = 480;
-  const eyeViewport = ({ eye }) => ({ x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 });
-  const Binding = layerType === 'projection' ? class {
-    constructor(_session, context) {
-      this.context = context;
-    }
-    createProjectionLayer({ scaleFactor, colorFormat, depthFormat }) {
-      const context = this.context;
-      const texture = format => {
-        const result = context.createTexture();
-        context.bindTexture(context.TEXTURE_2D, result);
-        context.texStorage2D(context.TEXTURE_2D, 1, format, framebufferWidth, framebufferHeight);
-        context.bindTexture(context.TEXTURE_2D, null);
-        return result;
-      };
-      this.colorTexture = texture(colorFormat);
-      this.depthStencilTexture = texture(depthFormat);
-      fixture.scaleFactor = scaleFactor;
-      return { textureWidth: framebufferWidth, textureHeight: framebufferHeight, ignoreDepthValues: true, fixedFoveation: 1 };
-    }
-    getViewSubImage(_layer, view) {
-      return { colorTexture: this.colorTexture, depthStencilTexture: this.depthStencilTexture, viewport: eyeViewport(view) };
-    }
-  } : undefined;
-  Object.defineProperty(window, 'XRWebGLBinding', { value: Binding, configurable: true });
-  window.XRWebGLLayer = class {
-    framebuffer = null;
-    framebufferWidth = framebufferWidth;
-    framebufferHeight = framebufferHeight;
-    fixedFoveation = 1;
-    constructor(_session, _context, options) {
-      fixture.scaleFactor = options.framebufferScaleFactor;
-    }
-    getViewport(view) { return eyeViewport(view); }
-  };
-
-  const projectionMatrix = new Float32Array([
-    1.3, 0, 0, 0, 0, 1.73, 0, 0, 0, 0, -1.001, -1, 0, 0, -.2, 0,
-  ]);
-
-  function viewPose() {
-    const { x, y, z, yaw } = fixture.head;
-    const center = new DOMMatrix().translate(x, y, z).rotate(0, yaw * 180 / Math.PI, 0);
-    const transform = { matrix: center.toFloat32Array() };
-    const views = ['left', 'right'].map((eye, index) => ({
-      eye, projectionMatrix,
-      transform: { matrix: center.translate(index === 0 ? -.032 : .032, 0, 0).toFloat32Array() },
-    }));
-    return { transform, views };
-  }
-
-  function controller(handedness) {
-    const transform = {
-      position: { x: handedness === 'left' ? -.24 : .24, y: 1.3, z: -.23 },
-      orientation: { x: 0, y: 0, z: 0, w: 1 },
-    };
-    const space = { transform, emulatedPosition: false };
-    return {
-      handedness, targetRayMode: 'tracked-pointer', profiles: ['meta-quest-touch-plus'],
-      gamepad: {
-        mapping: 'xr-standard', axes: [0, 0, 0, 0],
-        buttons: Array.from({ length: 7 }, () => ({ pressed: false, value: 0 })),
-      },
-      gripSpace: space, targetRaySpace: space,
-    };
-  }
-
-  class Session extends EventTarget {
-    inputSources = [controller('left'), controller('right')];
-    visibilityState = 'visible';
-    async requestReferenceSpace() { return new EventTarget(); }
-    updateRenderState({ baseLayer, layers }) {
-      fixture.layer = baseLayer ?? layers?.[0] ?? fixture.layer;
-    }
-    makeFrame() {
-      return { session: this, getViewerPose: viewPose, getPose: space => space };
-    }
-    requestAnimationFrame(callback) {
-      return raf(time => {
-        presenting = inXRFrame = true;
-        try {
-          callback(time, this.makeFrame());
-          ++fixture.frames;
-        } finally {
-          inXRFrame = false;
-        }
-      });
-    }
-    cancelAnimationFrame(id) { cancelRaf(id); }
-    async end() {
-      ++fixture.ends;
-      presenting = false;
-      this.dispatchEvent(new Event('end'));
-    }
-  }
-
-  fixture.mutate = async change => {
-    const { session } = fixture;
-    const source = session?.inputSources.find(({ handedness }) => handedness === change.side);
-    if (change.axes) source.gamepad.axes.splice(2, 2, ...change.axes);
-    if (change.button !== undefined) source.gamepad.buttons[change.button] = {
-      pressed: change.pressed, value: Number(change.pressed),
-    };
-    if (change.select) session.dispatchEvent(Object.assign(new Event('select'), {
-      inputSource: session.inputSources[1], frame: session.makeFrame(),
-    }));
-    if (change.head) Object.assign(fixture.head, change.head);
-    if (change.visibility) {
-      session.visibilityState = change.visibility;
-      session.dispatchEvent(new Event('visibilitychange'));
-    }
-    const before = fixture.frames;
-    if (!change.select) {
-      while (fixture.frames < before + (change.frames ?? 2)) await new Promise(raf);
-    }
-  };
-
-  const xr = new EventTarget();
-  xr.isSessionSupported = async () => true;
-  xr.requestSession = async (mode, features) => {
-    ++fixture.requests;
-    fixture.features = { mode, ...features };
-    fixture.activations.push(navigator.userActivation.isActive);
-    if (fixture.denyNext) {
-      fixture.denyNext = false;
-      throw new DOMException('', 'NotAllowedError');
-    }
-    return fixture.session = new Session();
-  };
-  Object.defineProperty(navigator, 'xr', { value: xr });
 }
 
 async function newPage() {
@@ -724,6 +548,127 @@ test('separate tabs pair with approval, render native WebRTC media and control a
   }
 });
 
+test('F carries a floating monitor on the desktop and leaves its video and sound at the released pose', { timeout }, async () => {
+  const sender = await newPage();
+  const viewer = await newPage();
+  const errors = [];
+  viewer.on('pageerror', () => errors.push('viewer'));
+  try {
+    await Promise.all([
+      sender.addInitScript(installSyntheticCapture), sender.addInitScript(observePeers),
+      viewer.addInitScript(observePeers), viewer.addInitScript(observeAudio), viewer.addInitScript(installSimulatedXR),
+    ]);
+    await sender.goto(new URL('?monitor=sender', url).href);
+    await viewer.goto(url.href);
+    const panel = button(viewer, '仮想モニター');
+    const canvas = viewer.locator('canvas.coast-view');
+    const mode = viewer.locator('.coast-mode');
+    const hint = viewer.locator('.coast-grab-hint[role="status"]');
+    const pickup = hint.filter({ hasText: /^F 浮遊モニターを掴む$/ });
+    const release = hint.filter({ hasText: /^F 浮遊モニターを置く$/ });
+    const distance = (a, b) => Math.hypot(...a.map((value, i) => value - b[i]));
+    const pose = () => viewer.evaluate(() => window.monitorSound.placement());
+    const moveRight = async ({ eye }) => {
+      await viewer.keyboard.down('d');
+      try {
+        await viewer.waitForFunction(previous => {
+          const position = window.monitorSound.placement()?.eye;
+          return position && Math.hypot(position[0] - previous[0], position[2] - previous[2]) > 0.65;
+        }, eye);
+      } finally {
+        await viewer.keyboard.up('d');
+      }
+    };
+
+    await panel.click();
+    await button(viewer, 'モニターを表示').click();
+    const input = viewer.getByRole('textbox', { name: '接続コード' });
+    const initialMode = await mode.textContent();
+    await input.press('f');
+    assert.equal(await input.inputValue(), 'f');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    await input.clear();
+
+    await requestPairing(sender, viewer);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    await viewer.getByRole('combobox', { name: 'モニターの音響' }).selectOption('spatial');
+    await button(viewer, 'モニター音声').click();
+    await viewer.waitForFunction(() => {
+      const pose = window.monitorSound.placement();
+      return pose && Math.hypot(...pose.source.map((value, i) => value - pose.eye[i])) > 3;
+    });
+
+    const edit = button(viewer, '配置を編集');
+    await edit.click();
+    const beforeEdit = await pose();
+    await canvas.focus();
+    await viewer.keyboard.press('f');
+    assert.equal(await edit.getAttribute('aria-pressed'), 'true');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    assert.ok(distance((await pose()).source, beforeEdit.source) < 0.02);
+    await edit.click();
+    await panel.click();
+    await canvas.focus();
+    await pickup.waitFor();
+    assert.equal(await viewer.evaluate(() => document.pointerLockElement), null);
+    const initial = await pose();
+    const initialPixels = await screenPixels(viewer);
+    assert.ok(initialPixels.count > 2_000);
+
+    await viewer.keyboard.press('f');
+    await release.waitFor();
+    await moveRight(await pose());
+    const carried = await pose();
+    const carriedPixels = await screenPixels(viewer, 'monitor-desktop-carried');
+    assert.ok(distance(carried.source, initial.source) > 0.5, 'the spatial source travels with the player');
+    assert.ok(carriedPixels.count > 2_000 && Math.abs(carriedPixels.x - initialPixels.x) < 24,
+      'the rendered video stays in front of the moving player');
+
+    await viewer.keyboard.press('f');
+    await release.waitFor({ state: 'hidden' });
+    const placed = await pose();
+    assert.ok(distance(placed.source, carried.source) < 0.2, 'releasing keeps the carried world position');
+    await moveRight(placed);
+    const walked = await pose();
+    const placedPixels = await screenPixels(viewer, 'monitor-desktop-placed');
+    assert.ok(distance(walked.source, placed.source) < 0.02, 'the spatial source stays at the released position');
+    assert.ok(placedPixels.count > 2_000 && placedPixels.x < carriedPixels.x - 32,
+      'after release, walking shifts the stationary video across the view');
+    assert.equal(await mode.textContent(), initialMode);
+
+    // Reset to the wider default distance used by portrait canvases.
+    await viewer.setViewportSize({ width: 540, height: 900 });
+    await panel.click();
+    await button(viewer, '位置・サイズを戻す').click();
+    await panel.click();
+    await canvas.focus();
+    await pickup.waitFor();
+    const portrait = await pose();
+    assert.ok(distance(portrait.source, portrait.eye) > 4.5);
+    await viewer.keyboard.press('f');
+    await release.waitFor();
+
+    await button(viewer, 'VRを開始').click();
+    await viewer.waitForFunction(() => window.xrFixture.frames > 3 && window.xrFixture.xrDraws > 0);
+    const immersive = await pose();
+    await canvas.focus();
+    await viewer.keyboard.press('f');
+    assert.equal(await hint.isVisible(), false);
+    assert.equal(await mode.textContent(), initialMode);
+    assert.ok(distance((await pose()).source, immersive.source) < 0.02);
+    await button(viewer.locator('.coast-xr-entry'), 'VRを終了').click();
+    await viewer.waitForFunction(() => window.xrFixture.ends === 1);
+    await canvas.focus();
+    await pickup.waitFor();
+    assert.deepEqual(errors, []);
+  } finally {
+    await Promise.all([sender.context().close(), viewer.context().close()]);
+  }
+});
+
 test('the audio toggle cancels and retries a pending start, and begins off after a new pairing', { timeout }, async () => {
   const sender = await newPage();
   const viewer = await newPage();
@@ -1034,7 +979,9 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     };
     await pressXRMenu();
     await viewer.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
-    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '設定']) await xrMenuStep(label);
+    for (const label of ['丘陵展望台', '都心の70階住戸', '映画館シアター（大）', '商業アトリウム', '湖畔の広間', '設定']) {
+      await xrMenuStep(label);
+    }
     await xrInput({ select: true });
     await viewer.waitForFunction(() => window.xrFixture.menuTitle === '設定');
     for (const label of ['歩行音', '昼', '夜', 'ワールド照明', '仮想モニター']) await xrMenuStep(label);
@@ -1537,6 +1484,8 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await step(1, '丘陵展望台');
     await step(1, '都心の70階住戸');
     await step(1, '映画館シアター（大）');
+    await step(1, '商業アトリウム');
+    await step(1, '湖畔の広間');
     await step(1, '設定');
     await choose();
     await waitForMenu('設定');
@@ -1560,6 +1509,8 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
     await step(1, '丘陵展望台');
     await step(1, '都心の70階住戸');
     await step(1, '映画館シアター（大）');
+    await step(1, '商業アトリウム');
+    await step(1, '湖畔の広間');
     await step(1, '設定');
     await step(1, 'VRを終了');
     const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);

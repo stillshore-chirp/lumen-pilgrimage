@@ -3,8 +3,10 @@ import { SPAWN } from './terrain';
 import { RESIDENCE_LABEL } from './world/residence/residenceFloor';
 import { RESIDENCE_ROOMS } from './world/residence/residencePlan';
 import { CINEMA_DESTINATIONS, CINEMA_LABEL } from './world/cinema/cinemaLayout';
+import { ATRIUM_DESTINATIONS, ATRIUM_LABEL } from './world/atrium/atriumLayout';
+import { LAKE_DESTINATIONS, LAKE_LABEL } from './world/lake/lakeLayout';
 
-export type ExplorationWorldId = 'coast' | 'overlook' | 'residence' | 'cinema';
+export type ExplorationWorldId = 'coast' | 'overlook' | 'residence' | 'cinema' | 'atrium' | 'lake';
 
 export interface CoastDestination extends CoastPose {
   readonly id: string;
@@ -48,8 +50,14 @@ export const EXPLORATION_WORLDS = [
     ],
   },
   { id: 'cinema', label: CINEMA_LABEL, places: CINEMA_DESTINATIONS },
+  { id: 'atrium', label: ATRIUM_LABEL, places: ATRIUM_DESTINATIONS },
+  { id: 'lake', label: LAKE_LABEL, places: LAKE_DESTINATIONS },
 ] as const satisfies readonly { id: ExplorationWorldId; label: string; places: readonly CoastDestination[] }[];
 
 export function findDestination(worldId: string, placeId: string | null): CoastDestination | undefined {
+  if (worldId === 'lake') {
+    if (placeId === 'west-veranda') placeId = 'west-window';
+    if (placeId === 'east-veranda') placeId = 'east-window';
+  }
   return EXPLORATION_WORLDS.find(world => world.id === worldId)?.places.find(place => place.id === placeId);
 }

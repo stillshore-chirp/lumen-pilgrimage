@@ -63,8 +63,9 @@ test('deterministic stereo room tails start after 55 ms and have independent inp
 });
 
 const browserChannel = process.env.COAST_CHROME_CHANNEL;
+const runBrowser = browserChannel || process.env.CINEMA_AUDIO_BROWSER || process.env.npm_lifecycle_event === 'test:cinema:browser';
 test('Chromium OfflineAudioContext verifies cinema signals at every seat and playback quality', {
-  skip: !browserChannel && !process.env.CINEMA_AUDIO_BROWSER,
+  skip: !runBrowser,
   timeout: 90_000,
 }, async t => {
   const { createServer } = await import('vite');

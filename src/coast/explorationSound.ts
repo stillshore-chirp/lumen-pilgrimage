@@ -1,5 +1,5 @@
 export type ExplorationSound = 'water' | 'birds' | 'insects' | 'wind' | 'traffic' | 'doors'
-  | 'appliances' | 'preview' | 'footsteps';
+  | 'appliances' | 'preview' | 'footsteps' | 'crowd';
 
 export interface ExplorationMix {
   readonly master: number;
@@ -22,6 +22,7 @@ export const DEFAULT_EXPLORATION_MIX: ExplorationMix = {
     appliances: 1,
     preview: 1,
     footsteps: 1,
+    crowd: 1,
   },
 };
 

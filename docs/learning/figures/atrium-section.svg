@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="600" viewBox="0 0 1120 600" role="img" aria-labelledby="title description">
+  <title id="title">商業アトリウムの横断面と地上階の模式平面</title>
+  <desc id="description">幅22メートルの共用部を左右の店先が挟む。幅16メートルの吹抜けを青い昼光が通り、回廊下には暖色照明がある。模式平面では奥のソファからカフェ横を抜け、曲線階段へ歩ける。</desc>
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 10 5 0 10z" fill="#1d607d"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 10 5 0 10z" fill="#aa6024"/>
+    </marker>
+    <style>
+      text {font-family:system-ui,"Hiragino Sans","Yu Gothic",sans-serif; fill:#273733}
+      .panel {fill:#fff; stroke:#d1d8d1}
+      .heading {font-size:24px; font-weight:650}
+      .label {font-size:17px}
+      .small {font-size:14px; fill:#485952}
+      .dim {fill:none; stroke:#4d5a55; stroke-width:1.4}
+      .guide {fill:none; stroke:#b6c2bb; stroke-width:1.2; stroke-dasharray:5 5}
+      .structure {fill:#daceb8; stroke:#846f52; stroke-width:1.5}
+      .envelope {fill:none; stroke:#4f6564; stroke-width:2.4}
+      .warm {fill:none; stroke:#bd752e; stroke-width:5; stroke-linecap:round}
+      .cool {fill:none; stroke:#1d607d; stroke-width:2.4; marker-end:url(#arrow-blue)}
+      .route {fill:none; stroke:#1d607d; stroke-width:2.7; marker-end:url(#arrow-blue)}
+      .amber-label {fill:#874817}
+      .blue-label {fill:#175775}
+    </style>
+  </defs>
+  <rect width="1120" height="600" fill="#f6f6f0"/>
+  <rect class="panel" x="22" y="22" width="634" height="556" rx="12"/>
+  <rect class="panel" x="674" y="22" width="424" height="556" rx="12"/>
+  <text class="heading" x="48" y="62">横断面</text>
+  <text class="small" x="48" y="88">共用床、回廊の下、吹抜けを光と音がつなぐ。</text>
+  <path class="guide" d="M117 125V527 M177 186V506 M497 186V506 M557 125V527"/>
+  <path d="M206 203 Q337 98 468 203 L435 270 H239Z" fill="#e6f0f3"/>
+  <path class="envelope" d="M85 203H206 Q337 99 468 203 H590 M85 203V507 M590 203V507"/>
+  <path d="M261 168 266 202 M313 150 314 188 M362 150 361 188 M415 168 408 201" fill="none" stroke="#65858d" stroke-width="2"/>
+  <path class="structure" d="M85 312H177V322H85ZM497 312H590V322H497ZM85 400H177V410H85ZM497 400H590V410H497Z"/>
+  <path class="guide" d="M178 312H497 M178 400H497 M85 131H590"/>
+  <path class="envelope" d="M85 508H590 M117 468V508 M557 468V508"/>
+  <path class="warm" d="M127 323H173 M501 323H547 M127 412H173 M501 412H547"/>
+  <path class="cool" d="M304 188 269 252 M353 183 341 270 M397 192 408 248"/>
+  <text class="label blue-label" x="341" y="119" text-anchor="middle">トップライト</text>
+  <text class="label amber-label" x="185" y="426">暖色のコーブ</text>
+  <text class="small" x="598" y="317">+9.15 m</text>
+  <text class="small" x="598" y="405">+4.85 m</text>
+  <text class="small" x="598" y="512">±0.00 m</text>
+  <path d="M181 490 Q292 484 415 369" fill="none" stroke="#aa6024" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow-amber)"/>
+  <text class="small amber-label" x="310" y="466">開口越しの音の経路</text>
+  <path class="dim" d="M177 219V232 M497 219V232 M177 225H497"/>
+  <rect x="270" y="212" width="134" height="25" rx="4" fill="#fff"/>
+  <text class="small" x="337" y="229" text-anchor="middle">吹抜け幅 16 m</text>
+  <path class="dim" d="M117 529V550 M557 529V550 M117 539H557"/>
+  <rect x="266" y="526" width="142" height="26" rx="4" fill="#fff"/>
+  <text class="label" x="337" y="545" text-anchor="middle">共用幅 22 m</text>
+  <text class="heading" x="702" y="62">地上階の模式平面</text>
+  <text class="small" x="702" y="88">比較カメラは手前。初期視点はソファ。</text>
+  <rect x="734" y="130" width="302" height="389" fill="#f9f6ef" stroke="#67807b" stroke-width="1.5"/>
+  <path class="structure" d="M734 130H776V519H734ZM994 130H1036V519H994Z"/>
+  <path class="guide" d="M734 215H776 M734 296H776 M734 377H776 M734 458H776 M994 215H1036 M994 296H1036 M994 377H1036 M994 458H1036"/>
+  <text class="small" x="756" y="303" text-anchor="middle" transform="rotate(-90 756 303)">店先の展示</text>
+  <text class="small" x="1015" y="370" text-anchor="middle" transform="rotate(90 1015 370)">店先の展示</text>
+  <rect x="816" y="258" width="103" height="54" rx="15" fill="#ddc9aa"/>
+  <rect x="832" y="283" width="72" height="10" rx="4" fill="#8c623d"/>
+  <circle cx="866" cy="286" r="4" fill="#1d607d"/>
+  <path class="route" d="M867 294V328"/>
+  <text class="label" x="790" y="249">ソファ</text>
+  <path d="M920 304 C951 268 953 236 923 224 C912 220 893 221 871 229" fill="none" stroke="#7c9ba5" stroke-width="19"/>
+  <path class="route" d="M920 304 C951 268 953 236 923 224 C912 220 893 221 871 229"/>
+  <text class="label" x="886" y="207">大階段</text>
+  <rect x="943" y="323" width="38" height="39" fill="#daceb8"/>
+  <circle cx="955" cy="343" r="7" fill="#fff" stroke="#aa6024" stroke-width="1.5"/>
+  <circle cx="969" cy="343" r="7" fill="#fff" stroke="#aa6024" stroke-width="1.5"/>
+  <text class="small" x="965" y="383" text-anchor="middle">カフェ</text>
+  <circle cx="887" cy="482" r="6.5" fill="#1d607d"/>
+  <path class="route" d="M887 472V413"/>
+  <text class="small" x="887" y="552" text-anchor="middle">画像照合用カメラ</text>
+  <path class="dim" d="M1049 192V137 M1044 144 1049 137 1054 144"/>
+  <text class="small" x="1049" y="126" text-anchor="middle">奥</text>
+</svg>

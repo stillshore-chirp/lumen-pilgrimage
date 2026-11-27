@@ -31,7 +31,7 @@ test('monitor sender selection wins across exploration URL combinations', () => 
 });
 
 test('startup accepts exact world IDs and sends unknown or retired scene URLs to coast', () => {
-  for (const worldId of ['coast', 'overlook', 'residence', 'cinema']) {
+  for (const worldId of ['coast', 'overlook', 'residence', 'cinema', 'atrium', 'lake']) {
     const address = new URL(`https://example.test/?world=${worldId}&scene=expedition`);
     assert.equal(route.parseStartupRoute(address.search).worldId, worldId);
   }
@@ -59,6 +59,9 @@ test('initial time defaults to night only for a residence URL without a time val
   assert.equal(initial('coast', '').time, 'day');
   assert.equal(initial('overlook', '').time, 'day');
   assert.equal(initial('cinema', '?time=night').time, 'night');
+  assert.equal(initial('atrium', '').time, 'day');
+  assert.equal(initial('lake', '').time, 'day');
+  assert.equal(initial('lake', '?time=night&place=west-veranda').time, 'night');
   assert.equal(initial('residence', '?time=night&time=day').time, 'night');
   assert.equal(initial('residence', '?time=day&time=night').time, 'day');
   assert.equal(initial('residence', '?place=living-window&place=tea-room').placeId, 'living-window');
@@ -70,6 +73,14 @@ test('destination lookup stays scoped to a known world and place ID', () => {
   assert.equal(findDestination('coast', 'inlet')?.id, 'inlet');
   assert.equal(findDestination('residence', 'inlet'), undefined);
   assert.equal(findDestination('coast', 'living-window'), undefined);
+  assert.equal(findDestination('atrium', 'lounge')?.seatedEyeHeight, 1.20);
+  assert.equal(findDestination('atrium', 'upper-gallery')?.floorY, 9.15);
+  assert.equal(findDestination('coast', 'lake')?.label, '湖畔');
+  assert.equal(findDestination('lake', 'west-window')?.label, '西の窓辺');
+  assert.equal(findDestination('lake', 'east-window')?.label, '東の窓辺');
+  assert.equal(findDestination('lake', 'west-veranda'), findDestination('lake', 'west-window'));
+  assert.equal(findDestination('lake', 'east-veranda'), findDestination('lake', 'east-window'));
+  assert.equal(findDestination('lake', 'lake'), undefined);
   assert.equal(findDestination('residence', 'missing'), undefined);
   assert.equal(findDestination('unknown', 'inlet'), undefined);
 });
