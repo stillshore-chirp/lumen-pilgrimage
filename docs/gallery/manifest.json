@@ -1,0 +1,2196 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+  "purpose": "Visitor gallery; desktop high-quality rendering, not VR/audio/performance evidence.",
+  "conversion": {
+    "tool": "ImageMagick",
+    "version": "7.0.10-57 Q16 x86_64",
+    "webpQuality": 88,
+    "webpMethod": 6,
+    "metadata": "stripped",
+    "crop": false,
+    "colorOrExposureCorrection": false
+  },
+  "totals": {
+    "scenes": 36,
+    "uiScreens": 6,
+    "thumbnails": 6,
+    "publishedImages": 48,
+    "bytes": 7834458
+  },
+  "frames": [
+    {
+      "id": "coast-inlet-day",
+      "subject": "浜から入り江と対岸を見渡す",
+      "world": "coast",
+      "place": "inlet",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:51:27.071Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -11.999999937809402,
+        3.602300295001271,
+        79.00000034215728
+      ],
+      "direction": [
+        0.034810978919267654,
+        0.10182322561740875,
+        -0.9941932559013367
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=coast&place=inlet&time=day"
+    },
+    {
+      "id": "coast-inlet-night",
+      "subject": "同じ浜から夜の入り江",
+      "world": "coast",
+      "place": "inlet",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:52:21.938Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -11.999999937809402,
+        3.602300295001271,
+        79.00000034215728
+      ],
+      "direction": [
+        0.034810978919267654,
+        0.10182322561740875,
+        -0.9941932559013367
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=coast&place=inlet&time=night"
+    },
+    {
+      "id": "coast-forest-day",
+      "subject": "密林の休憩所と散策路",
+      "world": "coast",
+      "place": "forest",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:56:20.741Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "mouse look yaw=3.05 pitch=0.025"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -28.049999043009514,
+        12.800000206421714,
+        108.64999633756156
+      ],
+      "direction": [
+        -0.09342686831951141,
+        0.024997396394610405,
+        0.9953122735023499
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "samplePlaybackSeconds": null,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=coast&place=forest&time=day"
+    },
+    {
+      "id": "coast-lake-day",
+      "subject": "山中の湖畔と滝",
+      "world": "coast",
+      "place": "lake",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:52:37.552Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        86.80000338365551,
+        75.50000170143016,
+        701.5000053338949
+      ],
+      "direction": [
+        0.875813901424408,
+        0.06994284689426422,
+        0.4775541424751282
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=coast&place=lake&time=day"
+    },
+    {
+      "id": "coast-vermilion-day",
+      "subject": "朱の参道を歩く位置から",
+      "world": "coast",
+      "place": "vermilion",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:52:43.747Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        209.0000030191859,
+        78.51087821880446,
+        904.0000068886052
+      ],
+      "direction": [
+        0.5514215230941772,
+        0.14943812787532806,
+        0.8207329511642456
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=coast&place=vermilion&time=day"
+    },
+    {
+      "id": "coast-ridge-day",
+      "subject": "稜線と山並み",
+      "world": "coast",
+      "place": "ridge",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:52:49.915Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -109.89998322820975,
+        184.76942205763874,
+        973.700013748966
+      ],
+      "direction": [
+        0.5067484378814697,
+        0.024997396394610405,
+        0.8617314696311951
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=coast&place=ridge&time=day"
+    },
+    {
+      "id": "overlook-main-day",
+      "subject": "中央デッキから盆地の街",
+      "world": "overlook",
+      "place": "main-deck",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:52:53.603Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -7.0000022941007956,
+        347.6499826751706,
+        -20.899996079117955
+      ],
+      "direction": [
+        0.5895676612854004,
+        -0.159318208694458,
+        -0.7918508052825928
+      ],
+      "projection": {
+        "verticalFovDeg": 54.00000052752577,
+        "aspect": 1.7777778017738937
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=overlook&place=main-deck&time=day"
+    },
+    {
+      "id": "overlook-main-night",
+      "subject": "同じ中央デッキから街明かり",
+      "world": "overlook",
+      "place": "main-deck",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:52:56.880Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -7.0000022941007956,
+        347.6499826751706,
+        -20.899996079117955
+      ],
+      "direction": [
+        0.5895676612854004,
+        -0.159318208694458,
+        -0.7918508052825928
+      ],
+      "projection": {
+        "verticalFovDeg": 54.00000052752577,
+        "aspect": 1.7777778017738937
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=overlook&place=main-deck&time=night"
+    },
+    {
+      "id": "overlook-east-day",
+      "subject": "東テラスと街区の奥行き",
+      "world": "overlook",
+      "place": "east-terrace",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:53:00.217Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        28.999999446181846,
+        347.6499926353772,
+        -21.199999984232562
+      ],
+      "direction": [
+        0.727493166923523,
+        -0.0998334139585495,
+        -0.6788129210472107
+      ],
+      "projection": {
+        "verticalFovDeg": 54.00000052752577,
+        "aspect": 1.7777778017738937
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=overlook&place=east-terrace&time=day"
+    },
+    {
+      "id": "overlook-upper-night",
+      "subject": "2階デッキから夜のパノラマ",
+      "world": "overlook",
+      "place": "upper-deck",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:53:03.485Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        17.39999886940973,
+        354.849990589506,
+        13.350000464893924
+      ],
+      "direction": [
+        0.4025522470474243,
+        -0.159318208694458,
+        -0.9014263153076172
+      ],
+      "projection": {
+        "verticalFovDeg": 54.00000052752577,
+        "aspect": 1.7777778017738937
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=overlook&place=upper-deck&time=night"
+    },
+    {
+      "id": "overlook-pavilion-day",
+      "subject": "中央デッキから振り返るパビリオンと施設",
+      "world": "overlook",
+      "place": "main-deck",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:56:24.230Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "mouse look yaw=-2.9 pitch=0.1"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -7.000000368346861,
+        347.64999836580586,
+        -20.90000015229024
+      ],
+      "direction": [
+        0.23864325881004333,
+        0.09943540394306183,
+        0.9660031199455261
+      ],
+      "projection": {
+        "verticalFovDeg": 54.00000052752577,
+        "aspect": 1.7777778017738937
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "samplePlaybackSeconds": null,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=overlook&place=main-deck&time=day"
+    },
+    {
+      "id": "residence-window-day",
+      "subject": "70階の南窓から街路を見下ろす",
+      "world": "residence",
+      "place": "living-window",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:53:08.436Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        21.890000073735845,
+        1.649999929791818,
+        -1.12000008227049
+      ],
+      "direction": [
+        -0.013414976187050343,
+        -0.28595221042633057,
+        0.9581499695777893
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=residence&place=living-window&time=day"
+    },
+    {
+      "id": "residence-window-night",
+      "subject": "同じ南窓から夜景",
+      "world": "residence",
+      "place": "living-window",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:53:12.814Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        21.890000073735845,
+        1.649999929791818,
+        -1.12000008227049
+      ],
+      "direction": [
+        -0.013414976187050343,
+        -0.28595221042633057,
+        0.9581499695777893
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=residence&place=living-window&time=night"
+    },
+    {
+      "id": "residence-living-day",
+      "subject": "窓から振り返るリビングの内装",
+      "world": "residence",
+      "place": "living-window",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:56:28.884Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "mouse look yaw=1.03 pitch=-0.11"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        21.889999707050713,
+        1.6500000376334185,
+        -1.120000153625039
+      ],
+      "direction": [
+        -0.8524541854858398,
+        -0.11156724393367767,
+        -0.5107588171958923
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "samplePlaybackSeconds": null,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=residence&place=living-window&time=day"
+    },
+    {
+      "id": "residence-tea-day",
+      "subject": "四畳半の茶室",
+      "world": "residence",
+      "place": "tea-room",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:53:21.400Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        6.569999879352663,
+        1.6499999493006996,
+        -3.920000030458188
+      ],
+      "direction": [
+        -0.5888030529022217,
+        -0.17902956902980804,
+        0.7882000803947449
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=residence&place=tea-room&time=day"
+    },
+    {
+      "id": "residence-study-day",
+      "subject": "窓辺の書斎と読書席",
+      "world": "residence",
+      "place": "study",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:53:25.860Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        8.970000212404834,
+        1.6500000502289591,
+        -3.9100002233389226
+      ],
+      "direction": [
+        0.38807377219200134,
+        -0.11971220374107361,
+        0.9138203859329224
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=residence&place=study&time=day"
+    },
+    {
+      "id": "residence-bedroom-night",
+      "subject": "主寝室と東側の窓",
+      "world": "residence",
+      "place": "primary-bedroom",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:53:29.932Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        20.070000517009838,
+        1.6500000542085327,
+        -13.57499980926514
+      ],
+      "direction": [
+        0.9968017339706421,
+        -0.07991469651460648,
+        -2.2077991856033163e-16
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=residence&place=primary-bedroom&time=night"
+    },
+    {
+      "id": "residence-theater-night",
+      "subject": "リビングのホームシアター席",
+      "world": "residence",
+      "place": "living-theater",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:53:34.090Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        19.989999771118164,
+        1.6500000201164653,
+        -3.060000021118597
+      ],
+      "direction": [
+        0,
+        -0.11474668979644775,
+        -0.9933947920799255
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=residence&place=living-theater&time=night"
+    },
+    {
+      "id": "cinema-center-arrival",
+      "subject": "中段中央からスクリーンと客席",
+      "world": "cinema",
+      "place": "center",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:56:39.218Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        0.39000000354860703,
+        4.400000012765815,
+        33.45000152681594
+      ],
+      "direction": [
+        -0.011509410105645657,
+        0.1593610644340515,
+        -0.9871532917022705
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 9000,
+      "samplePlaybackSeconds": null,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=cinema&place=center&time=day"
+    },
+    {
+      "id": "cinema-center-screening",
+      "subject": "同じ中央席から上映時の場内灯",
+      "world": "cinema",
+      "place": "center",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:56:49.473Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "上映設定: 上映"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        0.39000000354860703,
+        4.400000012765815,
+        33.45000152681594
+      ],
+      "direction": [
+        -0.011509410105645657,
+        0.1593610644340515,
+        -0.9871532917022705
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 9000,
+      "samplePlaybackSeconds": null,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=cinema&place=center&time=day"
+    },
+    {
+      "id": "cinema-center-preview",
+      "subject": "内蔵試映を上映中のスクリーン",
+      "world": "cinema",
+      "place": "center",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:58:07.103Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "試映を再生: application-generated built-in sample; no external media",
+        "上映設定: 上映"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        0.39000000354860703,
+        4.400000012765815,
+        33.45000152681594
+      ],
+      "direction": [
+        -0.011509410105645657,
+        0.1593610644340515,
+        -0.9871532917022705
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 9000,
+      "samplePlaybackSeconds": 9.4305,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=cinema&place=center&time=day"
+    },
+    {
+      "id": "cinema-front-turnback",
+      "subject": "前方席から振り返る20列の段床",
+      "world": "cinema",
+      "place": "front",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:58:17.508Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "mouse look yaw=3.141592653589793 pitch=0.16"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        0.39000000239464744,
+        1.1500001606256092,
+        19.999999684864992
+      ],
+      "direction": [
+        -0.00029127299785614014,
+        0.1610325574874878,
+        0.9869490265846252
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 9000,
+      "samplePlaybackSeconds": null,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=cinema&place=front&time=day"
+    },
+    {
+      "id": "cinema-rear-arrival",
+      "subject": "後方側席から通路とスクリーン",
+      "world": "cinema",
+      "place": "rear",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:58:27.738Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        13.710001182356734,
+        8.539999599085426,
+        50.50000284816588
+      ],
+      "direction": [
+        -0.2619255781173706,
+        0.024071933701634407,
+        -0.9647878408432007
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 9000,
+      "samplePlaybackSeconds": null,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=cinema&place=rear&time=day"
+    },
+    {
+      "id": "cinema-rear-service",
+      "subject": "清掃照明で見渡す客席と通路",
+      "world": "cinema",
+      "place": "rear",
+      "time": "day",
+      "capturedAt": "2026-11-27T11:03:54.581Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "上映設定: 清掃"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        13.710001182356734,
+        8.539999599085426,
+        50.50000284816588
+      ],
+      "direction": [
+        -0.2619255781173706,
+        0.024071933701634407,
+        -0.9647878408432007
+      ],
+      "projection": {
+        "verticalFovDeg": 60.00000089058408,
+        "aspect": 1.777777764182614
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 9000,
+      "samplePlaybackSeconds": null,
+      "trackedSourceAndPublicClean": true,
+      "servedBuild": {
+        "htmlSha256": "d09d80c8459e987e09a7b95e5f49947ce10e0de65ea3356c18302f5c11592f24",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-My6uAQQf.js",
+            "sha256": "95981d97e22c2a0bd86fe1eada303db9281eb540206bd07ea72160f5ddf63890"
+          },
+          {
+            "path": "/assets/CoastApp-DVv6nXRr.js",
+            "sha256": "c733ba27148e19d64b7d518ca6683213b69725b118df898e0a16e11890d81f03"
+          },
+          {
+            "path": "/assets/explorationRoute-DaU8zqTe.js",
+            "sha256": "11dc65e7dba385b1fdba85c0318944cc26b1d72b4aa962422f190997b4be313b"
+          },
+          {
+            "path": "/assets/index-jUkHjY4W.js",
+            "sha256": "0277e7cd72260c351015db6b244faee07b58db8d8c16c58740a106e75a9149b4"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-CuBS2ylN.js",
+            "sha256": "7d1d5f7ac17cec2267f899a90e2cebc9006f6d690dec3671006d4c81147f1228"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-D_zhoNfk.js",
+            "sha256": "83634a9ce5b286f4cffe67b5979b839dc13247e026058b4a35ab28d2c7c8c267"
+          }
+        ],
+        "sourceRevisionBinding": "not automatically verified; build dist from the recorded clean source before recapture",
+        "sha256": "2ecff21114e7dc9f22859a6c4b1ef72e00068520f892833732afbacff53de64c"
+      },
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=cinema&place=rear&time=day"
+    },
+    {
+      "id": "atrium-concourse-day",
+      "subject": "正面通路から吹抜けと大階段",
+      "world": "atrium",
+      "place": "concourse",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:51:30.661Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        6.136354766331231e-10,
+        1.6500000645019712,
+        -1.8371784094028953e-09
+      ],
+      "direction": [
+        -0.037708476185798645,
+        0.12169758230447769,
+        -0.9918506741523743
+      ],
+      "projection": {
+        "verticalFovDeg": 42.00000169963833,
+        "aspect": 1.7777777596996898
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=atrium&place=concourse&time=day"
+    },
+    {
+      "id": "atrium-lounge-day",
+      "subject": "ソファ座位から光庭と専門店",
+      "world": "atrium",
+      "place": "lounge",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:53:48.556Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -2.7000000476837123,
+        1.1999999063745008,
+        -29.700000908825544
+      ],
+      "direction": [
+        -1.2238968313801538e-16,
+        0.03499285504221916,
+        0.9993875622749329
+      ],
+      "projection": {
+        "verticalFovDeg": 42.00000169963833,
+        "aspect": 1.7777777596996898
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=atrium&place=lounge&time=day"
+    },
+    {
+      "id": "atrium-upper-day",
+      "subject": "上階の回廊から吹抜けを見下ろす",
+      "world": "atrium",
+      "place": "upper-gallery",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:53:51.784Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -9.219998695313667,
+        10.800000157915761,
+        -44.10000111734279
+      ],
+      "direction": [
+        0.6619988679885864,
+        -0.19866932928562164,
+        0.7226949334144592
+      ],
+      "projection": {
+        "verticalFovDeg": 42.00000169963833,
+        "aspect": 1.7777777596996898
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=atrium&place=upper-gallery&time=day"
+    },
+    {
+      "id": "atrium-west-shop-day",
+      "subject": "西側の店先を斜めから",
+      "world": "atrium",
+      "place": "concourse",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:54:00.093Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "walk to (-10.9, -4)",
+        "mouse look yaw=1.3207963267948966 pitch=-0.07"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -10.76556910388783,
+        1.6500000184757013,
+        -3.97367263861871
+      ],
+      "direction": [
+        -0.9665315747261047,
+        -0.06934430450201035,
+        -0.2469981610774994
+      ],
+      "projection": {
+        "verticalFovDeg": 42.00000169963833,
+        "aspect": 1.7777777596996898
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=atrium&place=concourse&time=day"
+    },
+    {
+      "id": "atrium-east-shop-night",
+      "subject": "東側の店先と夜の照明",
+      "world": "atrium",
+      "place": "concourse",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:54:08.484Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "walk to (10.9, -4)",
+        "mouse look yaw=-1.3207963267948966 pitch=-0.07"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        10.769317078722802,
+        1.6500000070264775,
+        -3.9628241288831427
+      ],
+      "direction": [
+        0.9662344455718994,
+        -0.06934430450201035,
+        -0.2481578290462494
+      ],
+      "projection": {
+        "verticalFovDeg": 42.00000169963833,
+        "aspect": 1.7777777596996898
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=atrium&place=concourse&time=night"
+    },
+    {
+      "id": "lake-hall-day",
+      "subject": "低卓越しに湖と石の環",
+      "world": "lake",
+      "place": "hall",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:51:34.190Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        0,
+        1.649999976158142,
+        7
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ],
+      "projection": {
+        "verticalFovDeg": 51.99999792066194,
+        "aspect": 1.7777779155964615
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=lake&place=hall&time=day"
+    },
+    {
+      "id": "lake-hall-night",
+      "subject": "同じ広間から星空と行灯",
+      "world": "lake",
+      "place": "hall",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:54:11.788Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        0,
+        1.649999976158142,
+        7
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ],
+      "projection": {
+        "verticalFovDeg": 51.99999792066194,
+        "aspect": 1.7777779155964615
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=lake&place=hall&time=night"
+    },
+    {
+      "id": "lake-west-day",
+      "subject": "西の窓辺から浅瀬と岩岸",
+      "world": "lake",
+      "place": "west-window",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:54:15.047Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -18.700000158738195,
+        1.6499999205769171,
+        -5.099999908907137
+      ],
+      "direction": [
+        0.10067996382713318,
+        -0.39860934019088745,
+        -0.9115778207778931
+      ],
+      "projection": {
+        "verticalFovDeg": 51.99999792066194,
+        "aspect": 1.7777779155964615
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=lake&place=west-window&time=day"
+    },
+    {
+      "id": "lake-east-day",
+      "subject": "東の窓辺から水際",
+      "world": "lake",
+      "place": "east-window",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:54:18.293Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        18.700000158738195,
+        1.6499999205769171,
+        -5.099999908907137
+      ],
+      "direction": [
+        -0.10067996382713318,
+        -0.39860934019088745,
+        -0.9115778207778931
+      ],
+      "projection": {
+        "verticalFovDeg": 51.99999792066194,
+        "aspect": 1.7777779155964615
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=lake&place=east-window&time=day"
+    },
+    {
+      "id": "lake-lantern-night",
+      "subject": "湖に浮かぶ灯籠と室内の行灯",
+      "world": "lake",
+      "place": "hall",
+      "time": "night",
+      "capturedAt": "2026-11-27T10:54:21.646Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "環境設定: 湖の灯籠"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        0,
+        1.649999976158142,
+        7
+      ],
+      "direction": [
+        0,
+        0,
+        -1
+      ],
+      "projection": {
+        "verticalFovDeg": 51.99999792066194,
+        "aspect": 1.7777779155964615
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=lake&place=hall&time=night"
+    },
+    {
+      "id": "lake-hall-turnback-day",
+      "subject": "広間を振り返る畳と背面の設え",
+      "world": "lake",
+      "place": "hall",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:54:25.082Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "環境設定: 布団",
+        "mouse look yaw=2.85 pitch=-0.12"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -6.173484301541521e-08,
+        1.649999881010146,
+        7.00000017335179
+      ],
+      "direction": [
+        -0.2864026427268982,
+        -0.11852075159549713,
+        0.9507504105567932
+      ],
+      "projection": {
+        "verticalFovDeg": 51.99999792066194,
+        "aspect": 1.7777779155964615
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=lake&place=hall&time=day"
+    },
+    {
+      "id": "lake-futon-day",
+      "subject": "湖を眺めて休む布団と畳",
+      "world": "lake",
+      "place": "hall",
+      "time": "day",
+      "capturedAt": "2026-11-27T10:58:31.205Z",
+      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "browser": "159.0.8154.6",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "quality": "high",
+      "lighting": "world default",
+      "actions": [
+        "高品質",
+        "環境設定: 布団",
+        "mouse look yaw=0.464 pitch=-0.35"
+      ],
+      "animation": "normal requestAnimationFrame; no time override",
+      "input": "public URL destination, ordinary pointer-lock mouse / keyboard / visible controls; no scene mutation",
+      "position": [
+        -1.4064710285310866e-07,
+        1.6500000626875533,
+        7.000000083115708
+      ],
+      "direction": [
+        -0.41874590516090393,
+        -0.3427099287509918,
+        -0.8409528732299805
+      ],
+      "projection": {
+        "verticalFovDeg": 51.99999792066194,
+        "aspect": 1.7777779155964615
+      },
+      "raster": {
+        "width": 1920,
+        "height": 1080,
+        "dpr": 1
+      },
+      "settleMs": 1500,
+      "samplePlaybackSeconds": null,
+      "pageerrors": [],
+      "resourceFailures": [],
+      "route": "/?world=lake&place=hall&time=day"
+    }
+  ],
+  "images": [
+    {
+      "file": "images/coast-inlet-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 255926,
+      "sha256": "cb74948a3fcf5567d76f8c16895d4b9b17f8cb50019762db8d91ed0e12764b6a",
+      "sourcePngSha256": "352292208f42e4d0e67b99306bdfd2bfcd4198b9d6aaf0c37390f7203f3ee538",
+      "shotId": "coast-inlet-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/coast-inlet-day-ui.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 256434,
+      "sha256": "b1f5070fa001cdbbcdaf9a11acda34320b00b8759efa9271c0c9a834d15ce1d8",
+      "sourcePngSha256": "033054c052a704b155ef2c3463afafefc197a8bbaaa5ed9a7e05980c33a98435",
+      "shotId": "coast-inlet-day",
+      "ui": true,
+      "thumbnail": false
+    },
+    {
+      "file": "images/coast-inlet-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 132656,
+      "sha256": "6f194250b36b11c7abdab72179f35a1683dffe337e064059a6bb50ea8e3ecb71",
+      "sourcePngSha256": "407bb9da895e8c4b2443c88f81ba3e0666c7f4859ab7793589406be45b36a3ca",
+      "shotId": "coast-inlet-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/coast-forest-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 543686,
+      "sha256": "8d2e3a0883f0351e92f2fe95121dc653bfe24c4f1c5cc232d972314e4eefa61b",
+      "sourcePngSha256": "ca6cdff5231f949a463a38ec619d076f79cca6e6929dbc7d60a42ce75ac1988a",
+      "shotId": "coast-forest-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/coast-lake-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 359404,
+      "sha256": "f933b1e83d2ee50d9862c6be937c4bdb48ca93ac35fab65b9bcede3fab1e8175",
+      "sourcePngSha256": "b36a7a1c7c90bd374d7f57d1f2fc3a45077165f01e1d88ca6d188de552385de1",
+      "shotId": "coast-lake-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/coast-vermilion-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 312946,
+      "sha256": "192025d069ee6f7f4ce326f7f5e7ec058fabbd0d2c11ec81c686303339967ccf",
+      "sourcePngSha256": "a3f7e06a2da051281b06a7ced405d1b8785f674a452c45c2dd710cbe69fbf86e",
+      "shotId": "coast-vermilion-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/coast-ridge-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 395830,
+      "sha256": "405762da9c469469443e28827134773f5ae2aa5db9a08d6e01434ba033bb728c",
+      "sourcePngSha256": "ab29ff2c139c1fc3f5b69e5003647f82702edbff4b9c2ac4adeeb1549c7c9b60",
+      "shotId": "coast-ridge-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/overlook-main-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 201058,
+      "sha256": "4327023a2ce7f418d57c5cbc9d4a22a1ea8d1ddd47f098f8cb2a69437cd3d14b",
+      "sourcePngSha256": "769c2197abbdae5efae1be482d06366df986352118945add410bfc4f8a1ed7dd",
+      "shotId": "overlook-main-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/overlook-main-day-ui.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 207008,
+      "sha256": "ea46ec5c06aa774336f18cce17d536bd15ce88d183996b9d64ea8bba73336f24",
+      "sourcePngSha256": "ce83cdab4e99c4919e63a12bb522b89d40579af2f7a04b9c090bdf14b73d70f3",
+      "shotId": "overlook-main-day",
+      "ui": true,
+      "thumbnail": false
+    },
+    {
+      "file": "images/overlook-main-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 201120,
+      "sha256": "ad548bcdcd0f8ba75e3628bf7dca5053ef8b372c9fde0b4fd04e257ce929a1e6",
+      "sourcePngSha256": "6918682520418250b3e0b78f888f923774a3995d1b6d15167feadc399818d636",
+      "shotId": "overlook-main-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/overlook-east-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 188320,
+      "sha256": "41704cf026b3d9581cd47e6f7827e3c93966b4827f5ee7809cdb46680c5c3f34",
+      "sourcePngSha256": "c4169284ee2ef35d3ff31074899ced66a7975fe9fa24be946f2076ddd590a726",
+      "shotId": "overlook-east-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/overlook-upper-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 220540,
+      "sha256": "68981ba988d1f7dc704c3288a5a6588959a32c091d142ec8e443056cc80d07aa",
+      "sourcePngSha256": "be7d0bf5ad62aabdc8b477e0723f7dca999a7b77a08d8c4009230f09f89a858e",
+      "shotId": "overlook-upper-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/overlook-pavilion-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 218898,
+      "sha256": "dd4f097b977337735ea5b584c5f172bfb6cd7de9161ae3b76102012623eecd3b",
+      "sourcePngSha256": "ded49abe41876529903ce7147c56e589adab72017164abc9db73ce46dc75fae4",
+      "shotId": "overlook-pavilion-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/residence-window-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 276800,
+      "sha256": "5dbf95ae62512b8a619fcf74b0eb217e628fee37fe3f77becb08aaf566a591b5",
+      "sourcePngSha256": "b963d2cd5a07de634f365f24314550a5e78dcb6f3976055ebcb8d19ef7347d28",
+      "shotId": "residence-window-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/residence-window-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 261568,
+      "sha256": "f586507a01cf67debc438d400c24c0c710299325d19897451f3788c09a57a6b5",
+      "sourcePngSha256": "83cbb36e9f1c15f3be504b5f6f6bc6f7fed0bbe153e026722c68b9173077d94f",
+      "shotId": "residence-window-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/residence-window-night-ui.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 270560,
+      "sha256": "e11298d0f3120dbe861eae305114336b6a328d3416e8826220315f6aa17a653d",
+      "sourcePngSha256": "799656597360660a643eb7ae0bffb433a891b63d95ec83872611c6c20d337f32",
+      "shotId": "residence-window-night",
+      "ui": true,
+      "thumbnail": false
+    },
+    {
+      "file": "images/residence-living-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 100546,
+      "sha256": "8d7f2e76b739d24b5296a04406110f1a198d1cde97a21e313aec23497777622e",
+      "sourcePngSha256": "11c31d0b07b9fae3254e68ece341ea25af7c6a308194319bc140fac63ddd6e57",
+      "shotId": "residence-living-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/residence-tea-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 104054,
+      "sha256": "a4001c605e4b70dc426a07979a3f987801b242236fb1b7e780bb9f0bb60c798f",
+      "sourcePngSha256": "efb52418b5e3b9c81403b4d47eca48cd493fce8663d70fa5588af46668334183",
+      "shotId": "residence-tea-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/residence-study-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 169576,
+      "sha256": "66c2dfe443938b833b7b3f012be56f0e0f69c63d9d4359b4969d87fdbf198cc0",
+      "sourcePngSha256": "113e5f5317da307623b789dd1fa67baf6c30a5a78773b14b326d0901be574fac",
+      "shotId": "residence-study-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/residence-bedroom-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 216890,
+      "sha256": "2a44bc5cae4babca4c28d447128cde3da5e6e70591d2c21977eda3062a7ad1bf",
+      "sourcePngSha256": "261e0268623dd1b2d700dbefe029d687ffa08bbf68445189038910cb9e9a901c",
+      "shotId": "residence-bedroom-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/residence-theater-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 82918,
+      "sha256": "4d1b66b7acfc513402f827ac8127645800aded79c96fe0b8adc5a993598bd308",
+      "sourcePngSha256": "60adbf4340d5f1875505d80028d1216105a331b23bb82213cb91ff0b7fd1f124",
+      "shotId": "residence-theater-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/cinema-center-arrival.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 45856,
+      "sha256": "36bd0b842442b757cf5237f3050ea223e465071f004ad9cf4947bd3886426295",
+      "sourcePngSha256": "c0584e7e81de6493b68495bcf5b254120876cef0d9a6fbfc5ba6145e3f85ee9b",
+      "shotId": "cinema-center-arrival",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/cinema-center-arrival-ui.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 71338,
+      "sha256": "cc69abcd8714b4438964354d08c3a915f2a16e1d4d350ac0fe9dac178418791e",
+      "sourcePngSha256": "92a6fe32a59065939159d0ef55a8a6c72374074a55ce7d4d45adb5921fd712f8",
+      "shotId": "cinema-center-arrival",
+      "ui": true,
+      "thumbnail": false
+    },
+    {
+      "file": "images/cinema-center-screening.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 4720,
+      "sha256": "49251b4f461f352bce9ba50da519e5c78792c4c4e53605e7c929e9092933e6ad",
+      "sourcePngSha256": "f50dae0e19ba7e82aa28367fee2b790be9d7ffd47e6ab0ac6b46be88fc180af5",
+      "shotId": "cinema-center-screening",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/cinema-center-preview.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 16322,
+      "sha256": "a1dea17e49f25c8980fede2be04ebe89d99e3ce4bfd8e6cf07b6c071d507a01b",
+      "sourcePngSha256": "b204f080a12f0d3e1603f3ab06b94bedf127e3fb621c87d2b18edecc99be8410",
+      "shotId": "cinema-center-preview",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/cinema-front-turnback.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 45450,
+      "sha256": "3df7bcf4449a25c92b6b660cd57ec13ed9552746063cda6cc8f67410eba0f7b2",
+      "sourcePngSha256": "79d83432ee7354dca6845cc6f567242fffab2fd3001687d552808fb232bc9473",
+      "shotId": "cinema-front-turnback",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/cinema-rear-arrival.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 49896,
+      "sha256": "70640a62f490a84b5bae4a4cb9ad525c3d6783712e2856534e0a27d8037c444d",
+      "sourcePngSha256": "2ee9941aacca4a2dc1f629ef17b9e73cb814c890c3b94a3efe9bd279ec5c27bb",
+      "shotId": "cinema-rear-arrival",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/cinema-rear-service.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 51242,
+      "sha256": "8e44f870069c3ab60b35eb5bfcab4b1600568e6fd48c78a983563b01e788e03e",
+      "sourcePngSha256": "1f8c7807147d3321575e14ab7e1ecc3790d7ba05be16feddc3f724df4f13d69d",
+      "shotId": "cinema-rear-service",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/atrium-concourse-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 253426,
+      "sha256": "d4b064065318d7875209c801d1acb6dd7d08b6a5b249664a232c99cc7aa82b8e",
+      "sourcePngSha256": "997c155414bcc1d749fb83c047365c0cc36ac20f25410136e5c6d1f9dcb43cf1",
+      "shotId": "atrium-concourse-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/atrium-concourse-day-ui.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 259314,
+      "sha256": "83a3b9efe5bfbf5b0debee9432fedd1667d9c2024ed4dcec486e1ba59fd7ad85",
+      "sourcePngSha256": "f99ed4d0b1db9ac5378737d36d160af5cf674b8ace0862e6a773bb25ea4a61b9",
+      "shotId": "atrium-concourse-day",
+      "ui": true,
+      "thumbnail": false
+    },
+    {
+      "file": "images/atrium-lounge-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 138310,
+      "sha256": "192ded8a96b2556f868e5ba0d87ba73863c3a2b3778ae883be078ec3b489038a",
+      "sourcePngSha256": "e4a0b9ee2deded9440fe6665839ff786c48b2dd3772bbdba6ed0213971f62aec",
+      "shotId": "atrium-lounge-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/atrium-upper-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 154466,
+      "sha256": "af3bc00684ee5aa1cd5a7b86947f25b10f671025060ff255e2917dad1d7f73e2",
+      "sourcePngSha256": "7b36abc9bc0224d2792f99ab5aac6fdae900e5db75afd7ee4bd1cc1d94da65e1",
+      "shotId": "atrium-upper-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/atrium-west-shop-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 68496,
+      "sha256": "af88d85ec5b38bff9b4e86e15e81487b130d7cc8bc72948cbcaed8d73d8ee3c4",
+      "sourcePngSha256": "ad88635c7b893d90085b680d08a6484eda4022a3c60e4c3eda76b47eaa560a12",
+      "shotId": "atrium-west-shop-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/atrium-east-shop-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 40652,
+      "sha256": "ac7b5e54de564e4e378c9b6eb2cf2f5b512a6f053c7ffc1a33488b3e58218d47",
+      "sourcePngSha256": "6f5a7a0946a7d1a17d9efc6aa442083016d0e5d77d1434fdd2b00042f25e40f7",
+      "shotId": "atrium-east-shop-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/lake-hall-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 250844,
+      "sha256": "e0f1f113ee6eb80f313c80f0011c3d20c37cd751e81ea30bd5120aaf6c0445ad",
+      "sourcePngSha256": "fed564599220383350095c5c02f994bb7d6867763e55dd6e6130f8b720b5f119",
+      "shotId": "lake-hall-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/lake-hall-day-ui.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 264474,
+      "sha256": "8167ffed6df8011e27be4bef03ae0d507c66ec622308b86f8347bfa4c1c1afdf",
+      "sourcePngSha256": "e6448e7d6aa080c0b28df35fc5bec08e97e7bb5ac8d604058cac8a95c25a8e55",
+      "shotId": "lake-hall-day",
+      "ui": true,
+      "thumbnail": false
+    },
+    {
+      "file": "images/lake-hall-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 106482,
+      "sha256": "2e5fbbb0d257d55cc8822a7afd90ffbdd4cd8990bbff63a8959a4832539c2036",
+      "sourcePngSha256": "91cf29724e478be83c74a2fd52f965a097ddfd84ef021582610cf27e92e84015",
+      "shotId": "lake-hall-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/lake-west-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 173792,
+      "sha256": "e5ee6f60e13feeb1f78cb2ffe6f61cbf4e1dad4d013d5aa2e6bcdd65ad7e33e4",
+      "sourcePngSha256": "953f473e291c5e16cd4f6d990b1567811754f3bf66683532e95a1db970fe4796",
+      "shotId": "lake-west-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/lake-east-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 209398,
+      "sha256": "7b1b40f7fc9e2db61d582316b3b6ea289fbb9f471b67fb4859b0bdc63a39b1c3",
+      "sourcePngSha256": "0e391221793cdfd01f7a4c3f10977639060e38334cfff038c0f8f57d62ccebe1",
+      "shotId": "lake-east-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/lake-lantern-night.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 122082,
+      "sha256": "727be003c33d21fc75ae8e0874c49ae8df39eb7f75bb2f4c3617f75e9f6beb75",
+      "sourcePngSha256": "62582a629ff1731aa0c9e75e85cba15366a9e34c29d1decf52268c6a97ad260c",
+      "shotId": "lake-lantern-night",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/lake-hall-turnback-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 93750,
+      "sha256": "c9e6d88e3d9ced7b192caa8200e4857ceedb852c5031254a04729f1c8bc13fb1",
+      "sourcePngSha256": "db3c4b6d05a9a567a0c5c2c6ce57157ba1f2300a52c289212af559bf1268ea32",
+      "shotId": "lake-hall-turnback-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/lake-futon-day.webp",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 247486,
+      "sha256": "6f8decd7d12b319622da9e2898a9e22e158335ecf6dbc38e705e99c9834b1aff",
+      "sourcePngSha256": "9b7ed599461260950fa87ea1863400640bd255c74f4beca1827a21bc9b63b299",
+      "shotId": "lake-futon-day",
+      "ui": false,
+      "thumbnail": false
+    },
+    {
+      "file": "images/coast-inlet-day-thumb.webp",
+      "width": 640,
+      "height": 360,
+      "bytes": 38878,
+      "sha256": "ab7659c204abd3789d3d605e74572cc9c5e076a1c01cff26af78a0cb0cd687c0",
+      "sourcePngSha256": "352292208f42e4d0e67b99306bdfd2bfcd4198b9d6aaf0c37390f7203f3ee538",
+      "shotId": "coast-inlet-day",
+      "ui": false,
+      "thumbnail": true
+    },
+    {
+      "file": "images/overlook-main-night-thumb.webp",
+      "width": 640,
+      "height": 360,
+      "bytes": 29180,
+      "sha256": "65e142530ed333166568a19aead7ceaa2a340d8c167eb95a656479b4c2dfb1d1",
+      "sourcePngSha256": "6918682520418250b3e0b78f888f923774a3995d1b6d15167feadc399818d636",
+      "shotId": "overlook-main-night",
+      "ui": false,
+      "thumbnail": true
+    },
+    {
+      "file": "images/residence-living-day-thumb.webp",
+      "width": 640,
+      "height": 360,
+      "bytes": 19580,
+      "sha256": "d7fc016b4755f907dfbf92b7915cad36a8769c537ab75834454bf34a2e16d3b9",
+      "sourcePngSha256": "11c31d0b07b9fae3254e68ece341ea25af7c6a308194319bc140fac63ddd6e57",
+      "shotId": "residence-living-day",
+      "ui": false,
+      "thumbnail": true
+    },
+    {
+      "file": "images/cinema-rear-service-thumb.webp",
+      "width": 640,
+      "height": 360,
+      "bytes": 11304,
+      "sha256": "9bea8e37d5d7e68414d5bdfba69ce5409625f44f89085b704fcb0c968bf77bd0",
+      "sourcePngSha256": "1f8c7807147d3321575e14ab7e1ecc3790d7ba05be16feddc3f724df4f13d69d",
+      "shotId": "cinema-rear-service",
+      "ui": false,
+      "thumbnail": true
+    },
+    {
+      "file": "images/atrium-concourse-day-thumb.webp",
+      "width": 640,
+      "height": 360,
+      "bytes": 51530,
+      "sha256": "719c26660df8c23a9079823efe55546684ca0fad5e66cd6f6356bcf7cfaa2f8e",
+      "sourcePngSha256": "997c155414bcc1d749fb83c047365c0cc36ac20f25410136e5c6d1f9dcb43cf1",
+      "shotId": "atrium-concourse-day",
+      "ui": false,
+      "thumbnail": true
+    },
+    {
+      "file": "images/lake-hall-day-thumb.webp",
+      "width": 640,
+      "height": 360,
+      "bytes": 39452,
+      "sha256": "6ddcee8f0ee0f94cd50100d738730e5b3dd45c84c740c61a6ad34c96fe3fdae8",
+      "sourcePngSha256": "fed564599220383350095c5c02f994bb7d6867763e55dd6e6130f8b720b5f119",
+      "shotId": "lake-hall-day",
+      "ui": false,
+      "thumbnail": true
+    }
+  ]
+}

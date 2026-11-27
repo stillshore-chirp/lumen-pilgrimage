@@ -129,7 +129,7 @@ PY
 | [70階住戸の設計仕様](residence/residence-70f-design.md) と [図面](residence/residence-70f-drawings.pdf) | 現行住戸の設計正本。図面は平面、眺望断面、街区、茶室と書斎の詳細を収めた4ページです。 |
 | [50階住戸の設計案](residence/residence-50f-design.md) と [図面](residence/residence-50f-drawings.pdf) | 過去の設計記録です。現在の住戸実装の正本ではありません。 |
 
-これらの PDF は設計参照資料です。映画館の室内は [`cinemaLayout.ts`](../src/coast/world/cinema/cinemaLayout.ts)・[`cinemaAuditorium.ts`](../src/coast/world/cinema/cinemaAuditorium.ts) が生成し、仕上げ画像も [`cinemaFinishes.ts`](../src/coast/world/cinema/cinemaFinishes.ts) がコードから作ります。住戸の現在の寸法と室配置は `residencePlan.ts` にあります。PDF の生成メタデータには映画館資料の Creator `HeadlessChrome/157`・Producer `Skia/PDF m157`、住戸図面の Producer `ReportLab PDF Library` が記録されていますが、編集用の原稿・図面ファイルや書き出しコマンドは追跡されていません。画面キャプチャ画像もリポジトリにはありません。ブラウザー撮影の入口は[検証手順](verification.md)にあります。
+これらの PDF は設計参照資料です。映画館の室内は [`cinemaLayout.ts`](../src/coast/world/cinema/cinemaLayout.ts)・[`cinemaAuditorium.ts`](../src/coast/world/cinema/cinemaAuditorium.ts) が生成し、仕上げ画像も [`cinemaFinishes.ts`](../src/coast/world/cinema/cinemaFinishes.ts) がコードから作ります。住戸の現在の寸法と室配置は `residencePlan.ts` にあります。PDF の生成メタデータには映画館資料の Creator `HeadlessChrome/157`・Producer `Skia/PDF m157`、住戸図面の Producer `ReportLab PDF Library` が記録されていますが、編集用の原稿・図面ファイルや書き出しコマンドは追跡されていません。訪問者向けの画面キャプチャは[ワールドギャラリー](gallery/README.md)に掲載しています。[撮影条件と再取得](gallery/capture.md)には撮影版・原寸・変換方法を記録します。回帰検証用の撮影の入口は[検証手順](verification.md)にあります。
 
 ## 差し替え後の確認
 
