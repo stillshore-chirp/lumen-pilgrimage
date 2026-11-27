@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { access, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, posix, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -35,12 +35,21 @@ const gates = [
   ...worlds.map(world => gate(world, world === 'lake' ? 'test:lake:unit' : `test:${world}`, testPaths(tests[world]))),
   gate('ci-impact', 'test:ci-impact', ['scripts/ci-impact.test.mjs', 'scripts/check-affected.test.mjs', 'scripts/ci-impact.mjs', 'scripts/check-affected.mjs']),
 ];
+// Browser suites also enter other scenes through actual fast travel, audio and XR tests.
+// Keep those consumers explicit instead of treating the suite's name as its only world.
+const coastSceneRoots = ['src/coast/CoastWorld.ts', 'src/coast/CoastAudio.ts'];
+const overlookSceneRoot = 'src/coast/world/overlook/OverlookWorld.ts';
+const residenceSceneRoot = 'src/coast/world/residence/ResidenceWorld.ts';
+const cinemaSceneRoot = 'src/coast/world/cinema/CinemaWorld.ts';
 const sceneRoots = {
-  coast: ['src/coast/CoastWorld.ts', 'src/coast/world/overlook/OverlookWorld.ts', 'src/coast/CoastAudio.ts'],
-  monitor: ['src/monitor/monitorView.ts', 'src/monitor/monitorSender.ts', 'server/virtual-monitor-signaling.mjs'],
-  residence: ['src/coast/world/residence/ResidenceWorld.ts'],
-  cinema: ['src/coast/world/cinema/CinemaWorld.ts'], atrium: ['src/coast/world/atrium/AtriumWorld.ts'],
-  lake: ['src/coast/world/lake/LakeWorld.ts'], koto: ['src/dev/kotoAudition.ts', 'src/dev/kotoAudition.css', 'tools/koto-audition.html'],
+  coast: [...coastSceneRoots, overlookSceneRoot, residenceSceneRoot, cinemaSceneRoot],
+  monitor: ['src/monitor/monitorView.ts', 'src/monitor/monitorSender.ts', 'server/virtual-monitor-signaling.mjs',
+    ...coastSceneRoots, overlookSceneRoot, residenceSceneRoot, cinemaSceneRoot,
+    'src/coast/ResidenceControlPanel.ts', 'src/coast/residenceControlPanel.css', 'src/coast/world/cinema/CinemaPanel.ts'],
+  residence: [residenceSceneRoot, ...coastSceneRoots, overlookSceneRoot, 'src/monitor/monitorView.ts'],
+  cinema: [cinemaSceneRoot, ...coastSceneRoots], atrium: ['src/coast/world/atrium/AtriumWorld.ts'],
+  lake: ['src/coast/world/lake/LakeWorld.ts', overlookSceneRoot],
+  koto: ['src/dev/kotoAudition.ts', 'src/dev/kotoAudition.css', 'tools/koto-audition.html'],
 };
 const browserGates = worlds.map(world => gate(`${world}-browser`, `test:${world}:browser`, [
   ...testPaths(browsers[world]), ...sceneRoots[world],
@@ -83,16 +92,19 @@ const nulStrings = bytes => bytes.toString('utf8').split('\0').filter(Boolean);
 function statusPaths(bytes) {
   const fields = nulStrings(bytes);
   const paths = [];
+  const removedPaths = [];
   for (let i = 0; i < fields.length;) {
     const status = fields[i++];
     if (!/^[ACDMRTUXB][0-9]*$/.test(status) || !fields[i]) throw new Error('Unrecognized Git change status');
-    paths.push(fields[i++]);
+    const firstPath = fields[i++];
+    paths.push(firstPath);
+    if (/^[DR]/.test(status)) removedPaths.push(firstPath);
     if (/^[RC]/.test(status)) {
       if (!fields[i]) throw new Error('Incomplete Git rename');
       paths.push(fields[i++]);
     }
   }
-  return paths;
+  return { paths, removedPaths };
 }
 async function revision(root, value) {
   if (!value || /^0+$/.test(value)) throw new Error('Missing or zero Git revision');
@@ -103,10 +115,22 @@ async function changes(root, options, fallbacks) {
   let head = null;
   let mode = 'files';
   let paths = [];
+  const removedPaths = [];
+  const addStatuses = bytes => {
+    const change = statusPaths(bytes);
+    paths.push(...change.paths);
+    removedPaths.push(...change.removedPaths);
+  };
   if (options.changedPaths !== undefined) {
     for (const change of options.changedPaths) {
       if (typeof change === 'string') paths.push(change);
-      else if (change && typeof change === 'object') paths.push(change.path, change.oldPath, change.newPath);
+      else if (change && typeof change === 'object') {
+        paths.push(change.path, change.oldPath, change.newPath);
+        if (change.oldPath && change.oldPath !== change.newPath) removedPaths.push(change.oldPath);
+        if (/^(?:D|R)\d*$/.test(change.status ?? '') || ['deleted', 'removed', 'renamed'].includes(change.status)) {
+          if (change.oldPath ?? change.path) removedPaths.push(change.oldPath ?? change.path);
+        }
+      }
       else fallbacks.push('A changed path has an unsupported representation');
     }
     paths = paths.filter(path => path !== undefined);
@@ -118,13 +142,13 @@ async function changes(root, options, fallbacks) {
       if (!['direct', 'merge-base'].includes(mode)) throw new Error('Unknown diff mode');
       base = mode === 'direct' ? requestedBase
         : (await git(root, ['merge-base', requestedBase, head])).toString().trim();
-      paths.push(...statusPaths(await git(root, ['diff', '--name-status', '-z', '--find-renames', base, head, '--'])));
+      addStatuses(await git(root, ['diff', '--name-status', '-z', '--find-renames', base, head, '--']));
     } catch { fallbacks.push('The comparison base/head could not be resolved; all gates are required'); }
   }
   const includeWorkingTree = options.includeWorkingTree ?? (options.changedPaths === undefined && options.base === undefined && options.head === undefined);
   if (includeWorkingTree) {
     try {
-      paths.push(...statusPaths(await git(root, ['diff', '--name-status', '-z', '--find-renames', 'HEAD', '--'])));
+      addStatuses(await git(root, ['diff', '--name-status', '-z', '--find-renames', 'HEAD', '--']));
       paths.push(...nulStrings(await git(root, ['ls-files', '--others', '--exclude-standard', '-z']))
         .filter(path => path !== 'node_modules' && !path.startsWith('node_modules/')));
     } catch { fallbacks.push('Working-tree changes could not be inspected; all gates are required'); }
@@ -135,7 +159,9 @@ async function changes(root, options, fallbacks) {
       || posix.normalize(path).startsWith('../')) fallbacks.push('A changed path is not repository relative');
     else valid.push(posix.normalize(path));
   }
-  return { base, head, includeWorkingTree, selectionMode: mode, changedPaths: [...new Set(valid)].sort() };
+  const normalized = new Set(valid);
+  return { base, head, includeWorkingTree, selectionMode: mode, changedPaths: [...normalized].sort(),
+    removedPaths: [...new Set(removedPaths.filter(path => typeof path === 'string').map(path => posix.normalize(path)))].filter(path => normalized.has(path)).sort() };
 }
 
 async function currentFiles(root) {
@@ -298,6 +324,12 @@ export async function planAffected(options = {}) {
   try {
     executionHead = await revision(root, 'HEAD');
     files = await currentFiles(root);
+    // ls-files retains unstaged deletions. Check the actual target, including explicit path probes.
+    const removed = new Set(comparison.removedPaths);
+    for (const path of comparison.changedPaths) if (files.has(path)) {
+      try { await access(resolve(root, path)); } catch { removed.add(path); }
+    }
+    comparison.removedPaths = [...removed].sort();
     const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
     checkTestRoster(files, pkg, blockingReasons);
     if (pkg.name === 'lumen-pilgrimage') for (const path of knownTests) {
@@ -341,6 +373,7 @@ export async function planAffected(options = {}) {
   } catch { fallbackReasons.push('The dependency graph or test inventory could not be read'); }
   const closures = new Map(gates.map(item => [item.id, closure(item.roots, graph)]));
   const browserClosures = new Map(browserGates.map(item => [item.id, closure(item.roots, graph, item.id.replace('-browser', ''))]));
+  for (const path of comparison.removedPaths) select('harness', `Removed or renamed repository link target: ${path}`);
   for (const path of comparison.changedPaths) {
     if (fullInputs.test(path)) { fallbackReasons.push(`Shared build, dependency or CI configuration changed: ${path}`); continue; }
     if (docs(path)) { select('harness', `Documentation or reference input: ${path}`); continue; }

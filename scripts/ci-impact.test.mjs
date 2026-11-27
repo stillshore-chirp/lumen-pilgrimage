@@ -46,6 +46,7 @@ test('offline koto synthesis and production tools do not acquire world or browse
     assert.ok(selected(plan).includes('koto'));
     assert.ok(!selected(plan).some(id => ['coast', 'monitor', 'cinema', 'atrium', 'residence', 'lake'].includes(id)), path);
     assert.deepEqual(browser(plan), [], path);
+    assert.ok(!selected(plan).includes('harness'), 'ordinary source edits do not alter link targets');
   }
 });
 
@@ -89,6 +90,25 @@ test('audition-only UI and world-only changes have separate browser plans', asyn
   assert.deepEqual(lake.fallbackReasons, []);
   assert.ok(browser(lake).includes('lake-browser'));
   assert.ok(!browser(lake).includes('coast-browser'));
+});
+
+test('cross-world browser suites retain the scenes and interactions their real tests exercise', async () => {
+  const cases = [
+    ['src/coast/world/residence/residenceAudio.ts', ['coast-browser', 'monitor-browser', 'residence-browser']],
+    ['src/coast/world/residence/residenceLighting.ts', ['coast-browser', 'monitor-browser', 'residence-browser']],
+    ['src/coast/world/residence/residenceNavigation.ts', ['coast-browser', 'monitor-browser', 'residence-browser']],
+    ['src/coast/world/cinema/cinemaAmbience.ts', ['coast-browser', 'monitor-browser', 'cinema-browser']],
+    ['src/coast/ResidenceControlPanel.ts', ['monitor-browser', 'residence-browser']],
+    ['src/coast/world/overlook/overlookAudio.ts', ['coast-browser', 'monitor-browser', 'residence-browser', 'lake-browser']],
+    ['src/coast/world/coastSceneryAssets.ts', ['coast-browser', 'monitor-browser', 'residence-browser', 'cinema-browser']],
+  ];
+  for (const [path, expected] of cases) {
+    const plan = await planAffected({ root: repository, changedPaths: [path] });
+    assert.deepEqual(plan.fallbackReasons, [], path);
+    for (const consumer of expected) assert.ok(browser(plan).includes(consumer), `${path} must retain ${consumer}`);
+    assert.ok(!browser(plan).includes('atrium-browser'), `${path} is not an atrium test consumer`);
+    assert.ok(!browser(plan).includes('koto-browser'), `${path} is not an audition test consumer`);
+  }
 });
 
 test('literal dynamic imports and readFile/new URL dependencies propagate transitively', async t => {
@@ -158,6 +178,45 @@ test('Git rename records retain both owners, including whitespace, Unicode and n
   assert.deepEqual(plan.fallbackReasons, []);
   assert.deepEqual(plan.changedPaths, [newPath, oldPath].sort());
   assert.ok(selected(plan).includes('koto') && selected(plan).includes('cinema'));
+});
+
+test('source rename selects the link harness while its referring markdown stays unchanged', async t => {
+  const oldPath = 'src/coast/world/lake/kotoPhysicalModel.ts';
+  const newPath = 'src/coast/world/lake/kotoPhysicalModelV2.ts';
+  const root = await fixture(t, { [oldPath]: 'export const value = 1;',
+    'docs/research.md': `[physical model](../${oldPath})` });
+  const base = git(root, 'rev-parse', 'HEAD');
+  await rename(join(root, oldPath), join(root, newPath));
+  const head = commit(root, [oldPath, newPath]);
+  const plan = await planAffected({ root, base, head, diffMode: 'direct' });
+  assert.deepEqual(plan.fallbackReasons, []);
+  assert.ok(!plan.changedPaths.includes('docs/research.md'));
+  assert.deepEqual(plan.removedPaths, [oldPath]);
+  assert.ok(selected(plan).includes('harness'));
+  const explicit = await planAffected({ root, changedPaths: [{ oldPath, newPath }] });
+  assert.ok(selected(explicit).includes('harness'));
+  assert.deepEqual(explicit.removedPaths, [oldPath]);
+});
+
+test('unstaged, staged and explicit deleted link targets retain the harness despite ls-files entries', async t => {
+  for (const path of ['src/coast/world/lake/kotoPhysicalModel.ts', 'public/lake-materials/leaf.webp']) {
+    const root = await fixture(t, { [path]: 'export const value = 1;', 'docs/reference.md': `[input](../${path})` });
+    git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+    await rm(join(root, path));
+    const unstaged = await planAffected({ root });
+    assert.deepEqual(unstaged.fallbackReasons, []);
+    assert.ok(selected(unstaged).includes('harness'));
+    assert.deepEqual(unstaged.removedPaths, [path]);
+    const explicit = await planAffected({ root, changedPaths: [path] });
+    assert.ok(selected(explicit).includes('harness'));
+    git(root, 'add', '--', path);
+    const staged = await planAffected({ root });
+    assert.ok(selected(staged).includes('harness'));
+    assert.deepEqual(staged.removedPaths, [path]);
+    const status = await planAffected({ root, changedPaths: [{ path, status: 'deleted' }] });
+    assert.ok(selected(status).includes('harness'));
+    assert.ok(!staged.changedPaths.includes('docs/reference.md'));
+  }
 });
 
 test('leading dashes and shell-looking filenames are data, never shell commands', async t => {

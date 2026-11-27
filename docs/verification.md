@@ -52,7 +52,7 @@
 
 ## 変更影響によるゲート選択
 
-通常の検証と全検査は目的を分けます。変更のないワールドの試験を、別のワールドを改修したというだけで実行しません。[選択器](../scripts/ci-impact.mjs)は単体試験・ブラウザーのconsumerから静的import、型依存、literal URLやsource読込みを追い、比較元の旧版と実際の実行treeの依存を合わせます。PRのmergeによってmain側に増えたconsumerも含め、topic headだけのgraphへ限定しません。JSON内の音声入力hash、生成bank/WAV、配布音源、共通音声素材などimportに現れない入力は、理由付きの宣言で補います。単なるディレクトリ名だけを影響判定に使いません。
+通常の検証と全検査は目的を分けます。変更のないワールドの試験を、別のワールドを改修したというだけで実行しません。[選択器](../scripts/ci-impact.mjs)は単体試験・ブラウザーのconsumerから静的import、型依存、literal URLやsource読込みを追い、比較元の旧版と実際の実行treeの依存を合わせます。PRのmergeによってmain側に増えたconsumerも含め、topic headだけのgraphへ限定しません。JSON内の音声入力hash、生成bank/WAV、配布音源、共通音声素材などimportに現れない入力は、理由付きの宣言で補います。単なるディレクトリ名だけを影響判定に使いません。ブラウザーsuiteの名前だけで対象を決めず、海岸試験の住戸/映画館の足音、モニター試験の住戸照明・Quest操作など、そのsuiteが実際に開いて検証するsceneもconsumerとして保持します。
 
 ```sh
 # origin/mainとの分岐点からHEAD、staged/unstagedとuntrackedを含める。
@@ -75,7 +75,7 @@ npm run check:affected -- --base BASE_SHA --head HEAD
 | 箏のオフライン物理モデルだけ | 共通の型/buildと箏の数値・音源入力の検査。変更していない他ワールドやbrowserは選ばない |
 | 同梱箏WAV・音声bank・権利台帳 | 実ファイル/台帳/音源の整合、必要な湖畔・比較画面consumer。WAVの実出力をmock fetchだけで合格にしない |
 | 共通の音声出力・操作/XR | その入力に依存する複数ワールド/モニターを選ぶ。共有入力の変更である根拠を残す |
-| 文書だけ | harness。アプリの合格やbrowser合格とは記録しない |
+| 文書だけ、リンク先の削除/改名 | harness。文書の本文が変わらなくても消失する参照先を検査。アプリやbrowserの合格とは記録しない |
 | build/依存/CIの設定、未知の実行入力、履歴不足、構文解析不能 | 理由付きの全標準gate。browser計画も保持し、未実行を合格にしない |
 
 [実行器](../scripts/check-affected.mjs)は固定したコマンド配列をshellなしで実行します。選択ゼロでは子processを起動せず、未選択を「非対象」、選択したが未実行のものを「未検証」とします。先行gateが失敗すると以後を止め、非ゼロ終了・signal・起動失敗・例外はCIの失敗です。成功した検査数で失敗を上書きしません。
