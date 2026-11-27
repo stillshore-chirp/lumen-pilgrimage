@@ -192,7 +192,11 @@ npm run check:affected -- --base BASE_SHA --head HEAD
 | 同梱箏WAV・音声bank・権利台帳 | 実ファイル/台帳/音源の整合、必要な湖畔・比較画面consumer。WAVの実出力をmock fetchだけで合格にしない |
 | 共通の音声出力・操作/XR | その入力に依存する複数ワールド/モニターを選ぶ。共有入力の変更である根拠を残す |
 | 文書だけ、リンク先の削除/改名 | harness。文書の本文が変わらなくても消失する参照先を検査。アプリやbrowserの合格とは記録しない |
+| オフライン図面の生成・改訂入力 | `scripts/draw-cinema-speaker-mounts.mjs`、`scripts/revise-residence-drawings.py`、`docs/residence/source/residence-70f-revisions.json` はharness。再生成一致・可読性・実装との整合は各図面の手順で別に確認する |
+| 同梱ソフトウェア通知 | `scripts/prepare-cinema-code-licenses.mjs` と既知のThree.js 0.184.0通知3ファイルはbuildとharness。実import/URL・試験consumerも加算し、同梱後の通知・記録の版/バイト/hashを別途照合する |
 | build/依存/CIの設定、未知の実行入力、履歴不足、構文解析不能 | 理由付きの全標準gate。browser計画も保持し、未実行を合格にしない |
+
+図面と通知の宣言は[選択器](../scripts/ci-impact.mjs)のexact pathに限定します。未登録の生成処理・改訂JSON・別版通知は理由付き全検査です。選択やgate成功だけで、再生成一致や権利条件への適合を保証しません。
 
 [実行器](../scripts/check-affected.mjs)は固定したコマンド配列をshellなしで実行します。選択ゼロでは子processを起動せず、未選択を「非対象」、選択したが未実行のものを「未検証」とします。先行gateが失敗すると以後を止め、非ゼロ終了・signal・起動失敗・例外はCIの失敗です。成功した検査数で失敗を上書きしません。
 

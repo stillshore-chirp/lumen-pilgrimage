@@ -71,6 +71,135 @@ test('documentation and binary references run the harness without compilation or
   assert.ok(plan.skipped.every(gate => gate.reasons.length > 0));
 });
 
+const drawingPaths = ['scripts/draw-cinema-speaker-mounts.mjs', 'scripts/revise-residence-drawings.py',
+  'docs/residence/source/residence-70f-revisions.json'];
+const noticePaths = ['scripts/prepare-cinema-code-licenses.mjs', 'public/licenses/ATTRIBUTION.md',
+  'public/licenses/three-0.184.0-LICENSE.txt', 'public/licenses/three-0.184.0.json'];
+const toolingFiles = Object.fromEntries([...drawingPaths, ...noticePaths].map(path => [path, '']));
+
+test('each offline drawing generator and revision input selects only the document harness', async t => {
+  const root = await fixture(t, toolingFiles);
+  for (const path of drawingPaths) {
+    const plan = await planAffected({ root, changedPaths: [path] });
+    assert.deepEqual(plan.fallbackReasons, [], path);
+    assert.deepEqual(selected(plan), ['harness'], path);
+    assert.deepEqual(browser(plan), [], path);
+    assert.ok(plan.selected[0].reasons.some(reason => reason.includes(path)), path);
+  }
+});
+
+test('each distributed software notice and its generator selects packaging and document checks', async t => {
+  const root = await fixture(t, toolingFiles);
+  for (const path of noticePaths) {
+    const plan = await planAffected({ root, changedPaths: [path] });
+    assert.deepEqual(plan.fallbackReasons, [], path);
+    assert.deepEqual(selected(plan), ['build', 'harness'], path);
+    assert.deepEqual(browser(plan), [], path);
+    assert.ok(plan.selected.every(gate => gate.reasons.some(reason => reason.includes(path))), path);
+  }
+});
+
+test('unregistered sibling generators, revision JSON and notice versions retain full fallback', async t => {
+  const root = await fixture(t);
+  for (const path of ['scripts/draw-cinema-other.mjs', 'scripts/revise-other-drawings.py',
+    'scripts/prepare-other-code-licenses.mjs', 'docs/residence/source/other-revisions.json',
+    'docs/cinema/other-revisions.json', 'public/licenses/other-LICENSE.txt',
+    'public/licenses/three-0.185.0-LICENSE.txt', 'public/licenses/three-0.185.0.json']) {
+    const plan = await planAffected({ root, changedPaths: [path] });
+    assert.equal(plan.selectionMode, 'fallback', path);
+    assert.ok(plan.fallbackReasons.includes(`Unclassified input: ${path}`), path);
+    assert.equal(plan.skipped.length, 0, path);
+    assert.ok(plan.browser.every(gate => gate.selected), path);
+  }
+});
+
+test('declared tooling inputs retain real test readFile and URL consumers', async t => {
+  const root = await fixture(t, { ...toolingFiles, 'scripts/coast-controls.test.mjs': '' });
+  for (const path of [...drawingPaths, ...noticePaths]) {
+    await put(root, 'scripts/coast-controls.test.mjs',
+      `import { readFile } from 'node:fs/promises'; await readFile(new URL('../${path}', import.meta.url));`);
+    const plan = await planAffected({ root, changedPaths: [path] });
+    assert.deepEqual(plan.fallbackReasons, [], path);
+    assert.deepEqual(selected(plan), [...(noticePaths.includes(path) ? ['build'] : []), 'harness', 'coast'], path);
+    assert.deepEqual(browser(plan), [], path);
+  }
+});
+
+test('declared drawing and notice inputs cannot hide runtime imports or public URL consumers', async t => {
+  const scene = 'src/coast/world/lake/LakeWorld.ts';
+  const root = await fixture(t, { ...toolingFiles, [scene]: '' });
+  for (const path of [...drawingPaths.filter(path => !path.endsWith('.py')), ...noticePaths]) {
+    const source = path.startsWith('public/')
+      ? `export const url = '/${path.slice('public/'.length)}';`
+      : `import '../../../../${path}';`;
+    await put(root, scene, source);
+    const plan = await planAffected({ root, changedPaths: [path] });
+    assert.deepEqual(plan.fallbackReasons, [], path);
+    assert.deepEqual(selected(plan), [...(noticePaths.includes(path) ? ['build'] : []), 'harness'], path);
+    assert.deepEqual(browser(plan), ['lake-browser'], path);
+  }
+});
+
+test('deleted declared tooling inputs preserve their gates and repository link validation', async t => {
+  const root = await fixture(t, toolingFiles);
+  const base = git(root, 'rev-parse', 'HEAD');
+  for (const path of Object.keys(toolingFiles)) await rm(join(root, path));
+  const head = commit(root, Object.keys(toolingFiles));
+  const plan = await planAffected({ root, base, head, diffMode: 'direct' });
+  assert.deepEqual(plan.fallbackReasons, []);
+  assert.deepEqual(plan.removedPaths, Object.keys(toolingFiles).sort());
+  assert.deepEqual(selected(plan), ['build', 'harness']);
+  assert.deepEqual(browser(plan), []);
+});
+
+test('renaming a declared generator, revision or license to an unknown path requires review', async t => {
+  for (const [oldPath, newPath] of [
+    [drawingPaths[0], 'scripts/draw-cinema-speaker-mounts-v2.mjs'],
+    [drawingPaths[2], 'docs/residence/source/residence-70f-revisions-v2.json'],
+    [noticePaths[2], 'public/licenses/three-0.185.0-LICENSE.txt'],
+  ]) {
+    const root = await fixture(t, { [oldPath]: '{}\n' });
+    const base = git(root, 'rev-parse', 'HEAD');
+    await rename(join(root, oldPath), join(root, newPath));
+    const head = commit(root, [oldPath, newPath]);
+    const plan = await planAffected({ root, base, head, diffMode: 'direct' });
+    assert.deepEqual(plan.changedPaths, [oldPath, newPath].sort());
+    assert.deepEqual(plan.removedPaths, [oldPath]);
+    assert.deepEqual(plan.fallbackReasons, [`Unclassified input: ${newPath}`]);
+    assert.ok(plan.browser.every(gate => gate.selected));
+  }
+});
+
+test('deleted software notice keeps its former runtime consumer after the reference is removed', async t => {
+  const path = 'public/licenses/ATTRIBUTION.md', scene = 'src/coast/world/lake/LakeWorld.ts';
+  const root = await fixture(t, { [path]: '# Notice', [scene]: "export const url = '/licenses/ATTRIBUTION.md';" });
+  const base = git(root, 'rev-parse', 'HEAD');
+  await rm(join(root, path));
+  await put(root, scene, 'export const replacement = true;');
+  const head = commit(root, [path, scene]);
+  const plan = await planAffected({ root, base, head, diffMode: 'direct' });
+  assert.deepEqual(plan.fallbackReasons, []);
+  assert.deepEqual(browser(plan), ['lake-browser']);
+  const reasons = plan.browser.find(gate => gate.id === 'lake-browser').reasons;
+  assert.ok(reasons.includes(`Runtime or browser-test dependency: ${path}`));
+});
+
+test('new offline declarations preserve existing world and shared controls, terrain and app impact', async () => {
+  for (const path of ['src/coast/world/cinema/cinemaLayout.ts', 'src/coast/CoastControls.ts',
+    'src/coast/terrain.ts', 'src/coast/CoastApp.ts']) {
+    const original = await planAffected({ root: repository, changedPaths: [path] });
+    const combined = await planAffected({ root: repository, changedPaths: [path, ...drawingPaths, ...noticePaths] });
+    assert.deepEqual(original.fallbackReasons, [], path);
+    assert.deepEqual(combined.fallbackReasons, [], path);
+    assert.deepEqual(browser(combined), browser(original), path);
+    assert.deepEqual(selected(combined), ['build', 'harness', ...selected(original).filter(id => !['build', 'harness'].includes(id))], path);
+    if (path.endsWith('cinemaLayout.ts')) assert.ok(selected(combined).includes('cinema'));
+    else for (const id of ['coast', 'monitor', 'residence', 'cinema', 'atrium', 'lake']) {
+      assert.ok(browser(combined).includes(`${id}-browser`), `${path} must retain ${id}`);
+    }
+  }
+});
+
 test('shared output and XR retain real application consumers', async () => {
   const output = await planAffected({ root: repository, changedPaths: ['src/coast/explorationOutput.ts'] });
   assert.deepEqual(output.fallbackReasons, []);
