@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { Texture, Vector4 } from 'three';
+import { Raycaster, Texture, Vector3, Vector4 } from 'three';
 import { COAST_SUN_DIRECTION } from '../src/coast/world/coastAtmosphere.ts';
 import { PRIMARY_RAINBOW_ANGLE } from '../src/coast/world/coastSprayRainbow.ts';
 import {
@@ -57,6 +57,45 @@ test('the overlook terrain tiles preserve every face, vertex and normal', () => 
     whole.dispose();
     tiled.dispose();
     streets.texture.dispose();
+  }
+});
+
+test('overlook support samples match actual Float32 triangles on both sides of every sampled diagonal', () => {
+  const streets = { texture: new Texture(), bounds: new Vector4(-10, -10, 10, 10) };
+  const surface = createOverlookSurface((x, z) => 50 + .005 * x + .003 * z + 3 * Math.sin(x / 13) * Math.cos(z / 9),
+    streets, { value: 0 });
+  try {
+    const mesh = surface.group.children[0], position = mesh.geometry.getAttribute('position');
+    surface.group.updateMatrixWorld(true);
+    let columns = 1;
+    while (position.getZ(columns) === position.getZ(0)) columns++;
+    const rows = position.count / columns;
+    const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
+    const testColumns = new Set([0, 3, Math.floor(columns / 2), columns - 2]);
+    for (const edge of [-4800, -1150, -205, -50, -36.85, -35.45, 35.45, 36.85, 50, 205, 1150, 4800]) {
+      for (let column = 0; column < columns - 1; column++) {
+        if (position.getX(column) <= edge && position.getX(column + 1) >= edge) { testColumns.add(column); break; }
+      }
+    }
+    for (const row of [0, 3, Math.floor(rows / 2), rows - 2]) {
+      for (const column of testColumns) {
+        const a = row * columns + column, b = a + columns;
+        for (const [u, v] of [[0, 0], [.2, .2], [.5, .5], [.8, .8], [1, 1]]) {
+          const x = position.getX(a) + u * (position.getX(a + 1) - position.getX(a));
+          const z = position.getZ(a) + v * (position.getZ(b) - position.getZ(a));
+          ray.ray.origin.set(x, 3000, z);
+          const hit = ray.intersectObject(mesh, false)[0];
+          assert.ok(hit, `actual triangle at ${x}, ${z}`);
+          assert.ok(Math.abs(surface.sampleHeight(x, z) - hit.point.y) < 1e-6,
+            `support and actual mesh agree at ${x}, ${z}`);
+        }
+      }
+    }
+    for (const [x, z] of [[NaN, 0], [0, Infinity], [-23000.001, 0], [23000.001, 0], [0, -26000.001], [0, 11000.001]]) {
+      assert.equal(surface.sampleHeight(x, z), undefined, 'invalid or outside input is not silently clamped');
+    }
+  } finally {
+    surface.dispose(); streets.texture.dispose();
   }
 });
 

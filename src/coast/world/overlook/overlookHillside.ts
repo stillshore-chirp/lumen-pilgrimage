@@ -230,7 +230,8 @@ function stoneMaterial(): THREE.MeshStandardMaterial {
 
 type Position = { x: number; z: number; height: number; width: number; aspect: number };
 
-export function createOverlookHillside(heightAt: (x: number, z: number) => number): THREE.Group {
+export function createOverlookHillside(heightAt: (x: number, z: number) => number,
+  surfaceHeightAt?: (x: number, z: number) => number | undefined): THREE.Group {
   const group = new THREE.Group();
   group.name = 'Dry hillside scrub, yucca and fractured stone';
   const random = seededDetail(2694973);
@@ -297,34 +298,71 @@ export function createOverlookHillside(heightAt: (x: number, z: number) => numbe
   const tint = new THREE.Color();
   const normal = new THREE.Vector3();
   const lean = new THREE.Quaternion();
+  const supportPoint = new THREE.Vector3();
+  const supportHeight = surfaceHeightAt ?? heightAt;
   for (const { kind, detail, form, points } of placements.values()) {
     const source = seededDetail(8747 + form * 349);
     const geometry = kind === 'stone' ? stoneGeometry(source) : kind === 'yucca' ? yuccaGeometry(source)
       : kind === 'grass' ? grassGeometry(source) : shrubGeometry(kind, source, detail);
     geometry.computeBoundingBox();
     const maxY = geometry.boundingBox!.max.y;
+    const supportPoints: THREE.Vector3[] = [];
+    if (surfaceHeightAt) {
+      const position = geometry.getAttribute('position');
+      const threshold = kind === 'stone' ? geometry.boundingBox!.min.y + (maxY - geometry.boundingBox!.min.y) * 0.35
+        : kind === 'grass' || kind === 'yucca' ? -0.035 : -0.08;
+      const unique = new Set<string>();
+      for (let i = 0; i < position.count; i++) {
+        if (position.getY(i) > threshold) continue;
+        const point = new THREE.Vector3().fromBufferAttribute(position, i);
+        const key = `${point.x},${point.y},${point.z}`;
+        if (unique.has(key)) continue;
+        unique.add(key);
+        supportPoints.push(point);
+      }
+    }
     const batch = new THREE.InstancedMesh(geometry, kind === 'stone' ? stones : plants, points.length);
     batch.name = `${kind}${detail ? ' (near)' : ' (slope)'}`;
     batch.count = 0;
     for (const { x, z, width, height, aspect } of points) {
-      const y = heightAt(x, z);
-      if (!Number.isFinite(y)) continue;
+      // Instance translations are Float32: sample at those same X/Z values.
+      const px = surfaceHeightAt ? Math.fround(x) : x, pz = surfaceHeightAt ? Math.fround(z) : z;
+      const y = supportHeight(px, pz);
+      if (y === undefined || !Number.isFinite(y)) continue;
       const stone = kind === 'stone';
       const baseY = y - (stone ? height * 0.18 : 0.025);
       const angle = random() * tau;
-      const index = batch.count++;
-      dummy.position.set(x, baseY, z);
+      dummy.position.set(px, baseY, pz);
       dummy.rotation.set(0, angle, 0);
       dummy.scale.set(width, height / maxY, width * aspect);
       if (stone) {
-        const slopeX = (heightAt(x + width * 0.6, z) - heightAt(x - width * 0.6, z)) / (width * 1.2);
-        const slopeZ = (heightAt(x, z + width * 0.6) - heightAt(x, z - width * 0.6)) / (width * 1.2);
+        const west = supportHeight(px - width * 0.6, pz), east = supportHeight(px + width * 0.6, pz);
+        const north = supportHeight(px, pz - width * 0.6), south = supportHeight(px, pz + width * 0.6);
+        if (west === undefined || east === undefined || north === undefined || south === undefined) continue;
+        const slopeX = (east - west) / (width * 1.2);
+        const slopeZ = (south - north) / (width * 1.2);
         normal.set(-slopeX * 0.76, 1, -slopeZ * 0.76).normalize();
         dummy.quaternion.premultiply(lean.setFromUnitVectors(up, normal));
         // Boulders lean into the grade with their weathered base still partly buried.
         dummy.position.y -= Math.min(0.29 * width, Math.hypot(slopeX, slopeZ) * 0.16 * width);
       }
       dummy.updateMatrix();
+      if (surfaceHeightAt) {
+        let highestBase = -Infinity;
+        let valid = supportPoints.length > 0;
+        for (const point of supportPoints) {
+          supportPoint.copy(point).applyMatrix4(dummy.matrix);
+          const ground = surfaceHeightAt(supportPoint.x, supportPoint.z);
+          if (ground === undefined || !Number.isFinite(ground)) { valid = false; break; }
+          highestBase = Math.max(highestBase, supportPoint.y - ground);
+        }
+        if (!valid) continue;
+        // Join every root ring / basal rock footprint to the soil. Move the
+        // instance as a whole; never pull leaves or individual vertices down.
+        if (highestBase > -0.01) dummy.position.y -= highestBase + 0.01;
+        dummy.updateMatrix();
+      }
+      const index = batch.count++;
       batch.setMatrixAt(index, dummy.matrix);
       const tone = 0.83 + random() * 0.29;
       tint.setRGB(tone * (0.94 + random() * 0.12), tone, tone * (0.91 + random() * 0.13));

@@ -112,6 +112,14 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 亭の主外殻、両翼、段違い屋根、八角drum、ドーム断面は [overlookPavilionPlan.ts](../src/coast/world/overlook/overlookPavilionPlan.ts) を描画と飛行で共有します。高さは主床346 mからの相対値です。箱とdrumは余裕半径で保守的に拡張し、ドームは回転軸断面の各線分までの最短距離へ半径と外殻の最大突出量約0.06435 mを加えます。頂部と斜面の両方を守り、屋根より高い空間の移動を許可します。歩行範囲、飛行上限451 m、着地点と階段の支持面は維持します。
 
+#### 表示地形と局所接地
+
+地形の解析関数と表示三角形の高さを分けて扱います。`createOverlookSurface` が返す `sampleHeight(x,z)` は、描画用Float32頂点と同じ格子・対角線を使う補間です。非有限入力と表示field外は `undefined` になり、端へclampしません。表示fieldはX=−23000..23000 m、Z=−26000..11000 mです。
+
+この補間は斜面の植物・岩と、鳥2点・虫5点の音源支持に渡します。植物は幹下部・株元、岩は下部の支持点を変換後に照合し、最高の基部点が地表−10 mmを超える場合は個体全体をY方向へ下げます。葉や個々の頂点を引き伸ばさず、局所形状、XZ位置と配置分布を保ちます。地下の根リングを使う数値と、目に見える茎の地表交差は分けて確認します。岩は支持footprintと露出する本体を調べ、全埋没を接地の成功へ数えません。
+
+道路・都市・住宅の高さAPIを一律に置換する変更ではありません。音源の高さは表示面から鳥1.15 m、虫0.4 mの制作値を使い、道路の伝搬計算には従来の地形入力を保持します。編集先は [表示地形](../src/coast/world/overlook/overlookTerrain.ts)、[斜面の個体配置](../src/coast/world/overlook/overlookHillside.ts)、[局所音源](../src/coast/world/overlook/overlookAudio.ts)です。
+
 擁壁、段、手すり、デッキの境界を変える場合は、描画形状と `groundHeight`／`blocksWalking`／`blocksFlight` を一組として扱います。[地形接続](../scripts/coast-terrain.test.mjs)と[階段・デッキのブラウザー試験](../scripts/coast-browser.test.mjs)が既存の入口です。
 
 ### 都心の70階住戸 — `residence`

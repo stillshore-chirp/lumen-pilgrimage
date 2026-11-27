@@ -8,6 +8,7 @@ import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { createFootfall } from '../residence/residenceAudioSamples';
 import { isMainDeckPaving } from './overlookDeck';
 import { isOverlookStairTread, isUpperDeck, overlookDeckGround } from './overlookUpperDeck';
+import type { OverlookSurfaceHeight } from './overlookTerrain';
 
 type SoundPoint = Readonly<{ x: number; y: number; z: number }>;
 type Corridor = { points: readonly SoundPoint[]; weight: number };
@@ -53,6 +54,7 @@ const CRICKET_PATCHES = [
   { x: -19, z: -46, clipStart: 32, firstCall: 1.74, rate: 1.07, gain: 0.50 },
   { x: 17, z: -49, clipStart: 42, firstCall: 2.42, rate: 0.98, gain: 0.73 },
 ];
+const BIRD_PERCHES = [{ x: -41, z: -9 }, { x: 48, z: -31 }] as const;
 
 function roadSections(points: readonly SoundPoint[]): RoadSection[] {
   return points.map((point, i) => {
@@ -106,7 +108,8 @@ export class OverlookAudio {
   private nextBird = 0;
   private birdPhrase = -1;
 
-  constructor(corridors: readonly Corridor[], private readonly heightAt: (x: number, z: number) => number) {
+  constructor(corridors: readonly Corridor[], private readonly heightAt: (x: number, z: number) => number,
+    private readonly sourceHeightAt?: OverlookSurfaceHeight) {
     this.roads = corridors
       .map(({ points, weight }) => ({ sections: roadSections(points), weight }))
       .filter(({ sections, weight }) => sections.length && weight > 0);
@@ -234,6 +237,10 @@ export class OverlookAudio {
   }
 
   private beginLayers(context: AudioContext, traffic: AudioBuffer, crickets: AudioBuffer, birds: AudioBuffer): void {
+    // Validate the local source supports before allocating any output graph.
+    // Road propagation continues to use the original regional height model.
+    const cricketPoints = CRICKET_PATCHES.map(patch => this.sourcePoint(patch.x, patch.z, 0.4));
+    const birdPoints = BIRD_PERCHES.map(perch => this.sourcePoint(perch.x, perch.z, 1.15));
     const night = this.time === 'night';
     const master = context.createGain();
     master.gain.value = this.mix.master * NOMINAL_MASTER_GAIN;
@@ -283,9 +290,8 @@ export class OverlookAudio {
       this.traffic.push({ road: sections, weight, panner, filter, atmosphere, level });
     }
 
-    for (const patch of CRICKET_PATCHES) {
-      const { x, z } = patch;
-      const point = { x, y: this.heightAt(x, z) + 0.4, z };
+    for (const [index, patch] of CRICKET_PATCHES.entries()) {
+      const point = cricketPoints[index];
       const panner = spatialPanner(context, point);
       const filter = context.createBiquadFilter();
       filter.type = 'lowpass';
@@ -296,14 +302,20 @@ export class OverlookAudio {
       const nextCall = night ? context.currentTime + patch.firstCall + 0.18 * Math.random() : Infinity;
       this.crickets.push({ point, patch, filter, level, nextCall, playing: false });
     }
-    for (const { x, z } of [{ x: -41, z: -9 }, { x: 48, z: -31 }]) {
-      const panner = spatialPanner(context, { x, y: this.heightAt(x, z) + 1.15, z });
+    for (const point of birdPoints) {
+      const panner = spatialPanner(context, point);
       panner.rolloffFactor = 1;
       panner.refDistance = 9;
       panner.connect(birdBus);
       this.birdPerches.push(panner);
     }
     this.nextBird = context.currentTime + 5 + 6 * Math.random();
+  }
+
+  private sourcePoint(x: number, z: number, aboveGround: number): SoundPoint {
+    const ground = this.sourceHeightAt ? this.sourceHeightAt(x, z) : this.heightAt(x, z);
+    if (ground === undefined || !Number.isFinite(ground)) throw new Error('Overlook audio source has no terrain support');
+    return { x, y: ground + aboveGround, z };
   }
 
   private loop(

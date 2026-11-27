@@ -53,13 +53,14 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
   const ground = createOverlookSurface(heightAt, streets, atmosphere.night, high);
   const deck = createOverlookDeck(high, atmosphere.night);
   const scene = new THREE.Scene();
-  scene.add(sky.dome, sky.clouds, ground.group, deck.group, city.group, traffic.group, airTraffic.group, createOverlookHillside(heightAt));
+  scene.add(sky.dome, sky.clouds, ground.group, deck.group, city.group, traffic.group, airTraffic.group,
+    createOverlookHillside(heightAt, ground.sampleHeight));
   const lighting = createCoastLighting(scene, atmosphere, heightAt, { nightIntensityScale: 0.28 });
   await Promise.all([streets.ready, city.ready]);
 
   return {
     id: 'overlook',
-    audio: new OverlookAudio(traffic.soundCorridors, heightAt),
+    audio: new OverlookAudio(traffic.soundCorridors, heightAt, ground.sampleHeight),
     navigation: {
       bounds, spawn: EXPLORATION_WORLDS[1].places[0], groundHeight: overlookDeckGround,
       flightCeiling: DECK_LEVEL + 105, blocksWalking: blocksDeckWalking,

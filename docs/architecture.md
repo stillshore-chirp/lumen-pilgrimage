@@ -63,6 +63,7 @@ flowchart LR
 ## 景観と描画
 
 - 丘陵展望台は標高データに展望デッキの擁壁と、その外側に落ちる斜面を接続する。手前の街区から約15 km先の都心へ向けて建物を段階的に高くし、西・東・さらに奥へ複数の高層街区を広げる。高層棟と周囲の低・中層街区は同じ基準位置を使う。既存の街路沿いの建物から向きと間隔を求め、遠方の低・中層街区を補う。幹線と高層棟の敷地を空け、延伸先でも車体・前照灯・尾灯を道路の高さと線形に合わせる。 [街区の基準位置](../src/coast/world/overlook/overlookDistricts.ts) · [高層業務街区](../src/coast/world/overlook/overlookSkyline.ts) · [幹線交通](../src/coast/world/overlook/overlookTraffic.ts) · [地理データの出典](../public/coast-overlook/ATTRIBUTION.md)
+- 展望台の局所接地は、表示地形が返すFloat32三角形補間を斜面の植物・岩と鳥/虫の音源へ渡す。個体の基部だけを支持検査し、補正は個体全体のY移動に限定する。音源支持と道路伝搬の地形入力を分け、都市や住戸の高さAPIを暗黙に置換しない。 [接地の契約](worlds.md#表示地形と局所接地)
 - [空と大気](../src/coast/world/coastAtmosphere.ts) は太陽光の色、空の散乱、距離霞を計算する。昼と夜の切替を空、環境光、距離霞、各ワールドの描画に反映する。入り江と山道の海・湖は、両品質で同じ空と光源を反射に使う。[湖面](../src/coast/world/coastUplandLake.ts) は地形の浅瀬を参照する。高品質では海岸と湖の水面付近で、反射用カメラを間隔を空けて描画する。丘陵展望台では、夜間に街灯と窓、デッキの照明が点く。
 - [入り江の星空](../src/coast/world/coastMilkyWay.ts) は天の川の星の密集と暗黒帯を手続き生成する。空の方角に固定して星と銀河の帯を描き、地平線近くと月の周囲では弱める。軽量と高品質で同じ星の配置を使う。[天の川の暗黒帯の解説](https://science.nasa.gov/solar-system/skywatching/night-sky-network/augusts-night-sky-notes-the-great-rift/)
 - 起動時は「軽量」。[照明](../src/coast/world/coastLighting.ts) は広域の影と林の間接光を共有する。高品質では視点近くを追従する影、地表の凹凸、近くの植生の詳細と内部解像度を追加する。軽量の広域影は視点が別の場所へ移るまで再利用する。
