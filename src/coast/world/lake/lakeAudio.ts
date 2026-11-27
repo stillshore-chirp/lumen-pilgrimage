@@ -15,7 +15,7 @@ import { LAKE_HALL, LAKE_SPAWN, LAKE_WATER_Y, LAKE_WINDOW_VIEW_X } from './lakeL
 
 const MIX_SOUNDS = ['water', 'birds', 'footsteps'] as const;
 type MixSound = typeof MIX_SOUNDS[number];
-const MASTER_GAIN = 0.66;
+export const LAKE_AUDIO_MASTER_GAIN = 0.66;
 const PROPAGATION_INTERVAL = 0.05;
 const PROPAGATION_SMOOTHING = 0.075;
 const BIRD_ASSETS = {
@@ -154,7 +154,7 @@ export class LakeAudio {
     await this.start();
     if (request !== this.kotoRequest || this.request.signal.aborted || !this.context || !this.master) return;
     this.koto ??= new LakeKoto(this.context, this.master);
-    this.koto.play(this.listenerPosition);
+    await this.koto.play(this.listenerPosition);
   }
 
   start(): Promise<void> {
@@ -209,7 +209,7 @@ export class LakeAudio {
     const now = context.currentTime;
     if (now >= this.nextPropagation) {
       this.nextPropagation = now + PROPAGATION_INTERVAL;
-      if (this.koto?.playing) this.koto.update(position, now);
+      this.koto?.update(position, now);
       const waterStrength = this.time === 'day' ? 0.87 : 0.67;
       for (const { voice, point } of this.water) updateExteriorVoice(voice, position, point, waterStrength, now);
       const call = this.playingBird;
@@ -288,7 +288,7 @@ export class LakeAudio {
       if (immediate) param.value = target;
       else param.setTargetAtTime(target, now, 0.04);
     };
-    setGain(this.master.gain, this.mix.master * MASTER_GAIN);
+    setGain(this.master.gain, this.mix.master * LAKE_AUDIO_MASTER_GAIN);
     for (const kind of MIX_SOUNDS) {
       const activity = kind === 'birds' && this.time === 'night' ? 0.44 : 1;
       setGain(this.buses[kind].gain, activity * explorationSoundGain(this.mix, kind));

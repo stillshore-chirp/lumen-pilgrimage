@@ -9,7 +9,7 @@
   "sources": [
     {
       "id": "freesound-365215",
-      "status": "candidate",
+      "status": "adopted",
       "nameAndFiles": {
         "title": "Japan_Koto_My_Amateur_Improv_Session_2.wav",
         "originalFilename": "Japan_Koto_My_Amateur_Improv_Session_2.wav",
@@ -50,15 +50,15 @@
           "Uploader explicitly identifies own improvised koto performance; CC0 selected for this recording.",
           "Creator profile and official biography independently describe publishing own field recordings under CC0."
         ],
-        "basis": "Reasonable provenance basis for a candidate, not a warranty of sole rights or a verified 13-string instrument."
+        "basis": "Individual CC0 1.0 statement, first-person performance/recording description, creator profile and official biography provide a reasonable basis for the specified transformed single notes. No whole improvisation, distinctive phrase or original performance timing is reused. This is not a warranty of sole rights or verified thirteen-string instrumentation."
       },
       "thirdParty": {
         "composition": "Uploader describes own improvisation; no named third-party composition or commercial source is declared. Distinctive phrases will not be copied into the independent score.",
         "performance": "Uploader explicitly describes being the player. No other performer is credited for these sessions.",
         "recording": "Zoom H2n stereo MS, mid-October 2016, Kashiwa, Chiba, Japan, microphone under instrument, according to uploader. Sole recording authorship is not independently proved.",
-        "otherRights": "No third-party library or commercial track is declared. Audible speech, other music, privacy and contamination must be checked on any proposed cut.",
+        "otherRights": "No third-party library or commercial source is declared. Selected cuts were screened for a dominant single-note harmonic event after a quiet interval. Human verification of absence of speech, other music and third-party performance has not been performed; no concrete contrary sign was identified in the source description and automatic screen.",
         "intent": "Profile requests creative transformation; discourages commercial redistribution of unedited sounds and misleading collaboration credit. Treat these as ethical requests separately from CC0 conditions.",
-        "conclusion": "Rights provenance is sufficiently plausible for private candidate analysis. Adoption still requires cut-specific quality/third-party checks and truthful instrument identification."
+        "conclusion": "Adopted for the specified processed note cuts and independent-score/high-band attack transformation, with documented uncertainty. The creator requests creative remixing and no misleading collaboration credit; unedited whole-recording sample-pack distribution is outside this use. A later identified third-party or distinctive-phrase contamination requires removal of that cut and regeneration of dependent assets."
       },
       "sourceIdentity": {
         "sha256": "5c9f8925cee5618525d3dbc2a70e8bab956b3de55b9fc79dd52adcebf2e2cce1",
@@ -76,7 +76,9 @@
         "steps": [
           "Public HTML used to resolve the explicit share-url high-quality MP3; no guessed original URL or authentication bypass.",
           "curl --fail --silent --location --connect-timeout 10 --max-time 40 --range 0-1999999 --output <private-stage.mp3> <official-preview-url>; timeout kept available bytes.",
-          "ffmpeg -hide_banner -loglevel error -y -i <private-stage.mp3> -acodec pcm_s16le <private-stage.wav>; decode exit 0."
+          "ffmpeg -hide_banner -loglevel error -y -i <private-stage.mp3> -acodec pcm_s16le <private-stage.wav>; decode exit 0.",
+          "python3 scripts/prepare-koto-samples.py --source-dir <reviewed-preview-decodes> --output-dir <output>; script verifies decoded-source SHA-256 before extraction.",
+          "Channel 0; per-cut DC removal; 0.5 ms sine-squared fade-in; 55-100 ms cosine-squared tail; one common bank gain; mono PCM16 quantization. Exact frame ranges and parameters are recorded in public/lake-audio/samples/bank.json."
         ],
         "decodedPreview": {
           "sampleRate": 48000,
@@ -86,34 +88,159 @@
           "sha256": "eddcf1922325756d0928293297d93b64beeb5f0ba43e11730f7eaf2741bf9f36",
           "bytes": 14612234
         },
-        "transformedNoteSelection": "not yet performed",
+        "transformedNoteSelection": {
+          "bankPath": "public/lake-audio/samples/bank.json",
+          "cutIds": [
+            "mid-319",
+            "mid-452",
+            "high-640",
+            "high-792"
+          ],
+          "processor": "scripts/prepare-koto-samples.py",
+          "processingReference": "docs/lake/koto-sample-processing.md",
+          "tools": {
+            "python": "3.14.5",
+            "numpy": "2.4.6"
+          }
+        },
         "tools": {
           "curl": "curl 8.7.1 (x86_64-apple-darwin26.0) libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.69.0",
           "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers"
+        },
+        "acquisitionReproduction": {
+          "status": "not-reproduced-bounded-public-CDN-retry-failed",
+          "recordedAt": "2026-11-27T12:16:14.365373+00:00",
+          "requestedRange": "bytes=0-1802239",
+          "transferExitCode": 56,
+          "receivedBytes": 0,
+          "meaning": "Original acquired input is preserved. The strict-prefix download was not reproduced; no claim of byte-identical redownload. Hash-locked local processing is separate."
+        },
+        "processingReproduction": {
+          "status": "same-input-five-WAV-and-bank-byte-identical",
+          "reference": "docs/lake/koto-sample-processing.md",
+          "meaning": "Rebuild from the retained, SHA-256-locked decoded input; not a successful repeat download from the CDN."
         }
       },
-      "distribution": [],
-      "usage": [],
+      "distribution": [
+        {
+          "path": "public/lake-audio/samples/mid-319.wav",
+          "sha256": "9ba2f8ef5cdd234ffd1cc4c296e3919e9fb7c9d16a30fef1355f99692978060d",
+          "bytes": 25772,
+          "kind": "processed-mono-single-note",
+          "processing": {
+            "bankPath": "public/lake-audio/samples/bank.json",
+            "bankEntryId": "mid-319",
+            "sourceDecodedSha256": "eddcf1922325756d0928293297d93b64beeb5f0ba43e11730f7eaf2741bf9f36",
+            "sourceStartFrame": 2379456,
+            "sourceEndFrameExclusive": 2392320
+          }
+        },
+        {
+          "path": "public/lake-audio/samples/mid-452.wav",
+          "sha256": "3ba200e1ac036e4648182a388d815adaa69f18d6e0304de8e1cbcaae6be304fa",
+          "bytes": 45644,
+          "kind": "processed-mono-single-note",
+          "processing": {
+            "bankPath": "public/lake-audio/samples/bank.json",
+            "bankEntryId": "mid-452",
+            "sourceDecodedSha256": "eddcf1922325756d0928293297d93b64beeb5f0ba43e11730f7eaf2741bf9f36",
+            "sourceStartFrame": 1594800,
+            "sourceEndFrameExclusive": 1617600
+          }
+        },
+        {
+          "path": "public/lake-audio/samples/high-640.wav",
+          "sha256": "a71e59e02bad64cd4cdf2944e561036548bc2458e944296ac0893202eefba7ce",
+          "bytes": 31820,
+          "kind": "processed-mono-single-note",
+          "processing": {
+            "bankPath": "public/lake-audio/samples/bank.json",
+            "bankEntryId": "high-640",
+            "sourceDecodedSha256": "eddcf1922325756d0928293297d93b64beeb5f0ba43e11730f7eaf2741bf9f36",
+            "sourceStartFrame": 1240752,
+            "sourceEndFrameExclusive": 1256640
+          }
+        },
+        {
+          "path": "public/lake-audio/samples/high-792.wav",
+          "sha256": "69e3a8948217f52c50e11d7469283033e29b55c5d18850f149bc09d46c875707",
+          "bytes": 112556,
+          "kind": "processed-mono-single-note",
+          "processing": {
+            "bankPath": "public/lake-audio/samples/bank.json",
+            "bankEntryId": "high-792",
+            "sourceDecodedSha256": "eddcf1922325756d0928293297d93b64beeb5f0ba43e11730f7eaf2741bf9f36",
+            "sourceStartFrame": 625344,
+            "sourceEndFrameExclusive": 681600
+          }
+        },
+        {
+          "path": "public/lake-audio/samples/bank.json",
+          "sha256": "0e7d90f2665021b985809c611d94c5dd4aed1c45e4341b4263cd16f287afc686",
+          "bytes": 21427,
+          "kind": "shared-processed-bank-metadata",
+          "sourceIds": [
+            "freesound-365215",
+            "freesound-365242"
+          ],
+          "processing": "Shared metadata maps all five processed note files to decoded source hashes, cut ranges, tool versions and processing parameters."
+        }
+      ],
+      "usage": [
+        {
+          "path": "src/coast/world/lake/kotoSampleModel.ts",
+          "purpose": "Renders the processed mono note bank with bounded pitch change, press/damping approximations, or a short high-band attack substitution into the physical model; does not reproduce the recorded improvisation as a phrase."
+        },
+        {
+          "path": "scripts/koto-analysis.mjs",
+          "purpose": "Loads and hash-checks the distributed bank, decodes mono notes, and renders sample/hybrid comparative study cases through the shared independently authored performance inputs."
+        },
+        {
+          "path": "scripts/prepare-koto-samples.py",
+          "purpose": "Offline extraction from retained SHA-256-locked preview decodes; writes the five processed note WAVs and bank metadata with exact source-frame correspondence. No network or original-WAV acquisition."
+        },
+        {
+          "path": "src/coast/world/lake/kotoPerformance.ts",
+          "purpose": "Defines the independently authored tuning, 39-second note events and shared comparison cases passed to sample/hybrid renderers; it supplies performance inputs and does not load recorded audio itself."
+        },
+        {
+          "path": "scripts/prepare-koto-performance.mjs",
+          "purpose": "Offline generation of the bundled 39-second independent score: verifies adopted CC0 sources and bank hashes, renders the hybrid at 96 kHz, resamples to 48 kHz, applies common gain and deterministic 24-bit TPDF dither; records sourceIds and input hashes in production.json."
+        },
+        {
+          "path": "src/coast/world/lake/lakeKotoAsset.ts",
+          "purpose": "Runtime lazy loading and decoding of the bundled generated koto-performance.wav derived from these processed note sources; no runtime request to the original recording service."
+        }
+      ],
       "quality": {
-        "status": "not_evaluated",
-        "evidence": "MP3 partial range decodes successfully to 48 kHz stereo PCM16; this verifies file usability only. Original page describes 96 kHz/24-bit WAV, which was not acquired.",
+        "status": "technical-screened-human-listening-pending",
+        "humanListening": "not-performed",
+        "instrumentStringCount": "unverified",
+        "evidence": "Distributed cuts match bank SHA-256, bytes, frames and 48 kHz mono PCM16. Their early harmonic-energy screen spans 0.984551-0.999108; this does not prove isolated performance, absence of speech or naturalness. Same-input rebuild is byte-identical as recorded in the processing document.",
+        "reference": "docs/lake/koto-sample-processing.md",
+        "measurementsReference": "docs/lake/koto-measurements.md",
         "limitations": [
-          "Lossy MP3 preview, not original WAV.",
-          "Improvisation rather than isolated controlled notes; overlapping decays, finger/pick differences and body-under microphone may limit useful cuts.",
-          "No human listening or final sample-selection quality acceptance recorded."
+          "Lossy incomplete official MP3 preview, not the original 96 kHz/24-bit WAV.",
+          "Thirteen-string instrument not verified; one uncontrolled recording/force condition, no measured velocity layers or round robins.",
+          "Several cuts have deliberately shortened tails; pure sample playback is limited to ±5 semitones including press, with A3/B-flat3 unavailable.",
+          "Human final-quality and third-party-contamination listening not performed.",
+          "Acquisition redownload not reproduced; preserved input and hash-locked processing are the reproducibility basis."
         ]
       },
       "uncertainties": [
         "Thirteen strings not verified.",
+        "Sole recording authorship not independently proved; first-person source and explicit CC0 are the reasonable provenance basis.",
         "No controlled velocity layers or round robins declared.",
         "Original WAV unavailable without account login; no credential use or bypass attempted.",
-        "Partial end must not be mistaken for a natural decay; cut boundaries and third-party sounds need assessment.",
-        "No external recording adopted into public assets at this snapshot."
-      ]
+        "Human listening for speech, other music, third-party performance and naturalness is pending; harmonic screening is not proof of their absence.",
+        "The adopted files are specified transformed notes only; original recording and distinctive improvisation phrases are not distributed.",
+        "Strict-prefix redownload failed within bounded attempts; same-input processing reproduction succeeded."
+      ],
+      "adoptionScope": "Rights and ethics accepted for the specified processed note files, public repository reproducibility, independent-score generation and technical sample/hybrid use. Human final-quality acceptance and thirteen-string identification remain pending."
     },
     {
       "id": "freesound-365242",
-      "status": "candidate",
+      "status": "adopted",
       "nameAndFiles": {
         "title": "Japan_Koto_Improv_Amateur_Session_3.wav",
         "originalFilename": "Japan_Koto_Improv_Amateur_Session_3.wav",
@@ -154,15 +281,15 @@
           "Uploader explicitly identifies own improvised koto performance; CC0 selected for this recording.",
           "Creator profile and official biography independently describe publishing own field recordings under CC0."
         ],
-        "basis": "Reasonable provenance basis for a candidate, not a warranty of sole rights or a verified 13-string instrument."
+        "basis": "Individual CC0 1.0 statement, first-person performance/recording description, creator profile and official biography provide a reasonable basis for the specified transformed single notes. No whole improvisation, distinctive phrase or original performance timing is reused. This is not a warranty of sole rights or verified thirteen-string instrumentation."
       },
       "thirdParty": {
         "composition": "Uploader describes own improvisation; no named third-party composition or commercial source is declared. Distinctive phrases will not be copied into the independent score.",
         "performance": "Uploader explicitly describes being the player. No other performer is credited for these sessions.",
         "recording": "Zoom H2n stereo MS, mid-October 2016, Kashiwa, Chiba, Japan, microphone under instrument, according to uploader. Sole recording authorship is not independently proved.",
-        "otherRights": "No third-party library or commercial track is declared. Audible speech, other music, privacy and contamination must be checked on any proposed cut.",
+        "otherRights": "No third-party library or commercial source is declared. Selected cuts were screened for a dominant single-note harmonic event after a quiet interval. Human verification of absence of speech, other music and third-party performance has not been performed; no concrete contrary sign was identified in the source description and automatic screen.",
         "intent": "Profile requests creative transformation; discourages commercial redistribution of unedited sounds and misleading collaboration credit. Treat these as ethical requests separately from CC0 conditions.",
-        "conclusion": "Rights provenance is sufficiently plausible for private candidate analysis. Adoption still requires cut-specific quality/third-party checks and truthful instrument identification."
+        "conclusion": "Adopted for the specified processed note cuts and independent-score/high-band attack transformation, with documented uncertainty. The creator requests creative remixing and no misleading collaboration credit; unedited whole-recording sample-pack distribution is outside this use. A later identified third-party or distinctive-phrase contamination requires removal of that cut and regeneration of dependent assets."
       },
       "sourceIdentity": {
         "sha256": "c59278af17194f544c1f2a364ffeadccad22a36c8af356b7215478266396c984",
@@ -180,7 +307,9 @@
         "steps": [
           "Public HTML used to resolve the explicit share-url high-quality MP3; no guessed original URL or authentication bypass.",
           "curl --fail --silent --location --connect-timeout 10 --max-time 40 --range 0-1999999 --output <private-stage.mp3> <official-preview-url>; timeout kept available bytes.",
-          "ffmpeg -hide_banner -loglevel error -y -i <private-stage.mp3> -acodec pcm_s16le <private-stage.wav>; decode exit 0."
+          "ffmpeg -hide_banner -loglevel error -y -i <private-stage.mp3> -acodec pcm_s16le <private-stage.wav>; decode exit 0.",
+          "python3 scripts/prepare-koto-samples.py --source-dir <reviewed-preview-decodes> --output-dir <output>; script verifies decoded-source SHA-256 before extraction.",
+          "Channel 0; per-cut DC removal; 0.5 ms sine-squared fade-in; 55-100 ms cosine-squared tail; one common bank gain; mono PCM16 quantization. Exact frame ranges and parameters are recorded in public/lake-audio/samples/bank.json."
         ],
         "decodedPreview": {
           "sampleRate": 48000,
@@ -190,30 +319,113 @@
           "sha256": "133eff375b227d0d2480bec544cbaa535994adf8cbeb5708235d8c73c5c47430",
           "bytes": 14266634
         },
-        "transformedNoteSelection": "not yet performed",
+        "transformedNoteSelection": {
+          "bankPath": "public/lake-audio/samples/bank.json",
+          "cutIds": [
+            "low-151"
+          ],
+          "processor": "scripts/prepare-koto-samples.py",
+          "processingReference": "docs/lake/koto-sample-processing.md",
+          "tools": {
+            "python": "3.14.5",
+            "numpy": "2.4.6"
+          }
+        },
         "tools": {
           "curl": "curl 8.7.1 (x86_64-apple-darwin26.0) libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.69.0",
           "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers"
+        },
+        "acquisitionReproduction": {
+          "status": "not-reproduced-bounded-public-CDN-retry-failed",
+          "recordedAt": "2026-11-27T12:16:14.365373+00:00",
+          "requestedRange": "bytes=0-1724415",
+          "transferExitCode": 28,
+          "receivedBytes": 188416,
+          "meaning": "Original acquired input is preserved. The strict-prefix download was not reproduced; no claim of byte-identical redownload. Hash-locked local processing is separate."
+        },
+        "processingReproduction": {
+          "status": "same-input-five-WAV-and-bank-byte-identical",
+          "reference": "docs/lake/koto-sample-processing.md",
+          "meaning": "Rebuild from the retained, SHA-256-locked decoded input; not a successful repeat download from the CDN."
         }
       },
-      "distribution": [],
-      "usage": [],
+      "distribution": [
+        {
+          "path": "public/lake-audio/samples/low-151.wav",
+          "sha256": "e4e40ee98121187039ecca725fd5b1192762bf2de85c7a8b264ac4ccfcc8b959",
+          "bytes": 81356,
+          "kind": "processed-mono-single-note",
+          "processing": {
+            "bankPath": "public/lake-audio/samples/bank.json",
+            "bankEntryId": "low-151",
+            "sourceDecodedSha256": "133eff375b227d0d2480bec544cbaa535994adf8cbeb5708235d8c73c5c47430",
+            "sourceStartFrame": 1478544,
+            "sourceEndFrameExclusive": 1519200
+          }
+        },
+        {
+          "path": "public/lake-audio/samples/bank.json",
+          "sha256": "0e7d90f2665021b985809c611d94c5dd4aed1c45e4341b4263cd16f287afc686",
+          "bytes": 21427,
+          "kind": "shared-processed-bank-metadata",
+          "sourceIds": [
+            "freesound-365215",
+            "freesound-365242"
+          ],
+          "processing": "Shared metadata maps all five processed note files to decoded source hashes, cut ranges, tool versions and processing parameters."
+        }
+      ],
+      "usage": [
+        {
+          "path": "src/coast/world/lake/kotoSampleModel.ts",
+          "purpose": "Renders the processed mono note bank with bounded pitch change, press/damping approximations, or a short high-band attack substitution into the physical model; does not reproduce the recorded improvisation as a phrase."
+        },
+        {
+          "path": "scripts/koto-analysis.mjs",
+          "purpose": "Loads and hash-checks the distributed bank, decodes mono notes, and renders sample/hybrid comparative study cases through the shared independently authored performance inputs."
+        },
+        {
+          "path": "scripts/prepare-koto-samples.py",
+          "purpose": "Offline extraction from retained SHA-256-locked preview decodes; writes the five processed note WAVs and bank metadata with exact source-frame correspondence. No network or original-WAV acquisition."
+        },
+        {
+          "path": "src/coast/world/lake/kotoPerformance.ts",
+          "purpose": "Defines the independently authored tuning, 39-second note events and shared comparison cases passed to sample/hybrid renderers; it supplies performance inputs and does not load recorded audio itself."
+        },
+        {
+          "path": "scripts/prepare-koto-performance.mjs",
+          "purpose": "Offline generation of the bundled 39-second independent score: verifies adopted CC0 sources and bank hashes, renders the hybrid at 96 kHz, resamples to 48 kHz, applies common gain and deterministic 24-bit TPDF dither; records sourceIds and input hashes in production.json."
+        },
+        {
+          "path": "src/coast/world/lake/lakeKotoAsset.ts",
+          "purpose": "Runtime lazy loading and decoding of the bundled generated koto-performance.wav derived from these processed note sources; no runtime request to the original recording service."
+        }
+      ],
       "quality": {
-        "status": "not_evaluated",
-        "evidence": "MP3 partial range decodes successfully to 48 kHz stereo PCM16; this verifies file usability only. Original page describes 96 kHz/24-bit WAV, which was not acquired.",
+        "status": "technical-screened-human-listening-pending",
+        "humanListening": "not-performed",
+        "instrumentStringCount": "unverified",
+        "evidence": "Distributed cuts match bank SHA-256, bytes, frames and 48 kHz mono PCM16. Their early harmonic-energy screen spans 0.994352-0.994352; this does not prove isolated performance, absence of speech or naturalness. Same-input rebuild is byte-identical as recorded in the processing document.",
+        "reference": "docs/lake/koto-sample-processing.md",
+        "measurementsReference": "docs/lake/koto-measurements.md",
         "limitations": [
-          "Lossy MP3 preview, not original WAV.",
-          "Improvisation rather than isolated controlled notes; overlapping decays, finger/pick differences and body-under microphone may limit useful cuts.",
-          "No human listening or final sample-selection quality acceptance recorded."
+          "Lossy incomplete official MP3 preview, not the original 96 kHz/24-bit WAV.",
+          "Thirteen-string instrument not verified; one uncontrolled recording/force condition, no measured velocity layers or round robins.",
+          "Several cuts have deliberately shortened tails; pure sample playback is limited to ±5 semitones including press, with A3/B-flat3 unavailable.",
+          "Human final-quality and third-party-contamination listening not performed.",
+          "Acquisition redownload not reproduced; preserved input and hash-locked processing are the reproducibility basis."
         ]
       },
       "uncertainties": [
         "Thirteen strings not verified.",
+        "Sole recording authorship not independently proved; first-person source and explicit CC0 are the reasonable provenance basis.",
         "No controlled velocity layers or round robins declared.",
         "Original WAV unavailable without account login; no credential use or bypass attempted.",
-        "Partial end must not be mistaken for a natural decay; cut boundaries and third-party sounds need assessment.",
-        "No external recording adopted into public assets at this snapshot."
-      ]
+        "Human listening for speech, other music, third-party performance and naturalness is pending; harmonic screening is not proof of their absence.",
+        "The adopted files are specified transformed notes only; original recording and distinctive improvisation phrases are not distributed.",
+        "Strict-prefix redownload failed within bounded attempts; same-input processing reproduction succeeded."
+      ],
+      "adoptionScope": "Rights and ethics accepted for the specified processed note files, public repository reproducibility, independent-score generation and technical sample/hybrid use. Human final-quality acceptance and thirteen-string identification remain pending."
     }
   ],
   "rejectedCandidates": [
@@ -258,6 +470,47 @@
       "url": "https://opengameart.org/content/lapsy-koto",
       "license": "CC0 display",
       "reason": "Musical piece and MIDI; no real recorded koto single-note provenance established."
+    }
+  ],
+  "managedAudioDirectories": [
+    "public/lake-audio"
+  ],
+  "generatedAssets": [
+    {
+      "path": "public/lake-audio/koto-performance.wav",
+      "sha256": "c73976efaa69ff309fdb66e765acad4e46c08770e850f0c3997ad78d909838c2",
+      "bytes": 5616044,
+      "generator": "scripts/prepare-koto-performance.mjs",
+      "sourceIds": [
+        "freesound-365215",
+        "freesound-365242"
+      ],
+      "qualityStatus": "technical-selection-human-listening-pending",
+      "evidence": "assets/lake-audio/production.json",
+      "processing": {
+        "method": "hybrid",
+        "internalSampleRate": 96000,
+        "sampleRate": 48000,
+        "channels": 1,
+        "pcmBits": 24,
+        "durationSeconds": 39,
+        "dither": {
+          "type": "TPDF",
+          "seed": 1802466415
+        },
+        "inputHashesReference": "assets/lake-audio/production.json#inputHashes",
+        "performanceInput": "src/coast/world/lake/kotoPerformance.ts",
+        "noteCount": 48,
+        "physicalFallbackNotes": 4
+      },
+      "runtimeUsage": "src/coast/world/lake/lakeKotoAsset.ts",
+      "limitations": [
+        "Provisional technical selection; final human listening acceptance pending.",
+        "Recorded instrument string count is unverified.",
+        "Original improvisation phrases, onset sequence and expressive timing are not reused; the 39-second performance is independently authored.",
+        "Four of 48 note events use physical fallback without recorded attack; this is not an all-sampled performance.",
+        "Source recording conditions, lossy-preview limitations and third-party-contamination listening uncertainty are inherited from the adopted note bank."
+      ]
     }
   ]
 }

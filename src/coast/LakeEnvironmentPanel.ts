@@ -1,40 +1,10 @@
 import type { ImmersiveMenuItem } from '../xr/ImmersiveMenu';
 import { lakeAngleControls, lakeToggleControls, type LakeSettings } from './world/lake/lakeSettings';
 import './lakeEnvironmentPanel.css';
+import { createLakeKotoTransport } from './lakeKotoTransport';
+export { createLakeKotoTransport, type LakeKotoControls } from './lakeKotoTransport';
 
 const label = '湖畔の環境設定';
-
-export interface LakeKotoControls {
-  readonly kotoPlaying: boolean;
-  setKotoPlaying(value: boolean): Promise<void>;
-}
-
-export function createLakeKotoTransport(audio: LakeKotoControls) {
-  const events = new EventTarget();
-  let pending = false;
-  let failed = false;
-  const notify = () => events.dispatchEvent(new Event('change'));
-  return {
-    get playing() { return audio.kotoPlaying; },
-    get pending() { return pending; },
-    get failed() { return failed; },
-    observe(listener: () => void) { events.addEventListener('change', listener); },
-    async toggle() {
-      if (pending) return;
-      pending = true;
-      failed = false;
-      notify();
-      try {
-        await audio.setKotoPlaying(!audio.kotoPlaying);
-      } catch {
-        failed = true;
-      } finally {
-        pending = false;
-        notify();
-      }
-    },
-  };
-}
 
 type LakeKotoTransport = ReturnType<typeof createLakeKotoTransport>;
 
@@ -135,7 +105,9 @@ export function createLakeEnvironmentPanel(settings: LakeSettings, onOpen: () =>
   function syncKoto(): void {
     if (!koto || !kotoButton) return;
     kotoButton.setAttribute('aria-pressed', String(koto.playing));
-    kotoButton.disabled = koto.pending;
+    kotoButton.disabled = false;
+    kotoButton.textContent = koto.pending ? '琴の準備を中止する' : '琴の演奏';
+    kotoButton.setAttribute('aria-busy', String(koto.pending));
     audioStatus.hidden = !koto.failed;
   }
 
@@ -200,11 +172,10 @@ export function createLakeEnvironmentXRItems(settings: LakeSettings,
     }));
     const kotoRows: ImmersiveMenuItem[] = koto ? [{
       label: () => {
-        if (koto.pending) return '琴を準備しています';
+        if (koto.pending) return '琴の準備を中止する';
         if (koto.failed) return '琴を再生する（再試行）';
         return koto.playing ? '琴を停止する' : '琴を再生する';
       },
-      enabled: () => !koto.pending,
       invoke: () => void koto.toggle(),
     }] : [];
     open(label, [

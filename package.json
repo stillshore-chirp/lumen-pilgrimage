@@ -19,10 +19,13 @@
     "test:atrium": "node --experimental-transform-types --test scripts/atrium-navigation.test.mjs scripts/atrium-audio.test.mjs scripts/atrium-facility.test.mjs",
     "test:atrium:browser": "node --test --test-concurrency=1 scripts/atrium-browser.test.mjs scripts/atrium-facility-browser.test.mjs",
     "capture:atrium:facility": "node scripts/atrium-facility-views.mjs",
-    "test:lake": "node --experimental-transform-types --test scripts/lake-navigation.test.mjs scripts/lake-audio.test.mjs scripts/lake-geometry.test.mjs scripts/lake-fish.test.mjs scripts/lake-vegetation.test.mjs",
+    "test:lake": "node --experimental-transform-types --test scripts/lake-navigation.test.mjs scripts/lake-audio.test.mjs scripts/lake-geometry.test.mjs scripts/lake-fish.test.mjs scripts/lake-vegetation.test.mjs && npm run test:koto",
     "test:lake:browser": "node --test --test-concurrency=1 scripts/lake-browser.test.mjs scripts/lake-sky-browser.test.mjs",
     "validate:harness": "node --test scripts/validate-harness.test.mjs && node scripts/validate-harness.mjs",
-    "validate:audio-samples": "node --test scripts/validate-audio-samples.test.mjs && node scripts/validate-audio-samples.mjs"
+    "validate:audio-samples": "node --test scripts/validate-audio-samples.test.mjs && node scripts/validate-audio-samples.mjs",
+    "test:koto": "node --experimental-transform-types --test scripts/koto-analysis.test.mjs scripts/koto-physical.test.mjs scripts/koto-sample.test.mjs scripts/koto-playback.test.mjs scripts/koto-transport.test.mjs scripts/koto-score.test.mjs scripts/koto-production.test.mjs",
+    "research:koto": "node --experimental-transform-types scripts/koto-analysis.mjs artifacts/koto-study public/lake-audio/samples/bank.json --production assets/lake-audio/production.json",
+    "prepare:koto": "node --experimental-transform-types scripts/prepare-koto-performance.mjs hybrid 96000"
   },
   "dependencies": {
     "three": "0.184.0"
