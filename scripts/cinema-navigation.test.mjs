@@ -76,6 +76,7 @@ test('finished cabinets, grille frames and fixings stay inside their shared coll
   const geometries = new Set();
   const materials = new Set();
   let maximumCabinetCornerGap = 0;
+  let maximumGrilleRecess = 0;
   let inspectedInstances = 0;
   for (const mesh of group.children) {
     const envelopes = mesh.userData.cinemaEquipmentEnvelopes;
@@ -107,6 +108,17 @@ test('finished cabinets, grille frames and fixings stay inside their shared coll
         assert.ok(hit);
         maximumCabinetCornerGap = Math.max(maximumCabinetCornerGap, hit.distance - .05);
       }
+      if (mesh.name === 'Recessed cinema speaker grilles') {
+        const direction = new Vector3(0, 0, 1).applyQuaternion(envelope.rotation);
+        const single = new Mesh(mesh.geometry, mesh.material);
+        single.matrixAutoUpdate = false;
+        single.matrix.copy(matrix);
+        single.updateMatrixWorld(true);
+        const ray = new Raycaster(envelope.center.clone().addScaledVector(direction, .1), direction.clone().negate(), 0, .2);
+        const hit = ray.intersectObject(single, false)[0];
+        assert.ok(hit);
+        maximumGrilleRecess = Math.max(maximumGrilleRecess, envelope.size.z / 2 - (.1 - hit.distance));
+      }
       inspectedInstances += 1;
     }
     mesh.dispose();
@@ -114,6 +126,7 @@ test('finished cabinets, grille frames and fixings stay inside their shared coll
   assert.ok(inspectedInstances > 48 * 7);
   assert.ok(maximumCabinetCornerGap <= CINEMA_SPEAKER_DETAIL.cabinetRadius * (Math.sqrt(3) - 1) + .00001);
   assert.ok(maximumCabinetCornerGap > .008);
+  assert.ok(Math.abs(maximumGrilleRecess - .017) < .00001);
   for (const geometry of geometries) geometry.dispose();
   for (const material of materials) material.dispose();
   group.clear();
