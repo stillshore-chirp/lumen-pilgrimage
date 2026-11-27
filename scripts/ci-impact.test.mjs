@@ -111,6 +111,16 @@ test('cross-world browser suites retain the scenes and interactions their real t
   }
 });
 
+test('residence shader preparation selects its projection XR consumer without unrelated browsers', async () => {
+  const shader = await planAffected({ root: repository,
+    changedPaths: ['src/coast/world/residence/residenceShaderPreparation.ts'] });
+  assert.deepEqual(shader.fallbackReasons, []);
+  assert.deepEqual(browser(shader), ['monitor-browser', 'residence-browser']);
+  const fish = await planAffected({ root: repository, changedPaths: ['src/coast/world/lake/lakeWildlifeFish.ts'] });
+  assert.ok(browser(fish).includes('lake-browser'));
+  assert.ok(!browser(fish).includes('monitor-browser'), 'A residence-only consumer does not acquire unrelated lake input');
+});
+
 test('literal dynamic imports and readFile/new URL dependencies propagate transitively', async t => {
   const root = await fixture(t, {
     'scripts/coast-controls.test.mjs': "const url = new URL('../src/coast/helper.ts', import.meta.url); await import(url.href);",
