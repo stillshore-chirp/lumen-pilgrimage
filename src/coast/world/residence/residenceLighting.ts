@@ -610,6 +610,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       daylight.shadow.needsUpdate = !night;
       refreshAllRooms();
       materials.glass.opacity = night ? 0.027 : 0.050;
+      materials.interiorGlass.opacity = materials.glass.opacity;
       materials.guard.opacity = night ? 0.061 : 0.090;
     },
     dispose() {

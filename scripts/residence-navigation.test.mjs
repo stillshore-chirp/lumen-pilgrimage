@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { after, test } from 'node:test';
-import { ArrayCamera, BoxGeometry, Group, InstancedBufferAttribute, InstancedBufferGeometry, Mesh,
+import { ArrayCamera, BoxGeometry, DirectionalLight, Group, InstancedBufferAttribute, InstancedBufferGeometry, Mesh,
   PerspectiveCamera, Raycaster, Scene, Vector3, Vector4 } from 'three';
 
 const src = new URL('../src/', import.meta.url).href;
@@ -22,6 +22,7 @@ const { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_T
 const { createResidenceMaterials } = await import('../src/coast/world/residence/residenceMaterials.ts');
 const { createResidenceFurniture } = await import('../src/coast/world/residence/residenceFurniture.ts');
 const { createResidenceShell } = await import('../src/coast/world/residence/residenceShell.ts');
+const { createResidenceReflections } = await import('../src/coast/world/residence/residenceReflections.ts');
 hooks.deregister();
 
 const materials = createResidenceMaterials();
@@ -306,6 +307,92 @@ test('the finished ceilings, recessed balcony soffit and door lintels bound aeri
   assert.equal(blocked(nav, 20.7, 13.58), false);
   assert.equal(blocked(navigation(false), 20.7, 13.58), true);
   assert.equal(blocked(nav, 22.79, 13.58), true);
+});
+
+test('interior glazing visible in captures never samples facade reflection targets', () => {
+  const shell = createResidenceShell(materials);
+  const reflections = createResidenceReflections(new Scene(), new Group(), shell.group, furniture.group, materials);
+  try {
+    let interiorPanes = 0;
+    furniture.group.traverse(object => {
+      if (!(object instanceof Mesh)) return;
+      assert.notEqual(object.material, materials.glass, 'Interior geometry must not use the recursive facade material');
+      if (object.material === materials.interiorGlass) interiorPanes++;
+    });
+    assert.equal(interiorPanes, 2, 'Both shower panes remain present in captures');
+    for (const property of ['opacity', 'roughness', 'ior', 'side', 'forceSinglePass']) {
+      assert.equal(materials.interiorGlass[property], materials.glass[property], property);
+    }
+    const shader = () => ({ uniforms: {}, vertexShader: '#include <common>\n#include <worldpos_vertex>',
+      fragmentShader: '#include <common>\n#include <opaque_fragment>' });
+    const facade = shader();
+    const interior = shader();
+    materials.glass.onBeforeCompile(facade);
+    materials.interiorGlass.onBeforeCompile(interior);
+    for (const sampler of ['windowSouthImage', 'windowEastImage', 'windowBedroomImage']) {
+      assert.ok(facade.uniforms[sampler], sampler);
+      assert.equal(interior.uniforms[sampler], undefined, sampler);
+    }
+  } finally {
+    reflections.dispose();
+    shell.dispose();
+  }
+});
+
+test('reflection capture waits for main-camera shadow textures and retries unchanged poses', () => {
+  const scene = new Scene();
+  const sunlight = new DirectionalLight();
+  sunlight.castShadow = true;
+  sunlight.shadow.autoUpdate = false;
+  sunlight.shadow.needsUpdate = false;
+  scene.add(sunlight);
+  const hidden = new Group();
+  hidden.visible = false;
+  const hiddenLight = new DirectionalLight();
+  hiddenLight.castShadow = true;
+  hidden.add(hiddenLight);
+  scene.add(hidden);
+  const otherLayer = new DirectionalLight();
+  otherLayer.castShadow = true;
+  otherLayer.layers.set(3);
+  scene.add(otherLayer);
+  const shell = createResidenceShell(materials);
+  const reflections = createResidenceReflections(scene, new Group(), shell.group, furniture.group, materials);
+  reflections.setQuality('high');
+  const camera = new PerspectiveCamera(60, 1, .05, 500);
+  camera.position.set(5.5, 1.65, -2);
+  const renderer = {
+    xr: { isPresenting: false },
+    shadowMap: { enabled: true, autoUpdate: false, needsUpdate: false },
+    getDrawingBufferSize() { throw new Error('capture reached'); },
+  };
+  try {
+    reflections.prepareRender(renderer, camera);
+    assert.equal(sunlight.shadow.needsUpdate, true, 'The main pass must allocate the missing shadow');
+    assert.equal(renderer.shadowMap.needsUpdate, true);
+    assert.equal(renderer.shadowMap.autoUpdate, false, 'The guard must preserve the update policy');
+    assert.equal(hiddenLight.shadow.needsUpdate, false);
+    assert.equal(otherLayer.shadow.needsUpdate, false);
+    sunlight.shadow.map = { dispose() {} };
+    assert.throws(() => reflections.prepareRender(renderer, camera), { message: 'capture reached' });
+    sunlight.shadow.map = null;
+    renderer.shadowMap.needsUpdate = false;
+    reflections.setQuality('light');
+    reflections.prepareRender(renderer, camera);
+    assert.equal(renderer.shadowMap.needsUpdate, true, 'A resized map must be prepared again');
+    reflections.setQuality('high');
+    renderer.shadowMap.enabled = false;
+    assert.throws(() => reflections.prepareRender(renderer, camera), { message: 'capture reached' },
+      'Disabled shadows must not cause an endless capture wait');
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.needsUpdate = false;
+    renderer.xr.isPresenting = true;
+    reflections.prepareRender(renderer, camera);
+    assert.equal(renderer.shadowMap.needsUpdate, false, 'XR keeps its reflection-off branch');
+  } finally {
+    reflections.dispose();
+    shell.dispose();
+  }
 });
 
 test('the living-room television has twice the 65-inch screen width and height', () => {

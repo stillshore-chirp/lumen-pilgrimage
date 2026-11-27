@@ -212,6 +212,27 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
       pendingRefreshes = 2;
       return;
     }
+    if (renderer.shadowMap.enabled) {
+      const missing: THREE.LightShadow[] = [];
+      scene.traverseVisible(object => {
+        if (!(object instanceof THREE.Light) || !object.castShadow || !object.layers.test(camera.layers)) return;
+        const shadow = (object as THREE.DirectionalLight | THREE.PointLight | THREE.SpotLight).shadow;
+        if (shadow && !shadow.map) missing.push(shadow);
+      });
+      if (missing.length) {
+        // Reflector disables shadow updates during its offscreen render. Let the
+        // main camera create typed shadow textures before any capture samples them.
+        for (const shadow of missing) shadow.needsUpdate = true;
+        renderer.shadowMap.needsUpdate = true;
+        for (const capture of captures) capture.visible.value = 0;
+        mirrorVisible.value = 0;
+        floorImage.value = null;
+        floorHasImage = false;
+        nearOcclusion.setActive(false);
+        pendingRefreshes = Math.max(pendingRefreshes, 2);
+        return;
+      }
+    }
     camera.updateMatrixWorld();
     camera.getWorldPosition(viewPoint);
     camera.getWorldQuaternion(rotation);
