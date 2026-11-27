@@ -61,6 +61,7 @@ interface XRState {
   readonly started: number;
   finalized: boolean;
   ending: boolean;
+  phase: 'initializing' | 'compatibility' | 'presenting';
   canvas?: HTMLCanvasElement;
   gl?: WebGLRenderingContext;
   timeout?: number;
@@ -117,21 +118,28 @@ function errors(gl: WebGLRenderingContext): string[] {
   }
   return result;
 }
+function configureContext(gl: WebGLRenderingContext): void {
+  if ('drawingBufferColorSpace' in gl) gl.drawingBufferColorSpace = 'srgb';
+  gl.disable(gl.DITHER);
+  gl.disable(gl.BLEND);
+  gl.disable(gl.DEPTH_TEST);
+  gl.colorMask(true, true, true, true);
+}
 function context(canvas: HTMLCanvasElement): WebGLRenderingContext {
   const gl = canvas.getContext('webgl', {
     alpha: false, antialias: false, depth: false, stencil: false,
     premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'low-power',
   });
   if (!gl) throw new DOMException('', 'NotSupportedError');
-  if ('drawingBufferColorSpace' in gl) gl.drawingBufferColorSpace = 'srgb';
-  gl.disable(gl.DITHER);
-  gl.disable(gl.BLEND);
-  gl.disable(gl.DEPTH_TEST);
-  gl.colorMask(true, true, true, true);
+  configureContext(gl);
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault();
     if (current?.gl === gl) {
-      current.report.reason = 'WebGL context lost';
+      // makeXRCompatible may normally recreate the context on a different GPU.
+      // Its promise owns restoration/failure; the session's timer still owns timeout.
+      if (current.phase === 'compatibility') return;
+      current.report.status = 'unavailable';
+      current.report.reason = 'WebGL context lost outside compatibility';
       void endXR('context-lost');
     }
   });
@@ -382,7 +390,7 @@ async function startXR(): Promise<void> {
     // Keep requestSession in the click activation, before any awaited work.
     session = await system.requestSession('immersive-vr', { requiredFeatures: [] });
     window.clearTimeout(requestTimer);
-    const state: XRState = { session, report, finalized: false, ending: false, started: performance.now() };
+    const state: XRState = { session, report, finalized: false, ending: false, phase: 'initializing', started: performance.now() };
     current = state;
     if (requesting === request) requesting = null;
     session.addEventListener('end', () => finalize(state), { once: true });
@@ -397,18 +405,28 @@ async function startXR(): Promise<void> {
     canvas.hidden = true; document.body.append(canvas); state.canvas = canvas;
     const gl = context(canvas); state.gl = gl;
     if (typeof gl.makeXRCompatible !== 'function') throw new DOMException('', 'NotSupportedError');
+    state.phase = 'compatibility';
     await gl.makeXRCompatible();
-    if (state.finalized || state.ending) return;
+    if (state.finalized || state.ending || report.endRequestedAt) {
+      // A cancelled initialization can restore after finalize already released its canvas.
+      if (state.finalized) gl.getExtension('WEBGL_lose_context')?.loseContext();
+      return;
+    }
+    if (gl.isContextLost()) throw new DOMException('', 'InvalidStateError');
+    // GPU migration resets GL state; establish the measurement conditions after restoration.
+    configureContext(gl);
+    state.phase = 'initializing';
     const layer = new XRWebGLLayer(session, gl, { alpha: false, antialias: false, depth: false,
       stencil: false, ignoreDepthValues: true, framebufferScaleFactor: 0.35 });
     if (!layer.framebuffer) throw new DOMException('', 'OperationError');
     session.updateRenderState({ baseLayer: layer });
     const reference = await session.requestReferenceSpace('viewer');
-    if (state.finalized || state.ending) return;
+    if (state.finalized || state.ending || report.endRequestedAt) return;
     report.layer = { type: 'XRWebGLLayer', requestedFramebufferScaleFactor: 0.35,
       width: layer.framebufferWidth, height: layer.framebufferHeight, antialias: layer.antialias,
       requestedAlpha: false, referenceSpace: 'viewer', projectionLayerComparison: 'not-performed' };
     report.frameCount = 0;
+    state.phase = 'presenting';
     element('session-status').textContent = `VR表示中。${duration}秒で終了を要求します。選択操作でも終了できます。`;
     const frame: XRFrameRequestCallback = (_time, xrFrame) => {
       if (state.finalized || state.ending || current !== state) return;

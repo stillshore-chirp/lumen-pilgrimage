@@ -10,7 +10,28 @@ function installXR() {
   window.testXR = fixture;
   const xrContexts = new WeakSet();
   const realRead = WebGLRenderingContext.prototype.readPixels;
-  WebGLRenderingContext.prototype.makeXRCompatible = async function () {};
+  WebGLRenderingContext.prototype.makeXRCompatible = async function () {
+    fixture.context = this;
+    if (!fixture.compatibilityMode) return;
+    const mode = fixture.compatibilityMode;
+    const extension = this.getExtension('WEBGL_lose_context');
+    if (!extension) throw new Error('Real WebGL context loss extension is required');
+    return new Promise((resolve, reject) => {
+      this.canvas.addEventListener('webglcontextlost', () => {
+        fixture.compatibilityLost = (fixture.compatibilityLost ?? 0) + 1;
+        if (mode === 'reject') { reject(new DOMException('', 'InvalidStateError')); return; }
+        if (mode === 'resolve-lost') { resolve(); return; }
+        if (mode === 'hang') return;
+        fixture.restoreCompatibility = () => extension.restoreContext();
+        if (mode === 'restore') setTimeout(fixture.restoreCompatibility, 0);
+      }, { once: true });
+      this.canvas.addEventListener('webglcontextrestored', () => {
+        fixture.compatibilityRestored = (fixture.compatibilityRestored ?? 0) + 1;
+        resolve();
+      }, { once: true });
+      extension.loseContext();
+    });
+  };
   WebGLRenderingContext.prototype.readPixels = function (...args) {
     if (xrContexts.has(this)) {
       if (!fixture.inFrame) { fixture.outsideFrameReads++; throw new DOMException('', 'InvalidStateError'); }
@@ -45,6 +66,9 @@ function installXR() {
   window.XRWebGLLayer = class {
     constructor(session, gl, init) {
       fixture.layerInit = init; xrContexts.add(gl);
+      fixture.stateAtLayer = { dither: gl.isEnabled(gl.DITHER), blend: gl.isEnabled(gl.BLEND),
+        depth: gl.isEnabled(gl.DEPTH_TEST), colorMask: [...gl.getParameter(gl.COLOR_WRITEMASK)],
+        contextLost: gl.isContextLost() };
       this.framebufferWidth = 640; this.framebufferHeight = 320; this.antialias = false;
       this.framebuffer = gl.createFramebuffer();
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
@@ -160,6 +184,61 @@ export async function runXRColorProbeBrowserTests(t, { browser, url, screenshotD
     await page.click('#stop-xr'); await waitEnded(page);
     assert.equal((await latest(page)).views.length, 2);
     if (screenshotDirectory) await writeFile(join(screenshotDirectory, 'xr-color-probe-simulated-stereo.json'), JSON.stringify(await latest(page), null, 2));
+  });
+  await test('compatibility GPU migration restores real GL state before readback', async page => {
+    await page.evaluate(() => { testXR.compatibilityMode = 'restore'; });
+    await begin(page); await waitStatus(page, 'obtained');
+    const state = await page.evaluate(() => ({ lost: testXR.compatibilityLost, restored: testXR.compatibilityRestored,
+      ends: testXR.ends, state: testXR.stateAtLayer }));
+    assert.deepEqual(state, { lost: 1, restored: 1, ends: 0,
+      state: { dither: false, blend: false, depth: false, colorMask: [true, true, true, true], contextLost: false } });
+    assert.ok((await latest(page)).views.every(view => view.patches.length === 13 && view.patches.every(patch =>
+      patch.status === 'obtained' && patch.maxAbsoluteDifferenceFromReference <= 1)));
+    await page.click('#stop-xr'); await waitEnded(page);
+  });
+  await test('compatibility rejection ends without constructing a layer', async page => {
+    await page.evaluate(() => { testXR.compatibilityMode = 'reject'; });
+    await begin(page); await waitEnded(page);
+    const report = await latest(page);
+    assert.equal(report.status, 'unavailable'); assert.deepEqual(report.views, []);
+    assert.match(report.reason, /VR startup: InvalidStateError/);
+    assert.equal(await page.evaluate(() => testXR.layerInit === undefined && testXR.ends === 1), true);
+  });
+  await test('compatibility resolving with a still-lost context remains unavailable', async page => {
+    await page.evaluate(() => { testXR.compatibilityMode = 'resolve-lost'; });
+    await begin(page); await waitEnded(page);
+    assert.equal((await latest(page)).status, 'unavailable');
+    assert.match((await latest(page)).reason, /InvalidStateError/);
+    assert.equal(await page.evaluate(() => testXR.layerInit === undefined), true);
+  });
+  await test('unrestored compatibility still ends on the session timer', async page => {
+    await page.evaluate(() => { testXR.compatibilityMode = 'hang'; });
+    await begin(page); await waitEnded(page);
+    const report = await latest(page);
+    assert.equal(report.status, 'unavailable'); assert.deepEqual(report.views, []);
+    assert.equal(report.endReason, 'duration-timer');
+    assert.equal(await page.evaluate(() => testXR.layerInit === undefined && testXR.ends === 1), true);
+  });
+  await test('cancelled compatibility ignores a late real GL restoration', async page => {
+    await page.evaluate(() => { testXR.compatibilityMode = 'hold'; });
+    await begin(page);
+    await page.waitForFunction(() => testXR.compatibilityLost === 1);
+    await page.click('#stop-xr'); await waitEnded(page);
+    await page.evaluate(() => testXR.restoreCompatibility());
+    await page.waitForFunction(() => testXR.compatibilityRestored === 1);
+    const report = await latest(page);
+    assert.equal(report.status, 'unavailable'); assert.equal(report.endReason, 'page-button');
+    assert.deepEqual(report.views, []);
+    assert.equal(await page.evaluate(() => testXR.layerInit === undefined && testXR.ends === 1), true);
+  });
+  await test('unexpected real context loss after readback ends as unavailable', async page => {
+    await begin(page); await waitStatus(page, 'obtained');
+    await page.evaluate(() => testXR.context.getExtension('WEBGL_lose_context').loseContext());
+    await waitEnded(page);
+    const report = await latest(page);
+    assert.equal(report.status, 'unavailable'); assert.equal(report.endReason, 'context-lost');
+    assert.match(report.reason, /outside compatibility/);
+    assert.match(await page.locator('#result-summary').textContent(), /unavailable/);
   });
   await test('permission rejection, retry, and controller selection end', async page => {
     await page.evaluate(() => { testXR.denyNext = true; }); await begin(page); await waitStatus(page, 'unavailable');

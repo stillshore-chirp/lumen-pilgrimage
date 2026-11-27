@@ -310,6 +310,8 @@ RGB8は光量ではなくバッファへ入れる符号値です。17/23/27な�
 
 各パッチ中央3×3画素の全36byte、入力RGB8、clearの値、8bit参照RGBA、最大絶対差、patch/sample矩形、viewportと左下原点をJSONに保存します。ディザー・ブレンド・depthを無効にし、alphaは1で描き、AAは要求しません。通常画面はdefault framebuffer、VRは専用WebGL1 contextの従来型 `XRWebGLLayer` です。XR layerはalpha=false、倍率0.35を要求しますが、実装のclamp・丸めを含む実寸を記録し、要求倍率から推定しません。各フレームで見本を再描画し、readPixelsは最初の有効な姿勢で一度だけ行います。
 
+XR互換化の `makeXRCompatible()` は正常なGPU移行としてcontext lossと復元を伴う場合があります。互換化中だけはそのPromiseの完了を待ち、復元後に色空間・ディザー・ブレンド・depth・書込みmaskを再設定します。未復元・拒否・取消・期限切れは測定を開始せず、表示開始後の予期しないcontext lossはレポートを未取得として終了要求します。
+
 opaque XR framebufferへのbind・clear・readはXR animation callback内に限定し、attachmentの検査・変更は行いません。framebufferの完全性、channel bit数、layer種別・実寸、context属性を記録します。対応するcontextには `drawingBufferColorSpace='srgb'` を指定し報告値も保存しますが、これはXR attachmentやcompositor出力を実測した値ではありません。attachmentのcolor encodingは取得不可の理由を残します。projection layerの検証には一般化しません。
 
 GL error、context loss、無効なframebuffer、pose/view/viewportの欠落、領域不足、例外、書き換わらない読取り先は、理由と未取得・`null` を保持します。白の確認用パッチを含む全ゼロ読取りは値を保存しても判定不能とし、参照比較を実施しません。上位レポートも未取得を引き継ぎ、空配列・0初期値・未実施を一致扱いにしません。「取得済み」はGL読取りの成立を示し、表示品質の合格ではありません。
@@ -319,10 +321,11 @@ GL error、context loss、無効なframebuffer、pose/view/viewportの欠落、�
 | 一次資料・参照箇所 | 実装へ反映した条件 |
 | --- | --- |
 | [WebXR Device API §11.2](https://immersive-web.github.io/webxr/#xrwebgllayer-interface)、opaque framebuffer | XR callback内だけでアクセスし、attachmentは照会・変更しません。compositorがRGB/RGBA backingをsRGB符号値として扱う条件に合わせ、二重の符号変換を加えません。 |
+| [WebXR Device API §11.3](https://immersive-web.github.io/webxr/#webgl-context-compatibility) | 互換化に伴うcontextの再作成と通常の描画失敗を分け、Promise完了とGL復元を確認して状態を設定し直してからlayerを作ります。 |
 | [WebXR Device API §4.1](https://immersive-web.github.io/webxr/#xrsession-interface)、[§6.2](https://immersive-web.github.io/webxr/#xrreferencespace-interface)、[§13.5.1](https://immersive-web.github.io/webxr/#immersiveness) | 開始は利用者操作から行い、viewerだけを要求します。終了要求と終了確認を分け、途中終了でも測定結果を残します。 |
 | [WebGL 1.0 §5.14.11–12](https://registry.khronos.org/webgl/specs/latest/1.0/) | scissor/clearで既知値を描き、その呼出し内またはXR callback内で直近の描画をRGBA/UNSIGNED_BYTEへ読みます。framebuffer状態・GL errorと実際の値を記録します。 |
 
-ビルド後の `npm run test:monitor:browser` 内で、[専用helper](../scripts/xr-color-probe-browser.mjs)の11 subtestを実行します。通常画面の実WebGL読取りとJSON保存、実WebGL texture framebufferを使う模擬XRの左右13パッチ、開始時activation、許可拒否・再試行・選択操作による終了、読取り拒否、全ゼロ、タイマー終了、初期化待機中の終了、pose欠落、終了拒否・再試行、遅延許可後の取消、狭幅表示と外部通信なしを確認します。模擬XRはアプリのlifecycleとGL描画の検査で、実機opaque framebufferやcompositorの実証ではありません。`COAST_SCREENSHOTS` を指定すると通常画面・狭幅の画像、通常/模擬両眼のJSON、HTML/TSのhash付き結果を保存します。helperのliteral `new URL` / `readFile` からHTMLとTSのCI入力閉包を追跡します。
+ビルド後の `npm run test:monitor:browser` 内で、[専用helper](../scripts/xr-color-probe-browser.mjs)の17 subtestを実行します。通常画面の実WebGL読取りとJSON保存、実WebGL texture framebufferを使う模擬XRの左右13パッチ、開始時activation、許可拒否・再試行・選択操作による終了、読取り拒否、全ゼロ、タイマー終了、初期化待機中の終了、pose欠落、終了拒否・再試行、遅延許可後の取消、狭幅表示と外部通信なしを確認します。追加の互換化ケースは実WebGLの `WEBGL_lose_context` でloss/restoreを発生させ、復元後の状態と読取り、拒否、未復元のままの完了、復元待ちの期限切れ、取消後の遅延復元、開始後の予期しないlossを確認します。GPUアダプターの実切替そのものは模擬しています。模擬XRはアプリのlifecycleとGL描画の検査で、実機opaque framebufferやcompositorの実証ではありません。`COAST_SCREENSHOTS` を指定すると通常画面・狭幅の画像、通常/模擬両眼のJSON、HTML/TSのhash付き結果を保存します。helperのliteral `new URL` / `readFile` からHTMLとTSのCI入力閉包を追跡します。
 
 住戸の夜間画質は、[住戸browser試験](../scripts/residence-browser.test.mjs)で同じ視点の木目・スピーカーの輪郭・消灯画面・窓外の建物を比較します。夜間の間接光と空反射のRGB係数は制作上の調整で、色温度や物理輝度の校正値ではありません。XRの軽量/高品質はThree.jsの[setFoveation](https://threejs.org/docs/pages/WebXRManager.html#setFoveation)へ0.50/0.25を指定し、base/projection両方式の設定値、同一セッションでの移動、通常画面への復帰と描画品質の保持を模擬入力で確認します。準備待機・失敗中の品質操作は、PR215で導入した開始待機・明示再試行・終了の状態を維持します。画素測定や模擬layerへの設定だけで機器上の効果を保証しません。
 
