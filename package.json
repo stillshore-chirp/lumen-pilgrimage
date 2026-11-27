@@ -25,7 +25,9 @@
     "validate:audio-samples": "node --test scripts/validate-audio-samples.test.mjs && node scripts/validate-audio-samples.mjs",
     "test:koto": "node --experimental-transform-types --test scripts/koto-analysis.test.mjs scripts/koto-physical.test.mjs scripts/koto-sample.test.mjs scripts/koto-playback.test.mjs scripts/koto-transport.test.mjs scripts/koto-score.test.mjs scripts/koto-production.test.mjs",
     "research:koto": "node --experimental-transform-types scripts/koto-analysis.mjs artifacts/koto-study public/lake-audio/samples/bank.json --production assets/lake-audio/production.json",
-    "prepare:koto": "node --experimental-transform-types scripts/prepare-koto-performance.mjs hybrid 96000"
+    "prepare:koto": "node --experimental-transform-types scripts/prepare-koto-performance.mjs hybrid 96000",
+    "audition:koto": "vite --host 127.0.0.1 --port 4191 --strictPort",
+    "test:koto:browser": "node --test scripts/koto-audition-browser.test.mjs"
   },
   "dependencies": {
     "three": "0.184.0"
