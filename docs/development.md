@@ -13,6 +13,8 @@ npm run dev
 
 Vite が表示した URL を Chrome で開きます。入り江から始まり、丘陵展望台、住戸、映画館はファストトラベルか `?world=overlook`、`?world=residence`、`?world=cinema` で直接開けます。操作の入口は[README](../README.md#起動と操作)、ビルド後のプレビューは[運用ガイド](operations.md)にあります。
 
+材質・照明と分離した色出力の切り分けには、独立した `/tools/xr-color-probe.html` を開きます。通常ゲームから読み込まず、追加依存もありません。開発サーバーと配布ビルドの両方で同じ入口を使えます。[XR色診断の手順と取得範囲](verification.md#xr色診断)を参照してください。
+
 ## 技術と検証ツール
 
 バージョンは [`package-lock.json`](../package-lock.json) の解決値です。[`package.json`](../package.json) は npm スクリプトと依存宣言の正本です。
@@ -46,6 +48,7 @@ Vite が表示した URL を Chrome で開きます。入り江から始まり�
 | 仮想モニターのセッション確立 | [`virtual-monitor-signaling.mjs`](../server/virtual-monitor-signaling.mjs) と [`vite.config.mjs`](../vite.config.mjs) |
 | 配布時に読む画像・音声・地理データ | `public/**`。制作・検証の案内は[素材ガイド](assets.md)、出典と再配布条件は各 `ATTRIBUTION.md` が正本です。 |
 | 自動試験 | [`scripts/`](../scripts/) の `*.test.mjs` と [`package.json`](../package.json) のスクリプト |
+| 独立したXR色診断 | [`tools/xr-color-probe.html`](../tools/xr-color-probe.html)、[`src/tools/XRColorProbe.ts`](../src/tools/XRColorProbe.ts)。[`vite.config.mjs`](../vite.config.mjs)の独立HTML entryとしてビルドし、[`scripts/xr-color-probe-browser.mjs`](../scripts/xr-color-probe-browser.mjs)を既存monitor browser gateから実行します。 |
 
 起動と責務のつながりは[設計](architecture.md)、操作と利用者向けの設定は[探索ガイド](exploration.md)にあります。編集前に[文書の責務と更新基準](documentation-structure.md)で対象の正本を選び、仕様・操作・素材に影響する場合は対応する文書も更新してください。
 

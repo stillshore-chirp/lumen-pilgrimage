@@ -5,6 +5,7 @@ import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
 import { preview } from 'vite';
 import { installSimulatedXR } from './simulated-xr.mjs';
+import { runXRColorProbeBrowserTests } from './xr-color-probe-browser.mjs';
 import { CINEMA_DESTINATIONS, cinemaGroundHeight } from '../src/coast/world/cinema/cinemaLayout.ts';
 
 const timeout = 90_000;
@@ -31,6 +32,10 @@ after(async () => {
   } finally {
     await server?.close();
   }
+});
+
+test('the independent XR color probe preserves measured and unavailable results', { timeout }, async t => {
+  await runXRColorProbeBrowserTests(t, { browser, url, screenshotDirectory });
 });
 
 function installSyntheticCapture() {
@@ -1523,6 +1528,75 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
   }
 });
 
+test('XR quality adjusts both layer types and survives travel and desktop return', { timeout }, async () => {
+  for (const layer of ['projection', 'base']) {
+    const page = await newPage();
+    try {
+      await page.addInitScript(installSimulatedXR, layer);
+      await page.goto(new URL('?world=residence&place=living-theater&time=night', url).href);
+      await button(page, 'VRを開始').click();
+      await page.waitForFunction(() => window.xrFixture.eyePoses[320] && window.xrFixture.xrDraws > 0);
+      const foveation = () => page.evaluate(() => ({
+        value: window.xrFixture.layer.fixedFoveation, scale: window.xrFixture.scaleFactor,
+      }));
+      assert.deepEqual(await foveation(), { value: .5, scale: 1 }, layer);
+      const change = input => page.evaluate(value => window.xrFixture.mutate(value), input);
+      await change({ side: 'left', button: 4, pressed: true });
+      await change({ side: 'left', button: 4, pressed: false });
+      const next = async expected => {
+        await change({ side: 'right', axes: [0, 1] });
+        await page.waitForFunction(label => window.xrFixture.selection?.startsWith(label), expected);
+        await change({ side: 'right', axes: [0, 0] });
+      };
+      const seek = async expected => {
+        // Drive the real menu with controller input; world-specific items may precede the target.
+        for (let step = 0; step < 12; step++) {
+          if (await page.evaluate(label => window.xrFixture.selection?.startsWith(label), expected)) return;
+          await change({ side: 'right', axes: [0, 1] });
+          await change({ side: 'right', axes: [0, 0] });
+        }
+        assert.fail(`XR menu item was not reached: ${expected}`);
+      };
+      await seek('設定');
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.menuTitle === '設定');
+      await seek('描画品質');
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.menuTitle === '描画品質'
+        && window.xrFixture.selection === '軽量（選択中）　周辺の描画負荷を抑える');
+      await next('高品質');
+      await change({ select: true });
+      await page.waitForFunction(() => window.xrFixture.selection === '高品質（選択中）　周辺の細部を保つ');
+      assert.deepEqual(await foveation(), { value: .25, scale: 1 }, layer);
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      if (layer === 'projection') {
+        for (let presses = 0; presses < 2; presses++) {
+          await change({ side: 'left', button: 4, pressed: true });
+          await change({ side: 'left', button: 4, pressed: false });
+        }
+        await page.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル'
+          && window.xrFixture.selection === '入り江と山道');
+        await change({ select: true });
+        await page.waitForFunction(() => window.xrFixture.menuTitle === '入り江と山道');
+        await change({ select: true });
+        await page.waitForURL(address => address.searchParams.get('world') === 'coast');
+        assert.deepEqual(await foveation(), { value: .25, scale: 1 }, 'travel preserves the projection layer quality');
+        assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+        assert.equal(await page.evaluate(() => window.xrFixture.requests), 1, 'travel continues the current session');
+      }
+      const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
+      await button(page.locator('.coast-xr-entry'), 'VRを終了').click();
+      await page.waitForFunction(draws => window.xrFixture.ends === 1 && window.xrFixture.desktopDraws > draws, desktopDraws);
+      await page.waitForFunction(width => document.querySelector('canvas.coast-view').width === width, viewport.width);
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      await button(page, '軽量').click();
+      await page.waitForFunction(width => document.querySelector('canvas.coast-view').width === width, Math.floor(viewport.width * .8));
+    } finally {
+      await page.close();
+    }
+  }
+});
+
 function observeShaderPreparation(supportsParallel) {
   const completion = 0x91b1;
   const probe = window.shaderPreparation = { allow: false, polls: 0, links: 0, firstUses: 0, throwCompletion: false };
@@ -1567,6 +1641,9 @@ test('the residence prepares the first interior view before starting projection 
       assert.equal(await entry.isDisabled(), true);
       assert.equal(await page.locator('#coast-xr-status').textContent(), 'VRの描画を準備しています。');
       assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+      await button(page, '高品質').click();
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      assert.equal(await entry.isDisabled(), true, 'Quality changes preserve the preparation gate');
 
       await page.evaluate(() => { window.shaderPreparation.allow = true; });
       await entry.click();
@@ -1655,6 +1732,10 @@ test('residence shader timeout and completion errors require preparation retry b
       await button(page, '描画準備をやり直す').waitFor();
       assert.match(await page.locator('#coast-xr-status').textContent(), /描画を準備できませんでした/);
       assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+      await button(page, '高品質').click();
+      assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+      assert.equal(await button(page, '描画準備をやり直す').isEnabled(), true,
+        'Quality remains usable without clearing the failed preparation state');
       await page.evaluate(() => {
         window.shaderPreparation.allow = true;
         window.shaderPreparation.throwCompletion = false;

@@ -169,6 +169,9 @@ const towersVertex = /* glsl */`
     float roof = max(normal.y, 0.0);
     vec3 daylight = vec3(0.57, 0.65, 0.75) + sun * vec3(0.97, 0.86, 0.69) + roof * 0.19;
     vec3 nightlight = vec3(0.028, 0.036, 0.047) + roof * 0.027;
+    #ifdef NEAR_CITY_NIGHT_VIEW
+      nightlight += vec3(0.026, 0.035, 0.048);
+    #endif
     vCityColor = color * mix(daylight, nightlight, uNight);
     vFacade = cityFacade;
     vLightSeed = cityLightSeed;
@@ -316,7 +319,11 @@ const blocksVertex = /* glsl */`
     float roof = smoothstep(0.18, 0.77, n.y);
     vec3 day = cityColor * (vec3(0.53, 0.62, 0.73) + facing * vec3(0.86, 0.78, 0.65) + roof * 0.10);
     day *= mix(0.54, 1.0, smoothstep(0.0, 0.46, position.y + roof * 0.2));
-    vec3 dark = cityColor * (vec3(0.015, 0.020, 0.028) + roof * 0.016) + vec3(0.001, 0.0016, 0.0025);
+    vec3 nightSky = vec3(0.015, 0.020, 0.028) + roof * 0.016;
+    #ifdef NEAR_CITY_NIGHT_VIEW
+      nightSky += vec3(0.021, 0.027, 0.038);
+    #endif
+    vec3 dark = cityColor * nightSky + vec3(0.001, 0.0016, 0.0025);
     vCityColor = mix(day, dark, uNight);
     float across = abs(localNormal.x) > 0.5 ? p.z : p.x;
     vBlockFace = vec4(across * cityWindowScale + cityVariant * 81.0, p.y * 0.254,

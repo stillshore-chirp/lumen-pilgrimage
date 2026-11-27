@@ -292,6 +292,49 @@ LAKE_SCREENSHOTS=/tmp/lake-window-review COAST_CHROME_CHANNEL=chromium \
 
 同じ構図の画像を並べ、正面で岩の環と両岸の収まりを確認します。左右の `approach`、`opening`、`oblique` は順に見比べ、岸が開口から現れる位置、岸と水の接点、岩壁の根元、遠い尾根へのつながりを目視します。視界の変化の滑らかさは、実際に同経路を歩いて確認します。
 
+## XR色診断
+
+`/tools/xr-color-probe.html` は材質・照明・テクスチャ・シェーダー・トーンマッピングを使わず、既知のRGB符号値を描画してアプリのGLバッファから読み戻す独立ページです。[HTML](../tools/xr-color-probe.html)と[TypeScript](../src/tools/XRColorProbe.ts)を[Viteの独立entry](../vite.config.mjs)としてビルドします。通常ゲームの読み込み・描画品質・設定には接続しません。画像・音声・外部通信・追加ライブラリはありません。
+
+### 実行と結果の保存
+
+1. `npm run dev` が表示するURLの `/tools/xr-color-probe.html` を開きます。配布ビルドは `npm run build` 後、`npm exec -- vite preview` の同じパスを使います。WebXRは信頼済みHTTPSまたはlocalhostで利用し、機器へ接続する手順は[別端末とVR](#別端末とvr)に従います。
+2. 「通常画面を測定」で通常canvasの13パッチを取得します。ページを開いた直後にも1回取得します。11段階の灰色（0、4、8、12、17、24、32、48、64、128、255）と暗色17/23/27、32/16/8を、各viewportの左上から4列で並べます。未使用部分は96/96/96です。
+3. VR利用時は「VR対応を再確認」を選び、表示時間5・10・15秒を指定して「VRの色見本を表示」を押します。この操作から直接セッションを要求し、各眼へ同じ配列を表示します。床や境界、手、カメラ、マイクは要求せず、`viewer` reference spaceだけを使います。
+4. コントローラーの選択操作、ページの終了ボタン、Escape、本体の終了操作で終了できます。設定した時間にはタイマーとXR frame内の期限から終了を要求します。初期化のPromise待機中もタイマーは動きます。開始要求の取消または20秒の応答期限後に許可されたセッションも終了を要求します。終了拒否や3秒以内に終了を確認できない場合は、完了扱いにせず再試行と本体の操作を案内します。ページはブラウザー・OSの停止を強制解除できません。
+5. 終了後の表と詳細JSONを確認し、「結果をJSON保存」を押します。通常とVRを別レポートで最新10回までページ内メモリーに保持します。再読込みや閉じる前に保存してください。
+
+### 入力・参照値・実測値の区別
+
+RGB8は光量ではなくバッファへ入れる符号値です。17/23/27なら `clearColor(17/255, 23/255, 27/255, 1)` とscissor付きclearを使います。8bit正規化RGB/RGBA格納を仮定したRGBA/UNSIGNED_BYTEの参照値は17/23/27/255ですが、実測結果とは別欄に置きます。追加の線形→sRGB変換は行いません。格納精度や丸めによる差を保存し、最大差1コード以内かを参考比較します。物理輝度や知覚品質の合否へ換算しません。
+
+各パッチ中央3×3画素の全36byte、入力RGB8、clearの値、8bit参照RGBA、最大絶対差、patch/sample矩形、viewportと左下原点をJSONに保存します。ディザー・ブレンド・depthを無効にし、alphaは1で描き、AAは要求しません。通常画面はdefault framebuffer、VRは専用WebGL1 contextの従来型 `XRWebGLLayer` です。XR layerはalpha=false、倍率0.35を要求しますが、実装のclamp・丸めを含む実寸を記録し、要求倍率から推定しません。各フレームで見本を再描画し、readPixelsは最初の有効な姿勢で一度だけ行います。
+
+XR互換化の `makeXRCompatible()` は正常なGPU移行としてcontext lossと復元を伴う場合があります。互換化中だけはそのPromiseの完了を待ち、復元後に色空間・ディザー・ブレンド・depth・書込みmaskを再設定します。未復元・拒否・取消・期限切れは測定を開始せず、表示開始後の予期しないcontext lossはレポートを未取得として終了要求します。
+
+opaque XR framebufferへのbind・clear・readはXR animation callback内に限定し、attachmentの検査・変更は行いません。framebufferの完全性、channel bit数、layer種別・実寸、context属性を記録します。対応するcontextには `drawingBufferColorSpace='srgb'` を指定し報告値も保存しますが、これはXR attachmentやcompositor出力を実測した値ではありません。attachmentのcolor encodingは取得不可の理由を残します。projection layerの検証には一般化しません。
+
+GL error、context loss、無効なframebuffer、pose/view/viewportの欠落、領域不足、例外、書き換わらない読取り先は、理由と未取得・`null` を保持します。白の確認用パッチを含む全ゼロ読取りは値を保存しても判定不能とし、参照比較を実施しません。上位レポートも未取得を引き継ぎ、空配列・0初期値・未実施を一致扱いにしません。「取得済み」はGL読取りの成立を示し、表示品質の合格ではありません。
+
+### 原典と開発側の検証
+
+| 一次資料・参照箇所 | 実装へ反映した条件 |
+| --- | --- |
+| [WebXR Device API §11.2](https://immersive-web.github.io/webxr/#xrwebgllayer-interface)、opaque framebuffer | XR callback内だけでアクセスし、attachmentは照会・変更しません。compositorがRGB/RGBA backingをsRGB符号値として扱う条件に合わせ、二重の符号変換を加えません。 |
+| [WebXR Device API §11.3](https://immersive-web.github.io/webxr/#webgl-context-compatibility) | 互換化に伴うcontextの再作成と通常の描画失敗を分け、Promise完了とGL復元を確認して状態を設定し直してからlayerを作ります。 |
+| [WebXR Device API §4.1](https://immersive-web.github.io/webxr/#xrsession-interface)、[§6.2](https://immersive-web.github.io/webxr/#xrreferencespace-interface)、[§13.5.1](https://immersive-web.github.io/webxr/#immersiveness) | 開始は利用者操作から行い、viewerだけを要求します。終了要求と終了確認を分け、途中終了でも測定結果を残します。 |
+| [WebGL 1.0 §5.14.11–12](https://registry.khronos.org/webgl/specs/latest/1.0/) | scissor/clearで既知値を描き、その呼出し内またはXR callback内で直近の描画をRGBA/UNSIGNED_BYTEへ読みます。framebuffer状態・GL errorと実際の値を記録します。 |
+
+ビルド後の `npm run test:monitor:browser` 内で、[専用helper](../scripts/xr-color-probe-browser.mjs)の17 subtestを実行します。通常画面の実WebGL読取りとJSON保存、実WebGL texture framebufferを使う模擬XRの左右13パッチ、開始時activation、許可拒否・再試行・選択操作による終了、読取り拒否、全ゼロ、タイマー終了、初期化待機中の終了、pose欠落、終了拒否・再試行、遅延許可後の取消、狭幅表示と外部通信なしを確認します。追加の互換化ケースは実WebGLの `WEBGL_lose_context` でloss/restoreを発生させ、復元後の状態と読取り、拒否、未復元のままの完了、復元待ちの期限切れ、取消後の遅延復元、開始後の予期しないlossを確認します。GPUアダプターの実切替そのものは模擬しています。模擬XRはアプリのlifecycleとGL描画の検査で、実機opaque framebufferやcompositorの実証ではありません。`COAST_SCREENSHOTS` を指定すると通常画面・狭幅の画像、通常/模擬両眼のJSON、HTML/TSのhash付き結果を保存します。helperのliteral `new URL` / `readFile` からHTMLとTSのCI入力閉包を追跡します。
+
+住戸の夜間画質は、[住戸browser試験](../scripts/residence-browser.test.mjs)で同じ視点の木目・スピーカーの輪郭・消灯画面・窓外の建物を比較します。夜間の間接光と空反射のRGB係数は制作上の調整で、色温度や物理輝度の校正値ではありません。XRの軽量/高品質はThree.jsの[setFoveation](https://threejs.org/docs/pages/WebXRManager.html#setFoveation)へ0.50/0.25を指定し、base/projection両方式の設定値、同一セッションでの移動、通常画面への復帰と描画品質の保持を模擬入力で確認します。準備待機・失敗中の品質操作は、PR215で導入した開始待機・明示再試行・終了の状態を維持します。画素測定や模擬layerへの設定だけで機器上の効果を保証しません。
+
+### 実機表示・撮影経路の運用確認
+
+本ページの読取り対象はアプリのGL framebufferまでです。その後のXR compositor、表示駆動、明るさ・コントラスト、レンズ、撮影露出・ホワイトバランス、写真の処理は測定しません。実機を使う機会には対象版、接続方式、機器・OS・ブラウザー版、表示設定と同一パッチの見え方を別に記録します。写真を使う場合は撮影条件と順序を固定し、GL取得値とは別資料として保存します。差があってもこのページで補正せず、どの経路を観測したかと未確定事項を残します。ページはpose行列・IPD・unmasked GPU情報・user agent・URL・自由入力を記録しません。
+
+この運用確認は[開発受け入れから分離](agent-harness.md#実機確認と開発受け入れの分離)します。未実施のHMD表示・compositor出力・機器撮影を、開発ブラウザーの成功結果から合格と推定しません。
+
 ## 実機での確認
 
 この節と次節は所有者が運用中に使う手順です。[開発受け入れとの分離](agent-harness.md#実機確認と開発受け入れの分離)に従い、実機を使う時期や結果報告をIssue・PRの完了条件にしません。対象版、機器・接続・設定、手順、実施状況、結果と限界を開発の受け入れ欄とは別に記録します。未実施の実機結果を合格へ置き換えず、機器で観測した不具合は再現条件とともに修正対象として評価します。

@@ -97,6 +97,16 @@ Lumen Pilgrimageでは、[ImmersiveSession](../../src/xr/ImmersiveSession.ts)が
 
 この事例の通常画面では、座位・立位・階段の移動、固定視点の点消灯、聴取位置での発音と足音の独立を検証した。模擬WebXRでは、両眼の描画、頭部の位置と向きに追従する音響の聴取点、上階での移動と通常画面への復帰を検証した。実機のレンズを通した像、耳元の定位、GPUとコンポジターのフレーム時間は実機で測る項目であり、この事例では未計測である。ブラウザーの描画通知間隔を記録するときも、GPUで描画した時間とは別の指標として扱う。 [商業アトリウムのブラウザー試験](../../scripts/atrium-browser.test.mjs) · [検証記録](https://github.com/stillshore-chirp/lumen-pilgrimage/pull/234)
 
+### 色の符号値と、表示までの観測点
+
+RGBの符号値は物理輝度ではない。`clearColor` へ与えた値、実際の格納形式に応じた量子化値、`readPixels` の返り値、XRコンポジターの出力、表示・レンズ越しの像、撮影画像を別の観測点として扱う。8bit正規化格納を仮定した参照値と実測値の一致は、GLへ入れた値がその読取り経路に届いた証拠であり、表示装置の輝度・色精度や暗部の判読性を測った結果ではない。 [WebGL 1.0 §5.14.11–12](https://registry.khronos.org/webgl/specs/latest/1.0/)
+
+従来型 `XRWebGLLayer` のopaque framebufferはXR animation callback内で描画・読取りを行い、attachmentの検査や変更は行わない。RGB/RGBA backingをコンポジターがsRGB符号値として扱う規則と、アプリが取得できるGLの値を区別する。contextの色空間属性だけからXR attachmentの形式や合成後の値を推定せず、未取得の観測点を残す。 [WebXR Device API §11.2](https://immersive-web.github.io/webxr/#xrwebgllayer-interface)
+
+GPUを切り替えるXR互換化では、正常な処理でもcontextが失われて復元され、GL状態が初期化される場合がある。互換化Promiseの完了と実際の復元を確かめ、測定条件を設定し直す。互換化中の復元待ちと、表示開始後の予期しない喪失を同じ終了条件へまとめない。 [WebXR Device API §11.3](https://immersive-web.github.io/webxr/#webgl-context-compatibility)
+
+読取りの検査では、黒の値が0であることと、読取り失敗で0しか得られないことを分ける。既知の白を確認用に含め、それも全ゼロなら読取りの成立は未確認とする。GL error、pose欠落、未変更の読取り先、空の測定も一致へ置き換えず、取得状態と理由を上位の要約へ引き継ぐ。実機の見え方は対象版・表示設定・撮影条件をそろえた別の運用記録とし、開発側のGL検証で実機未測定を補完済みにしない。実装例と再現手順は[XR色診断](../verification.md#xr色診断)を参照する。
+
 ## 目の応答と世界の安定性
 
 壁の縁や柱を凝視してゆっくり首を振り、線の流れ、揺れ、二重像、距離の瞬間的な変化を記録する。近い手すりへ顔を近づけて戻り、片眼ごとの輪郭と床との接点も確認する。焦点の合い方に関する設計判断は実機の観察記録へ残す。
