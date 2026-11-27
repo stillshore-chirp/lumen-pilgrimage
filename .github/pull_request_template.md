@@ -20,6 +20,15 @@
 - 外部音声を追加・変更した場合、[採用基準](https://github.com/stillshore-chirp/lumen-pilgrimage/blob/main/docs/assets.md#外部音声の採用基準)に対する権利/倫理/品質の判断、確認時の証拠、元ファイルから配布物・実使用までの台帳と検査結果:
 - 設計と実態の不一致、その修正と再検証（なければ照合した証拠）:
 
+### 参考画像・ワールド制作の工程証拠
+
+適用範囲（参考画像の有無、新設/大幅改修または影響する既存構造、非該当の理由）を示す。各欄は設計正本へ参照し、証拠の版・確認範囲・未達・次の判定を対応付ける。実施済みの結果を示し、未実施を空欄やチェックの充足で代替しない。
+
+- [画像解析](https://github.com/stillshore-chirp/lumen-pilgrimage/blob/main/docs/agent-harness.md#参考画像の段階的解析)：原資料ID/原寸、全体・重複グリッド・対象別の観察と再統合、事実/推定/仮定の対応先:
+- [全域先行設計](https://github.com/stillshore-chirp/lumen-pilgrimage/blob/main/docs/agent-harness.md#ワールド全域の先行設計)：用途・移動/視界の包絡、平面/断面・支持/接続・画像外・時間/環境・最適化の設計先:
+- [粗い3Dと設計レビュー](https://github.com/stillshore-chirp/lumen-pilgrimage/blob/main/docs/agent-harness.md#粗い3dモデルと独立設計レビュー)：動くモデルの版と実巡回結果、独立設計レビューの対象版・指摘・是正、詳細制作への可否:
+- [候補・最終検証](https://github.com/stillshore-chirp/lumen-pilgrimage/blob/main/docs/agent-harness.md#制作候補と最終版の全方向検証)：対応視点と局所比較、全方向/端部/連続経路/状態変化/性能の実結果、設計差し戻しと再判定:
+
 ## 維持した挙動・文書への影響
 
 - 維持した利用者の挙動・契約:
