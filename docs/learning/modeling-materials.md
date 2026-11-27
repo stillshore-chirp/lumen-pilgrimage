@@ -175,6 +175,14 @@ metal-roughness の解釈も固定する。誘電体では `metalness=0`、base 
 
 石には `metalness=0` を与え、仕上げに応じて roughness を広い範囲で変える。鏡面研磨した石と、荒い花崗岩を同じ `roughness=0.5` で済ませない。大きな面の色変動は base color、孔や細かな打痕は normal/bump、磨耗や濡れは roughness の変動で分担する。段鼻、タイル厚、目地の深さは実形状で出す。現行実装の参道石材は `roughness=0.94`、normalScale を別に持ち、石面を「灰色の絵」だけにしない構成になっている。値はこのワールドの描画用の設定値である。
 
+### 敷石から基壇までを一本の断面で読む
+
+目地を浅くしても、石の下面と支持層の間に空隙があれば床は一体に見えない。平面の割付、石の厚み、敷きモルタル、下地、基壇までを同じ基準面から読む。Marshallsの天然石施工資料は、連続したモルタルbedと最小10 mmの目地を説明している。ここから採るのは点支持を避けて下層へ連続させる原理であり、個別の広場の耐荷重認証へ一般化しない。 [Marshalls, Natural Stone Paving Installation Guidelines, Issue5, pp.2–3](https://media.marshalls.co.uk/image/upload/v1680084210/Installation-Guides/Natural-Stone-Paving-Installation-Guidelines.pdf)
+
+展望台の例では、主床0 mから石下面−0.050 m、bed下面−0.0785 m、既存cap上面−0.0785 mを揃える。石以外の床は以前の−0.0355 mを保ち、建物footprint内だけのbearingを−0.070..0 mに置く。このbearingはbackingへ34.5 mm重なり、bearing下面からcapまでの8.5 mmもbackingが埋める。同じ「床下」でも、石fieldと非石部を一枚の大きい箱で置換すると、露出面の高さを変えて新しい隙間や段差を作る。
+
+支持される本体から少し張り出したplinthの下面と、独立した敷居が浮く状態は別である。荷重のつながる形を確かめ、装飾の持出しをすべて埋めない。実装の対応は [展望台の床断面](../worlds.md#舗装と建物の支持断面)を参照する。寸法検査と同条件の低い視線を組み合わせ、影を消した診断を仕上がりの代用にしない。
+
 ### ガラス
 
 ガラスは `metalness=0`、屈折率は通常のソーダ石灰系の開始値として `ior≈1.5` を置く。板の厚み、縁、枠への入り方を実形状で作り、透明度だけで壁を消さない。透過と反射、内部の重なりはエンジンの transmission 機能と描画順の契約に従う。Walter らの研究は、粗い表面を通る反射・屈折をマイクロファセットとして扱い、エッチングガラスの伝送とサンプリングを検討している。[Walter, Marschner, Li, Torrance, *Microfacet Models for Refraction through Rough Surfaces*](https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.html) は、ガラスを単なるアルファブレンドへ還元しないための一次資料である。ただし、この論文は建築窓の具体的な複層構成や WebGL の透明描画を保証しない。

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { OverlookFinishes, OverlookModel } from './overlookModel';
-import { PAVILION_BODY, PAVILION_CENTER_Z, PAVILION_DOME, PAVILION_DRUM, PAVILION_ROOF_COURSES,
+import { PAVILION_THRESHOLD, PAVILION_BODY, PAVILION_CENTER_Z, PAVILION_DOME, PAVILION_DRUM, PAVILION_ROOF_COURSES,
   PAVILION_WING_Z, pavilionDomeProfile, pavilionEntrancePier, pavilionRoof, pavilionWing, pavilionWingCornice } from './overlookPavilionPlan';
 
 const centerZ = PAVILION_CENTER_Z;
@@ -103,7 +103,7 @@ function addPortico(model: OverlookModel, finish: OverlookFinishes): void {
   model.block(finish.shadowStone, 0, 0.42, 20.25, 20.75, 0.84, 20.90);
   model.block(finish.cream, 0, 0.86, 20.17, 20.86, 0.14, 21.21);
 
-  model.block(finish.cream, 0, 0.08, 9.30, 10.90, 0.16, 1.47);
+  model.block(finish.cream, ...PAVILION_THRESHOLD);
   model.block(finish.limestone, 0, 0.20, 9.56, 10.10, 0.10, 1.10);
   model.block(finish.shadowStone, 0, 2.93, 9.90, 8.25, 5.35, 0.18);
   for (const x of [-2.59, 0, 2.59]) {

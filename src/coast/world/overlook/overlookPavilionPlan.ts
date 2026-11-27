@@ -4,6 +4,7 @@ type Block = readonly [x: number, y: number, z: number, width: number, height: n
 export const PAVILION_CENTER_Z = 19.1;
 export const PAVILION_WING_Z = 21.45;
 export const PAVILION_BODY: Block = [0, 4.96, 20.34, 20.6, 9.92, 20.70];
+export const PAVILION_THRESHOLD: Block = [0, 0.08, 9.30, 10.90, 0.16, 1.47];
 export const PAVILION_ROOF_COURSES: readonly Block[] = [
   [0, 9.85, 20.33, 21.01, 0.26, 21.08],
   [0, 10.02, 20.33, 21.34, 0.13, 21.31],

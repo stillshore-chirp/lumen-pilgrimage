@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import { Raycaster, Texture, Vector3, Vector4 } from 'three';
 import { COAST_SUN_DIRECTION } from '../src/coast/world/coastAtmosphere.ts';
 import { PRIMARY_RAINBOW_ANGLE } from '../src/coast/world/coastSprayRainbow.ts';
@@ -13,13 +13,15 @@ const acousticsUrl = new URL('../src/coast/coastAcoustics.ts', import.meta.url).
 const overlookUrl = new URL('../src/coast/world/overlook/overlookTerrain.ts', import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (context.parentURL === overlookUrl && specifier === '../coastNoise') return nextResolve('../coastNoise.ts', context);
+    if (context.parentURL?.includes('/world/overlook/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context);
     const path = specifier === './terrain' && context.parentURL === acousticsUrl ? './terrain.ts' : specifier;
     return nextResolve(path, context);
   },
 });
 const { airCutoff, soundReach, terrainOcclusion, waterReflection } = await import(acousticsUrl);
 const { createOverlookSurface } = await import(overlookUrl);
+const { createOverlookDeck } = await import('../src/coast/world/overlook/overlookDeck.ts');
+const { PAVILION_BODY, PAVILION_THRESHOLD, pavilionWing, pavilionEntrancePier } = await import('../src/coast/world/overlook/overlookPavilionPlan.ts');
 hooks.deregister();
 
 test('the overlook terrain tiles preserve every face, vertex and normal', () => {
@@ -96,6 +98,72 @@ test('overlook support samples match actual Float32 triangles on both sides of e
     }
   } finally {
     surface.dispose(); streets.texture.dispose();
+  }
+});
+
+let supportDeck;
+function pavingDeck() {
+  supportDeck ??= createOverlookDeck({ value: 0 }, { value: 0 });
+  supportDeck.group.updateMatrixWorld(true);
+  return supportDeck;
+}
+after(() => {
+  if (!supportDeck) return;
+  supportDeck.dispose();
+  const geometries = new Set(), materials = new Set(), textures = new Set();
+  supportDeck.group.traverse(object => {
+    if (object.geometry) geometries.add(object.geometry);
+    for (const material of Array.isArray(object.material) ? object.material : object.material ? [object.material] : []) materials.add(material);
+  });
+  for (const geometry of geometries) geometry.dispose();
+  for (const material of materials) {
+    for (const key of ['map', 'bumpMap', 'alphaMap']) if (material[key]) textures.add(material[key]);
+    material.dispose();
+  }
+  for (const texture of textures) texture.dispose();
+});
+
+test('terrace stones remain closed solids with the intended floor and underside', () => {
+  const deck = pavingDeck(), mesh = deck.group.getObjectByName('Beveled terrace slabs');
+  assert.ok(mesh);
+  const geometry = mesh.geometry, position = geometry.getAttribute('position'), index = geometry.getIndex(), edges = new Map();
+  const key = i => `${position.getX(i).toFixed(6)},${position.getY(i).toFixed(6)},${position.getZ(i).toFixed(6)}`;
+  for (let i = 0; i < index.count; i += 3) {
+    const vertices = [index.getX(i), index.getX(i + 1), index.getX(i + 2)].map(key);
+    for (let e = 0; e < 3; e++) { const pair = [vertices[e], vertices[(e + 1) % 3]].sort().join('|'); edges.set(pair, (edges.get(pair) ?? 0) + 1); }
+  }
+  assert.ok([...edges.values()].every(count => count === 2), 'every stone edge has two incident faces');
+  geometry.computeBoundingBox();
+  assert.ok(Math.abs(geometry.boundingBox.min.y + .05) < 1e-6);
+  assert.ok(geometry.boundingBox.max.y <= .001501);
+  const down = new Raycaster(), up = new Raycaster(); let checked = 0;
+  for (let x = -30; x <= 30; x += 5) for (let z = -20; z <= 5; z += 5) {
+    down.set(new Vector3(x, 346.1, z), new Vector3(0, -1, 0));
+    up.set(new Vector3(x, 345.94, z), new Vector3(0, 1, 0));
+    const top = down.intersectObject(mesh, false)[0], bottom = up.intersectObject(mesh, false)[0];
+    if (!top) continue;
+    assert.ok(bottom); const thickness = top.point.y - bottom.point.y;
+    assert.ok(thickness >= .04849 && thickness <= .05151); checked++;
+  }
+  assert.ok(checked > 50);
+});
+
+test('terrace bearing meets all six shared ground blocks and preserves the nonstone floor', () => {
+  const deck = pavingDeck(), bearing = deck.group.getObjectByName('Recessed limestone');
+  const backing = deck.group.children.filter(object => object.name === 'Terrace joints');
+  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
+  for (const [x, , z, width, , depth] of [PAVILION_BODY, pavilionWing(-1), pavilionWing(1),
+    pavilionEntrancePier(-1), pavilionEntrancePier(1), PAVILION_THRESHOLD]) {
+    for (const dx of [-.49, 0, .49]) for (const dz of [-.49, 0, .49]) {
+      ray.set(new Vector3(x + width * dx, 346.01, z + depth * dz), new Vector3(0, -1, 0));
+      const hit = ray.intersectObject(bearing, false).find(h => Math.abs(h.point.y - 346) < 1e-6);
+      assert.ok(hit, 'the actual ground block footprint has bearing at its underside');
+      assert.ok(ray.intersectObjects(backing, false).some(h => Math.abs(h.point.y - 345.9645) < 1e-6));
+    }
+  }
+  for (const [x, z] of [[16, 10.5], [23.5, 9.5], [0, 9.2]]) {
+    ray.set(new Vector3(x, 345.98, z), new Vector3(0, -1, 0));
+    assert.ok(ray.intersectObjects(backing, false).some(h => Math.abs(h.point.y - 345.9645) < 1e-6));
   }
 });
 

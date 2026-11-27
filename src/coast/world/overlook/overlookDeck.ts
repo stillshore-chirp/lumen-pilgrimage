@@ -3,6 +3,7 @@ import type { WorldLightingMode } from '../../WorldLightingControl';
 import { createOverlookDeckContacts, PARAPET_CAP } from './overlookDeckDetail';
 import { OverlookModel, overlookFinishes, seededDetail, type OverlookFinishes } from './overlookModel';
 import { addOverlookPavilion } from './overlookPavilion';
+import { PAVILION_THRESHOLD, PAVILION_BODY, pavilionWing, pavilionEntrancePier } from './overlookPavilionPlan';
 import { DECK_FRONT, DECK_LEVEL, DECK_SIDE } from './overlookTerrain';
 import { addOverlookUpperDeck, OVERLOOK_UPPER_DECK_HEIGHT } from './overlookUpperDeck';
 
@@ -39,6 +40,56 @@ const slabFields: SlabField[] = [
   { minX: 24.00, maxX: 32.95, minZ: 8.38, maxZ: 31.03, seamX: 1.74, seamZ: 1.18, color: 0xc7b9a0 },
 ];
 
+// Local metres relative to the unchanged walking plane. Stone thickness is nominal
+// 50 mm; the small face variation is taken up above a common, fully supported base.
+const pavingSection = {
+  halfJoint: 0.005, bevel: 0.002, bottom: -0.05, bedBottom: -0.0785, groutTop: -0.003,
+} as const;
+
+type PavingRectangle = { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number };
+
+// Non-overlapping cells carry horizontal faces; only occupied/unoccupied boundaries
+// carry side faces. This preserves the old non-stone surface without a slab-intersecting block.
+function addPavingLayer(model: OverlookModel, material: THREE.Material, regions: readonly PavingRectangle[],
+  exclusions: readonly PavingRectangle[], bottom: number, top: number): void {
+  const rectangles = [...regions, ...exclusions];
+  const xs = [...new Set(rectangles.flatMap(rect => [rect.minX, rect.maxX]))].sort((a, b) => a - b);
+  const zs = [...new Set(rectangles.flatMap(rect => [rect.minZ, rect.maxZ]))].sort((a, b) => a - b);
+  const inside = (rect: PavingRectangle, x: number, z: number) =>
+    x > rect.minX && x < rect.maxX && z > rect.minZ && z < rect.maxZ;
+  const occupied = xs.slice(1).map((right, x) => zs.slice(1).map((far, z) => {
+    const cx = (xs[x] + right) / 2, cz = (zs[z] + far) / 2;
+    return regions.some(rect => inside(rect, cx, cz)) && !exclusions.some(rect => inside(rect, cx, cz));
+  }));
+  const positions: number[] = [], uvs: number[] = [], indices: number[] = [];
+  const quad = (a: readonly number[], b: readonly number[], c: readonly number[], d: readonly number[]) => {
+    const first = positions.length / 3;
+    positions.push(...a, ...b, ...c, ...d);
+    const horizontal = a[1] === b[1] && b[1] === c[1];
+    for (const p of [a, b, c, d]) uvs.push((horizontal ? p[0] : p[0] + p[2]) * 0.27,
+      (horizontal ? p[2] : p[1]) * 0.27);
+    indices.push(first, first + 1, first + 2, first, first + 2, first + 3);
+  };
+  for (let x = 0; x < xs.length - 1; x += 1) {
+    for (let z = 0; z < zs.length - 1; z += 1) {
+      if (!occupied[x][z]) continue;
+      const l = xs[x], r = xs[x + 1], n = zs[z], f = zs[z + 1];
+      quad([l, top, n], [l, top, f], [r, top, f], [r, top, n]);
+      quad([l, bottom, n], [r, bottom, n], [r, bottom, f], [l, bottom, f]);
+      if (!occupied[x - 1]?.[z]) quad([l, bottom, n], [l, bottom, f], [l, top, f], [l, top, n]);
+      if (!occupied[x + 1]?.[z]) quad([r, bottom, f], [r, bottom, n], [r, top, n], [r, top, f]);
+      if (!occupied[x][z - 1]) quad([r, bottom, n], [l, bottom, n], [l, top, n], [r, top, n]);
+      if (!occupied[x][z + 1]) quad([l, bottom, f], [r, bottom, f], [r, top, f], [l, top, f]);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  model.mesh(geometry, material);
+}
+
 function addPaving(model: OverlookModel, finish: OverlookFinishes): void {
   const retainingHeight = 13.80, batter = 2.58;
   const retaining = new THREE.BoxGeometry(71.2, retainingHeight, 55.63);
@@ -65,12 +116,25 @@ function addPaving(model: OverlookModel, finish: OverlookFinishes): void {
   model.block(finish.shadowStone, 0, -0.83, 3.29, 71.30, 0.195, 55.73);
   model.block(finish.limestone, 0, -0.485, 3.29, 71.55, 0.38, 55.95);
   model.block(finish.cream, 0, -0.186, 3.29, 71.72, 0.215, 56.10);
-  model.block(finish.mortar, 0, -0.078, 3.29, 70.51, 0.085, 55.3);
+  addPavingLayer(model, finish.mortar, slabFields, [], pavingSection.bedBottom, pavingSection.bottom);
+  const originalMortar = [{ minX: -35.255, maxX: 35.255, minZ: -24.36, maxZ: 30.94 }];
+  addPavingLayer(model, finish.mortar, originalMortar, slabFields, pavingSection.bedBottom, -0.0355);
+
+  // Structural candidate only: the six shared-plan ground blocks receive a bearing course.
+  // Decorative plinth overhangs are evaluated separately rather than silently expanded.
+  const bearingFootprints = [PAVILION_BODY, pavilionWing(-1), pavilionWing(1),
+    pavilionEntrancePier(-1), pavilionEntrancePier(1), PAVILION_THRESHOLD].map(([x, , z, width, , depth]) => ({
+    minX: x - width / 2, maxX: x + width / 2, minZ: z - depth / 2, maxZ: z + depth / 2,
+  }));
+  addPavingLayer(model, finish.shadowStone, bearingFootprints, [], -0.07, 0);
 
   const positions: number[] = [];
   const uvs: number[] = [];
   const colors: number[] = [];
   const triangles: number[] = [];
+  const groutPositions: number[] = [];
+  const groutUvs: number[] = [];
+  const groutTriangles: number[] = [];
   const random = seededDetail(58549);
   const tint = new THREE.Color();
   const stone = new THREE.Color();
@@ -78,13 +142,14 @@ function addPaving(model: OverlookModel, finish: OverlookFinishes): void {
     const x = (left + right) / 2, z = (near + far) / 2;
     const wear = (random() - 0.48) * 0.14 + Math.sin(x * 0.34 + z * 0.13) * Math.sin(z * 0.61) * 0.038;
     tint.setHex(color).multiplyScalar(1 + wear);
-    const top = (random() - 0.63) * 0.010;
+    const top = (random() - 0.5) * 0.003;
     const first = positions.length / 3;
-    const inset = 0.011 + random() * 0.007;
-    for (const [bevel, y, shade] of [[0, top - 0.036, 0.74], [0.031, top, 1]] as const) {
+    const inset = pavingSection.halfJoint;
+    // Retain the original 19 random draws per stone, including the former inset draw.
+    const chamfer = 0.002 + random() * 0.002;
+    for (const [bevel, y, shade] of [[0, top - pavingSection.bevel, 0.74], [pavingSection.bevel, top, 1]] as const) {
       const minX = left + inset + bevel, maxX = right - inset - bevel;
       const minZ = near + inset + bevel, maxZ = far - inset - bevel;
-      const chamfer = Math.min(0.026, (maxZ - minZ) * 0.18, (maxX - minX) * 0.18);
       for (const [x1, z1] of [
         [minX + chamfer, minZ], [minX, minZ + chamfer], [minX, maxZ - chamfer], [minX + chamfer, maxZ],
         [maxX - chamfer, maxZ], [maxX, maxZ - chamfer], [maxX, minZ + chamfer], [maxX - chamfer, minZ],
@@ -107,6 +172,48 @@ function addPaving(model: OverlookModel, finish: OverlookFinishes): void {
       colors.push(colors[k * 3], colors[k * 3 + 1], colors[k * 3 + 2]);
     }
     for (let i = 1; i < 7; i += 1) triangles.push(first + 16, first + 16 + i, first + 17 + i);
+
+    // Separate side vertices preserve the flat face and the small bevel normals.
+    for (let i = 0; i < 8; i += 1) {
+      const a = first + i, b = first + (i + 1) % 8;
+      const side = positions.length / 3;
+      const length = Math.hypot(positions[b * 3] - positions[a * 3], positions[b * 3 + 2] - positions[a * 3 + 2]);
+      for (const [k, y] of [[a, pavingSection.bottom], [b, pavingSection.bottom],
+        [a, top - pavingSection.bevel], [b, top - pavingSection.bevel]]) {
+        positions.push(positions[k * 3], y, positions[k * 3 + 2]);
+        uvs.push((k === a ? 0 : length) * 0.31, y * 0.31);
+        colors.push(colors[k * 3], colors[k * 3 + 1], colors[k * 3 + 2]);
+      }
+      triangles.push(side, side + 1, side + 2, side + 1, side + 3, side + 2);
+    }
+    const bottom = positions.length / 3;
+    for (let i = 0; i < 8; i += 1) {
+      const k = first + i;
+      positions.push(positions[k * 3], pavingSection.bottom, positions[k * 3 + 2]);
+      uvs.push(uvs[k * 2], uvs[k * 2 + 1]);
+      colors.push(colors[k * 3], colors[k * 3 + 1], colors[k * 3 + 2]);
+    }
+    for (let i = 1; i < 7; i += 1) triangles.push(bottom, bottom + i + 1, bottom + i);
+
+    // Only the joints carry grout faces, so no broad grout plane intersects the stones.
+    // At the lowest stones grout meets the bevel rather than extending into it.
+    const groutBevel = Math.max(0, pavingSection.groutTop - top + pavingSection.bevel);
+    const grout = groutPositions.length / 3;
+    const outer = [[left, near], [left, near], [left, far], [left, far],
+      [right, far], [right, far], [right, near], [right, near]];
+    for (let i = 0; i < 8; i += 1) {
+      const k = first + i;
+      const [ox, oz] = outer[i];
+      const ix = positions[k * 3] + (i < 4 ? groutBevel : -groutBevel);
+      const iz = positions[k * 3 + 2] + (i === 0 || i === 1 || i === 6 || i === 7 ? groutBevel : -groutBevel);
+      groutPositions.push(ox, pavingSection.groutTop, oz, ix, pavingSection.groutTop, iz);
+      groutUvs.push(ox * 0.31, oz * 0.31, ix * 0.31, iz * 0.31);
+    }
+    for (let i = 0; i < 8; i += 1) {
+      const a = grout + i * 2, b = grout + ((i + 1) % 8) * 2;
+      if (i % 2 === 1) groutTriangles.push(a, b, a + 1);
+      groutTriangles.push(b, b + 1, a + 1);
+    }
   };
   for (const { minX, maxX, minZ, maxZ, seamX, seamZ, color } of slabFields) {
     const rows = Math.max(1, Math.round((maxZ - minZ) / seamZ));
@@ -131,6 +238,42 @@ function addPaving(model: OverlookModel, finish: OverlookFinishes): void {
   geometry.setIndex(triangles);
   geometry.computeVertexNormals();
   model.mesh(geometry, finish.paving, false);
+
+  // Close exposed grout edges, omitting shared field boundaries inside the paving.
+  for (const field of slabFields) {
+    for (const axis of ['x', 'z'] as const) {
+      const other = axis === 'x' ? 'Z' : 'X';
+      for (const side of ['min', 'max'] as const) {
+        const fixed = field[`${side}${axis.toUpperCase()}` as keyof SlabField];
+        const from = field[`min${other}`], to = field[`max${other}`];
+        const cuts = [from, to];
+        const adjacent = slabFields.filter(candidate => candidate !== field
+          && candidate[`${side === 'min' ? 'max' : 'min'}${axis.toUpperCase()}` as keyof SlabField] === fixed);
+        for (const neighbour of adjacent) cuts.push(Math.max(from, neighbour[`min${other}`]), Math.min(to, neighbour[`max${other}`]));
+        cuts.sort((a, b) => a - b);
+        for (let i = 1; i < cuts.length; i += 1) {
+          const a = cuts[i - 1], b = cuts[i], middle = (a + b) / 2;
+          if (b <= a || a < from || b > to || adjacent.some(neighbour => middle > neighbour[`min${other}`]
+            && middle < neighbour[`max${other}`])) continue;
+          const first = groutPositions.length / 3;
+          for (const [run, y] of [[a, pavingSection.bottom], [b, pavingSection.bottom],
+            [a, pavingSection.groutTop], [b, pavingSection.groutTop]]) {
+            groutPositions.push(axis === 'x' ? fixed : run, y, axis === 'x' ? run : fixed);
+            groutUvs.push(run * 0.31, y * 0.31);
+          }
+          const reverse = (axis === 'x') === (side === 'max');
+          groutTriangles.push(...(reverse ? [first, first + 2, first + 1, first + 1, first + 2, first + 3]
+            : [first, first + 1, first + 2, first + 1, first + 3, first + 2]));
+        }
+      }
+    }
+  }
+  const groutGeometry = new THREE.BufferGeometry();
+  groutGeometry.setAttribute('position', new THREE.Float32BufferAttribute(groutPositions, 3));
+  groutGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(groutUvs, 2));
+  groutGeometry.setIndex(groutTriangles);
+  groutGeometry.computeVertexNormals();
+  model.mesh(groutGeometry, finish.mortar, false);
 }
 
 function addCompass(model: OverlookModel, finish: OverlookFinishes): void {

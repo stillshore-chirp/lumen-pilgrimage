@@ -120,6 +120,21 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 道路・都市・住宅の高さAPIを一律に置換する変更ではありません。音源の高さは表示面から鳥1.15 m、虫0.4 mの制作値を使い、道路の伝搬計算には従来の地形入力を保持します。編集先は [表示地形](../src/coast/world/overlook/overlookTerrain.ts)、[斜面の個体配置](../src/coast/world/overlook/overlookHillside.ts)、[局所音源](../src/coast/world/overlook/overlookAudio.ts)です。
 
+#### 舗装と建物の支持断面
+
+主床の基準はY=346 mで、歩行支持面と足音の材区分を保ちます。敷石は公称50 mm厚、top変動±1.5 mm、目地の芯幅10 mm、上端幅14 mm、面取り水平/鉛直各2 mmです。石を置く7fieldの直下だけに連続bedを設け、非石部と外縁は従来の床高さを保ちます。
+
+| 層・接点 | 主床からの相対Y | 世界Y |
+| --- | --- | --- |
+| 石の上面 | 0±0.0015 m | 346±0.0015 m |
+| 目地の上面 | −0.003 m | 345.997 m |
+| 石の下面 / bed上面 | −0.050 m | 345.950 m |
+| bed下面 / 既存cap上面 | −0.0785 m | 345.9215 m |
+| 非石部のbacking上面 | −0.0355 m | 345.9645 m |
+| 建物bearingの下面..上面 | −0.070..0 m | 345.930..346 m |
+
+既存capの下面は345.7065 mで、foundation上面345.710 mへ3.5 mm重なります。亭の本体・両翼・入口柱2本・敷居の実6footprintにbearingを設け、backingへ34.5 mm重ねてcapまでの支持をつなぎます。敷居は `PAVILION_THRESHOLD` を描画と床支持で共有し、亭の描画形状や飛行volumeを変えません。装飾plinthの張出しは支持された本体からの持出しとして扱い、正当な影の隙間まで埋めません。数値は制作上の寸法であり、実施設の荷重認証ではありません。 [舗装生成](../src/coast/world/overlook/overlookDeck.ts) · [共通亭寸法](../src/coast/world/overlook/overlookPavilionPlan.ts)
+
 擁壁、段、手すり、デッキの境界を変える場合は、描画形状と `groundHeight`／`blocksWalking`／`blocksFlight` を一組として扱います。[地形接続](../scripts/coast-terrain.test.mjs)と[階段・デッキのブラウザー試験](../scripts/coast-browser.test.mjs)が既存の入口です。
 
 ### 都心の70階住戸 — `residence`
