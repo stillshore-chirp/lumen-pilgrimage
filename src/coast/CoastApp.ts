@@ -100,6 +100,7 @@ function readHistoryIndex(state: unknown): number {
 export class CoastApp {
   private readonly world: ExplorationWorld;
   private readonly worldId: ExplorationWorldId;
+  private readonly pcVR: boolean;
   private readonly audio: ExplorationAudio;
   private readonly audioControls: ReturnType<typeof bindCoastSoundControls>;
   private readonly syncLightingControl: () => void;
@@ -140,7 +141,7 @@ export class CoastApp {
   private monitor?: MonitorView;
   private readonly seatTransition?: ReturnType<typeof createCinemaSeatTransition>;
   private time: CoastTimeOfDay;
-  private quality: CoastQuality = 'light';
+  private quality: CoastQuality;
   private lastFrame = 0;
   private elapsed = 0;
   private disposed = false;
@@ -157,6 +158,8 @@ export class CoastApp {
     xr?: CoastXR,
   ) {
     this.worldId = loaded.id;
+    this.pcVR = currentUrl.searchParams.get('vr') === 'pc';
+    this.quality = this.pcVR ? 'high' : 'light';
     this.xr = xr ?? new CoastXR(this.renderer.xr);
     this.cinemaControls = loaded.cinemaControls;
     this.residenceControls = loaded.residenceControls ?? [];
@@ -235,8 +238,8 @@ export class CoastApp {
           </div>
           <div class="coast-row" role="group" aria-label="描画品質">
             <span class="coast-label">描画</span>
-            <button type="button" class="coast-light" aria-pressed="true" title="広域の影と軽い植生描画">軽量</button>
-            <button type="button" class="coast-high" aria-pressed="false" title="細かな木漏れ日、地表の凹凸と手前の下草">高品質</button>
+            <button type="button" class="coast-light" aria-pressed="${this.quality === 'light'}" title="広域の影と軽い植生描画">軽量</button>
+            <button type="button" class="coast-high" aria-pressed="${this.quality === 'high'}" title="細かな木漏れ日、地表の凹凸と手前の下草">高品質</button>
           </div>
           <div class="coast-view-settings coast-setting-row">
             <label class="coast-label" for="coast-fov">視野角</label>
@@ -320,10 +323,19 @@ export class CoastApp {
     actions.append(vr);
     const vrButton = vr.querySelector('button')!;
     const vrStatus = vr.querySelector('p')!;
+    if (this.pcVR) {
+      vrStatus.className = 'coast-pcvr-status';
+      ui.querySelector('.coast-guide')!.append(vrStatus);
+    }
     let xrStatus: ImmersiveStatus | undefined;
+    let recheck = false;
     vrButton.addEventListener('click', () => {
       if (xrStatus?.state === 'presenting') {
         void this.xr.session.toggle();
+        return;
+      }
+      if (recheck) {
+        void this.xr.session.checkSupport();
         return;
       }
       if (xrStatus?.state !== 'available' && xrStatus?.state !== 'error') return;
@@ -337,6 +349,7 @@ export class CoastApp {
     this.syncXRStatus = () => {
       if (!xrStatus) return;
       const unavailable = xrStatus.state === 'unavailable' && window.isSecureContext;
+      recheck = this.pcVR && unavailable && Boolean(navigator.xr);
       const canStart = xrStatus.state === 'available' || xrStatus.state === 'error';
       const preparing = canStart && this.residenceShaders?.pending;
       const preparationFailed = canStart && this.residenceShaders?.state === 'failed';
@@ -347,10 +360,20 @@ export class CoastApp {
       } else if (preparationFailed) {
         vrButton.textContent = '描画準備をやり直す';
         vrStatus.textContent = 'VRの描画を準備できませんでした。準備をやり直してください。';
+      } else if (recheck) {
+        vrButton.disabled = false;
+        vrButton.textContent = 'VRの接続を再確認';
+        vrStatus.textContent = 'Meta Horizon Link で Quest を接続し、OpenXR ランタイムを確認してから再確認してください。';
+      } else if (this.pcVR && xrStatus.state === 'available') {
+        vrStatus.textContent = 'Quest を Meta Horizon Link で接続したら、Windows の Chrome でこのページの「VRを開始」を押してください。';
+      } else if (this.pcVR && xrStatus.state === 'error') {
+        vrStatus.textContent = `${xrStatus.message} Windows の Meta Horizon Link で Quest を接続し、OpenXR ランタイムを確認してください。`;
+      } else if (this.pcVR && unavailable) {
+        vrStatus.textContent = `${xrStatus.message} Windows の Chrome でページを開いてください。`;
       }
-      vrButton.title = unavailable ? xrStatus.message : '';
-      vrStatus.hidden = !preparing && !preparationFailed
-        && (xrStatus.state === 'available' || xrStatus.state === 'presenting' || unavailable);
+      vrButton.title = unavailable && !this.pcVR ? xrStatus.message : '';
+      vrStatus.hidden = xrStatus.state === 'presenting' || (!this.pcVR && !preparing && !preparationFailed
+        && (xrStatus.state === 'available' || unavailable));
     };
     this.bindXRStatus = () => this.xr.session.observe((status, session) => {
       if (session) this.desktopGrab.release();
@@ -678,7 +701,7 @@ export class CoastApp {
     if (decision.kind === 'invalid') return;
     this.desktopGrab.release();
     if (decision.kind === 'navigate') {
-      if (this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection || this.shouldKeepCinemaFiles) {
+      if (this.pcVR || this.renderer.xr.isPresenting || this.monitor?.hasActiveConnection || this.shouldKeepCinemaFiles) {
         void this.changeWorld(decision.url);
       } else {
         ++this.travelRequest;

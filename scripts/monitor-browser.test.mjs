@@ -2090,3 +2090,154 @@ test('audio routing recovers from a lost acknowledgment and keeps screen sharing
     await Promise.all([sender.context().close(), viewer.context().close()]);
   }
 });
+
+test('PCVR rechecks Link without opening XR, then uses one tracked desktop session across travel', { timeout }, async () => {
+  const page = await newPage();
+  page.setDefaultTimeout(25_000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.name));
+  try {
+    await page.addInitScript(installSimulatedXR, { supported: false, profile: 'oculus-touch' });
+    await page.goto(new URL('?vr=pc&world=coast&place=inlet&time=night', url).href);
+    const recheck = button(page, 'VRの接続を再確認');
+    const startVR = button(page, 'VRを開始');
+    const vrStatus = page.locator('#coast-xr-status');
+    const canvas = page.locator('.coast-view');
+    await recheck.waitFor();
+    assert.match(await vrStatus.textContent(), /Meta Horizon Link.*OpenXR/);
+    assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+    await page.waitForFunction(() => window.xrFixture.desktopDraws > 0);
+    const highSize = await canvas.evaluate(view => {
+      window.pcViewerCanvas = view;
+      return view.width;
+    });
+    await button(page, '軽量').click();
+    assert.equal(await button(page, '軽量').getAttribute('aria-pressed'), 'true');
+    assert.ok(await canvas.evaluate(view => view.width) < highSize);
+
+    await recheck.click();
+    await page.waitForFunction(() => window.xrFixture.checks === 2);
+    await recheck.waitFor();
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+    await page.evaluate(() => { window.xrFixture.supported = true; });
+    await recheck.click();
+    await startVR.waitFor();
+    assert.match(await vrStatus.textContent(), /Windows の Chrome でこのページの「VRを開始」/);
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 0, 'rechecking never enters VR');
+
+    await page.evaluate(() => { window.xrFixture.denyNext = true; });
+    await startVR.click();
+    await vrStatus.filter({ hasText: /VRを開始できませんでした.*Meta Horizon Link/ }).waitFor();
+    await startVR.click();
+    await page.waitForFunction(() => window.xrFixture.eyePoses[0] && window.xrFixture.eyePoses[320]);
+    const entered = await page.evaluate(() => {
+      const { activations, features, eyePoses, session } = window.xrFixture;
+      const { width, height } = window.pcViewerCanvas;
+      const { 0: left, 320: right } = eyePoses;
+      return {
+        activations, features, width, height, spacing: Math.hypot(left.x - right.x, left.z - right.z),
+        profiles: session.inputSources.map(source => source.profiles[0]),
+      };
+    });
+    assert.deepEqual(entered.activations, [true, true]);
+    assert.deepEqual(entered.features, {
+      mode: 'immersive-vr', requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'],
+    });
+    assert.deepEqual(entered.profiles, ['oculus-touch', 'oculus-touch']);
+    assert.ok(Math.abs(entered.spacing - .064) < .002, 'both eyes use independent tracked positions');
+    assert.deepEqual([entered.width, entered.height], [640, 480], 'the session provides the stereo target size');
+
+    const change = input => page.evaluate(value => window.xrFixture.mutate(value), input);
+    const press = async (side, index) => {
+      await change({ side, button: index, pressed: true });
+      await change({ side, button: index, pressed: false });
+    };
+    const firstZ = await page.evaluate(() => window.xrFixture.eyePoses[0].z);
+    await change({ side: 'left', axes: [0, -1], frames: 8 });
+    await change({ side: 'left', axes: [0, 0] });
+    assert.ok(await page.evaluate(() => window.xrFixture.eyePoses[0].z) < firstZ - .1);
+    await press('left', 5);
+    assert.equal(await page.locator('.coast-mode').textContent(), '自由飛行');
+    await press('left', 5);
+    await press('left', 4);
+    await page.waitForFunction(() => window.xrFixture.menuTitle === 'ファストトラベル');
+    await change({ side: 'right', axes: [0, 1] });
+    await page.waitForFunction(() => window.xrFixture.selection === '丘陵展望台');
+    await change({ side: 'right', axes: [0, 0] });
+    await change({ select: true });
+    await page.waitForFunction(() => window.xrFixture.menuTitle === '丘陵展望台');
+    await change({ select: true });
+    await page.waitForURL(address => address.searchParams.get('vr') === 'pc'
+      && address.searchParams.get('world') === 'overlook' && address.searchParams.get('time') === 'night');
+    await page.waitForFunction(() => window.xrFixture.eyePoses[0]?.y > 345);
+    assert.equal(await button(page, '軽量').getAttribute('aria-pressed'), 'true');
+    assert.equal(await canvas.evaluate(view => view === window.pcViewerCanvas), true);
+    assert.deepEqual(await page.evaluate(() => {
+      const { requests, ends, strayDraws } = window.xrFixture;
+      return { requests, ends, strayDraws };
+    }), { requests: 2, ends: 0, strayDraws: 0 });
+
+    const desktopDraws = await page.evaluate(() => window.xrFixture.desktopDraws);
+    await button(page.locator('.coast-xr-entry'), 'VRを終了').click();
+    await startVR.waitFor();
+    await page.waitForFunction(draws => window.xrFixture.ends === 1 && window.xrFixture.desktopDraws > draws, desktopDraws);
+    assert.equal(new URL(page.url()).searchParams.get('vr'), 'pc');
+    await button(page, 'ファストトラベル').click();
+    await button(page.getByRole('dialog', { name: 'ファストトラベル' }), '入り江の浜').click();
+    await page.waitForURL(address => address.searchParams.get('vr') === 'pc'
+      && address.searchParams.get('world') === 'coast');
+    assert.equal(await button(page, '軽量').getAttribute('aria-pressed'), 'true');
+    assert.equal(await canvas.evaluate(view => view === window.pcViewerCanvas), true);
+    assert.deepEqual(errors, []);
+  } finally {
+    await page.close();
+  }
+});
+
+test('PCVR reconnection retains residence shader preparation, retry, and session exit gates', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await exposeResidencePreparationReset(page);
+    await page.addInitScript(installSimulatedXR, { layerType: 'projection', supported: false, profile: 'oculus-touch' });
+    await page.addInitScript(observeShaderPreparation, true);
+    await page.goto(new URL('?vr=pc&world=residence&place=living-window&time=night', url).href);
+    await button(page, 'VRの接続を再確認').waitFor();
+    assert.equal(await button(page, '高品質').getAttribute('aria-pressed'), 'true');
+    await page.evaluate(() => { window.xrFixture.supported = true; });
+    await button(page, 'VRの接続を再確認').click();
+    await page.waitForFunction(() => window.shaderPreparation.polls > 0);
+    assert.equal(await button(page, 'VRを開始').isDisabled(), true);
+    assert.equal(await page.locator('#coast-xr-status').textContent(), 'VRの描画を準備しています。');
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+
+    await page.evaluate(() => { window.shaderPreparation.throwCompletion = true; });
+    await button(page, '描画準備をやり直す').waitFor();
+    assert.match(await page.locator('#coast-xr-status').textContent(), /描画を準備できませんでした/);
+    await page.evaluate(() => {
+      window.shaderPreparation.throwCompletion = false;
+      window.shaderPreparation.allow = true;
+      window.xrFixture.denyNext = true;
+    });
+    await button(page, '描画準備をやり直す').click();
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 0,
+      'Reconnection and preparation retry must not start XR');
+    await button(page, 'VRを開始').click();
+    await page.locator('#coast-xr-status').filter({ hasText: /VRを開始できませんでした.*Meta Horizon Link/ }).waitFor();
+    await button(page, 'VRを開始').click();
+    await page.waitForFunction(() => window.xrFixture.eyePoses[320] && window.xrFixture.xrDraws > 0);
+    assert.equal(await page.evaluate(() => window.xrFixture.layer.fixedFoveation), .25);
+    await page.evaluate(() => {
+      window.shaderPreparation.allow = false;
+      window.resetResidenceShaderPreparation();
+    });
+    assert.equal(await button(page, 'VRを終了').isEnabled(), true,
+      'Shader preparation cannot block an active session from ending');
+    await button(page, 'VRを終了').click();
+    await page.waitForFunction(() => window.xrFixture.ends === 1);
+    assert.equal(await button(page, 'VRを開始').isDisabled(), true);
+    assert.equal(await page.locator('#coast-xr-status').textContent(), 'VRの描画を準備しています。');
+    assert.deepEqual(await page.evaluate(() => window.xrFixture.activations), [true, true]);
+  } finally {
+    await page.close();
+  }
+});

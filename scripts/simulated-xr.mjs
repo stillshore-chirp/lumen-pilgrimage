@@ -1,6 +1,8 @@
-export function installSimulatedXR(layerType = 'base') {
+export function installSimulatedXR(options = 'base') {
+  const { layerType = 'base', supported = true, profile = 'meta-quest-touch-plus' } = typeof options === 'string'
+    ? { layerType: options } : options;
   const fixture = {
-    requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
+    supported, checks: 0, requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
     head: { x: 0, y: 1.65, z: 0, yaw: 0, pitch: 0 }, eyePoses: {},
   };
   window.xrFixture = fixture;
@@ -123,7 +125,7 @@ export function installSimulatedXR(layerType = 'base') {
 
   function controller(handedness) {
     return {
-      handedness, targetRayMode: 'tracked-pointer', profiles: ['meta-quest-touch-plus'],
+      handedness, targetRayMode: 'tracked-pointer', profiles: [profile],
       gamepad: {
         mapping: 'xr-standard', axes: [0, 0, 0, 0],
         buttons: Array.from({ length: 7 }, () => ({ pressed: false, value: 0 })),
@@ -201,7 +203,10 @@ export function installSimulatedXR(layerType = 'base') {
   };
 
   const xr = new EventTarget();
-  xr.isSessionSupported = async () => true;
+  xr.isSessionSupported = async () => {
+    ++fixture.checks;
+    return fixture.supported;
+  };
   xr.requestSession = async (mode, features) => {
     ++fixture.requests;
     fixture.features = { mode, ...features };

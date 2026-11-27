@@ -137,9 +137,9 @@ PCVRのフレームは、アプリ更新、左右ビューの描画、XRコン�
 
 [W3C WebXR Device API](https://www.w3.org/TR/webxr/#xr-compositor) は、XRコンポジターがページのグラフィックスコンテキストから分離されたコンテキストを持ち、別スレッドまたは別プロセスで表示能力を維持できると定義する。同仕様は、XRの `requestAnimationFrame` について、nominal frame rate、effective frame rate、target frame rateを区別し、`predictedDisplayTime` を表示される時点に合わせたシーン状態の計算に使える値として説明する。アプリのコールバック時刻、描画完了時刻、コンポジターが採用した時刻を混同しない。
 
-レイヤーを使う構成では、シーン全体の投影レイヤーと、固定した矩形・円筒・映像などの合成レイヤーを別の更新単位にできる。[W3C WebXR Layers API Level 1](https://www.w3.org/TR/webxrlayers-1/) は、`XRProjectionLayer` を視界全体のレイヤーとして定義し、投影レイヤーを端末のネイティブ更新頻度に近く更新することを求める。性能はレイヤーの対応状況、深度、再描画、コンポジターの統計から機器ごとに確認する。現行コードはThree.jsの通常のXRレンダー経路を使い、この章ではレイヤー利用を実装済みとして扱わない。
+レイヤーを使う構成では、シーン全体の投影レイヤーと、固定した矩形・円筒・映像などの合成レイヤーを別の更新単位にできる。[W3C WebXR Layers API Level 1](https://www.w3.org/TR/webxrlayers-1/) は、`XRProjectionLayer` を視界全体のレイヤーとして定義し、投影レイヤーを端末のネイティブ更新頻度に近く更新することを求める。性能はレイヤーの対応状況、深度、再描画、コンポジターの統計から機器ごとに確認する。現行コードはThree.jsのXRレンダー経路を使い、対応環境に応じて従来型の `XRWebGLLayer` または `XRProjectionLayer` へ描画する。アプリ独自の矩形・円筒・映像などの追加合成レイヤーは未統合であり、これらを実装済みとして扱わない。
 
-圧縮経路では符号化と復号を測る。[W3C WebCodecs](https://www.w3.org/TR/webcodecs/) はAPIを定義するが、特定コーデックや実装方式を要求しない。機器固有の指標は一次資料と実測を要する。特定のMeta Link指標や、未統合のPCVR経路を現行の完了条件へ含めない。`docs/verification.md:119-121` はWindows配信元のPCVRを未検証として記録している。
+圧縮経路では符号化と復号を測る。[W3C WebCodecs](https://www.w3.org/TR/webcodecs/) はAPIを定義するが、特定コーデックや実装方式を要求しない。機器固有の指標は一次資料と実測を要する。現行の[PCVR入口](../verification.md#windows-pcvr)はWindowsのChromeから利用者の操作でWebXRを開始し、Meta Horizon Linkを介してQuestへ接続する。接続の再検出・両眼描画・入力・品質とセッションの保持は開発環境の模擬XRで確認し、実際の符号化・転送・復号、GPU性能、映像・音声・遅延は[所有者の運用確認](../agent-harness.md#実機確認と開発受け入れの分離)として測定する。開発環境の結果から未測定機器の品質や性能を保証しない。
 
 各層を別の時計で測る。アプリは開始・更新・描画終了と [`WebGLRenderer.info`](https://threejs.org/docs/pages/WebGLRenderer) のdraw call、triangle、geometry、textureを記録し、[Chrome DevTools Performance](https://developer.chrome.com/docs/devtools/performance) はメインスレッドを記録する。XRランタイムの合成・再投影・表示、ストリーミングのencode・ネットワーク・decode待ちも別に保存する。
 
