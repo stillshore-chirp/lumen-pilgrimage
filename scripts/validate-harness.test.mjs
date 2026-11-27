@@ -12,11 +12,13 @@ function createFixture(overrides = {}) {
   const files = {
     'package.json': JSON.stringify({ scripts: { serve: 'vite' } }),
     'AGENTS.md': '[Harness](docs/agent-harness.md) [Structure](docs/documentation-structure.md)',
-    'README.md': '[Guide](docs/agent-harness.md) [Rules](AGENTS.md)',
+    'README.md': '[Guide](docs/agent-harness.md) [Rules](AGENTS.md) [Issue](.github/ISSUE_TEMPLATE/change.md) [PR](.github/pull_request_template.md) [Plan](plans/TEMPLATE.md)',
     'docs/agent-harness.md': '[Structure](documentation-structure.md)',
     'docs/documentation-structure.md': '# Structure\n',
     'plans/README.md': '# Archive\n',
     'plans/TEMPLATE.md': '# Template\n',
+    '.github/ISSUE_TEMPLATE/change.md': '# Issue\n',
+    '.github/pull_request_template.md': '# PR\n',
     ...overrides
   };
   for (const [path, source] of Object.entries(files)) {
@@ -77,6 +79,70 @@ test('does not treat a heading inside a fenced example as an anchor', () => {
     const result = fixture.run();
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /invalid repository link/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('validates repository links in the issue template', () => {
+  const fixture = createFixture({
+    '.github/ISSUE_TEMPLATE/change.md': '[Missing source](../../docs/missing-source.md)'
+  });
+  try {
+    const result = fixture.run();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /ISSUE_TEMPLATE\/change\.md:1: invalid repository link/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('checks runnable npm commands in the PR template', () => {
+  const fixture = createFixture({
+    '.github/pull_request_template.md': '```sh\nnpm run missing-check\n```'
+  });
+  try {
+    const result = fixture.run();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /pull_request_template\.md: unknown npm script missing-check/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('requires a workflow template to remain reachable from the entry point', () => {
+  const fixture = createFixture({
+    'README.md': '[Guide](docs/agent-harness.md) [Rules](AGENTS.md) [Issue](.github/ISSUE_TEMPLATE/change.md) [PR](.github/pull_request_template.md)'
+  });
+  try {
+    const result = fixture.run();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /maintained document is not reachable: plans\/TEMPLATE\.md/);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('accepts repository main URLs from a conversation template', () => {
+  const fixture = createFixture({
+    '.github/ISSUE_TEMPLATE/change.md': '[Rules](https://github.com/stillshore-chirp/lumen-pilgrimage/blob/main/docs/documentation-structure.md#structure)'
+  });
+  try {
+    const result = fixture.run();
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('checks main URL anchors against the candidate tree without network access', () => {
+  const fixture = createFixture({
+    '.github/pull_request_template.md': '[Rules](https://github.com/stillshore-chirp/lumen-pilgrimage/blob/main/docs/documentation-structure.md#missing-section)'
+  });
+  try {
+    const result = fixture.run();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /pull_request_template\.md:1: invalid repository link/);
   } finally {
     fixture.cleanup();
   }

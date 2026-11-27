@@ -6,8 +6,14 @@ const root = realpathSync(fileURLToPath(new URL('..', import.meta.url)));
 const skillRoot = '.agents/skills';
 const harnessGuide = 'docs/agent-harness.md';
 const documentationStructure = 'docs/documentation-structure.md';
+const repositoryWebRoot = 'https://github.com/stillshore-chirp/lumen-pilgrimage/blob/main/';
 const historicalDocs = new Set(['docs/residence/residence-50f-design.md']);
-const preservedDocs = ['plans/README.md', 'plans/TEMPLATE.md'];
+const preservedDocs = ['plans/README.md'];
+const workflowTemplates = [
+  '.github/ISSUE_TEMPLATE/change.md',
+  '.github/pull_request_template.md',
+  'plans/TEMPLATE.md'
+];
 const errors = [];
 
 function repositoryPath(path) {
@@ -109,11 +115,16 @@ function checkLinks(doc, source) {
         errors.push(description);
         continue;
       }
-      if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(reference)) {
+      const repositoryWebLink = reference.startsWith(repositoryWebRoot);
+      if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(reference) && !repositoryWebLink) {
         continue;
       }
       try {
-        const url = new URL(reference, pathToFileURL(resolve(root, doc)));
+        // Conversation templates need absolute GitHub links after insertion.
+        // Validate this repository's main links against the candidate local tree.
+        const url = repositoryWebLink
+          ? new URL(reference.slice(repositoryWebRoot.length), pathToFileURL(root + sep))
+          : new URL(reference, pathToFileURL(resolve(root, doc)));
         const target = repositoryPath(fileURLToPath(url));
         const fragment = decodeURIComponent(url.hash.slice(1));
         if (fragment && target.endsWith('.md') && !headingAnchors(read(target)).has(fragment)) {
@@ -164,6 +175,7 @@ function run() {
   const currentDocs = [
     'AGENTS.md',
     'README.md',
+    ...workflowTemplates,
     ...discoveredDocs.filter((doc) => !historicalDocs.has(doc)),
     ...assetCredits
   ];
