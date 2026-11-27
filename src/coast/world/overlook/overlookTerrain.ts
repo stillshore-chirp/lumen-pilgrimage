@@ -4,7 +4,6 @@ import { coastNoise } from '../coastNoise';
 export const DECK_LEVEL = 346;
 export const DECK_FRONT = -24;
 export const DECK_SIDE = 35;
-const DATA_FOLDER = `${import.meta.env.BASE_URL}coast-overlook/`;
 const HEADER_BYTES = 24;
 const FRONT_FOOTING = DECK_FRONT - 0.45;
 const SIDE_FOOTING = DECK_SIDE + 0.45;
@@ -20,7 +19,7 @@ interface ElevationGrid {
 }
 
 async function loadElevation(file: string): Promise<ElevationGrid> {
-  const response = await fetch(DATA_FOLDER + file);
+  const response = await fetch(`${import.meta.env.BASE_URL}coast-overlook/${file}`);
   if (!response.ok) throw new Error('Could not fetch the overlook terrain.');
   const data = new DataView(await response.arrayBuffer());
   if (data.byteLength < HEADER_BYTES || data.getUint32(0) !== 0x48494c4c) throw new Error('Invalid elevation grid.');
@@ -92,7 +91,7 @@ function terrainAxis(minimum: number, maximum: number): number[] {
 export function createOverlookSurface(
   heightAt: (x: number, z: number) => number, streets: { texture: THREE.Texture; bounds: THREE.Vector4 },
   night: THREE.IUniform<number>, high?: THREE.IUniform<number>,
-): THREE.Mesh {
+) {
   const xs = terrainAxis(-23000, 23000), zs = terrainAxis(-26000, 11000);
   // Sample the top and toe of the cut independently of the regular grid.
   xs.push(-SIDE_FOOTING - 1.4, -SIDE_FOOTING, SIDE_FOOTING, SIDE_FOOTING + 1.4);
@@ -229,8 +228,56 @@ export function createOverlookSurface(
 
       `);
   };
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = 'Measured basin terrain and street beds';
-  mesh.castShadow = mesh.receiveShadow = true;
-  return mesh;
+  const group = new THREE.Group();
+  group.name = 'Measured basin terrain and street beds';
+  // The residence uses one unshadowed mesh: the main city view keeps almost every tile in view.
+  if (!high) {
+    group.add(new THREE.Mesh(geometry, material));
+    return { group, material, dispose() { geometry.dispose(); material.dispose(); } };
+  }
+  const tileCells = 96;
+  const point = new THREE.Vector3();
+  const position = geometry.getAttribute('position');
+  const tiles: THREE.BufferGeometry[] = [];
+  offset = 0;
+  // Compute the normals from the complete surface before assigning triangles to tiles.
+  for (let startZ = 0; startZ < zs.length - 1; startZ += tileCells) {
+    for (let startX = 0; startX < xs.length - 1; startX += tileCells) {
+      const endX = Math.min(startX + tileCells, xs.length - 1);
+      const endZ = Math.min(startZ + tileCells, zs.length - 1);
+      const start = offset;
+      const bounds = new THREE.Box3();
+      for (let z = startZ; z <= endZ; z += 1) {
+        for (let x = startX; x <= endX; x += 1) {
+          const a = z * xs.length + x;
+          bounds.expandByPoint(point.fromBufferAttribute(position, a));
+          if (z < endZ && x < endX) {
+            const b = a + xs.length;
+            indices.set([a, b, a + 1, b, b + 1, a + 1], offset);
+            offset += 6;
+          }
+        }
+      }
+      const tile = new THREE.BufferGeometry();
+      tile.setAttribute('position', position);
+      tile.setAttribute('color', geometry.getAttribute('color'));
+      tile.setAttribute('normal', geometry.getAttribute('normal'));
+      tile.setIndex(geometry.index);
+      tile.setDrawRange(start, offset - start);
+      tile.boundingBox = bounds;
+      tile.boundingSphere = bounds.getBoundingSphere(new THREE.Sphere());
+      const mesh = new THREE.Mesh(tile, material);
+      mesh.castShadow = mesh.receiveShadow = true;
+      tiles.push(tile);
+      group.add(mesh);
+    }
+  }
+  return {
+    group,
+    material,
+    dispose() {
+      for (const tile of tiles) tile.dispose();
+      material.dispose();
+    },
+  };
 }

@@ -1,4 +1,4 @@
-export function installSimulatedXR() {
+export function installSimulatedXR(layerType = 'base') {
   const fixture = {
     requests: 0, ends: 0, xrDraws: 0, desktopDraws: 0, strayDraws: 0, frames: 0, activations: [],
     head: { x: 0, y: 1.65, z: 0, yaw: 0, pitch: 0 }, eyePoses: {},
@@ -52,14 +52,41 @@ export function installSimulatedXR() {
     if (this.canvas.width === 960 && this.canvas.height === 104) fixture.hint = text;
     return fillText.call(this, text, x, y, ...rest);
   };
-  Object.defineProperty(window, 'XRWebGLBinding', { value: undefined, configurable: true });
+  const framebufferWidth = 640;
+  const framebufferHeight = 480;
+  const eyeViewport = ({ eye }) => ({ x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 });
+  const Binding = layerType === 'projection' ? class {
+    constructor(_session, context) {
+      this.context = context;
+    }
+    createProjectionLayer({ scaleFactor, colorFormat, depthFormat }) {
+      const context = this.context;
+      const texture = format => {
+        const result = context.createTexture();
+        context.bindTexture(context.TEXTURE_2D, result);
+        context.texStorage2D(context.TEXTURE_2D, 1, format, framebufferWidth, framebufferHeight);
+        context.bindTexture(context.TEXTURE_2D, null);
+        return result;
+      };
+      this.colorTexture = texture(colorFormat);
+      this.depthStencilTexture = texture(depthFormat);
+      fixture.scaleFactor = scaleFactor;
+      return { textureWidth: framebufferWidth, textureHeight: framebufferHeight, ignoreDepthValues: true, fixedFoveation: 1 };
+    }
+    getViewSubImage(_layer, view) {
+      return { colorTexture: this.colorTexture, depthStencilTexture: this.depthStencilTexture, viewport: eyeViewport(view) };
+    }
+  } : undefined;
+  Object.defineProperty(window, 'XRWebGLBinding', { value: Binding, configurable: true });
   window.XRWebGLLayer = class {
     framebuffer = null;
-    framebufferWidth = 640;
-    framebufferHeight = 480;
-    getViewport({ eye }) {
-      return { x: eye === 'left' ? 0 : 320, y: 0, width: 320, height: 480 };
+    framebufferWidth = framebufferWidth;
+    framebufferHeight = framebufferHeight;
+    fixedFoveation = 1;
+    constructor(_session, _context, options) {
+      fixture.scaleFactor = options.framebufferScaleFactor;
     }
+    getViewport(view) { return eyeViewport(view); }
   };
 
   const projectionMatrix = new Float32Array([
@@ -109,7 +136,9 @@ export function installSimulatedXR() {
     inputSources = [controller('left'), controller('right')];
     visibilityState = 'visible';
     async requestReferenceSpace() { return new EventTarget(); }
-    updateRenderState() {}
+    updateRenderState({ baseLayer, layers }) {
+      fixture.layer = baseLayer ?? layers?.[0] ?? fixture.layer;
+    }
     makeFrame() {
       return { session: this, getViewerPose: viewPose, getPose: space => space?.tracked === false ? null : space ?? null };
     }

@@ -84,20 +84,19 @@ export async function createResidenceCity() {
     blocksFootprint: excludeRegionalFootprint,
   });
   const terrain = createOverlookSurface(heightAt, streets, atmosphere.night);
-  terrain.castShadow = terrain.receiveShadow = false;
   const loaded = await Promise.allSettled([streets.ready, basin.ready]);
   for (const result of loaded) {
     if (result.status === 'rejected') {
       sky.dispose();
       streets.texture.dispose();
       atmosphere.sky.value.dispose();
-      disposeDrawables(terrain);
+      terrain.dispose();
       disposeDrawables(basin.group);
       throw result.reason;
     }
   }
   const neighborhood = createResidenceNeighborhood(atmosphere.night, createResidenceBlocks());
-  const groundMaterial = terrain.material as THREE.MeshStandardMaterial;
+  const groundMaterial = terrain.material;
   const streetCoverage = groundMaterial.onBeforeCompile;
   groundMaterial.onBeforeCompile = (shader, renderer) => {
     streetCoverage(shader, renderer);
@@ -147,7 +146,7 @@ export async function createResidenceCity() {
   region.name = 'Surveyed hills and shared downtown skyline';
   region.position.set(-origin.x, RESIDENCE_STREET_LEVEL - grade, origin.z);
   region.scale.z = -1;
-  region.add(terrain, basin.group);
+  region.add(terrain.group, basin.group);
 
   const traffic = createResidenceStreetTraffic(atmosphere.night);
   const airTraffic = createAirTraffic(residenceFlights);
@@ -182,6 +181,7 @@ export async function createResidenceCity() {
   setQuality('light');
   return {
     group,
+    regionalCity: basin.group,
     setTimeOfDay,
     setQuality,
     update(time: number, _camera?: THREE.PerspectiveCamera) {

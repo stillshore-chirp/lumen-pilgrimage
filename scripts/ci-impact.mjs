@@ -45,6 +45,8 @@ const sceneRoots = {
   coast: [...coastSceneRoots, overlookSceneRoot, residenceSceneRoot, cinemaSceneRoot],
   monitor: ['src/monitor/monitorView.ts', 'src/monitor/monitorSender.ts', 'server/virtual-monitor-signaling.mjs',
     ...coastSceneRoots, overlookSceneRoot, residenceSceneRoot, cinemaSceneRoot,
+    // The projection-XR shader preparation cases live in the monitor browser suite.
+    'src/coast/world/residence/residenceShaderPreparation.ts',
     'src/coast/ResidenceControlPanel.ts', 'src/coast/residenceControlPanel.css', 'src/coast/world/cinema/CinemaPanel.ts'],
   residence: [residenceSceneRoot, ...coastSceneRoots, overlookSceneRoot, 'src/monitor/monitorView.ts'],
   cinema: [cinemaSceneRoot, ...coastSceneRoots], atrium: ['src/coast/world/atrium/AtriumWorld.ts'],
