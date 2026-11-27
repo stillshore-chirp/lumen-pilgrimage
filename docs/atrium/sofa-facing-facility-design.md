@@ -1,5 +1,7 @@
 # 商業アトリウム・ソファ正面の施設設計
 
+[光庭・専門店・上階の実画面](../gallery/atrium.md)。撮影条件はギャラリーを参照してください。
+
 設計仕様 2026-11-27。対象読者は建築、内装、植栽、照明、音響、実装、受け入れ確認の担当者。**独立設計査読R1〜R5および遠景・近接品質の差分査読RF1〜RF3を是正した設計資料である。実装の達成はPRの検証結果と区別する。** 基準スナップショットは `31a37ae66fdaf08f66dfc2e24ab9f9eb2ed78f68`。
 
 この資料と[自作の平面・断面図](sofa-facing-facility-plan-section.svg)を建築・内装の正本とする。専門稿は[照明・素材・展示](sofa-facing-light-material-design.md)、[植栽](sofa-facing-landscape-design.md)、[音響](sofa-facing-acoustic-design.md)。実装入力は[共通寸法](../../src/coast/world/atrium/atriumFrontPlan.ts)で共有し、設計過程と査読の採否は[Issue #269](https://github.com/stillshore-chirp/lumen-pilgrimage/issues/269)へ記録する。

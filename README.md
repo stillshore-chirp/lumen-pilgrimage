@@ -1,6 +1,22 @@
 # Lumen Pilgrimage
 
-Lumen Pilgrimage は、Three.js と TypeScript で開発しているブラウザー向けの景観探索プロトタイプです。入り江から森・湖・稜線を歩き、丘陵展望台、都心の70階住戸、映画館シアター（大）を巡ります。昼夜や描画品質、環境音を切り替え、仮想モニターには端末の画面共有を表示できます。開発サーバーとプレビューには Vite を使います。
+Lumen Pilgrimage は、景色の中を歩き、気に入った場所で過ごすブラウザー向けの景観探索プロトタイプです。自然の散策路、街を望む展望台や住戸、映画館、商業アトリウム、湖畔の広間を巡ります。
+
+[![入り江の浜から海と対岸の岩壁を望む昼景](docs/gallery/images/coast-inlet-day.webp)](docs/gallery/coast.md)
+
+昼夜、照明、環境音を切り替えながら探索できます。仮想モニターには端末の画面共有を表示できます。Three.js と TypeScript で開発し、開発サーバーとプレビューに Vite を使います。
+
+## 過ごせる空間
+
+写真はデスクトップブラウザーの実描画です。「高品質」で撮影しています。
+
+| 自然と眺望 | 建築と室内 |
+| --- | --- |
+| [![入り江と山道](docs/gallery/images/coast-inlet-day-thumb.webp)](docs/gallery/coast.md)<br>**[入り江と山道](docs/gallery/coast.md)**<br>浜から密林、山中の湖、朱の参道、稜線へ続く散策路。 | [![清掃照明で見る映画館の客席と通路](docs/gallery/images/cinema-rear-service-thumb.webp)](docs/gallery/cinema.md)<br>**[映画館シアター](docs/gallery/cinema.md)**<br>大型スクリーンの前に座り、館内を歩いて席を選ぶ。 |
+| [![丘陵展望台](docs/gallery/images/overlook-main-night-thumb.webp)](docs/gallery/overlook.md)<br>**[丘陵展望台](docs/gallery/overlook.md)**<br>高さと方角を変えて、街並みと夜の灯りを眺める。 | [![商業アトリウム](docs/gallery/images/atrium-concourse-day-thumb.webp)](docs/gallery/atrium.md)<br>**[商業アトリウム](docs/gallery/atrium.md)**<br>曲階段と回廊を巡り、店先とガラス越しの光庭を眺める。 |
+| [![湖畔の広間](docs/gallery/images/lake-hall-day-thumb.webp)](docs/gallery/lake.md)<br>**[湖畔の広間](docs/gallery/lake.md)**<br>畳の広間から湖と石の環を望み、昼夜の景色の中で過ごす。 | [![都心の70階住戸](docs/gallery/images/residence-living-day-thumb.webp)](docs/gallery/residence.md)<br>**[都心の70階住戸](docs/gallery/residence.md)**<br>窓外の街を眺め、リビング、茶室、書斎を行き来する。 |
+
+[すべてのスクリーンショットを見る](docs/gallery/README.md)
 
 ## 起動と操作
 
@@ -29,6 +45,7 @@ Meta Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、「VRを
 
 | 知りたいこと | 読む文書 |
 | --- | --- |
+| 各ワールドの景色と昼夜・別視点 | [ワールドギャラリー](docs/gallery/README.md) |
 | キー操作、散策路、視野角、描画・環境音の設定、仮想モニター | [探索ガイド](docs/exploration.md) |
 | ワールド切替、地形、描画、音響の設計 | [設計](docs/architecture.md) |
 | 映画館ワールドの上映音響設計 | [入力・スピーカー・非VRとPC VRでの検証](docs/cinema/cinema-sound-design.md) |
