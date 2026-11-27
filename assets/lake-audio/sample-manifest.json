@@ -1,0 +1,263 @@
+{
+  "schemaVersion": 1,
+  "casePolicy": {
+    "issue": 275,
+    "newExternalAudioLicense": "CC0-1.0",
+    "scope": "New external audio introduced for the koto research and comparison work only; not a permanent ban on other licenses or a removal rule for existing assets.",
+    "authority": "Autonomous in-scope adoption when provenance, rights, ethics and quality satisfy the documented gates; no project-owner preapproval gate."
+  },
+  "sources": [
+    {
+      "id": "freesound-365215",
+      "status": "candidate",
+      "nameAndFiles": {
+        "title": "Japan_Koto_My_Amateur_Improv_Session_2.wav",
+        "originalFilename": "Japan_Koto_My_Amateur_Improv_Session_2.wav",
+        "acquiredFilename": "365215-official-hq-preview-first-2MB.mp3",
+        "instrument": "koto (uploader description)",
+        "stringCount": null,
+        "stringCountStatus": "unverified"
+      },
+      "roles": {
+        "creator": "RutgerMuller",
+        "performer": "RutgerMuller (explicit first-person improvisation description)",
+        "recordist": "RutgerMuller (inferred from upload and first-person recording description; sole recorder not independently established)"
+      },
+      "officialSource": {
+        "url": "https://freesound.org/people/RutgerMuller/sounds/365215/",
+        "id": "365215",
+        "profileUrl": "https://freesound.org/people/RutgerMuller/",
+        "creatorWebsite": "https://www.rutgermuller.nl"
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "statementUrl": "https://freesound.org/people/RutgerMuller/sounds/365215/",
+        "legalCodeUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode",
+        "statementLabel": "Creative Commons 0"
+      },
+      "checkedDate": "2026-11-27",
+      "licenseEvidence": {
+        "checkedAt": "2026-11-27T12:02:45.853374+00:00",
+        "method": "Exa full-page read plus direct public HTML inspection; timestamp records completion of retrieval after the label check",
+        "observedLabel": "Creative Commons 0",
+        "observedLicenseHref": "http://creativecommons.org/publicdomain/zero/1.0/",
+        "sourcePageSha256": "655019a6f3c02e884c9054950cbacc434d542d9e58d431725ba4d30350dd6028",
+        "shortRecord": "Individual sound page links CC0 1.0; creator profile confirms CC0, requests creative transformation and no misleading collaboration credit. Public share-url metadata links the high-quality MP3 preview; original WAV download requires login."
+      },
+      "rights": {
+        "affirmer": "RutgerMuller",
+        "confirmedScope": [
+          "Uploader explicitly identifies own improvised koto performance; CC0 selected for this recording.",
+          "Creator profile and official biography independently describe publishing own field recordings under CC0."
+        ],
+        "basis": "Reasonable provenance basis for a candidate, not a warranty of sole rights or a verified 13-string instrument."
+      },
+      "thirdParty": {
+        "composition": "Uploader describes own improvisation; no named third-party composition or commercial source is declared. Distinctive phrases will not be copied into the independent score.",
+        "performance": "Uploader explicitly describes being the player. No other performer is credited for these sessions.",
+        "recording": "Zoom H2n stereo MS, mid-October 2016, Kashiwa, Chiba, Japan, microphone under instrument, according to uploader. Sole recording authorship is not independently proved.",
+        "otherRights": "No third-party library or commercial track is declared. Audible speech, other music, privacy and contamination must be checked on any proposed cut.",
+        "intent": "Profile requests creative transformation; discourages commercial redistribution of unedited sounds and misleading collaboration credit. Treat these as ethical requests separately from CC0 conditions.",
+        "conclusion": "Rights provenance is sufficiently plausible for private candidate analysis. Adoption still requires cut-specific quality/third-party checks and truthful instrument identification."
+      },
+      "sourceIdentity": {
+        "sha256": "5c9f8925cee5618525d3dbc2a70e8bab956b3de55b9fc79dd52adcebf2e2cce1",
+        "bytes": 1802240,
+        "kind": "official-hq-mp3-preview-partial-byte-range",
+        "complete": false,
+        "originalWavAcquired": false,
+        "requestedRange": "bytes=0-1999999",
+        "availableDecodedSeconds": 76.10497916666667
+      },
+      "retrievalAndProcessing": {
+        "url": "https://cdn.freesound.org/previews/365/365215_179538-hq.mp3",
+        "retrievedAt": "2026-11-27T12:02:45.853374+00:00",
+        "transferExitCode": 28,
+        "steps": [
+          "Public HTML used to resolve the explicit share-url high-quality MP3; no guessed original URL or authentication bypass.",
+          "curl --fail --silent --location --connect-timeout 10 --max-time 40 --range 0-1999999 --output <private-stage.mp3> <official-preview-url>; timeout kept available bytes.",
+          "ffmpeg -hide_banner -loglevel error -y -i <private-stage.mp3> -acodec pcm_s16le <private-stage.wav>; decode exit 0."
+        ],
+        "decodedPreview": {
+          "sampleRate": 48000,
+          "channels": 2,
+          "sampleWidthBytes": 2,
+          "frames": 3653039,
+          "sha256": "eddcf1922325756d0928293297d93b64beeb5f0ba43e11730f7eaf2741bf9f36",
+          "bytes": 14612234
+        },
+        "transformedNoteSelection": "not yet performed",
+        "tools": {
+          "curl": "curl 8.7.1 (x86_64-apple-darwin26.0) libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.69.0",
+          "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers"
+        }
+      },
+      "distribution": [],
+      "usage": [],
+      "quality": {
+        "status": "not_evaluated",
+        "evidence": "MP3 partial range decodes successfully to 48 kHz stereo PCM16; this verifies file usability only. Original page describes 96 kHz/24-bit WAV, which was not acquired.",
+        "limitations": [
+          "Lossy MP3 preview, not original WAV.",
+          "Improvisation rather than isolated controlled notes; overlapping decays, finger/pick differences and body-under microphone may limit useful cuts.",
+          "No human listening or final sample-selection quality acceptance recorded."
+        ]
+      },
+      "uncertainties": [
+        "Thirteen strings not verified.",
+        "No controlled velocity layers or round robins declared.",
+        "Original WAV unavailable without account login; no credential use or bypass attempted.",
+        "Partial end must not be mistaken for a natural decay; cut boundaries and third-party sounds need assessment.",
+        "No external recording adopted into public assets at this snapshot."
+      ]
+    },
+    {
+      "id": "freesound-365242",
+      "status": "candidate",
+      "nameAndFiles": {
+        "title": "Japan_Koto_Improv_Amateur_Session_3.wav",
+        "originalFilename": "Japan_Koto_Improv_Amateur_Session_3.wav",
+        "acquiredFilename": "365242-official-hq-preview-first-2MB.mp3",
+        "instrument": "koto (uploader description)",
+        "stringCount": null,
+        "stringCountStatus": "unverified"
+      },
+      "roles": {
+        "creator": "RutgerMuller",
+        "performer": "RutgerMuller (explicit first-person improvisation description)",
+        "recordist": "RutgerMuller (inferred from upload and first-person recording description; sole recorder not independently established)"
+      },
+      "officialSource": {
+        "url": "https://freesound.org/people/RutgerMuller/sounds/365242/",
+        "id": "365242",
+        "profileUrl": "https://freesound.org/people/RutgerMuller/",
+        "creatorWebsite": "https://www.rutgermuller.nl"
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "statementUrl": "https://freesound.org/people/RutgerMuller/sounds/365242/",
+        "legalCodeUrl": "https://creativecommons.org/publicdomain/zero/1.0/legalcode",
+        "statementLabel": "Creative Commons 0"
+      },
+      "checkedDate": "2026-11-27",
+      "licenseEvidence": {
+        "checkedAt": "2026-11-27T12:03:25.875851+00:00",
+        "method": "Exa full-page read plus direct public HTML inspection; timestamp records completion of retrieval after the label check",
+        "observedLabel": "Creative Commons 0",
+        "observedLicenseHref": "http://creativecommons.org/publicdomain/zero/1.0/",
+        "sourcePageSha256": "7d20139d9208a72beeddc5a7512c400b73a520f3b5212d3c6ed9baf2b352bfd6",
+        "shortRecord": "Individual sound page links CC0 1.0; creator profile confirms CC0, requests creative transformation and no misleading collaboration credit. Public share-url metadata links the high-quality MP3 preview; original WAV download requires login."
+      },
+      "rights": {
+        "affirmer": "RutgerMuller",
+        "confirmedScope": [
+          "Uploader explicitly identifies own improvised koto performance; CC0 selected for this recording.",
+          "Creator profile and official biography independently describe publishing own field recordings under CC0."
+        ],
+        "basis": "Reasonable provenance basis for a candidate, not a warranty of sole rights or a verified 13-string instrument."
+      },
+      "thirdParty": {
+        "composition": "Uploader describes own improvisation; no named third-party composition or commercial source is declared. Distinctive phrases will not be copied into the independent score.",
+        "performance": "Uploader explicitly describes being the player. No other performer is credited for these sessions.",
+        "recording": "Zoom H2n stereo MS, mid-October 2016, Kashiwa, Chiba, Japan, microphone under instrument, according to uploader. Sole recording authorship is not independently proved.",
+        "otherRights": "No third-party library or commercial track is declared. Audible speech, other music, privacy and contamination must be checked on any proposed cut.",
+        "intent": "Profile requests creative transformation; discourages commercial redistribution of unedited sounds and misleading collaboration credit. Treat these as ethical requests separately from CC0 conditions.",
+        "conclusion": "Rights provenance is sufficiently plausible for private candidate analysis. Adoption still requires cut-specific quality/third-party checks and truthful instrument identification."
+      },
+      "sourceIdentity": {
+        "sha256": "c59278af17194f544c1f2a364ffeadccad22a36c8af356b7215478266396c984",
+        "bytes": 1724416,
+        "kind": "official-hq-mp3-preview-partial-byte-range",
+        "complete": false,
+        "originalWavAcquired": false,
+        "requestedRange": "bytes=0-1999999",
+        "availableDecodedSeconds": 74.30497916666667
+      },
+      "retrievalAndProcessing": {
+        "url": "https://cdn.freesound.org/previews/365/365242_179538-hq.mp3",
+        "retrievedAt": "2026-11-27T12:03:25.875851+00:00",
+        "transferExitCode": 28,
+        "steps": [
+          "Public HTML used to resolve the explicit share-url high-quality MP3; no guessed original URL or authentication bypass.",
+          "curl --fail --silent --location --connect-timeout 10 --max-time 40 --range 0-1999999 --output <private-stage.mp3> <official-preview-url>; timeout kept available bytes.",
+          "ffmpeg -hide_banner -loglevel error -y -i <private-stage.mp3> -acodec pcm_s16le <private-stage.wav>; decode exit 0."
+        ],
+        "decodedPreview": {
+          "sampleRate": 48000,
+          "channels": 2,
+          "sampleWidthBytes": 2,
+          "frames": 3566639,
+          "sha256": "133eff375b227d0d2480bec544cbaa535994adf8cbeb5708235d8c73c5c47430",
+          "bytes": 14266634
+        },
+        "transformedNoteSelection": "not yet performed",
+        "tools": {
+          "curl": "curl 8.7.1 (x86_64-apple-darwin26.0) libcurl/8.7.1 (SecureTransport) LibreSSL/3.3.6 zlib/1.2.12 nghttp2/1.69.0",
+          "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers"
+        }
+      },
+      "distribution": [],
+      "usage": [],
+      "quality": {
+        "status": "not_evaluated",
+        "evidence": "MP3 partial range decodes successfully to 48 kHz stereo PCM16; this verifies file usability only. Original page describes 96 kHz/24-bit WAV, which was not acquired.",
+        "limitations": [
+          "Lossy MP3 preview, not original WAV.",
+          "Improvisation rather than isolated controlled notes; overlapping decays, finger/pick differences and body-under microphone may limit useful cuts.",
+          "No human listening or final sample-selection quality acceptance recorded."
+        ]
+      },
+      "uncertainties": [
+        "Thirteen strings not verified.",
+        "No controlled velocity layers or round robins declared.",
+        "Original WAV unavailable without account login; no credential use or bypass attempted.",
+        "Partial end must not be mistaken for a natural decay; cut boundaries and third-party sounds need assessment.",
+        "No external recording adopted into public assets at this snapshot."
+      ]
+    }
+  ],
+  "rejectedCandidates": [
+    {
+      "id": "yukinisuzume-koto",
+      "url": "https://yukinisuzume.seesaa.net/",
+      "license": "creator custom terms; not CC0-1.0",
+      "reason": "Original source explicitly describes thirteen strings and one sample per note, but not CC0. Mirror CC-BY label cannot convert original terms into CC0."
+    },
+    {
+      "id": "unreal-instruments-koto",
+      "url": "https://sfzinstruments.github.io/folk/koto/",
+      "license": "Custom (catalogue statement)",
+      "reason": "13 Strings KOTO, but no CC0-1.0 statement established; no audio acquired."
+    },
+    {
+      "id": "world-strings-koto",
+      "url": "https://lilambdcrossing.itch.io/world-strings-real-recordings",
+      "license": "CC-BY-3.0 for the koto recording",
+      "reason": "Mixed-license pack; CC0 label for other recordings does not cover koto."
+    },
+    {
+      "id": "freesound-zacate-714936",
+      "url": "https://freesound.org/people/zacate/sounds/714936/",
+      "license": "CC0 display",
+      "reason": "No first-person recording/performance/composition provenance, source and title unresolved; no audio acquired."
+    },
+    {
+      "id": "freesound-spt3125-kayageum1",
+      "url": "https://freesound.org/people/spt3125/packs/1534/",
+      "license": "CC0 search/source descriptions",
+      "reason": "Single-note samples are a 23-string kayageum, not verified thirteen-string koto."
+    },
+    {
+      "id": "vini-128-oscillators",
+      "url": "https://musical-artifacts.com/artifacts/5952",
+      "license": "public-domain display",
+      "reason": "Synth oscillator bank; does not establish real acoustic koto recording provenance."
+    },
+    {
+      "id": "tozan-lapsy-koto",
+      "url": "https://opengameart.org/content/lapsy-koto",
+      "license": "CC0 display",
+      "reason": "Musical piece and MIDI; no real recorded koto single-note provenance established."
+    }
+  ]
+}
