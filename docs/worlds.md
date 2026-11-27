@@ -58,6 +58,10 @@
 
 [CoastNavigation](../src/coast/CoastControls.ts)はワールドごとに境界、初期姿勢、`groundHeight`、任意の水位と衝突判定、飛行上限、任意の天井高を提供します。共通の移動処理はこの契約から移動できる範囲と支持面を読みます。地形や建築を変更するときは、描画形状と同じ座標・高さをナビゲーションへ反映します。
 
+飛行の任意判定 `blocksFlight(x, z, eyeY, clearance)` は、ワールド座標のカメラ中心高と余裕半径を受け取ります。共通処理の半径は0.25 mです。従来の2引数関数も使用できます。XYZ経路を屋外では最大0.46 m、屋内では最大0.15 m間隔で標本化し、形状・床・天井・頭部の余裕を満たした最後のXYZだけを確定します。上下移動にも同じ判定を行います。これは離散経路の検査であり、任意の薄い形状に対する連続衝突判定ではありません。
+
+XRでスティック等により身体位置を動かす際は、追跡された頭部offsetを加えた位置でも判定します。既に重なっている場合は離れる向きへの退避を許可します。ヘッドセットから得る頭部の1対1追跡は維持し、現実の頭を動かした位置を仮想壁へ固定する処理にはしません。 [移動制御](../src/coast/CoastControls.ts) · [検査手順](verification.md#高さに応じた飛行の確認)
+
 | 実装座標の前提 | 現行の基準 |
 | --- | --- |
 | 海岸 | 海面は `y=0`、海岸の既定着地点は `(-12, 79)`。湖は独立した水位を持ちます。 |
@@ -105,6 +109,8 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 標高グリッド2種（`public/coast-overlook/overlook-elevation.bin`、`overlook-detail.bin`）を読み込み、デッキの擁壁、斜面、盆地の街区をつなぎます。[overlookTerrain.ts](../src/coast/world/overlook/overlookTerrain.ts)が標高を補間し、中央デッキ周囲に接地用の斜面を作ります。[OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts)はデッキ、街路、交通、航空機、空と照明をまとめ、更新処理から照明・交通・航空機を動かします。座標上の2階デッキは主デッキより7.2 m高く、東階段の各段・踊り場と歩行支持面を[overlookUpperDeck.ts](../src/coast/world/overlook/overlookUpperDeck.ts)で共有します。
 
 中央デッキ、西テラス、東テラス、2階展望デッキへ直接移動できます。現在、展望台用の配置図PDFはありません。標高データの出典と条件は[展望台の素材クレジット](../public/coast-overlook/ATTRIBUTION.md)、利用経路は[探索ガイド](exploration.md)を参照してください。
+
+亭の主外殻、両翼、段違い屋根、八角drum、ドーム断面は [overlookPavilionPlan.ts](../src/coast/world/overlook/overlookPavilionPlan.ts) を描画と飛行で共有します。高さは主床346 mからの相対値です。箱とdrumは余裕半径で保守的に拡張し、ドームは回転軸断面の各線分までの最短距離へ半径と外殻の最大突出量約0.06435 mを加えます。頂部と斜面の両方を守り、屋根より高い空間の移動を許可します。歩行範囲、飛行上限451 m、着地点と階段の支持面は維持します。
 
 擁壁、段、手すり、デッキの境界を変える場合は、描画形状と `groundHeight`／`blocksWalking`／`blocksFlight` を一組として扱います。[地形接続](../scripts/coast-terrain.test.mjs)と[階段・デッキのブラウザー試験](../scripts/coast-browser.test.mjs)が既存の入口です。
 

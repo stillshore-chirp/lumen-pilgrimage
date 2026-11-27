@@ -10,6 +10,7 @@ import { OverlookAudio } from './overlookAudio';
 import { createOverlookCity, createOverlookCityGround } from './overlookCity';
 import { createOverlookDeck, OVERLOOK_DECK_OBSTACLES } from './overlookDeck';
 import { createOverlookHillside } from './overlookHillside';
+import { blocksPavilionFlight } from './overlookPavilionPlan';
 import { createOverlookSurface, DECK_LEVEL, loadOverlookTerrain } from './overlookTerrain';
 import { createOverlookTraffic, isOverlookRoadway } from './overlookTraffic';
 import { blocksUpperDeckWalking, isUpperDeck, overlookDeckGround } from './overlookUpperDeck';
@@ -61,7 +62,8 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
     audio: new OverlookAudio(traffic.soundCorridors, heightAt),
     navigation: {
       bounds, spawn: EXPLORATION_WORLDS[1].places[0], groundHeight: overlookDeckGround,
-      flightCeiling: DECK_LEVEL + 105, blocksWalking: blocksDeckWalking, blocksFlight: insidePavilion,
+      flightCeiling: DECK_LEVEL + 105, blocksWalking: blocksDeckWalking,
+      blocksFlight: (x, z, eyeY, clearance) => blocksPavilionFlight(x, z, eyeY - DECK_LEVEL, clearance),
     },
     world: {
       scene,

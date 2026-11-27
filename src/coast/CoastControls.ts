@@ -47,7 +47,8 @@ export interface CoastNavigation {
   readonly supportAt?: (x: number, z: number, footLimit: number) => number;
   readonly waterLevel?: (x: number, z: number) => number;
   readonly blocksWalking?: (x: number, z: number, foot: number, previousFoot?: number) => boolean;
-  readonly blocksFlight?: (x: number, z: number) => boolean;
+  // eyeY is the camera/head centre; clearance is its radius in world metres.
+  readonly blocksFlight?: (x: number, z: number, eyeY: number, clearance: number) => boolean;
   readonly allowFlight?: boolean;
   readonly flightCeiling: number;
   readonly ceilingHeight?: (x: number, z: number, foot: number) => number;
@@ -624,28 +625,24 @@ export class CoastControls {
     const floor = indoor ? this.flightFloorHeight(x, z) : -Infinity;
     const targetY = this.limitHeadY(this.camera.position, Math.min(ceiling, Math.max(floor, y + this.movement.y)), offset);
     const sampleDistance = indoor ? WALK_SAMPLE_DISTANCE : FLIGHT_SAMPLE_DISTANCE;
-    const steps = Math.ceil(Math.hypot(targetX - x, targetZ - z) / sampleDistance);
-    let clear = true;
+    const steps = Math.max(1, Math.ceil(Math.hypot(targetX - x, targetY - y, targetZ - z) / sampleDistance));
     let previousX = x, previousY = y, previousZ = z;
     for (let step = 1; step <= steps; step += 1) {
       const t = step / steps;
       const sampleX = x + (targetX - x) * t, sampleZ = z + (targetZ - z) * t;
       const sampleY = y + (targetY - y) * t;
       const blocked = this.navigation.blocksFlight
-        ? this.navigation.blocksFlight(sampleX, sampleZ)
+        ? this.navigation.blocksFlight(sampleX, sampleZ, sampleY, CAMERA_SURFACE_CLEARANCE)
         : this.navigation.blocksWalking?.(sampleX, sampleZ, sampleY - CAMERA_SURFACE_CLEARANCE);
       if (blocked || sampleY < this.flightFloorHeight(sampleX, sampleZ) || sampleY > this.ceilingY(sampleX, sampleZ)
         || !this.headCanFollow(previousX, previousY, previousZ, sampleX, sampleY, sampleZ, offset)) {
-        clear = false;
         break;
       }
       previousX = sampleX;
       previousY = sampleY;
       previousZ = sampleZ;
     }
-    const safeX = clear ? targetX : x;
-    const safeZ = clear ? targetZ : z;
-    this.camera.position.set(safeX, Math.max(this.flightFloorHeight(safeX, safeZ), targetY), safeZ);
+    this.camera.position.set(previousX, previousY, previousZ);
   }
 
   private moveAlongSupport(
@@ -697,16 +694,20 @@ export class CoastControls {
     if (!offset || !this.headBlocked(nextX + offset.x, nextY + offset.y, nextZ + offset.z)) return true;
     // During overlap, a retreat on one axis cannot offset advancing into clearance on the other.
     const xAlongHeadOffset = (nextX - x) * offset.x;
+    const yAlongHeadOffset = this.flying ? (nextY - y) * offset.y : 0;
     const zAlongHeadOffset = (nextZ - z) * offset.z;
-    const retreating = xAlongHeadOffset <= 0 && zAlongHeadOffset <= 0
-      && (xAlongHeadOffset < 0 || zAlongHeadOffset < 0);
+    const retreating = xAlongHeadOffset <= 0 && yAlongHeadOffset <= 0 && zAlongHeadOffset <= 0
+      && (xAlongHeadOffset < 0 || yAlongHeadOffset < 0 || zAlongHeadOffset < 0);
     return retreating && this.headBlocked(x + offset.x, y + offset.y, z + offset.z);
   }
 
   private headBlocked(x: number, y: number, z: number): boolean {
     const foot = y - CAMERA_SURFACE_CLEARANCE;
+    const blocked = this.flying && this.navigation.blocksFlight
+      ? this.navigation.blocksFlight(x, z, y, CAMERA_SURFACE_CLEARANCE)
+      : this.navigation.blocksWalking?.(x, z, foot) === true;
     return this.clampX(x) !== x || this.clampZ(z) !== z || foot < this.navigation.groundHeight(x, z)
-      || y > this.ceilingY(x, z) || this.navigation.blocksWalking?.(x, z, foot) === true;
+      || y > this.ceilingY(x, z) || blocked;
   }
 
   private limitHeadY(position: Vector3, targetY: number, offset?: Vector3): number {
