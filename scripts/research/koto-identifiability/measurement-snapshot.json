@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "status": "not-adopted-analysis-only",
+  "measuredDateUtc": "2026-11-27",
+  "software": {
+    "python": "3.13.4",
+    "numpy": "2.5.5",
+    "scipy": "1.18.1"
+  },
+  "environment": {
+    "os": "Darwin",
+    "architecture": "arm64",
+    "repositoryBase": "dffe81edff54f854c88e42bfbdf8de09643550bc",
+    "blasBackend": "not-recorded",
+    "platform": "macOS-27.2-arm64-arm-64bit-Mach-O"
+  },
+  "notRerunDuringPackaging": true,
+  "packagedToolSha256": {
+    "matrix_pencil.py": "700cac7460ec77cc7dbce2fff88c07f7c7efd831e229847a7b7ac959a7470c27",
+    "commuted.py": "3c5b0357deb00aa4dc0e69e06c9bd2ef554904508cd22193ec59a2b856893907"
+  },
+  "matrixPencil": {
+    "input": {
+      "path": "public/lake-audio/samples/low-151.wav",
+      "sha256": "e4e40ee98121187039ecca725fd5b1192762bf2de85c7a8b264ac4ccfcc8b959",
+      "availability": "bundled"
+    },
+    "historicalScriptSha256": "675af165865a871db5d817e4087c813f7b513cdb76037a016bbd12b665ce01a3",
+    "windowsSeconds": {
+      "train": [
+        0.457,
+        0.687
+      ],
+      "holdout": [
+        0.707,
+        0.773
+      ]
+    },
+    "errors": [
+      {
+        "modesPerHarmonic": 1,
+        "trainRelativeRms": 0.13947261195406507,
+        "holdoutFullBandRelativeRms": 0.2660015526827979,
+        "jacobianCondition": 2814.751536012726,
+        "zeroDecayBoundaryCount": 2
+      },
+      {
+        "modesPerHarmonic": 2,
+        "trainRelativeRms": 0.0769061609577041,
+        "holdoutFullBandRelativeRms": 0.23910476606409398,
+        "jacobianCondition": 615796.0842489325,
+        "zeroDecayBoundaryCount": 7
+      }
+    ],
+    "last35msRelativeRms": {
+      "1": 0.3021602409013059,
+      "2": 0.2862169354775964
+    },
+    "reasons": [
+      "two-mode parameters vary with training window",
+      "additional modes improve training much more than held-out prediction",
+      "growing pencil poles and zero-decay constrained solutions do not identify physical polarizations",
+      "66ms within-recording holdout does not justify natural sustained extension"
+    ],
+    "bankInput": {
+      "path": "public/lake-audio/samples/bank.json",
+      "sha256": "0e7d90f2665021b985809c611d94c5dd4aed1c45e4341b4263cd16f287afc686"
+    }
+  },
+  "commuted": {
+    "bankSha256": "9dbf8876821cafb6b5e61cb56e872f790202e903f05242c195c8ab748d8dc1b7",
+    "bankAvailability": "not-bundled-private-six-root-bank",
+    "inputs": [
+      {
+        "id": "low-151",
+        "filename": "low-151.wav",
+        "sha256": "e4e40ee98121187039ecca725fd5b1192762bf2de85c7a8b264ac4ccfcc8b959",
+        "availability": "bundled-public-sample",
+        "bundledPath": "public/lake-audio/samples/low-151.wav"
+      },
+      {
+        "id": "mid-319",
+        "filename": "mid-319.wav",
+        "sha256": "9ba2f8ef5cdd234ffd1cc4c296e3919e9fb7c9d16a30fef1355f99692978060d",
+        "availability": "bundled-public-sample",
+        "bundledPath": "public/lake-audio/samples/mid-319.wav"
+      },
+      {
+        "id": "mid-452",
+        "filename": "mid-452.wav",
+        "sha256": "3ba200e1ac036e4648182a388d815adaa69f18d6e0304de8e1cbcaae6be304fa",
+        "availability": "bundled-public-sample",
+        "bundledPath": "public/lake-audio/samples/mid-452.wav"
+      },
+      {
+        "id": "high-640",
+        "filename": "high-640.wav",
+        "sha256": "a71e59e02bad64cd4cdf2944e561036548bc2458e944296ac0893202eefba7ce",
+        "availability": "bundled-public-sample",
+        "bundledPath": "public/lake-audio/samples/high-640.wav"
+      },
+      {
+        "id": "high-792",
+        "filename": "high-792.wav",
+        "sha256": "69e3a8948217f52c50e11d7469283033e29b55c5d18850f149bc09d46c875707",
+        "availability": "bundled-public-sample",
+        "bundledPath": "public/lake-audio/samples/high-792.wav"
+      },
+      {
+        "id": "low-240-candidate",
+        "filename": "low-240-candidate.wav",
+        "sha256": "7a327229b5015eb9ead18f8832db8b358a0ecf9f8e213e17c5152013a3335317",
+        "availability": "not-bundled-private",
+        "bundledPath": null
+      }
+    ],
+    "errorsDb": {
+      "leaveOneRootWithoutBody": 15.661149381991121,
+      "leaveOneRootWithBody": 8.79227986407403,
+      "rootAndWindowWithoutBody": 20.75826060468793,
+      "rootAndWindowWithBody": 14.674505911936109,
+      "windowOutConstantLoss": 11.419688730304708,
+      "windowOutFrequencyLoss": 11.500100987594422
+    },
+    "reasons": [
+      "fixed-Hz magnitude prediction has some benefit but does not identify body versus excitation",
+      "stable invertible filter factorization remains ambiguous",
+      "shared loss does not improve held-out window prediction",
+      "complex body response and passive bridge admittance are not identified",
+      "no audio-quality or natural-sustain claim"
+    ]
+  }
+}

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { PerspectiveCamera, Ray, Triangle, Vector3 } from 'three';
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Ray, Raycaster, Scene, Triangle, Vector3 } from 'three';
+import { createDesktopGrabOcclusion } from '../src/coast/desktopGrabOcclusion.ts';
 import {
   COAST_REST_SITES, COAST_WALKS, FOREST_WALKS, INARI_WALKS, UPLAND_LAKE, UPLAND_WALKS,
   groundHeight, restSiteYaw, SEA_LEVEL, SPAWN,
@@ -82,6 +83,7 @@ function createControls(browser, camera, callbacks = {}, navigation) {
     onMovementChange: callbacks.onMovementChange ?? (() => {}),
     onLockChange: callbacks.onLockChange ?? (() => {}),
     onLockError: callbacks.onLockError ?? (() => {}),
+    onGrabKey: callbacks.onGrabKey,
     diveObstacleHeight: callbacks.diveObstacleHeight
   }, navigation);
 }
@@ -108,6 +110,74 @@ test('walking passes through each coastal rest bench at ground level', () => {
     controls.dispose();
     browser.cleanup();
   }
+});
+
+test('F gives grabbing priority and preserves flight when no target accepts it', () => {
+  const browser = createBrowser();
+  let grabCount = 0;
+  let hasTarget = true;
+  const controls = createControls(browser, new PerspectiveCamera(), {
+    onGrabKey: () => {
+      ++grabCount;
+      return hasTarget;
+    },
+  });
+  const press = (options = {}) => {
+    let prevented = false;
+    browser.window.dispatch('keydown', {
+      code: 'KeyF', target: browser.canvas, preventDefault: () => { prevented = true; }, ...options,
+    });
+    return prevented;
+  };
+
+  try {
+    for (const options of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, { defaultPrevented: true }]) {
+      assert.equal(press(options), false);
+    }
+    assert.equal(grabCount, 0);
+    assert.equal(press(), true);
+    assert.equal(press({ repeat: true }), true);
+    assert.equal(grabCount, 1);
+    assert.equal(controls.currentMovement, 'walk');
+
+    hasTarget = false;
+    assert.equal(press(), true);
+    assert.equal(grabCount, 2);
+    assert.equal(controls.currentMovement, 'flight');
+
+    controls.setDesktopInputEnabled(false);
+    assert.equal(press(), false);
+    assert.equal(grabCount, 2);
+  } finally {
+    controls.dispose();
+    browser.cleanup();
+  }
+});
+
+test('only visible opaque surfaces in front of the grab target block the aim ray', () => {
+  const scene = new Scene();
+  const target = new Group();
+  const geometry = new BoxGeometry(1, 1, 0.1);
+  const material = new MeshBasicMaterial();
+  const wall = new Mesh(geometry, material);
+  const wallParent = new Group();
+  scene.add(wallParent, target);
+  wallParent.add(wall);
+  target.add(new Mesh(geometry, material));
+  target.position.z = -3;
+  wall.position.z = -1;
+  const ray = new Raycaster(new Vector3(), new Vector3(0, 0, -1));
+  const isOccluded = createDesktopGrabOcclusion(scene);
+
+  assert.equal(isOccluded(ray, target, 3), true);
+  wallParent.visible = false;
+  assert.equal(isOccluded(ray, target, 3), false);
+  wallParent.visible = true;
+  material.transparent = true;
+  assert.equal(isOccluded(ray, target, 3), false);
+  material.transparent = false;
+  wall.position.z = -4;
+  assert.equal(isOccluded(ray, target, 3), false);
 });
 
 test('walking approaches a steep cliff without crossing it or losing ground contact', () => {

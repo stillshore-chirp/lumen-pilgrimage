@@ -1,4 +1,10 @@
+/artifacts/ci/
+/node_modules
 # Logs
+/artifacts/koto-study/
+/artifacts/koto-recorded-modal-trial/
+/artifacts/koto-recording-performance-trial/
+/artifacts/koto-recorded-sustain-trial/
 logs
 *.log
 npm-debug.log*

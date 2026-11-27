@@ -3,6 +3,7 @@ import type { ExplorationScene } from '../../CoastApp';
 import { findDestination } from '../../coastDestinations';
 import { ResidenceAudio } from './residenceAudio';
 import { createResidenceCity } from './residenceCity';
+import { bindResidenceCityVisibility } from './residenceCityVisibility';
 import { createResidenceCurtains } from './residenceCurtains';
 import { createResidenceFurniture } from './residenceFurniture';
 import { createResidenceLighting } from './residenceLighting';
@@ -34,6 +35,7 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
   furniture.group.add(curtains.group);
   const scene = new Scene();
   scene.add(city.group, shell.group, furniture.group);
+  bindResidenceCityVisibility(scene, city.group, city.regionalCity);
   const invalidateReflections = () => reflections.invalidate();
   const theaterLights = createResidenceTheaterLights(furniture.theater.screen, invalidateReflections);
   const lighting = createResidenceLighting(scene, materials, furniture.obstacles, invalidateReflections, theaterLights);

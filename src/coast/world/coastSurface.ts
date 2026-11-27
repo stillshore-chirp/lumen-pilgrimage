@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { registerDesktopGrabOccluder } from '../desktopGrabOcclusion';
 import type { CoastQuality } from '../CoastWorld';
 import {
   COAST_BOUNDS, LANDSCAPE_BOUNDS, coastBedrock, coastTreadWear, forestStreamDistance, groundHeight,
@@ -28,6 +29,57 @@ function terrainAxis(start: number, end: number, playStart: number, playEnd: num
     result.push(value);
   }
   return result;
+}
+
+function terrainCell(axis: readonly number[], coordinate: number): number {
+  let low = 0;
+  let high = axis.length - 1;
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2);
+    if (Math.fround(axis[middle]) < coordinate) low = middle;
+    else high = middle;
+  }
+  return low;
+}
+
+function registerTerrainOcclusion(mesh: THREE.Mesh, xs: readonly number[], zs: readonly number[]): void {
+  const positions = mesh.geometry.getAttribute('position');
+  const indices = mesh.geometry.getIndex()!;
+  const inverse = new THREE.Matrix4();
+  const localRay = new THREE.Ray();
+  const end = new THREE.Vector3();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const hit = new THREE.Vector3();
+  const columns = xs.length - 1;
+  // Include both cells at a shared edge to allow for transformed ray roundoff.
+  const edgeTolerance = 1e-6;
+  registerDesktopGrabOccluder(mesh, ({ ray, near, far }) => {
+    inverse.copy(mesh.matrixWorld).invert();
+    const start = ray.at(near, localRay.origin).applyMatrix4(inverse);
+    ray.at(far, end).applyMatrix4(inverse);
+    localRay.direction.subVectors(end, start).normalize();
+    const lengthSquared = start.distanceToSquared(end);
+    const firstX = terrainCell(xs, Math.min(start.x, end.x) - edgeTolerance);
+    const lastX = terrainCell(xs, Math.max(start.x, end.x) + edgeTolerance);
+    const firstZ = terrainCell(zs, Math.min(start.z, end.z) - edgeTolerance);
+    const lastZ = terrainCell(zs, Math.max(start.z, end.z) + edgeTolerance);
+
+    // Each cell contributes two consecutive, front-facing triangles to the rendered mesh.
+    for (let z = firstZ; z <= lastZ; z += 1) {
+      for (let x = firstX; x <= lastX; x += 1) {
+        const cell = (z * columns + x) * 6;
+        for (let i = cell; i < cell + 6; i += 3) {
+          a.fromBufferAttribute(positions, indices.getX(i));
+          b.fromBufferAttribute(positions, indices.getX(i + 1));
+          c.fromBufferAttribute(positions, indices.getX(i + 2));
+          if (localRay.intersectTriangle(a, b, c, true, hit) && start.distanceToSquared(hit) < lengthSquared) return true;
+        }
+      }
+    }
+    return false;
+  });
 }
 
 export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, time: THREE.IUniform<number>) {
@@ -256,6 +308,7 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
   terrain.name = 'Bay terrain, sea bed and escarpments';
   terrain.castShadow = true;
   terrain.receiveShadow = true;
+  registerTerrainOcclusion(terrain, xs, zs);
   return {
     mesh: terrain,
     mossRock,

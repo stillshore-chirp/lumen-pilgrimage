@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">音源・反射経路・聴取者とインパルス応答</title>
+  <desc id="desc">矩形室の音源から聴取者への直接音、床の初期反射、側壁の遅い反射を左に示し、右に対応する到来時刻と後期残響尾部を示す工学図。</desc>
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e5a96"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b43b3b"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b57616"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <linearGradient id="tail" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#63738a" stop-opacity="0.68"/>
+      <stop offset="1" stop-color="#63738a" stop-opacity="0.04"/>
+    </linearGradient>
+    <style>
+      .jp { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif; fill: #1e293b; }
+      .title { font-size: 25px; font-weight: 700; }
+      .section { font-size: 17px; font-weight: 700; }
+      .label { font-size: 15px; }
+      .small { font-size: 13px; }
+      .tiny { font-size: 12px; }
+      .panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; }
+      .room { fill: #ffffff; stroke: #334155; stroke-width: 2.2; }
+      .wall { stroke: #334155; stroke-width: 10; stroke-linecap: square; }
+      .direct { stroke: #1e5a96; stroke-width: 4; fill: none; marker-end: url(#arrow-blue); }
+      .early { stroke: #b43b3b; stroke-width: 3.5; fill: none; marker-end: url(#arrow-red); }
+      .late { stroke: #b57616; stroke-width: 3; fill: none; stroke-dasharray: 9 7; marker-end: url(#arrow-amber); }
+      .construction { stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 5 5; fill: none; }
+      .axis { stroke: #334155; stroke-width: 1.8; marker-end: url(#arrow-gray); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="700" fill="#ffffff"/>
+  <text x="42" y="42" class="jp title">音源・経路・聴取者を同じ応答で読む</text>
+  <text x="42" y="68" class="jp small">左：画像音源による幾何経路　／　右：到来時刻と後期尾部　（すべて説明用の計算例）</text>
+
+  <rect x="35" y="92" width="570" height="535" rx="10" class="panel"/>
+  <text x="60" y="125" class="jp section">矩形室（幅8 m × 奥行6 m × 高さ3 m）</text>
+  <rect x="75" y="155" width="490" height="360" class="room"/>
+  <line x1="75" y1="155" x2="565" y2="155" class="wall"/>
+  <line x1="75" y1="515" x2="565" y2="515" class="wall"/>
+  <line x1="75" y1="155" x2="75" y2="515" class="wall"/>
+  <line x1="565" y1="155" x2="565" y2="515" class="wall"/>
+  <text x="88" y="178" class="jp small">天井（画像源 S<tspan baseline-shift="super" font-size="11">c</tspan> は省略表示）</text>
+  <text x="88" y="548" class="jp small">床面 y = 0（反射点を表示）</text>
+
+  <line x1="198" y1="335" x2="475" y2="365" class="direct"/>
+  <circle cx="198" cy="335" r="13" fill="#1e5a96"/>
+  <text x="164" y="315" class="jp label" font-weight="700">S 音源</text>
+  <text x="155" y="355" class="jp tiny">（2.0, 1.0, 2.0）</text>
+
+  <line x1="198" y1="335" x2="354" y2="515" class="early"/>
+  <line x1="354" y1="515" x2="475" y2="365" class="early"/>
+  <circle cx="354" cy="515" r="7" fill="#b43b3b"/>
+  <text x="321" y="584" class="jp label" fill="#b43b3b">床反射点</text>
+  <text x="328" y="567" class="jp tiny" fill="#b43b3b">d = 4.565 m</text>
+
+  <line x1="198" y1="335" x2="76" y2="335" class="construction"/>
+  <line x1="76" y1="335" x2="475" y2="365" class="late"/>
+  <circle cx="67" cy="335" r="10" fill="#b57616"/>
+  <text x="48" y="307" class="jp small" fill="#b57616">S<tspan baseline-shift="super" font-size="11">w</tspan></text>
+  <text x="48" y="324" class="jp tiny" fill="#b57616">壁の画像源</text>
+
+  <circle cx="475" cy="365" r="14" fill="#334155"/>
+  <path d="M488 352 Q505 365 488 378" fill="none" stroke="#334155" stroke-width="2"/>
+  <path d="M491 346 Q516 365 491 384" fill="none" stroke="#334155" stroke-width="2"/>
+  <text x="448" y="405" class="jp label" font-weight="700">R 聴取者</text>
+  <text x="425" y="424" class="jp tiny">（6.0, 1.2, 2.0）</text>
+  <line x1="198" y1="335" x2="198" y2="155" class="construction"/>
+  <text x="207" y="195" class="jp tiny">天井画像源 S<tspan baseline-shift="super" font-size="10">c</tspan></text>
+
+  <rect x="60" y="592" width="520" height="24" rx="5" fill="#e2e8f0"/>
+  <circle cx="80" cy="604" r="6" fill="#1e5a96"/>
+  <text x="93" y="609" class="jp tiny">直接音</text>
+  <circle cx="175" cy="604" r="6" fill="#b43b3b"/>
+  <text x="188" y="609" class="jp tiny">最初の強い反射</text>
+  <circle cx="326" cy="604" r="6" fill="#b57616"/>
+  <text x="339" y="609" class="jp tiny">遅い反射・尾部への寄与</text>
+
+  <rect x="635" y="92" width="530" height="320" rx="10" class="panel"/>
+  <text x="660" y="125" class="jp section">インパルス応答の時間軸</text>
+  <text x="660" y="149" class="jp small">音速 c = 343 m/s、直接音 t₀ = 11.68 ms</text>
+  <line x1="690" y1="345" x2="1115" y2="345" class="axis"/>
+  <line x1="690" y1="175" x2="690" y2="345" class="axis"/>
+  <text x="650" y="285" class="jp small" transform="rotate(-90 650 285)">相対エネルギー</text>
+  <text x="1114" y="370" class="jp small">時間 (ms)</text>
+  <g class="jp tiny">
+    <line x1="690" y1="345" x2="690" y2="351" stroke="#334155"/>
+    <text x="682" y="368">0</text>
+    <line x1="776" y1="345" x2="776" y2="351" stroke="#334155"/>
+    <text x="766" y="368">10</text>
+    <line x1="861" y1="345" x2="861" y2="351" stroke="#334155"/>
+    <text x="850" y="368">20</text>
+    <line x1="946" y1="345" x2="946" y2="351" stroke="#334155"/>
+    <text x="935" y="368">30</text>
+    <line x1="1031" y1="345" x2="1031" y2="351" stroke="#334155"/>
+    <text x="1020" y="368">40</text>
+    <line x1="1115" y1="345" x2="1115" y2="351" stroke="#334155"/>
+    <text x="1104" y="368">50</text>
+  </g>
+  <line x1="790" y1="345" x2="790" y2="220" class="direct"/>
+  <line x1="804" y1="345" x2="804" y2="256" class="early"/>
+  <line x1="842" y1="345" x2="842" y2="274" stroke="#b43b3b" stroke-width="3" marker-end="url(#arrow-red)"/>
+  <line x1="888" y1="345" x2="888" y2="292" class="late"/>
+  <path d="M888 292 C920 306 950 320 985 328 C1020 336 1060 341 1110 344 L1110 345 L888 345 Z" fill="url(#tail)"/>
+  <text x="778" y="205" class="jp small" fill="#1e5a96">11.68 ms 直接</text>
+  <text x="797" y="244" class="jp small" fill="#b43b3b">13.31 ms 床</text>
+  <text x="838" y="265" class="jp tiny" fill="#b43b3b">16.08 ms 天井</text>
+  <text x="872" y="285" class="jp small" fill="#b57616">23.33 ms 壁</text>
+  <text x="980" y="302" class="jp small" fill="#64748b">後期尾部</text>
+  <text x="660" y="397" class="jp tiny">初期反射は方向・到来時刻を保持し、後期尾部は密なエネルギーとして別系統で扱う。</text>
+
+  <rect x="635" y="440" width="530" height="162" rx="10" class="panel"/>
+  <text x="660" y="472" class="jp section">聴取者側の変換</text>
+  <rect x="660" y="503" width="110" height="43" rx="6" fill="#dbeafe" stroke="#1e5a96" stroke-width="1.5"/>
+  <text x="683" y="529" class="jp label">音源 x(t)</text>
+  <line x1="770" y1="524" x2="828" y2="524" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-gray)"/>
+  <rect x="828" y="503" width="125" height="43" rx="6" fill="#fee2e2" stroke="#b43b3b" stroke-width="1.5"/>
+  <text x="850" y="529" class="jp label">経路 h(t)</text>
+  <line x1="953" y1="524" x2="1011" y2="524" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-gray)"/>
+  <rect x="1011" y="503" width="128" height="43" rx="6" fill="#fef3c7" stroke="#b57616" stroke-width="1.5"/>
+  <text x="1024" y="529" class="jp label">HRTF / 両耳</text>
+  <text x="660" y="578" class="jp tiny">dBFS → 校正済み再生系 → Pa / dB SPL の対応を記録する。</text>
+</svg>

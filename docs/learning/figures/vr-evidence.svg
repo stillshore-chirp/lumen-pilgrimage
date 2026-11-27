@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760" role="img" aria-labelledby="title desc">
+  <title id="title">WebXRの評価を四つの証拠層へ分ける図</title>
+  <desc id="desc">静止画と巡回から、両眼投影、頭部姿勢、音響リスナー、アプリ描画、XRコンポジター、転送と表示を確認し、視覚・空間操作・知覚・性能の受け入れ判断へ結ぶ。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101827"/>
+      <stop offset="1" stop-color="#19273a"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24354d"/>
+      <stop offset="1" stop-color="#1a293e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6fe1d1"/>
+      <stop offset="1" stop-color="#7eb6ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity=".28"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8cb8cc"/>
+    </marker>
+    <marker id="arrowAccent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#74e3d3"/>
+    </marker>
+    <style>
+      .title { font: 700 30px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; fill: #f4f8ff; }
+      .subtitle { font: 400 15px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; fill: #b6c8da; }
+      .label { font: 700 17px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; fill: #eef7ff; }
+      .body { font: 400 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; fill: #c9d7e6; }
+      .small { font: 400 12px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; fill: #9fb4c9; }
+      .metric { font: 700 14px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; fill: #74e3d3; }
+      .card { fill: url(#panel); stroke: #3d5573; stroke-width: 1.5; }
+      .thin { fill: none; stroke: #8cb8cc; stroke-width: 2; marker-end: url(#arrow); }
+      .accentLine { fill: none; stroke: #74e3d3; stroke-width: 2.5; marker-end: url(#arrowAccent); }
+    </style>
+  </defs>
+
+  <rect width="1400" height="760" fill="url(#bg)"/>
+  <rect x="42" y="34" width="1316" height="692" rx="24" fill="none" stroke="#314764" stroke-width="1"/>
+  <text x="78" y="84" class="title">WebXRの評価証拠を一つの経路に束ねる</text>
+  <text x="78" y="113" class="subtitle">静止画は形を読む入口。巡回は姿勢・音・フレーム時刻を結び、受け入れ判断へ進む。</text>
+
+  <text x="78" y="160" class="metric">入力と観測</text>
+  <rect x="78" y="180" width="220" height="126" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="100" y="212" class="label">静止画</text>
+  <text x="100" y="238" class="body">形状・材質・照明</text>
+  <text x="100" y="260" class="body">遮蔽・床との接点</text>
+  <text x="100" y="286" class="small">証明できる範囲を固定</text>
+
+  <rect x="78" y="330" width="220" height="150" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="100" y="362" class="label">巡回・頭部運動</text>
+  <text x="100" y="388" class="body">local-floor / 6DoF姿勢</text>
+  <text x="100" y="410" class="body">移動・旋回・着地点</text>
+  <text x="100" y="432" class="body">視線方向・最悪頭部位置</text>
+  <text x="100" y="460" class="small">時系列の証拠を保存</text>
+
+  <rect x="78" y="525" width="220" height="126" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="100" y="557" class="label">音源とリスナー</text>
+  <text x="100" y="583" class="body">位置・前方・上方</text>
+  <text x="100" y="605" class="body">距離・遮蔽・反射</text>
+  <text x="100" y="631" class="small">見える場所と聞こえる場所</text>
+
+  <path d="M 298 243 C 354 243, 354 283, 410 283" class="thin"/>
+  <path d="M 298 403 C 354 403, 354 283, 410 283" class="thin"/>
+  <path d="M 298 588 C 354 588, 354 454, 410 454" class="thin"/>
+
+  <text x="410" y="160" class="metric">体験の変換</text>
+  <rect x="410" y="194" width="250" height="178" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="434" y="228" class="label">両眼の投影</text>
+  <text x="434" y="254" class="body">XRViewerPose.views</text>
+  <text x="434" y="277" class="body">左右のtransform</text>
+  <text x="434" y="300" class="body">提供されたprojectionMatrix</text>
+  <text x="434" y="336" class="small">近景の視差と遠景の収束</text>
+  <text x="434" y="356" class="small">光学系に合わせて描画</text>
+
+  <rect x="410" y="410" width="250" height="178" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="434" y="444" class="label">視点と音場</text>
+  <text x="434" y="470" class="body">head pose → camera</text>
+  <text x="434" y="493" class="body">listener position / forward</text>
+  <text x="434" y="516" class="body">HRTF・遮蔽・到来時間</text>
+  <text x="434" y="552" class="small">視覚と聴覚を同じ座標へ</text>
+  <text x="434" y="572" class="small">同じフレーム時刻で更新</text>
+
+  <path d="M 660 283 C 716 283, 716 270, 766 270" class="accentLine"/>
+  <path d="M 660 499 C 716 499, 716 536, 766 536" class="accentLine"/>
+
+  <text x="766" y="160" class="metric">実行経路</text>
+  <rect x="766" y="194" width="250" height="154" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="790" y="228" class="label">アプリ・GPU</text>
+  <text x="790" y="254" class="body">update / prepareRender</text>
+  <text x="790" y="277" class="body">draw calls・triangles</text>
+  <text x="790" y="300" class="body">CPU / GPU frame time</text>
+  <text x="790" y="328" class="small">P95・P99・予算超過率</text>
+
+  <rect x="1050" y="194" width="250" height="154" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="1074" y="228" class="label">XRランタイム</text>
+  <text x="1074" y="254" class="body">frame timing</text>
+  <text x="1074" y="277" class="body">compositor / reprojection</text>
+  <text x="1074" y="300" class="body">表示の採用時刻</text>
+  <text x="1074" y="328" class="small">アプリFPSと別に保存</text>
+
+  <path d="M 1016 270 L 1050 270" class="thin"/>
+
+  <rect x="766" y="410" width="250" height="154" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="790" y="444" class="label">転送がある場合</text>
+  <text x="790" y="470" class="body">encode / network</text>
+  <text x="790" y="493" class="body">jitter / queue</text>
+  <text x="790" y="516" class="body">decode / display</text>
+  <text x="790" y="544" class="small">PCVR経路は条件付きで測る</text>
+
+  <rect x="1050" y="410" width="250" height="154" rx="14" class="card" filter="url(#shadow)"/>
+  <text x="1074" y="444" class="label">受け入れ判断</text>
+  <text x="1074" y="470" class="body">視覚・空間操作</text>
+  <text x="1074" y="493" class="body">見る／聞くの一致</text>
+  <text x="1074" y="516" class="body">性能と原因診断</text>
+  <text x="1074" y="544" class="small">未測定値を保証にしない</text>
+
+  <path d="M 1016 487 L 1050 487" class="thin"/>
+  <path d="M 1175 348 L 1175 410" class="accentLine"/>
+  <path d="M 900 348 C 900 380, 900 380, 900 410" class="accentLine"/>
+
+  <rect x="410" y="642" width="890" height="48" rx="12" fill="#1d3445" stroke="#437b80"/>
+  <text x="434" y="673" class="metric">記録の原則：</text>
+  <text x="550" y="673" class="body">実装事実・実機観察・合成例・未確認事項を同じ表へ混ぜない。</text>
+</svg>
