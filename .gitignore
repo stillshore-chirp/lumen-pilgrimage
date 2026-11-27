@@ -1,5 +1,6 @@
 # Logs
 /artifacts/koto-study/
+/artifacts/koto-recorded-modal-trial/
 logs
 *.log
 npm-debug.log*
