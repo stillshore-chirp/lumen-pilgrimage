@@ -41,14 +41,56 @@
 | 変更範囲 | 実行するゲート | 確認できること |
 | --- | --- | --- |
 | 文書と参照だけ | `npm run validate:harness` | 現行文書と素材クレジットのリポジトリ内リンク、記載した npm スクリプト名、README からの到達可能性を検査します。内容の正確さや実機での動作は証明しません。 |
-| アプリのコード | `npm run check` | 型チェック、本番ビルド、文書リンク検査と各機能の Node テストを実行します。CI もこのコマンドを使います。 |
-| 探索、移動、描画、音響、ワールド遷移 | `npm run check` の後に `npm run test:coast:browser` | ビルドしたアプリの操作・描画・音響・時間帯引き継ぎをブラウザーで確認します。 |
-| 仮想モニター、WebXR | `npm run check` の後に `npm run test:monitor:browser` | 別タブの接続、合成メディアの伝送、表示・配置・音声、Fキーでの掴みと解放、模擬WebXRでの探索を確認します。OSの画面選択ダイアログは試験用に置き換えます。 |
-| 住戸または映画館 | `npm run check` の後に `npm run test:residence:browser` または `npm run test:cinema:browser` | 該当ワールドの画面操作とブラウザー描画を確認します。物理ディスプレイ、スピーカー、VR機器の出力品質は実機で別に確認します。 |
-| 商業アトリウム | `npm run check` の後に `npm run test:atrium:browser` | ソファ初期位置、立ち上がり、上階への移動、点灯による画面の変化を確認します。 |
-| 湖畔の広間 | `npm run check` の後に `npm run test:lake:browser` | 正面の昼夜、Fキーと模擬WebXRのグリップによる行灯と光源の持ち運び、両窓と背面の歩行境界、全方向の見え方、ワールド間の時刻、環境音と模擬WebXRを確認します。 |
+| アプリのコード | `npm run check:affected` | 比較元と変更入力から型/build・文書/素材・該当機能のNode試験を選びます。CIも同じ選択器を使います。 |
+| 探索、移動、描画、音響、ワールド遷移 | `npm run check:affected -- --browser` | ビルドしたアプリの操作・描画・音響・時間帯引き継ぎをブラウザーで確認します。 |
+| 仮想モニター、WebXR | `npm run check:affected -- --browser` | 別タブの接続、合成メディアの伝送、表示・配置・音声、Fキーでの掴みと解放、模擬WebXRでの探索を確認します。OSの画面選択ダイアログは試験用に置き換えます。 |
+| 住戸または映画館 | `npm run check:affected -- --browser`（個別は residence/cinema のbrowser） | 該当ワールドの画面操作とブラウザー描画を確認します。物理ディスプレイ、スピーカー、VR機器の出力品質は実機で別に確認します。 |
+| 商業アトリウム | `npm run check:affected -- --browser`（個別は `test:atrium:browser`） | ソファ初期位置、立ち上がり、上階への移動、点灯による画面の変化を確認します。 |
+| 湖畔の広間 | `npm run check:affected -- --browser`（個別は `test:lake:browser`） | 正面の昼夜、Fキーと模擬WebXRのグリップによる行灯と光源の持ち運び、両窓と背面の歩行境界、全方向の見え方、ワールド間の時刻、環境音と模擬WebXRを確認します。 |
 
-`npm run check` はローカルと CI のコードゲートです。ブラウザー試験と実機の画面共有・入力・音響は、それぞれ別の確認です。`validate:harness` は維持対象の各文書を README から辿れることも検査します。
+`npm run check:affected` は通常のローカルとCIの選択ゲートです。ブラウザー試験と実機の画面共有・入力・音響は、それぞれ別の確認です。`validate:harness` は維持対象の各文書を README から辿れることも検査します。
+
+## 変更影響によるゲート選択
+
+通常の検証と全検査は目的を分けます。変更のないワールドの試験を、別のワールドを改修したというだけで実行しません。[選択器](../scripts/ci-impact.mjs)は単体試験・ブラウザーのconsumerから静的import、型依存、literal URLやsource読込みを追い、比較元の旧版と実際の実行treeの依存を合わせます。PRのmergeによってmain側に増えたconsumerも含め、topic headだけのgraphへ限定しません。JSON内の音声入力hash、生成bank/WAV、配布音源、共通音声素材などimportに現れない入力は、理由付きの宣言で補います。単なるディレクトリ名だけを影響判定に使いません。ブラウザーsuiteの名前だけで対象を決めず、海岸試験の住戸/映画館の足音、モニター試験の住戸照明・Quest操作など、そのsuiteが実際に開いて検証するsceneもconsumerとして保持します。
+
+```sh
+# origin/mainとの分岐点からHEAD、staged/unstagedとuntrackedを含める。
+npm run check:affected
+
+# 選択だけを確認し、検査は実行しない。
+npm run check:affected -- --plan-only
+
+# 必要なブラウザーゲートも実行。必要時だけbuildを補う。
+npm run check:affected -- --browser
+
+# 任意の確定版と比較する例（BASE_SHAを実際のcommitへ置き換える）。
+npm run check:affected -- --base BASE_SHA --head HEAD
+```
+
+同じHEADで一度通した関連gateは、比較元、入力path・素材・設定・環境の閉包が変わらなければ再利用できます。merge後のclean mainで空差分になった計画を、以前の変更の検証結果に使いません。確定版との再検証には `--base` / `--head` を明示します。全検査を明示する場合は下の `npm run check` を使います。
+
+| 入力の例 | 選択する範囲・扱い |
+| --- | --- |
+| 箏のオフライン物理モデルだけ | 共通の型/buildと箏の数値・音源入力の検査。変更していない他ワールドやbrowserは選ばない |
+| 同梱箏WAV・音声bank・権利台帳 | 実ファイル/台帳/音源の整合、必要な湖畔・比較画面consumer。WAVの実出力をmock fetchだけで合格にしない |
+| 共通の音声出力・操作/XR | その入力に依存する複数ワールド/モニターを選ぶ。共有入力の変更である根拠を残す |
+| 文書だけ、リンク先の削除/改名 | harness。文書の本文が変わらなくても消失する参照先を検査。アプリやbrowserの合格とは記録しない |
+| build/依存/CIの設定、未知の実行入力、履歴不足、構文解析不能 | 理由付きの全標準gate。browser計画も保持し、未実行を合格にしない |
+
+[実行器](../scripts/check-affected.mjs)は固定したコマンド配列をshellなしで実行します。選択ゼロでは子processを起動せず、未選択を「非対象」、選択したが未実行のものを「未検証」とします。先行gateが失敗すると以後を止め、非ゼロ終了・signal・起動失敗・例外はCIの失敗です。成功した検査数で失敗を上書きしません。
+
+`artifacts/ci/plan.json` に比較元/対象版・変更path・選択/非対象・理由、`results.json` に実結果、`summary.md` とgate別logへ証跡を残します。CIは同じ内容をStep Summaryと14日保存の `affected-validation` artifactへ出します。実機・知覚品質は、この選択結果で確認済みにしません。
+
+### GitHubでの比較と必須チェック
+
+[GitHubのPRイベント](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request)では、既定checkoutはmerge treeです。選択はイベントのbase SHAとtopic head SHAの分岐点からの差分、実行はcheckoutしたmerge treeとし、両者を記録します。main pushは[push payload](https://docs.github.com/en/webhooks/webhook-events-and-payloads#push)のbeforeからafterを直接比較します。可変のorigin/mainや固定HEADの親で代用しません。[Gitのmerge-base](https://git-scm.com/docs/git-merge-base)と[差分仕様](https://git-scm.com/docs/git-diff)に従い、削除/改名の旧新pathとNUL区切りを扱います。初期pushのzero SHAや不足履歴を空の成功へ変えません。checkoutは全履歴を取得します。
+
+[必須チェックのskip仕様](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#handling-skipped-but-required-checks)に従い、workflow自体をpath filterで消さず、既存の `validate` jobを常時起動して内部でgateを選びます。CIは標準gateを実行し、browserは従来どおり別のローカル/対象環境の検証です。[upload-artifact v4](https://github.com/actions/upload-artifact/blob/v4/README.md#inputs)は結果の保存に限定し、[GitHub/寄稿者のMIT条件](https://github.com/actions/upload-artifact/blob/v4/LICENSE)を確認しました。Actionのソースをゲームへ同梱しません。
+
+### 選択規則の保守とレビュー
+
+新しいworld、試験、動的読込み、素材/生成物を追加・変更するときは、選択器のテスト一覧・consumer・非import入力の宣言も照合します。packageの実コマンドと試験一覧がずれた場合、未登録の新しい試験がある場合は計画を不合格にし、登録・修正するまで成功にしません。未知の実行入力や履歴不足は理由付きの全検査とし、非対象へ放置しません。未知入力の対応を追加するときは、必要gateを選ぶ正例と無関係gateを省く負例の両方を `npm run test:ci-impact` で確かめます。任意の動的ファイルアクセスを完全に静的証明する仕組みではありません。新しい必須受け入れ条件が既存gateにない場合は、該当する直接評価を追加します。
 
 ## 一括検証
 
@@ -56,7 +98,7 @@
 npm run check
 ```
 
-型チェック、本番ビルド、ハーネス文書の静的検査、探索の回帰テストと仮想モニターの単体・統合テストを実行します。[CI](../.github/workflows/ci.yml) でも同じコマンドを実行します。
+型チェック、本番ビルド、ハーネス文書の静的検査、探索の回帰テストと仮想モニターの単体・統合テストを実行します。CIは変更影響に応じたgateだけを実行します。このコマンドは意図的に全標準gateを実行する互換入口です。
 
 - `npm run build` は型チェックと Vite の本番ビルドを行います。
 - `npm run validate:harness` は現行文書のリポジトリ内リンクと、記載された npm スクリプト名を確認します。

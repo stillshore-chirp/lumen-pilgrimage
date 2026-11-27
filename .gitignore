@@ -1,3 +1,5 @@
+/artifacts/ci/
+/node_modules
 # Logs
 /artifacts/koto-study/
 /artifacts/koto-recorded-modal-trial/
