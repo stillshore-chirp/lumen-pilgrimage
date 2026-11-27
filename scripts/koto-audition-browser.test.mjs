@@ -275,13 +275,19 @@ test('375px and landscape layouts fit, keyboard focus remains visible, external 
   } finally { await page.close(); }
 });
 
-test('malformed visualization is shown as unavailable while valid audio remains usable', { timeout: 30000 }, async () => {
-  const { page } = await openPage();
+test('malformed visualization stays unavailable and failed performance press is explained', { timeout: 30000 }, async () => {
+  const failedPerformance = { ...manifest, clips: manifest.clips.map(clip => clip.method === 'legacy' && clip.case === 'performance'
+    ? { ...clip, measurements: { ...clip.measurements, gates: { performancePress: false } } } : clip) };
+  const { page } = await openPage({ manifestOverride: failedPerformance });
   try {
+    await page.locator('#case').selectOption('performance');
+    assert.match(await page.locator('#conditions').textContent(), /不合格: 曲内の押し手到達/);
+    assert.doesNotMatch(await page.locator('#conditions').textContent(), /gateに不合格なし/);
     await page.route('**/artifacts/koto-study/visualization.json', route => route.fulfill({ json: { waveform: { timesSeconds: [1], min: [], max: [] } } }));
     await page.locator('#case').selectOption('high');
     await page.locator('#data-status').filter({ hasText: '図のデータを読み込めません' }).waitFor();
     assert.equal(await page.locator('#play').isDisabled(), false);
+    assert.doesNotMatch(await page.locator('#conditions').textContent(), /曲内の押し手到達/);
   } finally { await page.close(); }
 });
 

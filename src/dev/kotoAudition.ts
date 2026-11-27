@@ -366,7 +366,8 @@ function refreshConditions(): void {
   addCondition('音声形式', clip ? `${clip.sampleRate.toLocaleString()} Hz / mono / ${clip.durationSeconds.toFixed(2)} 秒` : `比較音声なし · ${unavailableReason()}`);
   if (clip) {
     const gates = isRecord(clip.measurements.gates) ? clip.measurements.gates : {};
-    const labels: Record<string, string> = { pitch: '音高', damping: '消音', finite: '有限値', dc: '直流偏り', duration: '長さ', loopSeam: 'ループ接続', final50ms: '終端' };
+    const labels: Record<string, string> = { pitch: '音高', damping: '消音', performancePress: '曲内の押し手到達',
+      finite: '有限値', dc: '直流偏り', duration: '長さ', loopSeam: 'ループ接続', final50ms: '終端' };
     const failures = Object.entries(gates).filter(([, result]) => result === false).map(([key]) => labels[key] ?? key);
     const note = isRecord(clip.measurements.note) ? clip.measurements.note : {};
     const pitch = isRecord(note.pitch) ? note.pitch : {};
