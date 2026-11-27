@@ -16,8 +16,8 @@ const { bindResidenceCityVisibility } = await import('../src/coast/world/residen
 const { ResidenceShaderPreparation } = await import('../src/coast/world/residence/residenceShaderPreparation.ts');
 const { createResidenceDoors } = await import('../src/coast/world/residence/residenceDoors.ts');
 const { createResidenceNavigation } = await import('../src/coast/world/residence/residenceNavigation.ts');
-const { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS,
-  RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS } =
+const { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_TEA_CEILING_SUSPENSION,
+  RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS } =
   await import('../src/coast/world/residence/residencePlan.ts');
 const { createResidenceMaterials } = await import('../src/coast/world/residence/residenceMaterials.ts');
 const { createResidenceFurniture } = await import('../src/coast/world/residence/residenceFurniture.ts');
@@ -309,6 +309,23 @@ test('the finished ceilings, recessed balcony soffit and door lintels bound aeri
   assert.equal(blocked(nav, 22.79, 13.58), true);
 });
 
+test('tea seating ceiling and exposed beams stop flight at the rendered underside', () => {
+  const nav = navigation(true);
+  furniture.group.updateMatrixWorld(true);
+  for (const [east, north, underside] of [
+    [5.5, 2.85, 2.479], // A clear panel between the transverse beams.
+    [5.5, 2.073, 2.4275], // The middle transverse beam projects below the panel.
+    [3.944, 2.8, 2.443], // The west longitudinal beam.
+  ]) {
+    const ray = new Raycaster(new Vector3(east, 2.30, -north), new Vector3(0, 1, 0), 0, .6);
+    const hit = ray.intersectObject(furniture.group, true).find(({ object }) => !object.material.transparent);
+    assert.ok(hit, `No rendered tea ceiling at E${east}, N${north}`);
+    assert.ok(Math.abs(hit.point.y - underside) < 1e-5, `Unexpected rendered underside at E${east}, N${north}`);
+    assert.equal(nav.ceilingHeight(east, -north), underside);
+  }
+  assert.equal(nav.ceilingHeight(6.45, -4.45), 2.85, 'The entrance keeps its higher ceiling');
+});
+
 test('interior glazing visible in captures never samples facade reflection targets', () => {
   const shell = createResidenceShell(materials);
   const reflections = createResidenceReflections(new Scene(), new Group(), shell.group, furniture.group, materials);
@@ -336,6 +353,22 @@ test('interior glazing visible in captures never samples facade reflection targe
   } finally {
     reflections.dispose();
     shell.dispose();
+  }
+});
+
+test('tea suspension collars meet the diagonal rods at the main ceiling', () => {
+  const { collarTop, anchor, soffit, points } = RESIDENCE_TEA_CEILING_SUSPENSION;
+  const lower = collarTop - .008;
+  const upper = anchor + .004;
+  const t = (soffit - lower) / (upper - lower);
+  furniture.group.updateMatrixWorld(true);
+  for (const support of points) {
+    const east = support.east + (support.braceEast - support.east) * t;
+    const north = support.north + (support.braceNorth - support.north) * t;
+    const ray = new Raycaster(new Vector3(east, soffit - .03, -north), new Vector3(0, 1, 0), 0, .05);
+    const hits = ray.intersectObject(furniture.group, true);
+    assert.ok(hits.some(hit => hit.object.material === materials.metal && Math.abs(hit.point.y - (soffit - .006)) < 1e-5),
+      `No diagonal collar at ${support.id}`);
   }
 });
 

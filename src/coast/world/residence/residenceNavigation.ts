@@ -2,16 +2,20 @@ import type { CoastNavigation, CoastPose } from '../../CoastControls';
 import { createResidenceDoors, RESIDENCE_WALKER_RADIUS, type ResidenceDoors } from './residenceDoors';
 import {
   RESIDENCE_BATH_SERVICE_SHAFT, RESIDENCE_FACADE_PIERS, RESIDENCE_ROOMS,
-  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_UPPER_SLAB_BOTTOM, RESIDENCE_WALLS, type ResidenceRect, type ResidenceWall,
+  RESIDENCE_STAIR_ENCLOSURE, RESIDENCE_TEA_CEILING_PARTS, RESIDENCE_UPPER_SLAB_BOTTOM, RESIDENCE_WALLS,
+  type ResidenceRect, type ResidenceWall,
 } from './residencePlan';
 
 const WALKER_RADIUS_SQUARED = RESIDENCE_WALKER_RADIUS ** 2;
 
 const occupiedRooms = RESIDENCE_ROOMS.filter(room => room.id !== 'PS');
 const floor = occupiedRooms.flatMap(room => room.rectangles);
-const ceilingFootprints = occupiedRooms.flatMap(room => room.rectangles.map(rect => ({
-  rect, height: room.ceiling ?? RESIDENCE_UPPER_SLAB_BOTTOM,
-})));
+const ceilingFootprints = [
+  ...occupiedRooms.flatMap(room => room.rectangles.map(rect => ({
+    rect, height: room.ceiling ?? RESIDENCE_UPPER_SLAB_BOTTOM,
+  }))),
+  ...RESIDENCE_TEA_CEILING_PARTS.map(({ rect, bottom }) => ({ rect, height: bottom })),
+];
 const balconyFloor = RESIDENCE_ROOMS.filter(room => room.id === 'BL').flatMap(room => room.rectangles);
 const bounds = {
   minX: Math.min(...floor.map(rect => rect[0])) - 1,

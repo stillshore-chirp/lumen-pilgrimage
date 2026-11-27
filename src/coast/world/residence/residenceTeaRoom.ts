@@ -3,7 +3,7 @@ import type { FurnitureModel, FurniturePiece } from './residenceFurnitureModel';
 import type { ResidenceMaterials } from './residenceMaterials';
 import { fixtureFinish } from './residenceFixtureFinish';
 import { addTeaRoomShoji } from './residenceShoji';
-import { RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS, RESIDENCE_TEA_TATAMI } from './residencePlan';
+import { RESIDENCE_TEA_CEILING_PARTS, RESIDENCE_TEA_CEILING_SUSPENSION, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS, RESIDENCE_TEA_TATAMI } from './residencePlan';
 
 function tatami(model: FurnitureModel, m: ResidenceMaterials) {
   const edging = model.tone(m.fabric, 0x575046);
@@ -159,9 +159,33 @@ export function addTeaRoom(model: FurnitureModel, m: ResidenceMaterials) {
   clay.box(plaster, -1.737, 1.411, .266, .026, 2.679, 4.77);
   clay.box(plaster, 1.737, 1.411, .624, .023, 2.679, 4.074);
   clay.box(plaster, -.582, 1.420, -2.124, 2.286, 2.72, .018);
-  clay.box(ceiling, -.036, 2.494, .727, 3.025, .030, 3.034);
-  for (const x of [-1.526, 1.456]) clay.box(m.cedar, x, 2.466, .727, .056, .046, 3.087, .004, 0, true);
-  for (const z of [-.785, .727, 2.248]) clay.box(m.cedar, -.036, 2.459, z, 3.037, .063, .052, .004);
+  for (const part of RESIDENCE_TEA_CEILING_PARTS) {
+    const [west, south, east, north] = part.rect;
+    const material = part.finish === 'ceiling' ? ceiling : m.cedar;
+    model.at((west + east) / 2, (south + north) / 2).box(material, 0, (part.bottom + part.top) / 2, 0,
+      east - west, part.top - part.bottom, north - south, part.finish === 'cedar' ? .004 : 0, 0, part.turnGrain);
+  }
+
+  const suspension = RESIDENCE_TEA_CEILING_SUSPENSION;
+  for (const support of suspension.points) {
+    const piece = model.at(support.east, support.north);
+    const top = suspension.anchor;
+    const braceX = support.braceEast - support.east;
+    const braceZ = support.north - support.braceNorth;
+    const braceBottom = suspension.collarTop - .008;
+    const braceTop = top + .004;
+    piece.box(m.metal, 0, (suspension.bottom + suspension.collarTop) / 2, 0,
+      .050, suspension.collarTop - suspension.bottom, .050);
+    piece.rod(m.metal, [0, suspension.collarTop - .018, 0], [0, top + .004, 0], .006);
+    piece.rod(m.metal, [0, braceBottom, 0], [braceX, braceTop, braceZ], .004);
+    for (const [x, z] of [[0, 0], [braceX, braceZ]]) {
+      piece.box(m.metal, x, top + .004, z, .056, .020, .056);
+    }
+    piece.box(m.metal, 0, suspension.soffit - .002, 0, .036, .008, .036);
+    const throughCeiling = (suspension.soffit - braceBottom) / (braceTop - braceBottom);
+    piece.box(m.metal, braceX * throughCeiling, suspension.soffit - .002, braceZ * throughCeiling,
+      .036, .008, .036);
+  }
 
   tatami(model, m);
   hearth(model, m);

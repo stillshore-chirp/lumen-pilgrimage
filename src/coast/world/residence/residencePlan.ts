@@ -74,7 +74,44 @@ export const RESIDENCE_TEA_MATS: readonly ResidenceRect[] = [
 export const RESIDENCE_TEA_HEARTH: ResidenceRect = [4.98, 2.065, 5.404, 2.489];
 export const RESIDENCE_STUDY_RUG: ResidenceRect = [8.42, 1.69, 10.47, 3.92];
 
+interface ResidenceCeilingPart {
+  readonly id: string;
+  readonly rect: ResidenceRect;
+  readonly bottom: number;
+  readonly top: number;
+  readonly finish: 'ceiling' | 'cedar';
+  readonly turnGrain?: boolean;
+}
+
+// The tea seating area has a lower ceiling than its entrance. Keep its exposed
+// panel and beams in the same world-space definition as the head clearance.
+export const RESIDENCE_TEA_CEILING_PARTS: readonly ResidenceCeilingPart[] = [
+  { id: 'tea-ceiling-panel', rect: [3.9215, .556, 6.9465, 3.590], bottom: 2.479, top: 2.509, finish: 'ceiling' },
+  { id: 'tea-ceiling-west-beam', rect: [3.916, .5295, 3.972, 3.6165], bottom: 2.443, top: 2.489,
+    finish: 'cedar', turnGrain: true },
+  { id: 'tea-ceiling-east-beam', rect: [6.898, .5295, 6.954, 3.6165], bottom: 2.443, top: 2.489,
+    finish: 'cedar', turnGrain: true },
+  { id: 'tea-ceiling-north-beam', rect: [3.9155, 3.559, 6.9525, 3.611], bottom: 2.4275, top: 2.4905, finish: 'cedar' },
+  { id: 'tea-ceiling-middle-beam', rect: [3.9155, 2.047, 6.9525, 2.099], bottom: 2.4275, top: 2.4905, finish: 'cedar' },
+  { id: 'tea-ceiling-south-beam', rect: [3.9155, .526, 6.9525, .578], bottom: 2.4275, top: 2.4905, finish: 'cedar' },
+];
+
 export const RESIDENCE_UPPER_SLAB_BOTTOM = 3.19;
+
+// An open canopy below the room ceiling, independently supported from the slab.
+// Connection sizes are visual design assumptions, not a rated structural system.
+export const RESIDENCE_TEA_CEILING_SUSPENSION = {
+  bottom: 2.484,
+  collarTop: 2.522,
+  soffit: 2.85,
+  anchor: RESIDENCE_UPPER_SLAB_BOTTOM,
+  points: [
+    { id: 'south-west', east: 3.944, north: .552, braceEast: 4.144, braceNorth: .752 },
+    { id: 'south-east', east: 6.926, north: .552, braceEast: 6.726, braceNorth: .752 },
+    { id: 'north-west', east: 3.944, north: 3.585, braceEast: 4.144, braceNorth: 3.385 },
+    { id: 'north-east', east: 6.926, north: 3.585, braceEast: 6.726, braceNorth: 3.385 },
+  ],
+} as const;
 
 export const RESIDENCE_BALCONY_DOOR = { e: 20.7, nFrom: 13.05, nTo: 14.1 } as const;
 export const RESIDENCE_FOYER_POCKET = { west: 9.24, stowLimit: 11, cap: .044 } as const;
