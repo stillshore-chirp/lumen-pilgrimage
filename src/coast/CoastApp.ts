@@ -316,19 +316,37 @@ export class CoastApp {
     actions.append(vr);
     const vrButton = vr.querySelector('button')!;
     const vrStatus = vr.querySelector('p')!;
-    vrButton.addEventListener('click', () => void this.xr.session.toggle(), { signal: this.events.signal });
     let xrStatus: ImmersiveStatus | undefined;
+    vrButton.addEventListener('click', () => {
+      if (xrStatus?.state === 'presenting') {
+        void this.xr.session.toggle();
+        return;
+      }
+      if (xrStatus?.state !== 'available' && xrStatus?.state !== 'error') return;
+      if (this.residenceShaders?.state === 'failed') {
+        this.residenceShaders.reset();
+        this.syncXRStatus();
+        return;
+      }
+      if (!this.residenceShaders?.pending) void this.xr.session.toggle();
+    }, { signal: this.events.signal });
     this.syncXRStatus = () => {
       if (!xrStatus) return;
       const unavailable = xrStatus.state === 'unavailable' && window.isSecureContext;
-      const preparing = xrStatus.state === 'available' && this.residenceShaders?.pending;
+      const canStart = xrStatus.state === 'available' || xrStatus.state === 'error';
+      const preparing = canStart && this.residenceShaders?.pending;
+      const preparationFailed = canStart && this.residenceShaders?.state === 'failed';
       renderImmersiveStatus(vrButton, vrStatus, xrStatus, unavailable ? 'VR非対応' : 'VRを開始', 'VRを終了');
       if (preparing) {
         vrButton.disabled = true;
         vrStatus.textContent = 'VRの描画を準備しています。';
+      } else if (preparationFailed) {
+        vrButton.textContent = '描画準備をやり直す';
+        vrStatus.textContent = 'VRの描画を準備できませんでした。準備をやり直してください。';
       }
       vrButton.title = unavailable ? xrStatus.message : '';
-      vrStatus.hidden = !preparing && (xrStatus.state === 'available' || xrStatus.state === 'presenting' || unavailable);
+      vrStatus.hidden = !preparing && !preparationFailed
+        && (xrStatus.state === 'available' || xrStatus.state === 'presenting' || unavailable);
     };
     this.bindXRStatus = () => this.xr.session.observe((status, session) => {
       if (session) this.desktopGrab.release();
@@ -929,9 +947,9 @@ export class CoastApp {
     this.world.prepareRender?.(this.renderer, viewer);
     this.renderer.render(this.world.scene, immersive ? this.xr.camera : this.camera);
     if (this.residenceShaders && this.xrSupported) {
-      const pending = this.residenceShaders.pending;
+      const state = this.residenceShaders.state;
       this.residenceShaders.advance(immersive ? this.renderer.xr.getCamera() : this.camera);
-      if (pending !== this.residenceShaders.pending) this.syncXRStatus();
+      if (state !== this.residenceShaders.state) this.syncXRStatus();
     }
   };
 

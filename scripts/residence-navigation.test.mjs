@@ -13,6 +13,7 @@ const hooks = registerHooks({
 });
 const { EXPLORATION_WORLDS, findDestination } = await import('../src/coast/coastDestinations.ts');
 const { bindResidenceCityVisibility } = await import('../src/coast/world/residence/residenceCityVisibility.ts');
+const { ResidenceShaderPreparation } = await import('../src/coast/world/residence/residenceShaderPreparation.ts');
 const { createResidenceDoors } = await import('../src/coast/world/residence/residenceDoors.ts');
 const { createResidenceNavigation } = await import('../src/coast/world/residence/residenceNavigation.ts');
 const { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS,
@@ -101,6 +102,77 @@ function residenceEye(x, z, yaw, pitch, lensShift = 0) {
   eye.updateMatrixWorld();
   return eye;
 }
+
+function shaderPreparationProbe(t) {
+  const previousProgram = Object.getOwnPropertyDescriptor(globalThis, 'WebGLProgram');
+  const MockProgram = class {};
+  Object.defineProperty(globalThis, 'WebGLProgram', { value: MockProgram, configurable: true });
+  t.after(() => {
+    if (previousProgram) Object.defineProperty(globalThis, 'WebGLProgram', previousProgram);
+    else delete globalThis.WebGLProgram;
+  });
+  const probe = { now: 0, complete: false, uniformCalls: 0, compiles: 0, compileThrows: false, uniformsThrow: false };
+  t.mock.method(performance, 'now', () => probe.now);
+  const program = { program: new MockProgram(), getUniforms() {
+    if (probe.uniformsThrow) throw new Error('Synthetic first-use failure');
+    probe.uniformCalls++;
+  } };
+  const renderer = {
+    getContext: () => ({ isContextLost: () => false, getExtension: () => ({ COMPLETION_STATUS_KHR: 0x91b1 }),
+      getProgramParameter: () => probe.complete }),
+    getRenderTarget: () => null, outputColorSpace: 'srgb', toneMapping: 0,
+    shadowMap: { enabled: true, type: 1 }, xr: { isPresenting: false }, info: { programs: [] },
+    compile() {
+      probe.compiles++;
+      if (probe.compileThrows) throw new Error('Synthetic compile failure');
+      this.info.programs = [program];
+    },
+  };
+  return { probe, preparation: new ResidenceShaderPreparation(renderer, new Scene()), camera: new PerspectiveCamera() };
+}
+
+test('residence shader preparation keeps a five-second unfinished program failed until a successful retry', t => {
+  const { probe, preparation, camera } = shaderPreparationProbe(t);
+  preparation.advance(camera);
+  assert.equal(preparation.state, 'pending');
+  probe.now = 5_001;
+  preparation.advance(camera);
+  assert.equal(preparation.state, 'failed');
+  assert.equal(probe.uniformCalls, 0);
+  preparation.advance(camera);
+  assert.equal(probe.compiles, 1, 'Failure does not retry or unlock by itself');
+
+  preparation.reset();
+  assert.equal(preparation.state, 'pending');
+  preparation.advance(camera);
+  assert.equal(preparation.state, 'pending', 'A linked program still needs its completion and first-use work');
+  assert.equal(probe.uniformCalls, 0);
+  probe.complete = true;
+  preparation.advance(camera);
+  assert.equal(preparation.state, 'ready');
+  assert.equal(probe.uniformCalls, 1);
+});
+
+test('residence shader preparation exposes compile and first-use exceptions and retries cached programs', t => {
+  const { probe, preparation, camera } = shaderPreparationProbe(t);
+  probe.compileThrows = true;
+  preparation.advance(camera);
+  assert.equal(preparation.state, 'failed');
+  assert.equal(probe.uniformCalls, 0);
+
+  probe.compileThrows = false;
+  probe.complete = true;
+  probe.uniformsThrow = true;
+  preparation.reset();
+  preparation.advance(camera);
+  assert.equal(preparation.state, 'failed');
+  assert.equal(probe.uniformCalls, 0);
+  probe.uniformsThrow = false;
+  preparation.reset();
+  preparation.advance(camera);
+  assert.equal(preparation.state, 'ready');
+  assert.equal(probe.uniformCalls, 1, 'Retry reflects an existing linked program rather than treating it as ready');
+});
 
 test('immersive city draws when either eye can see an opening and restores visibility after rendering', () => {
   const { city, renderer, visibleDuring } = cityRenderProbe();

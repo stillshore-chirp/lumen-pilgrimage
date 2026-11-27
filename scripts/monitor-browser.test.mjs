@@ -1525,7 +1525,7 @@ test('Quest exploration enters without a monitor and keeps one stereo XR session
 
 function observeShaderPreparation(supportsParallel) {
   const completion = 0x91b1;
-  const probe = window.shaderPreparation = { allow: false, polls: 0, links: 0, firstUses: 0 };
+  const probe = window.shaderPreparation = { allow: false, polls: 0, links: 0, firstUses: 0, throwCompletion: false };
   const gl = WebGL2RenderingContext.prototype;
   const extension = gl.getExtension;
   const parameter = gl.getProgramParameter;
@@ -1538,6 +1538,7 @@ function observeShaderPreparation(supportsParallel) {
   gl.getProgramParameter = function (program, pname) {
     if (pname === completion) {
       probe.polls++;
+      if (probe.throwCompletion) throw new Error('Synthetic shader completion failure');
       return probe.allow;
     }
     return parameter.call(this, program, pname);
@@ -1627,6 +1628,89 @@ test('the residence prepares the first projection XR turn without parallel shade
     assert.deepEqual(result, { polls: 0, links: 0, firstUses: 0, turned: true, activation: [true] });
     await button(page, 'VRを終了').click();
     await button(page, 'VRを開始').waitFor();
+  } finally {
+    await page.close();
+  }
+});
+
+async function exposeResidencePreparationReset(page) {
+  await page.route('**/assets/CoastApp-*.js', async route => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const prepare = 'this.world.prepareRender?.(';
+    assert.equal(source.split(prepare).length - 1, 1, 'The preparation reset fixture needs one render hook');
+    const hook = 'window.resetResidenceShaderPreparation??=(()=>{this.residenceShaders.reset();this.syncXRStatus()}),';
+    await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
+  });
+}
+
+test('residence shader timeout and completion errors require preparation retry before a fresh XR start', { timeout }, async () => {
+  for (const failure of ['timeout', 'exception']) {
+    const page = await newPage();
+    try {
+      await page.addInitScript(installSimulatedXR, 'projection');
+      await page.addInitScript({ content: `(${observeShaderPreparation.toString()})(true);
+        window.shaderPreparation.throwCompletion = ${failure === 'exception'};` });
+      await page.goto(new URL('?world=residence&place=living-window&time=night', url).href);
+      await button(page, '描画準備をやり直す').waitFor();
+      assert.match(await page.locator('#coast-xr-status').textContent(), /描画を準備できませんでした/);
+      assert.equal(await page.evaluate(() => window.xrFixture.requests), 0);
+      await page.evaluate(() => {
+        window.shaderPreparation.allow = true;
+        window.shaderPreparation.throwCompletion = false;
+      });
+      await button(page, '描画準備をやり直す').click();
+      assert.equal(await page.evaluate(() => window.xrFixture.requests), 0,
+        'Preparation retry must not request a session during the same click');
+      await button(page, 'VRを開始').click();
+      await page.waitForFunction(() => window.xrFixture.frames > 4 && window.xrFixture.eyePoses[320]);
+      assert.equal(await page.evaluate(() => window.xrFixture.requests), 1);
+      await button(page, 'VRを終了').click();
+    } finally {
+      await page.close();
+    }
+  }
+});
+
+test('residence preparation gates a denied XR retry while preserving the active session exit', { timeout }, async () => {
+  const page = await newPage();
+  try {
+    await page.addInitScript(installSimulatedXR, 'projection');
+    await page.addInitScript({ content: `(${observeShaderPreparation.toString()})(true);
+      window.shaderPreparation.allow = true;` });
+    await exposeResidencePreparationReset(page);
+    await page.goto(new URL('?world=residence&place=living-window&time=day', url).href);
+    await page.evaluate(() => { window.xrFixture.denyNext = true; });
+    await button(page, 'VRを開始').click();
+    await page.locator('#coast-xr-status').filter({ hasText: /機器の接続と許可/ }).waitFor();
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 1);
+
+    const waiting = await page.evaluate(() => {
+      window.shaderPreparation.allow = false;
+      window.resetResidenceShaderPreparation();
+      const entry = document.querySelector('.coast-xr-entry button');
+      return { disabled: entry.disabled, label: entry.textContent,
+        status: document.querySelector('#coast-xr-status').textContent };
+    });
+    assert.deepEqual(waiting, { disabled: true, label: 'VRを開始', status: 'VRの描画を準備しています。' });
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 1);
+    await page.evaluate(() => { window.shaderPreparation.allow = true; });
+    await page.waitForFunction(() => !document.querySelector('.coast-xr-entry button').disabled);
+    assert.match(await page.locator('#coast-xr-status').textContent(), /機器の接続と許可/,
+      'The session-start failure remains distinct from preparation failure');
+    await button(page, 'VRを開始').click();
+    await page.waitForFunction(() => window.xrFixture.frames > 4 && window.xrFixture.eyePoses[320]);
+
+    const active = await page.evaluate(() => {
+      window.shaderPreparation.allow = false;
+      window.resetResidenceShaderPreparation();
+      const entry = document.querySelector('.coast-xr-entry button');
+      return { disabled: entry.disabled, label: entry.textContent };
+    });
+    assert.deepEqual(active, { disabled: false, label: 'VRを終了' });
+    await button(page, 'VRを終了').click();
+    await page.waitForFunction(() => window.xrFixture.ends === 1);
+    assert.equal(await page.evaluate(() => window.xrFixture.requests), 2);
   } finally {
     await page.close();
   }

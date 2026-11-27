@@ -10,29 +10,40 @@ export class ResidenceShaderPreparation {
   private readonly prepared = new Set<string>();
   private signature: string | undefined;
   private queue: Program[] = [];
-  private ready = false;
+  private preparationState: 'pending' | 'ready' | 'failed' = 'pending';
   private deadline = 0;
+  private readonly renderer: WebGLRenderer;
+  private readonly scene: Scene;
 
-  constructor(private readonly renderer: WebGLRenderer, private readonly scene: Scene) {
+  constructor(renderer: WebGLRenderer, scene: Scene) {
+    this.renderer = renderer;
+    this.scene = scene;
     this.gl = renderer.getContext();
     this.lights = scene.children.filter(object => object instanceof Light);
     this.reset();
   }
 
-  get pending(): boolean { return !this.ready; }
+  get state(): 'pending' | 'ready' | 'failed' { return this.preparationState; }
+
+  get pending(): boolean { return this.preparationState === 'pending'; }
 
   reset(): void {
-    this.parallel = this.gl.isContextLost() ? null : this.gl.getExtension('KHR_parallel_shader_compile');
     this.prepared.clear();
     this.signature = undefined;
     this.queue = [];
-    this.ready = false;
+    this.preparationState = 'pending';
+    try {
+      this.parallel = this.gl.isContextLost() ? null : this.gl.getExtension('KHR_parallel_shader_compile');
+    } catch {
+      this.preparationState = 'failed';
+    }
   }
 
   advance(camera: Camera): void {
     // Without the completion query, the driver can block while reflecting a program.
     // Keep those waits on the flat display before allowing a new immersive session.
-    if (this.gl.isContextLost() || (this.renderer.xr.isPresenting && !this.parallel)) return;
+    if (this.preparationState === 'failed' || this.gl.isContextLost()
+      || (this.renderer.xr.isPresenting && !this.parallel)) return;
     const target = this.renderer.getRenderTarget();
     const lights = this.lights.map(light => {
       if (!light.visible || !light.layers.test(camera.layers)) return 0;
@@ -43,13 +54,13 @@ export class ResidenceShaderPreparation {
     try {
       if (signature !== this.signature) {
         this.signature = signature;
-        this.ready = this.prepared.has(signature);
-        if (!this.ready) this.prepare(camera);
+        this.preparationState = this.prepared.has(signature) ? 'ready' : 'pending';
+        if (this.pending) this.prepare(camera);
       }
-      if (this.ready) return;
+      if (!this.pending) return;
       if (performance.now() >= this.deadline) {
         this.queue = [];
-        this.ready = true;
+        this.preparationState = 'failed';
         return;
       }
       const program = this.queue.shift();
@@ -65,20 +76,19 @@ export class ResidenceShaderPreparation {
       }
       if (this.queue.length === 0) {
         this.prepared.add(signature);
-        this.ready = true;
+        this.preparationState = 'ready';
       }
     } catch {
       this.queue = [];
-      this.ready = true;
-      console.warn('Residence VR shader preparation could not finish.');
+      this.preparationState = 'failed';
     }
   }
 
   private prepare(camera: Camera): void {
-    const known = new Set(this.renderer.info.programs);
-    const outstanding = new Set(this.queue);
     this.renderer.compile(this.scene, camera);
     this.deadline = performance.now() + MAX_PREPARATION_IDLE_MS;
-    this.queue = (this.renderer.info.programs ?? []).filter(program => !known.has(program) || outstanding.has(program));
+    // A failed attempt can leave linked programs whose first-use reflection never
+    // completed. Revisit cached programs too; completed getUniforms() calls are cheap.
+    this.queue = [...(this.renderer.info.programs ?? [])];
   }
 }
