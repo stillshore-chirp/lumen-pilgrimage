@@ -15,7 +15,7 @@ const { LAKE_DESTINATIONS, LAKE_GLAZING, LAKE_HALL, LAKE_SIDE_VENTS, LAKE_TATAMI
   await import('../src/coast/world/lake/lakeLayout.ts');
 const { LAKE_KOTO_SPEAKERS, lakeKotoSpeakerGains } = await import('../src/coast/world/lake/lakeKoto.ts');
 const { LAKE_KOTO_DURATION, LAKE_KOTO_SAMPLE_RATE, renderLakeKoto } =
-  await import('../src/coast/world/lake/lakeKotoScore.ts');
+  await import('./fixtures/lakeKotoLegacy.ts');
 hooks.deregister();
 
 const [hall, westWindow, eastWindow] = LAKE_DESTINATIONS.map(({ x, z }) => ({ x, y: 1.65, z }));
@@ -110,7 +110,7 @@ test('the koto array favors the closest speaker and bounds the total coherent ga
   assert.ok(nearFacade(0.45) > nearFacade(0.01) && nearFacade(0.9) > nearFacade(0.45));
 });
 
-test('the koto performance has bounded peaks, decaying harmonics, a pitch press and a quiet loop seam', () => {
+test('the preserved comparison baseline has the original peak, harmonics, press and loop seam', () => {
   const samples = renderLakeKoto();
   const rate = LAKE_KOTO_SAMPLE_RATE;
   assert.equal(samples.length, LAKE_KOTO_DURATION * rate);

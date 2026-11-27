@@ -84,7 +84,7 @@
 
 天井の高さ8.10 mに、横4基を奥行3列に並べて計12基の音源とする。各位置へ同じ演奏を送り、聴取者に近い音源の寄与を大きくする。位置と向きから到来方向が変わる。同じ信号の重なりで出力が過度に増えないよう全体を抑え、広間の境界では室内側から音を絞る。 [W3C・Web Audioの空間音響](https://www.w3.org/TR/webaudio/#Spatialization) · [天井音源と琴の再生](../../src/coast/world/lake/lakeKoto.ts)
 
-39秒の演奏は平調子をもとに作曲した。爪が弦を弾く瞬間、弦の倍音の減衰、胴と内部の空気の響きを合成する。押し手は発音後に音高が連続して上がるように作る。譜面と音源は広間用に制作した。 [Coaldrakeら・弦と爪のモデル](https://pub.dega-akustik.de/ISMA2019/data/articles/000063.pdf) · [Coaldrake・箏の胴の振動](https://pubmed.ncbi.nlm.nih.gov/33261375/) · [西口ら・押し手の計測](https://www.jstage.jst.go.jp/article/jasj/77/10/77_634/_article/-char/ja) · [譜面と音源の合成](../../src/coast/world/lake/lakeKotoScore.ts)
+39秒の独自演奏はD基準の平調子をもとに作曲し、既存48音の弦・開始・強弱・押し量を保つ。爪・剛性弦・琴柱と胴の連成、後押し・消音を設計し、物理合成、CC0録音の加工単音、ハイブリッドの実出力を比較する。今回の区切りではCC0実録4根の有限余韻加工と相対励振補正を48 kHz/mono/24-bitへ事前生成し、12基で再生する。楽器の生成、演奏、天井再生、最終出力を分けて測り、人間の聴感を未実施のまま合格としない。モデル・原典の適用、採否と制約、再生成・比較試聴は[箏音源の正本](koto-instrument-design.md)へ集約する。 [譜面と音源](../../src/coast/world/lake/lakeKotoScore.ts)
 
 ## 素材と確認方法
 

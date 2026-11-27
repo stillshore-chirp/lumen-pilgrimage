@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "method": "hybrid",
+  "qualityStatus": "technical-selection-human-listening-pending",
+  "internalSampleRate": 96000,
+  "sampleRate": 48000,
+  "channels": 1,
+  "frames": 1872000,
+  "durationSeconds": 39,
+  "pcmBits": 24,
+  "dither": {
+    "type": "TPDF",
+    "seed": 1802466415
+  },
+  "targetRmsDbfs": -24,
+  "samplePeakLimitDbfs": -3,
+  "gain": 2.158812831107866,
+  "gainDb": 6.6842998134220055,
+  "inputHashes": {
+    "scripts/prepare-koto-performance.mjs": "ce1ec0596f2756acc7db5c6607a5dfa57d3236832f9c86e8491fe44839f30b31",
+    "scripts/koto-analysis.mjs": "513a5d66c44417e91177d4ed8b417887accdb11bc82d70726270dffb3b04d193",
+    "src/coast/world/lake/kotoPhysicalModel.ts": "0f9fe7cd79f40e6e5f117070f59051837b9a74c2e8622d5eb7d3f8912367be2a",
+    "src/coast/world/lake/kotoPerformance.ts": "9369a44f18b55e54412301a332e1446c30720bcbbab3fd767b7b73d2440e02bd",
+    "src/coast/world/lake/kotoSampleModel.ts": "6ca104c08eff9885b1e031633f1e11904f26611a2fd15e6c591b9159592aea95",
+    "public/lake-audio/samples/bank.json": "0e7d90f2665021b985809c611d94c5dd4aed1c45e4341b4263cd16f287afc686",
+    "public/lake-audio/samples/low-151.wav": "e4e40ee98121187039ecca725fd5b1192762bf2de85c7a8b264ac4ccfcc8b959",
+    "public/lake-audio/samples/mid-319.wav": "9ba2f8ef5cdd234ffd1cc4c296e3919e9fb7c9d16a30fef1355f99692978060d",
+    "public/lake-audio/samples/mid-452.wav": "3ba200e1ac036e4648182a388d815adaa69f18d6e0304de8e1cbcaae6be304fa",
+    "public/lake-audio/samples/high-640.wav": "a71e59e02bad64cd4cdf2944e561036548bc2458e944296ac0893202eefba7ce",
+    "public/lake-audio/samples/high-792.wav": "69e3a8948217f52c50e11d7469283033e29b55c5d18850f149bc09d46c875707"
+  },
+  "sourceIds": [
+    "freesound-365215",
+    "freesound-365242"
+  ],
+  "output": {
+    "path": "assets/lake-audio/history/koto-performance-hybrid96.wav",
+    "sha256": "c73976efaa69ff309fdb66e765acad4e46c08770e850f0c3997ad78d909838c2",
+    "bytes": 5616044
+  },
+  "raw": {
+    "frames": 1872000,
+    "durationSeconds": 39,
+    "nonFiniteCount": 0,
+    "samplePeak": 0.30229732394218445,
+    "samplePeakDbfs": -10.391313947101061,
+    "rms": 0.029227051803115175,
+    "rmsDbfs": -30.684299813422005,
+    "mean": 4.1412870180026e-07,
+    "absoluteDcDbfs": -127.657293380703,
+    "crestDb": 20.292985866320944,
+    "maxAdjacentDelta": 0.07312983274459839,
+    "maxDeltaAtSeconds": 2.22725,
+    "loopSeamDelta": 4.517311536501524e-28,
+    "loopSeamDbfs": -546.9023991455222,
+    "final50msRmsDbfs": -396.440848824489
+  },
+  "delivered": {
+    "frames": 1872000,
+    "durationSeconds": 39,
+    "nonFiniteCount": 0,
+    "samplePeak": 0.652603268623352,
+    "samplePeakDbfs": -3.707015106778684,
+    "rms": 0.0630957344850127,
+    "rmsDbfs": -23.999999994907416,
+    "mean": 8.938949969079759e-07,
+    "absoluteDcDbfs": -120.97426986886292,
+    "crestDb": 20.292984888128732,
+    "maxAdjacentDelta": 0.15787363052368164,
+    "maxDeltaAtSeconds": 2.22725,
+    "loopSeamDelta": 0,
+    "loopSeamDbfs": -180,
+    "final50msRmsDbfs": -144.4727373011459
+  },
+  "quantization": {
+    "maximumAbsoluteError": 1.7695128917694092e-07,
+    "rmsErrorDbfs": -144.49582024585078
+  },
+  "diagnosticsSummary": {
+    "notes": 48,
+    "physicalFallbackNotes": 4
+  },
+  "performance": {
+    "wallMs": 90641.50037499999,
+    "cpu": {
+      "user": 89061099,
+      "system": 1207647
+    },
+    "retainedPcmBytes": 7488000,
+    "arrayBuffersDeltaBytes": 42572186
+  },
+  "unperformed": [
+    "human-listening",
+    "verified-thirteen-string-recording-identity",
+    "physical-headphone-calibration"
+  ],
+  "historicalRecord": {
+    "originalOutputPath": "public/lake-audio/koto-performance.wav",
+    "originalCommit": "72af835",
+    "humanResult": "Owner identified this candidate as guitar; not a current quality pass.",
+    "inputSnapshots": {
+      "scripts/prepare-koto-performance.mjs": "assets/lake-audio/history/inputs/prepare-koto-performance.mjs",
+      "scripts/koto-analysis.mjs": "assets/lake-audio/history/inputs/koto-analysis.mjs"
+    }
+  }
+}

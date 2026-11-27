@@ -69,5 +69,6 @@ Meta Quest 3 のブラウザーで信頼済みの HTTPS URL を開き、「VRを
 | ワールドの構成、到着地点、移動と昼夜の引き継ぎを変更する | [ワールド案内](docs/worlds.md) · [実装設計](docs/architecture.md) |
 | 仮想モニターの共有、接続、音声、対応環境を変更する | [仮想モニター仕様](docs/monitor.md) · [検証手順](docs/verification.md#仮想モニターの実機確認) |
 | 素材を追加・加工し、出典や再現手順を記録する | [素材ガイド](docs/assets.md) · [素材の出典](docs/exploration.md#素材の出典) |
+| 湖畔の箏音源を研究・再生成し、新旧を比較試聴する | [音源設計](docs/lake/koto-instrument-design.md) · [比較試聴の起動](docs/lake/koto-audition.md) |
 | 配布と運用の確認手順を調べる | [運用ガイド](docs/operations.md) |
 | 文書の正本、更新先、受け入れ基準を確認する | [文書の責務と更新基準](docs/documentation-structure.md) |
