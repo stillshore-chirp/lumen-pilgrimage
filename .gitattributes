@@ -1,6 +1,7 @@
 # Hash-locked audio preparation inputs retain LF on every checkout platform.
 scripts/prepare-koto-performance.mjs text eol=lf
-scripts/koto-analysis.mjs text eol=lf
+scripts/koto-*.mjs text eol=lf
+scripts/fixtures/lakeKotoLegacy.ts text eol=lf
 src/coast/world/lake/koto*.ts text eol=lf
 public/lake-audio/samples/bank.json text eol=lf
 public/lake-audio/*.wav binary

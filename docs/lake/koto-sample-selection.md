@@ -33,8 +33,13 @@
 | [zacate: The Koto](https://freesound.org/people/zacate/sounds/714936/) | CC0表示のあるMP3曲。 | **不採用**。録音者・演奏者・曲の出典を本人説明から追えない。表示だけで権利連鎖を確定せず、音声未取得。 |
 | [spt3125: kayageum1](https://freesound.org/people/spt3125/packs/1534/) | 単音・音高・マイクの具体的説明がある。 | **対象外**。説明は23弦kayageum。検索タグのkotoを根拠に十三弦箏として採らない。音声未取得。 |
 | [128 CC0 Synth Oscillators](https://musical-artifacts.com/artifacts/5952) / [Lapsy Koto](https://opengameart.org/content/lapsy-koto) | 前者は合成オシレーター集、後者はCC0楽曲とMIDI。 | **今回不採用**。実録音の十三弦単音として制作元・奏法を確認できない。音声未取得。 |
+| [VCSL公式の楽器一覧](https://versilian-studios.com/vcsl/) / [Zithersの現行tree](https://github.com/sgossner/VCSL/tree/master/Chordophones/Zithers) | 追加探索時のmaster `c1ea7bcc`、公開主体Versilian Studios LLC、LICENSEはCC0 1.0。Dan Tranh Normalに48 WAV、ほかにPsaltery等がある。 | **箏の実録候補としては対象外**。Dan Tranh・Psalteryを十三弦箏と表示しない。音声未取得でrate/bit・音質も未確認。 |
+| [Vanyamba: Analog Koto](https://freesound.org/people/Vanyamba/sounds/528744/) | WAV 44.1 kHz/16-bit/stereo、本人の説明はanalog synth。 | **実箏の録音候補として不採用**。名称だけで実録としない。権利条件を確定する前の音源種別による除外、音声未取得。 |
+| [LakorpSound: koto-noise](https://freesound.org/people/LakorpSound/sounds/727162/) | WAV 48 kHz/24-bit/3.75秒の案内。本文から録音・演奏主体や単音性を追えない。 | **採用しない**。名称・録音形式だけで実箏の種類、権利連鎖、音色の一貫性を認定できない。音声未取得。 |
 
 この探索で、十三弦と明示されたCC0単音集は確認できませんでした。存在しないとは断定しません。取得できるCC0箏候補の具体的な品質を調べ、適合しなければ物理方式を継続します。判断しにくい候補を所有者承認待ちに移して採用根拠を置き換えません。
+
+追加探索は所有者の初回・限定試作の音色不適合を受け、同じ2026-11-27に行いました。既存素材の権利上の採用根拠と、完成音質を満たすかの判断を分けます。現在の短い圧縮録音、少ない音高、強弱層の不足を、CC0であることや形式上の高い配布bit数で解消したとは扱いません。実聴の未達と次の設計判断は[音源設計](koto-instrument-design.md#所有者による初回試聴と再設計の判断)を参照します。
 
 ## 取得できた音と同一性
 
