@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { applianceTime, createApplianceCycle } from './residenceApplianceCycle';
 import type { FurnitureModel } from './residenceFurnitureModel';
 import type { ResidenceMaterials } from './residenceMaterials';
-import { RESIDENCE_ROOMS, type ResidenceRect } from './residencePlan';
+import { RESIDENCE_ROOMS, type ResidenceControlLocation, type ResidenceRect } from './residencePlan';
 
 type Point = Readonly<{ x: number; y: number; z: number }>;
 export type ApplianceMount = readonly [east: number, north: number, heading?: number];
@@ -15,7 +15,7 @@ type ApplianceControl = { id: string; label: string } & (
   | { kind: 'output'; read: () => string }
 );
 
-type ApplianceSection = { id: string; title: string; category: 'appliances'; controls: readonly ApplianceControl[] };
+type ApplianceSection = { id: string; title: string; category: 'appliances'; location: ResidenceControlLocation; controls: readonly ApplianceControl[] };
 export type ResidenceApplianceAudioSource = {
   id: string;
   position: Point;
@@ -343,7 +343,9 @@ export class ResidenceAppliances {
 
   private register(fixture: Fixture, frame: THREE.Group, controls: readonly ApplianceControl[],
     { at, ...sound }: Omit<ResidenceApplianceAudioSource, 'id' | 'position'> & { at: ApplianceAnchor }): void {
-    const section = { id: fixture.id, title: fixture.title, category: 'appliances' as const, controls };
+    const position = frame.localToWorld(new THREE.Vector3(...at));
+    const section = { id: fixture.id, title: fixture.title, category: 'appliances' as const, controls,
+      location: { roomId: fixture.room, markers: [[position.x, -position.z, position.x, -position.z] as const] } };
     this.panels.push(section);
     const room = RESIDENCE_ROOMS.find(room => room.id === fixture.room)!;
     this.nearbyFixtures.push({ section, position: frame.localToWorld(new THREE.Vector3(...fixture.approach)),

@@ -94,6 +94,7 @@ export function addTeaRoomShoji(model: FurnitureModel, materials: ResidenceMater
   let amount = 1;
   const control = {
     kind: 'toggle' as const, id: 'shoji', label: '障子',
+    location: { roomId: '04', markers: [[center - casingWidth / 2, SLIDING_NORTH, center + casingWidth / 2, SLIDING_NORTH] as const] },
     get: () => target === 1,
     set(open: boolean) { target = Number(open); },
   };
