@@ -356,7 +356,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   function theaterControls() {
     if (!theaterLights) return [];
     return [
-      { kind: 'toggle' as const, id: 'theater-light', label: 'シアター照明',
+      { kind: 'toggle' as const, id: 'theater-light', label: 'シアター照明', location: theaterLights.location,
         get: theaterLights.enabled,
         set(on: boolean) {
           if (profile.theater === on) return;
@@ -364,7 +364,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
           if (lightingMode !== 'auto') individuallyAdjusted = true;
           refreshRoom('LD');
         } },
-      { kind: 'color' as const, id: 'theater-color', label: 'シアター照明の色',
+      { kind: 'color' as const, id: 'theater-color', label: 'シアター照明の色', location: theaterLights.location,
         get: theaterLights.color, set: theaterLights.setColor },
     ];
   }
@@ -376,12 +376,14 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     const sources = roomSources[id];
     return {
       id: `lighting-${id}`, title, category: 'lighting' as const,
+      location: { roomId: id, markers: sources.map(source => source.span) },
       controls: [
         { kind: 'button' as const, id: 'on', label: '一括点灯', invoke: () => setFixtures(id, sources, true, true) },
         { kind: 'button' as const, id: 'off', label: '一括消灯', invoke: () => setFixtures(id, sources, false, true) },
         ...(id === 'LD' ? theaterControls() : []),
         ...sources.map(source => ({
           kind: 'toggle' as const, id: source.id, label: source.label,
+          location: { roomId: id, markers: [source.span] },
           get: () => isOn(source), set: (on: boolean) => setFixtures(id, [source], on),
         })),
       ],

@@ -1,6 +1,12 @@
 // Plan axes in metres. World coordinates are x = e and z = -n.
 export type ResidenceRect = readonly [west: number, south: number, east: number, north: number];
 
+export interface ResidenceControlLocation {
+  readonly roomId: string;
+  /** Plan metres: point or line endpoints taken from the generated fixture. */
+  readonly markers: readonly ResidenceRect[];
+}
+
 export interface ResidenceRoom {
   readonly id: string;
   readonly label: string;

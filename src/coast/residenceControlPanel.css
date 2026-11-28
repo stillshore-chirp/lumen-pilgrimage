@@ -4,6 +4,9 @@
 
 .residence-control-dialog {
   width: min(43rem, calc(100% - 1.5rem));
+  --residence-plan-surface: #f2f0e8;
+  --residence-plan-ink: #173d3d;
+  --residence-plan-mark: #9f3308;
 }
 
 .residence-control-dialog :is(button, select, input[type="color"]):focus-visible {
@@ -11,20 +14,153 @@
   outline-offset: 2px;
 }
 
-.residence-control-dialog[open]:has(.residence-control-directory),
-.residence-control-body:has(.residence-control-directory) {
+.residence-control-dialog[open]:has(:is(.residence-control-directory, .residence-control-device, .residence-control-plan-large)) {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  width: min(61rem, calc(100% - 1.5rem));
+  block-size: min(43rem, calc(100dvh - 1.5rem));
+  overflow: hidden;
 }
 
-.residence-control-dialog:has(.residence-control-directory) .coast-travel-content,
-.residence-control-directory {
+.residence-control-dialog:has(:is(.residence-control-directory, .residence-control-device, .residence-control-plan-large)) .coast-travel-content {
+  min-block-size: 0;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.residence-control-body,
+.residence-control-directory {
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
 .residence-control-directory {
   display: grid;
+  block-size: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.75rem;
+}
+
+.residence-control-workspace,
+.residence-control-device {
+  display: grid;
+  min-block-size: 0;
+  min-inline-size: 0;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.residence-control-device,
+.residence-control-plan-large { block-size: 100%; min-block-size: 0; }
+.residence-control-plan-large .residence-control-plan { block-size: 100%; }
+.residence-control-plan-tools { display: flex; align-items: center; gap: .5rem; min-inline-size: 0; }
+.residence-control-plan-tools > button { flex: 0 0 auto; }
+
+.residence-control-plan-card {
+  display: grid;
+  min-block-size: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.residence-control-room-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  flex: 1;
+}
+.residence-control-room-picker > span { white-space: nowrap; }
+
+.residence-control-room-picker select {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 44px;
+  border: 1px solid #8bbdb0;
+  border-radius: 9px;
+  padding: 0.375rem;
+  color: inherit;
+  background: #1e3d3d;
+  font: inherit;
+}
+
+.residence-control-plan {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  min-block-size: 0;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.residence-control-plan svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  border-radius: 10px;
+  background: var(--residence-plan-surface);
+  color: var(--residence-plan-ink);
+}
+
+.residence-plan-room text,
+.residence-plan-direction {
+  font-size: 0.56px;
+  font-weight: 650;
+  fill: var(--residence-plan-ink);
+  pointer-events: none;
+}
+
+.residence-plan-floor { fill: #e6e1d2; stroke: #9fa99f; stroke-width: .035; }
+.residence-plan-floor-tile { fill: #d9e8e6; }
+.residence-plan-floor-deck { fill: #caddcb; }
+.residence-plan-floor-core { fill: #d5d9d3; }
+.residence-plan-room-choice { cursor: pointer; }
+.residence-plan-room-choice:hover .residence-plan-floor { fill: #b5d4c9; }
+.residence-plan-room.is-selected .residence-plan-floor { fill: #b5d4c9; stroke: #173d3d; stroke-width: .16; }
+.residence-control-dialog .residence-plan-room-choice:focus { outline: none; }
+.residence-plan-room-choice:focus-visible .residence-plan-floor { stroke: #9f3308; stroke-width: .2; }
+.residence-plan-walls { pointer-events: none; }
+.residence-plan-wall { stroke: #264746; stroke-width: .13; stroke-linecap: square; }
+.residence-plan-window { stroke: #33717d; stroke-width: .065; }
+.residence-plan-markers { pointer-events: none; }
+.residence-plan-markers :is(line, circle) { stroke: var(--residence-plan-mark); stroke-width: 3px; vector-effect: non-scaling-stroke; fill: #fff4d5; stroke-linecap: round; }
+.residence-plan-caption { min-block-size: 3em; margin: 0; color: #e0f4eb; font-size: .85em; line-height: 1.5; }
+.residence-control-target,
+.residence-control-empty { margin: 0 0 .75rem; color: #e0f4eb; font-size: .85em; line-height: 1.5; }
+.residence-control-operations { display: grid; grid-template-rows: auto minmax(0, 1fr); min-block-size: 0; padding: .25rem; gap: .5rem; }
+.residence-control-target-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.residence-control-target-tools p { margin: 0; flex: 1; }
+.residence-control-items { min-block-size: 0; overflow: auto; overscroll-behavior: contain; align-content: start; padding: .25rem; }
+.residence-control-dialog .residence-control-lists { padding-top: 0; border-top: 0; min-block-size: 0; }
+.residence-control-dialog [hidden] { display: none; }
+
+@media (max-width: 600px) {
+  .residence-control-workspace,
+  .residence-control-device {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+  .residence-plan-room text,
+  .residence-plan-direction { font-size: .8px; }
+  .residence-plan-caption { min-block-size: 1.5em; }
+}
+
+@media (max-height: 420px) {
+  .residence-control-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+  .residence-control-plan-card > .residence-control-plan,
+  .residence-control-device > .residence-control-plan { display: none; }
+  .residence-control-device { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .residence-control-dialog:has(:is(.residence-control-directory, .residence-control-device, .residence-control-plan-large)) .coast-travel-content { gap: .4rem; padding: .5rem; }
+  .residence-control-dialog .coast-travel-heading { gap: .25rem; }
+  .residence-control-dialog .coast-travel-heading h2 { font-size: 1em; }
+  .residence-control-directory { gap: .4rem; }
+  .residence-control-room-picker { font-size: .8em; gap: .25rem; }
+  .residence-control-room-picker select { min-block-size: 44px; }
+  .residence-plan-caption { font-size: .75em; min-block-size: 3em; }
 }
 
 .residence-control-directory .residence-control-actions > button[aria-pressed] {
@@ -33,6 +169,7 @@
 
 .residence-control-lists {
   display: grid;
+  min-inline-size: 0;
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
 
