@@ -20,7 +20,7 @@ globalThis.window = globalThis;
 globalThis.EncodedVideoChunk = class {
   constructor(data) { Object.assign(this, data); }
 };
-function make({ length = 120, depth = 0, bframes = false, delay = 0, acceptFirst = false, outputDelay = 0 } = {}) {
+function make({ length = 120, depth = 0, bframes = false, delay = 0, acceptFirst = false, outputDelay = 0, keyPeriod = 30, continuationReadDelay = 0 } = {}) {
   let movie;
   const c = { maxPendingObserved: 0, decoders: 0, closed: 0, inputs: 0, outputs: 0, frameCloses: 0, flushes: 0, maxQueue: 0, duplicateCloses: 0 };
   globalThis.VideoDecoder = class extends EventTarget {
@@ -53,9 +53,20 @@ function make({ length = 120, depth = 0, bframes = false, delay = 0, acceptFirst
   if (bframes)
     for (let i = 1; i + 1 < length; i += 3)
       [order[i], order[i + 1]] = [order[i + 1], order[i]];
-  const samples = Array.from({ length }, (_, i) => ({ index: i, offset: i, size: 1, key: i % 30 === 0, presentationTime: order.indexOf(i) / 24, outputTimestamp: order.indexOf(i) * 41667, outputDuration: 41667 }));
+  const samples = Array.from({ length }, (_, i) => ({ index: i, offset: i, size: 1, key: i % keyPeriod === 0, presentationTime: order.indexOf(i) / 24, outputTimestamp: order.indexOf(i) * 41667, outputDuration: 41667 }));
   const video = { width: 320, height: 180, duration: length / 24, samples, presentationOrder: order, sampleByTimestamp: new Map(samples.map(s => [s.outputTimestamp, s.index])), config: {} };
-  movie = new CinemaMovieVideoImpl(new File([new Uint8Array(length)], 'fixture'), video);
+  const file = new File([new Uint8Array(length)], 'fixture');
+  if (continuationReadDelay > 0) {
+    const slice = file.slice.bind(file);
+    file.slice = (...args) => {
+      const blob = slice(...args);
+      return { arrayBuffer: async () => {
+        if (c.flushes > 0) await new Promise(resolve => setTimeout(resolve, continuationReadDelay));
+        return blob.arrayBuffer();
+      } };
+    };
+  }
+  movie = new CinemaMovieVideoImpl(file, video);
   return { movie, c, order };
 }
 test('sequential asynchronous output reuses one decoder, no intermediate flush, bounded cache and four-slot queue', async () => { const { movie, c } = make({ length: 180, delay: 1 }); for (let i = 0; i < 140; i++) {
@@ -128,6 +139,78 @@ test('dequeue-before-output circulation bounds future admission and resumes afte
   assert.equal(c.duplicateCloses, 0);
   assert(c.maxPendingObserved <= 12);
 } });
+// A delayed prefix read models the work after flush, independently of the
+// device's native decoding speed. Long-GOP seek must finish that work before
+// reporting readiness; cached frames alone cannot prove forward continuation.
+test('seek prepares a flushed long-GOP continuation before playback can exhaust the cached pictures', async () => {
+  for (const depth of [0, 2]) {
+    const { movie, c } = make({ length: 180, keyPeriod: 250, depth, bframes: depth > 0,
+      acceptFirst: true, outputDelay: 8, continuationReadDelay: 8 });
+    try {
+      await movie.seek(1);
+      assert.equal(movie.decoderNeedsKeyframe, false);
+      assert.equal(movie.decodeCursor, 32);
+      for (let i = 24; i < 48; i++) {
+        assert.equal(movie.present(i / 24), true, `Unprepared frame ${i}, depth ${depth}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 / 24));
+        assert(movie.frames.size <= 8);
+      }
+      await movie.operation;
+      assert(c.maxQueue <= 4);
+    } finally { movie.dispose(); }
+    assert.equal(c.outputs, c.frameCloses);
+    assert.equal(c.duplicateCloses, 0);
+  }
+});
+test('a seek to an already cached picture still primes a decoder left key-required by a prior drain', async () => {
+  const { movie, c } = make({ length: 120, keyPeriod: 250, acceptFirst: true, outputDelay: 8 });
+  try {
+    movie.presentationTarget = 24;
+    await movie.decodeTo(24, true);
+    assert(movie.frames.has(25));
+    assert.equal(movie.decoderNeedsKeyframe, true);
+    const generation = movie.decoderGeneration;
+    await movie.seek(25 / 24);
+    assert.equal(movie.decoderGeneration, generation + 1);
+    assert.equal(movie.decoderNeedsKeyframe, false);
+    assert.equal(movie.present(25 / 24), true);
+  } finally { movie.dispose(); }
+  assert.equal(c.outputs, c.frameCloses);
+  assert.equal(c.duplicateCloses, 0);
+});
+test('the drained final B-frame needs no forward prime and reverse seek retains key restart and closure', async () => {
+  const { movie, c } = make({ length: 48, keyPeriod: 250, depth: 2, bframes: true,
+    acceptFirst: true, outputDelay: 8 });
+  try {
+    await movie.seek(movie.duration);
+    assert.equal(movie.present(movie.duration), true);
+    assert.equal(movie.decodeCursor, 48);
+    assert.equal(c.decoders, 1);
+    assert.equal(movie.decoderNeedsKeyframe, true);
+    await movie.seek(1 / 24);
+    assert.equal(movie.present(1 / 24), true);
+    assert(movie.frames.size <= 8);
+  } finally { movie.dispose(); }
+  assert.equal(c.closed, c.decoders);
+  assert.equal(c.outputs, c.frameCloses);
+  assert.equal(c.duplicateCloses, 0);
+});
+test('dispose during a seek continuation cancels its generation and releases every output', async () => {
+  const { movie, c } = make({ length: 180, keyPeriod: 250, acceptFirst: true,
+    outputDelay: 8, continuationReadDelay: 8 });
+  const pending = movie.seek(1);
+  const deadline = performance.now() + 1000;
+  while (c.decoders < 2 && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 1));
+  const primeStarted = c.decoders >= 2;
+  movie.dispose();
+  await pending;
+  assert.equal(primeStarted, true);
+  assert.equal(movie.frames.size, 0);
+  assert.equal(movie.pendingFrames.size, 0);
+  assert.equal(c.closed, c.decoders);
+  assert.equal(c.outputs, c.frameCloses);
+  assert.equal(c.duplicateCloses, 0);
+});
 after(() => { for (const [k, v] of Object.entries(original)) {
   if (v === undefined)
     delete globalThis[k];

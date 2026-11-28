@@ -773,6 +773,34 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
     return true;
   }
 
+  private async primeAfterSeekFlush(target: number): Promise<void> {
+    const end = this.decodeCursor;
+    // flush requires a new key chunk. Prepare the already decoded prefix while
+    // seek still owns the readiness gate, before cached pictures can run out.
+    // At EOF the drained pictures need no forward decoder continuation.
+    if (!this.decoderNeedsKeyframe || end >= this.video.samples.length) return;
+    const generation = this.createDecoder(this.findKeySample(target));
+    const decoder = this.decoder;
+    if (!decoder) unsupported('映像デコーダーを初期化できません。');
+    while (this.decodeCursor < end) {
+      if (this.disposed || generation !== this.decoderGeneration) return;
+      await this.waitForDecodeSlot(decoder);
+      if (this.disposed || generation !== this.decoderGeneration) return;
+      const sample = this.video.samples[this.decodeCursor];
+      const bytes = await readFileRange(this.file, sample.offset, sample.size);
+      if (this.disposed || generation !== this.decoderGeneration) return;
+      if (Number.isFinite(sample.presentationTime)) this.pendingFrames.add(sample.index);
+      decoder.decode(new EncodedVideoChunk({
+        type: sample.key ? 'key' : 'delta',
+        timestamp: sample.outputTimestamp,
+        duration: sample.outputDuration,
+        data: bytes,
+      }));
+      this.decodeCursor += 1;
+    }
+    if (this.lastError) throw this.lastError;
+  }
+
   async seek(timeSeconds: number): Promise<void> {
     if (this.disposed) throw new CinemaMovieVideoError('破棄済みの上映映像はシークできません。');
     if (!Number.isFinite(timeSeconds)) throw new CinemaMovieVideoError('シーク時刻は有限な秒数で指定してください。');
@@ -784,6 +812,7 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
       if (this.disposed) throw new CinemaMovieVideoError('破棄済みの上映映像です。');
       this.lastError = null;
       await this.decodeTo(target, true);
+      await this.primeAfterSeekFlush(target);
     });
   }
 
