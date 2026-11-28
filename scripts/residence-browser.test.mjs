@@ -1298,6 +1298,24 @@ test('the residence plan selects real rooms and keeps the individual device loca
   await page.setViewportSize({ width: 320, height: 300 });
   await button(lights, '図を拡大').click();
   const expanded = residenceDialog(page, '平面図');
+  await button(expanded, '前の画面へ戻る').focus();
+  await page.keyboard.press('Shift+Tab');
+  const svgFocus = await expanded.evaluate(dialog => {
+    const active = document.activeElement;
+    const path = active?.querySelector('.residence-plan-floor');
+    const groupStyle = active ? getComputedStyle(active) : null;
+    const pathStyle = path ? getComputedStyle(path) : null;
+    const box = path?.getBoundingClientRect();
+    return { activeSvg: active instanceof SVGElement && dialog.contains(active),
+      focusVisible: active?.matches(':focus-visible'), outlineStyle: groupStyle?.outlineStyle,
+      stroke: pathStyle?.stroke, strokeWidth: Number.parseFloat(pathStyle?.strokeWidth ?? '0'),
+      pathVisible: Boolean(box?.width && box?.height && pathStyle?.display !== 'none'
+        && pathStyle?.visibility === 'visible' && Number(pathStyle?.opacity) > 0) };
+  });
+  assert.ok(svgFocus.activeSvg && svgFocus.focusVisible && svgFocus.outlineStyle === 'none',
+    'The keyboard-focused SVG room must suppress its outer outline');
+  assert.ok(svgFocus.pathVisible && svgFocus.stroke?.replace(/\s/g, '') === 'rgb(159,51,8)' && svgFocus.strokeWidth > 0,
+    'The visible room path must retain its red keyboard focus stroke');
   await capture(page, 'residence-spatial-pendant-expanded');
   await button(expanded, '前の画面へ戻る').click();
   assert.ok(await button(lights, '図を拡大').evaluate(element => element === document.activeElement));
