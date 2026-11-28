@@ -14,9 +14,10 @@ import { createOverlookCorridorPlan, createOverlookRoadDatum } from './overlookC
 import { createOverlookEarthworks } from './overlookEarthworks';
 import { createOverlookRoadStructures } from './overlookRoadStructures';
 import { blocksPavilionFlight } from './overlookPavilionPlan';
-import { createOverlookSurface, DECK_LEVEL, gradeOverlookView, loadOverlookSurvey, OVERLOOK_SURFACE_BOUNDS } from './overlookTerrain';
+import { createOverlookSurface, DECK_LEVEL, gradeBeforeLocalWorks, loadOverlookSurvey, OVERLOOK_SURFACE_BOUNDS } from './overlookTerrain';
 import { createOverlookTraffic } from './overlookTraffic';
 import { blocksUpperDeckWalking, isUpperDeck, overlookDeckGround } from './overlookUpperDeck';
+import { createOverlookViewGrade } from './overlookViewTerrain';
 
 const DAY_SUN = new THREE.Vector3(-0.66, 0.51, -0.55).normalize();
 const bounds = { minX: -34.35, maxX: 34.35, minZ: -23.15, maxZ: 23.75 };
@@ -34,7 +35,6 @@ function blocksDeckWalking(x: number, z: number, foot: number): boolean {
 
 export async function loadOverlookScene(): Promise<ExplorationScene> {
   const survey = await loadOverlookSurvey();
-  const heightAt = (x: number, z: number) => gradeOverlookView(x, z, survey(x, z));
   const atmosphere = createCoastAtmosphere(DAY_SUN, {
     nightHorizon: 0x1b2330,
     nightZenith: 0x141824,
@@ -49,13 +49,28 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
 
   const streets = createOverlookCityGround();
   const high = { value: 0 };
+  const roadDatum = createOverlookRoadDatum(survey);
+  // This reference is CPU-only and is never added to the scene. Its covered
+  // intervals keep a low soil connection while the foreground is opened.
+  const coverReference = (() => {
+    const referenceGround = createOverlookSurface(
+      (x, z) => gradeBeforeLocalWorks(x, z, survey(x, z)), streets, atmosphere.night);
+    try {
+      return createOverlookCorridorPlan(roadDatum, (x, z) => {
+        const y = referenceGround.sampleHeight(x, z);
+        if (y === undefined) throw new Error('The reference road is outside the rendered terrain.');
+        return y;
+      }, OVERLOOK_SURFACE_BOUNDS);
+    } finally { referenceGround.dispose(); }
+  })();
+  const heightAt = createOverlookViewGrade(survey, coverReference);
   const ground = createOverlookSurface(heightAt, streets, atmosphere.night, high);
   const originalSurfaceHeight = (x: number, z: number): number => {
     const y = ground.sampleHeight(x, z);
     if (y === undefined) throw new Error('The overlook placement is outside the rendered terrain.');
     return y;
   };
-  const corridors = createOverlookCorridorPlan(createOverlookRoadDatum(survey), originalSurfaceHeight, OVERLOOK_SURFACE_BOUNDS);
+  const corridors = createOverlookCorridorPlan(roadDatum, originalSurfaceHeight, OVERLOOK_SURFACE_BOUNDS);
   const earthworks = createOverlookEarthworks(ground.group, ground.sampleHeight, corridors, ground.material);
   const surfaceHeight = (x: number, z: number): number => {
     const y = earthworks.sampleHeight(x, z);
