@@ -118,7 +118,10 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
         lighting.setQuality(quality);
         reflections.setQuality(quality);
       },
-      prepareRender: reflections.prepareRender,
+      prepareRender(renderer, camera) {
+        lighting.bindRenderer(renderer);
+        reflections.prepareRender(renderer, camera);
+      },
       update(elapsed, camera) {
         const dt = elapsed - previous;
         const step = dt / DOOR_SLIDE_SECONDS;

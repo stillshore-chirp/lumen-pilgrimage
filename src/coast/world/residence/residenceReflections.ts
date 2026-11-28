@@ -202,7 +202,37 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
   let quality: CoastQuality = 'light';
   const exteriorVisibility: boolean[] = [];
 
+  let contextRenderer: THREE.WebGLRenderer | undefined;
+  let disposed = false;
+  const invalidateCapturedImages = () => {
+    nearOcclusion.setActive(false);
+    for (const capture of captures) capture.visible.value = 0;
+    mirrorVisible.value = 0;
+    floorImage.value = null;
+    floorHasImage = false;
+    pendingRefreshes = 2;
+  };
+  const releaseLostContextResources = () => {
+    invalidateCapturedImages();
+    if (!contextRenderer?.getContext().isContextLost()) return;
+    for (const capture of captures) capture.reflector.getRenderTarget().dispose();
+  };
+
+  function bindRenderer(renderer: THREE.WebGLRenderer): void {
+    nearOcclusion.bindRenderer(renderer);
+    if (contextRenderer === renderer) return;
+    contextRenderer?.domElement.removeEventListener('webglcontextlost', releaseLostContextResources);
+    contextRenderer?.domElement.removeEventListener('webglcontextrestored', invalidateCapturedImages);
+    contextRenderer = renderer;
+    contextRenderer.domElement.addEventListener('webglcontextlost', releaseLostContextResources);
+    contextRenderer.domElement.addEventListener('webglcontextrestored', invalidateCapturedImages);
+    invalidateCapturedImages();
+  }
+
   function prepareRender(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera) {
+    if (disposed) return;
+    bindRenderer(renderer);
+    if (renderer.getContext().isContextLost()) { nearOcclusion.setActive(false); return; }
     if (renderer.xr.isPresenting) {
       for (const capture of captures) capture.visible.value = 0;
       mirrorVisible.value = 0;
@@ -237,7 +267,8 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
     camera.getWorldPosition(viewPoint);
     camera.getWorldQuaternion(rotation);
     if (pendingRefreshes === 0 && viewPoint.distanceToSquared(latestPosition) < .000016 && rotation.dot(latestRotation) > .999995
-      && latestProjection.equals(camera.projectionMatrix)) return;
+      && latestProjection.equals(camera.projectionMatrix)
+      && !nearOcclusion.needsCapture(renderer, quality === 'high' && viewPoint.y < 3.5)) return;
     latestPosition.copy(viewPoint);
     latestRotation.copy(rotation);
     latestProjection.copy(camera.projectionMatrix);
@@ -259,6 +290,7 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
       || floorRotation.dot(rotation) < .99991)) visible.push(floor);
     floor.visible.value = Number(floorInView && floorHasImage);
     const useNearOcclusion = quality === 'high' && viewPoint.y < 3.5;
+    if (!useNearOcclusion) nearOcclusion.setActive(false);
     if (!visible.length && !useNearOcclusion) return;
 
     renderer.getDrawingBufferSize(size);
@@ -363,6 +395,10 @@ export function createResidenceReflections(scene: THREE.Scene, exterior: THREE.O
       pendingRefreshes = 2;
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
+      contextRenderer?.domElement.removeEventListener('webglcontextlost', releaseLostContextResources);
+      contextRenderer?.domElement.removeEventListener('webglcontextrestored', invalidateCapturedImages);
       nearOcclusion.dispose();
       for (const { geometry, reflector } of captures) {
         reflector.dispose();
