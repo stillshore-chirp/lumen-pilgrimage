@@ -1661,6 +1661,9 @@ test('nearby appliances open individual controls and start localized audio', { t
   await microwave.waitFor();
   assert.equal(await microwave.locator('[data-residence-section]').count(), 1);
   assert.equal(await button(microwave, '設備一覧へ戻る').count(), 0);
+  assert.equal(await microwave.locator('[data-residence-plan]').count(), 0);
+  assert.equal(await button(microwave, '図を拡大').count(), 0);
+  assert.equal(await button(microwave, 'メニューへ戻る').count(), 0);
   assert.equal(await microwave.getByRole('combobox').count(), 0);
   await page.keyboard.press('t');
   assert.equal(await residenceDialog(page, 'ファストトラベル').count(), 0);
@@ -1710,6 +1713,9 @@ test('nearby appliances open individual controls and start localized audio', { t
   await button(page, '洗濯機（入口側）を操作').click();
   const washer = residenceDialog(page, '洗濯機（入口側）');
   assert.equal(await button(washer, '設備一覧へ戻る').count(), 0);
+  assert.equal(await washer.locator('[data-residence-plan]').count(), 0);
+  assert.equal(await button(washer, '図を拡大').count(), 0);
+  assert.equal(await button(washer, 'メニューへ戻る').count(), 0);
   assert.equal(await button(washer, '加熱開始・再開').count(), 0);
   const mode = washer.getByRole('combobox', { name: '運転モード' });
   assert.deepEqual(await mode.locator('option').allTextContents(), ['洗浄', 'すすぎ', '脱水', '乾燥']);

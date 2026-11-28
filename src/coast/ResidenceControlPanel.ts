@@ -190,7 +190,7 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
     const entries = members.map(section => {
       const choice = button(section.title);
       choice.dataset.residenceChoice = section.id;
-      choice.addEventListener('click', () => showDevice(section, choice));
+      choice.addEventListener('click', () => showDevice(section, { kind: 'remote', choice }));
       choices.append(choice);
       return { section, choice };
     });
@@ -272,7 +272,24 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
     showView('平面図', view, { label: '前の画面へ戻る', invoke: restore });
   }
 
-  function showDevice(section: ResidenceControlSection, choice?: HTMLButtonElement): void {
+  function showDevice(section: ResidenceControlSection,
+    context: { readonly kind: 'local' } | { readonly kind: 'remote'; readonly choice: HTMLButtonElement }): void {
+    if (context.kind === 'local') {
+      const items = document.createElement('div');
+      items.className = 'residence-control-items';
+      items.dataset.residenceSection = section.id;
+      items.dataset.residenceRoom = section.location.roomId;
+      activeItems = section.controls.map(control => {
+        const item = createControl(control, section.category, sync);
+        item.element.dataset.residenceControl = control.id;
+        item.sync();
+        items.append(item.element);
+        return item;
+      });
+      showView(section.title, items);
+      return;
+    }
+    const choice = context.choice;
     const view = document.createElement('div');
     view.className = 'residence-control-device';
     const devicePlan = createResidenceControlPlan(roomIds, selectRoom);
@@ -337,9 +354,7 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
   function open(sectionId: string, returnFocus: HTMLElement): void {
     const section = sections.find(item => item.id === sectionId);
     if (!section || dialog.open) return;
-    selectRoom(section.location.roomId);
-    selectCategory(section.category);
-    showDevice(section);
+    showDevice(section, { kind: 'local' });
     showModal(returnFocus);
   }
 
