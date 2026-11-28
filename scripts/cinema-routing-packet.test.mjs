@@ -21,7 +21,10 @@ function processor(inputs) {
     (_name, value) => { Implementation = value; }, Base, 0, 0);
   const value = new Implementation({ processorOptions: { speakerCount: 57, inputCount: inputs,
     kinds: [...Array(53).fill(0),1,1,2,2], lfeIndex: 3, lfeGain: 1 } });
-  return { value, messages, send: data => value.port.onmessage({ data }) };
+  // Keep the original callback to exercise an already-dispatched late event
+  // after disposal unregisters the live MessagePort handler.
+  const receive = value.port.onmessage;
+  return { value, messages, send: data => receive({ data }) };
 }
 
 // Dense reference deliberately discovers all key boundaries with a sorted set.
@@ -161,7 +164,16 @@ test('Float32 mix overflow stops and resets before state writes for packed and l
     assert.equal(p.playhead, 18); assert.equal(p.playing, true);
     assert.ok(output.every(ear => ear.every(Number.isFinite)));
     target.send({ type: 'dispose' }); assert.equal(p.process([], [output]), false);
+    assert.equal(p.port.onmessage, null);
+    const retiredPlayhead = p.playhead, retiredMessages = target.messages.length;
     target.send({ type: 'seek', sample: 0 }); assert.equal(p.disposed, true);
+    target.send({ type: 'playing', active: true });
+    enqueue(target, packed, -18, 0, .001);
+    target.send({ type: 'dispose' });
+    assert.equal(p.playhead, retiredPlayhead); assert.equal(p.playing, false);
+    assert.equal(p.queue.length, 0); assert.equal(target.messages.length, retiredMessages);
+    assert.equal(p.process([], [output]), false);
+    assert.ok(output.every(ear => ear.every(value => value === 0)));
   }
 });
 
