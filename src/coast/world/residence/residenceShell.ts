@@ -1,3 +1,4 @@
+import { RESIDENCE_BALCONY_CROSSFALL } from './residenceFloorPlan';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { CoastTimeOfDay } from '../coastAtmosphere';
@@ -142,7 +143,7 @@ function addFloorsAndCeilings(geometry: ShellGeometry, materials: ResidenceMater
         for (const oak of floorAround(finish, RESIDENCE_TEA_TATAMI)) geometry.box(materials.oak, oak, -.035, 0);
       } else {
         geometry.box(materials.core, finish, -.31, -.035);
-        geometry.box(materials[room.floor], finish, -.035, 0, undefined, room.floor === 'deck' ? .006 : 0);
+        geometry.box(materials[room.floor], finish, -.035, 0, undefined, room.floor === 'deck' ? RESIDENCE_BALCONY_CROSSFALL : 0);
       }
       // The upper floor slab forms the soffit over the recessed deck.
       geometry.box(materials.core, rect, RESIDENCE_UPPER_SLAB_BOTTOM, 3.50);

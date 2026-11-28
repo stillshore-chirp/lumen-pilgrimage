@@ -248,6 +248,32 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
     light: diningSpot(east),
   }));
   const diningObjects = dining.flatMap(({ light }) => [light, light.target]);
+
+  let contextRenderer: THREE.WebGLRenderer | undefined;
+  let disposed = false;
+  const ownedShadows = [daylight.shadow, ...dining.map(({ light }) => light.shadow)];
+  const releaseLostContextShadows = () => {
+    if (!contextRenderer?.getContext().isContextLost()) return;
+    // Remove the previous renderer generation's dispose closures while deletion is a context-loss no-op.
+    for (const shadow of ownedShadows) {
+      shadow.dispose();
+      shadow.map = null;
+      shadow.mapPass = null;
+      shadow.needsUpdate = true;
+    }
+  };
+  const invalidateRestoredShadows = () => {
+    for (const shadow of ownedShadows) shadow.needsUpdate = true;
+  };
+
+  function bindRenderer(renderer: THREE.WebGLRenderer): void {
+    if (disposed || contextRenderer === renderer) return;
+    contextRenderer?.domElement.removeEventListener('webglcontextlost', releaseLostContextShadows);
+    contextRenderer?.domElement.removeEventListener('webglcontextrestored', invalidateRestoredShadows);
+    contextRenderer = renderer;
+    contextRenderer.domElement.addEventListener('webglcontextlost', releaseLostContextShadows);
+    contextRenderer.domElement.addEventListener('webglcontextrestored', invalidateRestoredShadows);
+  }
   const lampCenters = fabricLamps.map(({ east, north, base, height }) =>
     new THREE.Vector4(east, base + .79 * height, -north, .255 * height));
   const shadeSources = fabricLamps.map(({ id, room }) => roomSources[room].find(fixture => fixture.id === id)!);
@@ -551,6 +577,7 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
   refreshEmitters();
   updateSpill();
   return {
+    bindRenderer,
     attachInterior(shell: THREE.Object3D, furniture: THREE.Object3D) {
       furnitureGroup = furniture;
       attachMaterials(shell, furniture);
@@ -610,9 +637,14 @@ export function createResidenceLighting(scene: THREE.Scene, materials: Residence
       daylight.shadow.needsUpdate = !night;
       refreshAllRooms();
       materials.glass.opacity = night ? 0.027 : 0.050;
+      materials.interiorGlass.opacity = materials.glass.opacity;
       materials.guard.opacity = night ? 0.061 : 0.090;
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
+      contextRenderer?.domElement.removeEventListener('webglcontextlost', releaseLostContextShadows);
+      contextRenderer?.domElement.removeEventListener('webglcontextrestored', invalidateRestoredShadows);
       scene.remove(daylight, daylight.target, luminaires.group, switches.group, ...diningObjects);
       daylight.shadow.dispose();
       for (const { light } of dining) light.shadow.dispose();

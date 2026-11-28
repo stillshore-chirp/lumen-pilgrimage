@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 2,
+  "baseline": {
+    "file": "residence-70f-drawings-baseline.pdf",
+    "sha256": "65d67fc8789d522c2b4d92a5d8bf4ec64ab41bbd890878747f13c50fab0fb635",
+    "bytes": 171100,
+    "commit": "eca7905",
+    "pages": 4,
+    "pageSizePoints": [
+      1190.551,
+      841.8898
+    ]
+  },
+  "plan": {
+    "file": "src/coast/world/residence/residencePlan.ts",
+    "sha256": "b9109e029ae8e63b9ce6e5328e02ccdf447f662b36ed9a1746f1d89c7da6078c"
+  },
+  "tools": {
+    "reportlab": "4.4.9",
+    "pypdf": "6.21.4"
+  },
+  "font": {
+    "family": "Arial Unicode MS",
+    "sha256": "876af2cd4854644e7f3e7feb2f688997fdb3343c6df6693611209c9dfb47ccec",
+    "fsType": 8
+  },
+  "planPage": {
+    "number": 1,
+    "scaleDenominator": 100,
+    "originPoints": [
+      76.53543,
+      144.5669
+    ],
+    "oldPartitionEastMetres": 19,
+    "partition": {
+      "north": 9.95,
+      "west": 12.8,
+      "east": 22.8,
+      "thickness": 0.14
+    },
+    "bedroomDoor": [
+      17.9,
+      18.86
+    ],
+    "primaryDoor": [
+      17.59,
+      18.63
+    ],
+    "labelSouthShiftMetres": 0.15,
+    "labelMatricesPoints": [
+      [
+        675.4977,
+        416.6929
+      ],
+      [
+        678.2098,
+        404.5039
+      ]
+    ]
+  },
+  "teaPage": {
+    "number": 4,
+    "scaleDenominator": 30,
+    "originMetres": [
+      3.65,
+      0
+    ],
+    "originPoints": [
+      121.8898,
+      236.6929
+    ],
+    "noteXPoints": 48.18898,
+    "originalNoteBaselinesPoints": [
+      130.3937,
+      117.6378,
+      104.8819,
+      92.12598
+    ],
+    "revisedNoteBaselinesPoints": [
+      133.5,
+      122.3,
+      111.1,
+      99.9,
+      88.7,
+      77.5
+    ],
+    "notes": [
+      "一畳0.955 × 1.910 m。炉開口0.424 m角は中央の半畳。西は点前座、北と東は客座。",
+      "畳と板張りは廊下と同じ高さ。床の間1.54 × 0.61 m、床から+0.105 m。",
+      "内障子は幅0.690 mの4枚。中央2枚は内側の軌道を滑り、最大1.26 m開く。",
+      "固定の外軌道 N0.574 m、可動の内軌道 N0.610 m。カーテンと障子は別操作。",
+      "破線は四周開放の吊天井。○は4吊点、内向きの斜材は平面への投影。",
+      "板下面+{panelBottom} m、最下梁+{beamBottom} m。主天井+{soffit} mを貫通し、床スラブ下面+{anchor} mへ支持。"
+    ]
+  },
+  "activeRevisionIds": [
+    "teaSupport",
+    "partition"
+  ]
+}

@@ -13,7 +13,8 @@ const worlds = ['coast', 'monitor', 'residence', 'cinema', 'atrium', 'lake', 'ko
 const tests = {
   coast: ['coast-controls', 'coast-terrain', 'coast-acoustics', 'exploration-route'],
   monitor: ['monitor-signaling', 'monitor-session', 'monitor-capture', 'monitor-pose', 'monitor-xr', 'monitor-audio'],
-  residence: ['residence-navigation', 'residence-audio', 'residence-street', 'residence-lighting', 'residence-appliances'],
+  residence: ['residence-navigation', 'residence-audio', 'residence-street', 'residence-lighting', 'residence-appliances',
+    'residence-acoustic-paths', 'residence-monitor-audio', 'residence-screen-occlusion'],
   cinema: ['cinema-navigation', 'cinema-lighting', 'cinema-audio', 'cinema-source', 'cinema-routing', 'cinema-reflections-geometry', 'cinema-room-audio'],
   atrium: ['atrium-navigation', 'atrium-audio', 'atrium-facility'],
   lake: ['lake-navigation', 'lake-audio', 'lake-geometry', 'lake-fish', 'lake-vegetation'],

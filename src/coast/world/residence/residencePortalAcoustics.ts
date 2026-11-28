@@ -1,11 +1,15 @@
-import { smoothstep, type CoastPoint } from '../../terrain';
-import { RESIDENCE_WALLS, type ResidenceOpening, type ResidenceWall } from './residencePlan';
+import type { CoastPoint } from '../../terrain';
+import { createResidenceAcousticPathModel, residenceAcousticPathResponse, type ResidenceAcousticPath } from './residenceAcousticPaths';
+import { acousticDoorSnapshot, acousticRoomAt } from './residenceAcousticScene';
+import { acousticPointAt, acousticSegmentBox, acousticWallPrism, pointInAcousticOpening } from './residenceAcousticGeometry';
+import { RESIDENCE_ROOMS, RESIDENCE_WALLS, type ResidenceOpening, type ResidenceWall } from './residencePlan';
 
 type Point = Readonly<CoastPoint>;
 export type ResidenceDoorOpenness = (wall: ResidenceWall, opening: ResidenceOpening) => number;
 
 export const RESIDENCE_PARTITIONS = RESIDENCE_WALLS.filter(wall => wall.kind === 'interior' || wall.kind === 'party');
 const SOUND_BARRIERS = RESIDENCE_WALLS.filter(wall => wall.kind !== 'guard');
+const model = createResidenceAcousticPathModel();
 
 export function residenceDoorFraction(value: number): number {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
@@ -15,98 +19,120 @@ export function residenceOpeningPoint(wall: ResidenceWall, along: number, y: num
   return wall.axis === 'e' ? { x: along, y, z: -wall.fixed } : { x: wall.fixed, y, z: -along };
 }
 
-const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
-const mix = (from: number, to: number, amount: number): number => from + (to - from) * amount;
-
-function wallOffset(wall: ResidenceWall, point: Point): number {
-  return (wall.axis === 'e' ? -point.z : point.x) - wall.fixed;
-}
-
 function apertureBands(wall: ResidenceWall, opening: ResidenceOpening, doorOpenness?: ResidenceDoorOpenness) {
   if (opening.kind === 'passage') return { low: 1, high: 1, diffuse: 1 };
-  if (opening.kind === 'window') return { low: 0.050 ** 2, high: 0.009 ** 2, diffuse: 0.040 ** 2 };
+  if (opening.kind === 'window') return { low: .050 ** 2, high: .009 ** 2, diffuse: .040 ** 2 };
   const balcony = opening.kind === 'balcony-door';
   const fusuma = opening.kind === 'fusuma';
   const fraction = residenceDoorFraction(doorOpenness?.(wall, opening) ?? (balcony ? 0 : 1));
-  // The hinged leaf rotates through 90 degrees and progressively uncovers its projection.
   const slides = balcony || fusuma || opening.kind === 'gallery-slide';
-  const openArea = slides ? fraction : 1 - Math.cos(fraction * Math.PI / 2);
-  // Parallel paths through the closed panel/leaks and the uncovered part of the aperture.
-  // Asakura (2009), Ch. 3; Raghuvanshi (2021), Sec. 5. Coefficients are scene estimates.
+  const area = slides ? fraction : 1 - Math.cos(fraction * Math.PI / 2);
+  const blend = (closed: number, open: number, amount: number) => closed + (open - closed) * amount;
+  // Existing scene estimates. They are not measured product transmission losses.
   return {
-    low: mix((balcony ? 0.055 : fusuma ? 0.24 : 0.135) ** 2, 0.95 ** 2, openArea),
-    high: mix((balcony ? 0.009 : fusuma ? 0.057 : 0.022) ** 2, 0.91 ** 2, openArea ** 1.55),
-    diffuse: mix((balcony ? 0.043 : fusuma ? 0.19 : 0.105) ** 2, 0.78 ** 2, openArea),
+    low: blend((balcony ? .055 : fusuma ? .24 : .135) ** 2, .95 ** 2, area),
+    high: blend((balcony ? .009 : fusuma ? .057 : .022) ** 2, .91 ** 2, area ** 1.55),
+    diffuse: blend((balcony ? .043 : fusuma ? .19 : .105) ** 2, .78 ** 2, area),
   };
 }
 
+// Direct finite-volume transmission remains available for endpoints outside the
+// room graph and custom wall fixtures. Wall proximity never cancels its material.
 export function traceResidenceWalls(listener: Point, source: Point, walls: readonly ResidenceWall[],
   doorOpenness?: ResidenceDoorOpenness) {
-  const crossings = walls.flatMap(wall => {
-    const from = wallOffset(wall, listener);
-    const to = wallOffset(wall, source);
-    if (from * to >= 0) return [];
-    const fraction = from / (from - to);
-    const x = mix(listener.x, source.x, fraction);
-    const n = -mix(listener.z, source.z, fraction);
-    const y = mix(listener.y, source.y, fraction);
-    const along = wall.axis === 'e' ? x : n;
-    const edge = Math.min(along - wall.from, wall.to - along);
-    const thickness = smoothstep(0, 0.24, Math.min(Math.abs(from), Math.abs(to)));
-    const through = smoothstep(-0.12, 0.12, edge) * smoothstep(-0.12, 0.12, wall.height - y) * thickness;
-    return through > 0 ? [{ wall, fraction, along, y, through }] : [];
-  }).sort((a, b) => b.fraction - a.fraction);
-
   let low = 1;
   let high = 1;
   let diffuse = 1;
-  let arrival = source;
-  for (const { wall, along, y, through } of crossings) {
-    const interior = wall.kind === 'interior';
-    const opaqueLow = (interior ? 0.095 : 0.032) ** 2;
-    const opaqueHigh = (interior ? 0.012 : 0.004) ** 2;
-    const opaqueDiffuse = (interior ? 0.075 : 0.024) ** 2;
-    let lowAcross = opaqueLow;
-    let highAcross = opaqueHigh;
-    let diffuseAcross = opaqueDiffuse;
-    let arrivalWeight = 0;
-    let arrivalAlong = 0;
-    let arrivalHeight = 0;
+  for (const wall of walls) {
+    const interval = acousticSegmentBox(listener, source, acousticWallPrism(wall));
+    if (!interval) continue;
+    const entry = acousticPointAt(listener, source, interval[0]);
+    const exit = acousticPointAt(listener, source, interval[1]);
+    const opening = wall.openings?.find(candidate => pointInAcousticOpening(wall, candidate, entry)
+      && pointInAcousticOpening(wall, candidate, exit));
+    const bands = opening ? apertureBands(wall, opening, doorOpenness) : {
+      low: (wall.kind === 'interior' ? .095 : .032) ** 2,
+      high: (wall.kind === 'interior' ? .012 : .004) ** 2,
+      diffuse: (wall.kind === 'interior' ? .075 : .024) ** 2,
+    };
+    low *= bands.low;
+    high *= bands.high;
+    diffuse *= bands.diffuse;
+  }
+  return { gain: Math.sqrt(low), highGain: Math.sqrt(high), cutoff: 110 + 17_890 * high / Math.max(1e-24, low),
+    arrival: source, diffuseGain: Math.sqrt(diffuse) };
+}
+
+function externalPaths(listener: Point, source: Point, doorOpenness?: ResidenceDoorOpenness): ResidenceAcousticPath[] {
+  const direct = traceResidenceWalls(listener, source, SOUND_BARRIERS, doorOpenness);
+  const paths = [residenceAcousticPathResponse([source, listener],
+    [direct.gain ** 2, direct.highGain ** 2, direct.diffuseGain ** 2], 'direct-or-wall', ['boundary-direct'])];
+  const listenerRoom = acousticRoomAt(listener);
+  const sourceRoom = acousticRoomAt(source);
+  if (Boolean(listenerRoom) === Boolean(sourceRoom)) return paths;
+  const reverse = !listenerRoom;
+  const outside = reverse ? listener : source;
+  const indoors = reverse ? source : listener;
+  const state = acousticDoorSnapshot(doorOpenness);
+  const directDistance = Math.hypot(source.x - listener.x, source.y - listener.y, source.z - listener.z);
+  const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+  for (const [wallIndex, wall] of SOUND_BARRIERS.entries()) {
+    if (wall.kind !== 'exterior') continue;
     for (const opening of wall.openings ?? []) {
-      const width = opening.to - opening.from;
-      const nearest = clamp(along, opening.from + width * 0.10, opening.to - width * 0.10);
-      const height = clamp(y, opening.bottom + 0.06, opening.top - 0.06);
-      const offset = Math.hypot(nearest - along, height - y);
-      const direct = 1 / (1 + (offset / (0.13 + width * 0.55)) ** 2) ** 2;
-      const scattered = 1 / (1 + (offset / (0.45 + width * 0.76)) ** 2) ** 2;
-      const bands = apertureBands(wall, opening, doorOpenness);
-      const directPower = direct * bands.low;
-      lowAcross = Math.max(lowAcross, directPower);
-      highAcross = Math.max(highAcross, direct ** 2 * bands.high);
-      diffuseAcross = Math.max(diffuseAcross, scattered * bands.diffuse);
-      const weight = Math.max(0, directPower - opaqueLow) ** 2;
-      arrivalWeight += weight;
-      arrivalAlong += nearest * weight;
-      arrivalHeight += height * weight;
-    }
-    low *= mix(1, lowAcross, through);
-    high *= mix(1, highAcross, through);
-    diffuse *= mix(1, diffuseAcross, through);
-    if (arrivalWeight > 0) {
-      const aperture = residenceOpeningPoint(wall, arrivalAlong / arrivalWeight, arrivalHeight / arrivalWeight);
-      const bend = through * smoothstep(opaqueLow, opaqueLow * 5, lowAcross);
-      arrival = { x: mix(arrival.x, aperture.x, bend), y: mix(arrival.y, aperture.y, bend),
-        z: mix(arrival.z, aperture.z, bend) };
+      if (opening.kind !== 'window' && opening.kind !== 'balcony-door') continue;
+      const alongOutside = wall.axis === 'e' ? outside.x : -outside.z;
+      const alongInside = wall.axis === 'e' ? indoors.x : -indoors.z;
+      const along = clamp((alongOutside + alongInside) / 2, opening.from + .04, opening.to - .04);
+      const height = clamp((outside.y + indoors.y) / 2, opening.bottom + .05, opening.top - .05);
+      const center = residenceOpeningPoint(wall, along, height);
+      const reach = wall.thickness / 2 + .005;
+      const faces = [-reach, reach].map(offset => wall.axis === 'e' ? { ...center, z: -(wall.fixed + offset) }
+        : { ...center, x: wall.fixed + offset });
+      const inside = faces.find(point => {
+        const id = acousticRoomAt(point);
+        return id && RESIDENCE_ROOMS.find(room => room.id === id)?.floor !== 'deck';
+      });
+      if (!inside) continue;
+      const exterior = faces.find(point => point !== inside)!;
+      const sourceOffset = wall.axis === 'e' ? -outside.z - wall.fixed : outside.x - wall.fixed;
+      const exteriorOffset = wall.axis === 'e' ? -exterior.z - wall.fixed : exterior.x - wall.fixed;
+      if (sourceOffset * exteriorOffset <= 0) continue;
+      // A balcony door already belongs to the room graph. A fixed window adds
+      // its glazing once between the two faces before entering that graph.
+      const entry = opening.kind === 'balcony-door' ? exterior : inside;
+      const segment = traceResidenceWalls(exterior, outside, SOUND_BARRIERS.filter(candidate => candidate !== wall), doorOpenness);
+      const glass = opening.kind === 'window' ? [.050, .009, .040] : [1, 1, 1];
+      for (const interior of model.solve(entry, indoors, state).paths) {
+        let points: readonly Point[] = [outside, exterior, ...interior.points];
+        const reference = Math.max(1, interior.length);
+        const pressure = [interior.lowGain * reference * segment.gain * glass[0],
+          interior.highGain * reference * segment.highGain * glass[1],
+          interior.diffuseGain * reference * segment.diffuseGain * glass[2]];
+        if (reverse) points = [...points].reverse();
+        const path = residenceAcousticPathResponse(points, pressure.map(value => value ** 2) as [number, number, number],
+          'external-chain', [`entry:${wallIndex}:${opening.kind}:${opening.from}`, ...interior.ids]);
+        if (path.length - directDistance < .035) continue;
+        paths.push(path);
+      }
     }
   }
-  // Approximate the two transmission bands as one variable low-pass. Easing across
-  // wall edges and threshold distance keeps moving sources and listeners continuous.
-  return { gain: Math.sqrt(low), cutoff: 110 + 17_890 * (high / low), arrival, diffuseGain: Math.sqrt(diffuse) };
+  paths.sort((a, b) => b.lowGain - a.lowGain);
+  return paths.slice(0, 3);
 }
 
 export function residenceSoundPath(listener: Point, source: Point, doorOpenness?: ResidenceDoorOpenness) {
+  const result = model.solve(source, listener, acousticDoorSnapshot(doorOpenness));
+  const paths = result.paths.length ? result.paths : externalPaths(listener, source, doorOpenness);
+  if (paths.length) {
+    const gain = Math.hypot(...paths.map(path => path.lowGain));
+    const high = Math.hypot(...paths.map(path => path.highGain));
+    const dominant = paths[0];
+    return { gain, cutoff: 110 + 17_890 * high ** 2 / Math.max(1e-24, gain ** 2), arrival: dominant.arrival,
+      diffuseGain: Math.hypot(...paths.map(path => path.diffuseGain)), delay: dominant.delay, paths };
+  }
   const path = traceResidenceWalls(listener, source, SOUND_BARRIERS, doorOpenness);
   const distance = Math.hypot(source.x - listener.x, source.y - listener.y, source.z - listener.z);
   const spreading = 1 / Math.max(1, distance);
-  return { ...path, gain: path.gain * spreading, diffuseGain: path.diffuseGain * spreading };
+  return { ...path, gain: path.gain * spreading, diffuseGain: path.diffuseGain * spreading,
+    delay: distance / 343, paths: result.paths };
 }

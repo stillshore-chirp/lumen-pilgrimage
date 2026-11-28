@@ -1,3 +1,6 @@
+# Preserve generated drawing bytes on every checkout platform.
+*.pdf binary
+
 # Hash-locked audio preparation inputs retain LF on every checkout platform.
 scripts/prepare-koto-performance.mjs text eol=lf
 scripts/koto-*.mjs text eol=lf
