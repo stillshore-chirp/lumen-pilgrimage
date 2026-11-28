@@ -624,3 +624,80 @@ test('the waterfall range reaches the beach and air removes more treble with dis
   assert.ok(airCutoff(fromBeach) < airCutoff(70));
   assert.equal(soundReach(840, 840), 0);
 });
+
+
+test('road slabs keep closed support solids behind a single asphalt and fascia envelope', async () => {
+  const { plan, earthworks } = await fixture();
+  const traffic = createOverlookTraffic((x, z) => earthworks.sampleHeight(x, z), plan);
+  const structures = createOverlookRoadStructures(plan);
+  const pointKey = p => p.map(v => Object.is(v, -0) ? 0 : v).join(',');
+  const faceKey = points => points.map(pointKey).sort().join('|');
+  const surface = traffic.group.getObjectByName('Asphalt, lane markings, and streetlight reflections');
+  const position = surface.geometry.attributes.position, index = surface.geometry.index;
+  const upper = new Set();
+  for (let i = 0; i < index.count; i += 3) {
+    upper.add(faceKey([0, 1, 2].map(j => Array.from(position.array.slice(index.getX(i + j) * 3, index.getX(i + j) * 3 + 3)))));
+  }
+  const fasciaPosition = traffic.group.getObjectByName('Concrete viaduct fascias').geometry.attributes.position;
+  const fasciaRings = new Map();
+  for (let i = 0; i < fasciaPosition.count; i += 1) {
+    const x = fasciaPosition.getX(i), y = fasciaPosition.getY(i), z = fasciaPosition.getZ(i), key = `${x},${z}`;
+    const ring = fasciaRings.get(key) ?? { min: Infinity, max: -Infinity };
+    ring.min = Math.min(ring.min, y); ring.max = Math.max(ring.max, y); fasciaRings.set(key, ring);
+  }
+  let upperMatches = 0, visibleGroups = 0, internalMaterial, released = false;
+  try {
+    for (const road of plan.roads) {
+      const mesh = structures.group.getObjectByName(`Road ${road.id} closed slab contacting pier tops`);
+      const geometry = mesh.geometry, p = geometry.attributes.position, materials = mesh.material;
+      assert.ok(Array.isArray(materials));
+      assert.equal(geometry.groups.length, 2);
+      const [external, internal] = geometry.groups;
+      assert.equal(external.start, 0);
+      assert.equal(internal.start, external.count);
+      assert.equal(external.count + internal.count, p.count);
+      assert.equal(materials[external.materialIndex].visible, true);
+      assert.equal(materials[internal.materialIndex].visible, false);
+      internalMaterial ??= materials[internal.materialIndex];
+      assert.equal(materials[internal.materialIndex], internalMaterial);
+      visibleGroups += geometry.groups.filter(g => materials[g.materialIndex].visible).length;
+      const edges = new Map();
+      let bottomTriangles = 0;
+      for (let i = 0; i < p.count; i += 3) {
+        const points = [0, 1, 2].map(j => Array.from(p.array.slice((i + j) * 3, (i + j) * 3 + 3)));
+        const a = new Vector3().fromArray(points[0]), b = new Vector3().fromArray(points[1]), c = new Vector3().fromArray(points[2]);
+        const normal = b.sub(a).cross(c.sub(a)).normalize();
+        for (let j = 0; j < 3; j += 1) {
+          const key = [pointKey(points[j]), pointKey(points[(j + 1) % 3])].sort().join('|');
+          edges.set(key, (edges.get(key) ?? 0) + 1);
+        }
+        if (normal.y > .5) {
+          assert.ok(i >= internal.start, 'no competing concrete upper face is drawn');
+          assert.ok(upper.has(faceKey(points)), 'support volume meets the actual asphalt triangles');
+          upperMatches += 1;
+        }
+        if (normal.y < -.5) {
+          assert.ok(i < internal.start, 'the exterior underside is retained');
+          bottomTriangles += 1;
+        }
+        if (i >= internal.start && Math.abs(normal.y) < .5) {
+          for (const [x, y, z] of points) {
+            const fascia = fasciaRings.get(`${x},${z}`);
+            assert.ok(fascia && y >= fascia.min && y <= fascia.max, 'a real fascia covers every suppressed side ring');
+          }
+        }
+      }
+      assert.ok([...edges.values()].every(count => count === 2), 'the full support geometry is closed, including both end faces');
+      assert.equal(bottomTriangles, (road.frames.length - 1) * 2);
+    }
+    assert.equal(upperMatches, index.count / 3);
+    assert.equal(visibleGroups, plan.roads.length, 'one slab draw per road; no station-sized material groups');
+    let disposed = 0;
+    internalMaterial.addEventListener('dispose', () => { disposed += 1; });
+    structures.dispose(); released = true;
+    assert.equal(disposed, 1);
+  } finally {
+    traffic.dispose();
+    if (!released) structures.dispose();
+  }
+});
