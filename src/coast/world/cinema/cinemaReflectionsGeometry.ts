@@ -1,8 +1,8 @@
 import {
-  CINEMA_BOUNDS, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SEAT_BANKS,
-  CINEMA_TREADS, cinemaGroundHeight,
+  CINEMA_BOUNDS, CINEMA_ROOM_HEIGHT, cinemaGroundHeight,
 } from './cinemaLayout';
 import type { CinemaPoint } from './cinemaProgram';
+import { cinemaScreenCrossings, cinemaReflectionBandGain, cinemaSeatingClearance } from './cinemaPropagation';
 import { CINEMA_RENDER_SPEAKERS as RENDER_SPEAKERS } from './cinemaSpeakers';
 
 const SAMPLE_RATE = 48_000;
@@ -18,8 +18,6 @@ interface ReflectionSurface {
   readonly id: SurfaceId;
   readonly axis: Axis;
   readonly value: number;
-  readonly lowGain: number;
-  readonly highGain: number;
   contains(point: CinemaPoint): boolean;
 }
 interface PathCandidate {
@@ -28,6 +26,10 @@ interface PathCandidate {
   readonly delaySamples: number;
   readonly gain: number;
   readonly highGain: number;
+  readonly pathLength: number;
+  readonly launchPoint: CinemaPoint;
+  readonly screenCrossings: number;
+  readonly bandGain: readonly number[];
   readonly strength: number;
 }
 
@@ -42,6 +44,10 @@ export interface CinemaEarlyPath {
   readonly gain: number;
   /** Relative high-frequency reflection gain, constrained to 0..1. */
   readonly highGain: number;
+  readonly pathLength: number;
+  readonly launchPoint: CinemaPoint;
+  readonly screenCrossings: number;
+  readonly bandGain: readonly number[];
 }
 
 function distance(a: CinemaPoint, b: CinemaPoint): number {
@@ -90,17 +96,7 @@ function segmentInsideRoom(from: CinemaPoint, to: CinemaPoint): boolean {
 
 /** Keep the cheap rake/seat test bounded so this function can run at 20 Hz. */
 function blockedBySeating(from: CinemaPoint, to: CinemaPoint): boolean {
-  if (Math.abs(to[2] - from[2]) < 0.01) return false;
-  const crosses = (z: number, height: number, seatBack: boolean): boolean => {
-    const fraction = (z - from[2]) / (to[2] - from[2]);
-    if (!(fraction > 0.01 && fraction < 0.99)
-      || from[1] + (to[1] - from[1]) * fraction >= height) return false;
-    if (!seatBack) return true;
-    const x = from[0] + (to[0] - from[0]) * fraction;
-    return CINEMA_SEAT_BANKS.some(bank => x >= bank.minX && x <= bank.maxX);
-  };
-  return CINEMA_TREADS.some(tread => crosses(tread.z, tread.y, false))
-    || CINEMA_ROWS.some(row => !row.hasWheelchairBays && crosses(row.z + 0.4, row.y + 0.86, true));
+  return cinemaSeatingClearance(from, to).blocked;
 }
 
 function wallContains(point: CinemaPoint): boolean {
@@ -112,30 +108,26 @@ function wallContains(point: CinemaPoint): boolean {
 
 const surfaces: readonly ReflectionSurface[] = [
   {
-    id: 'left', axis: 'x', value: CINEMA_BOUNDS.minX, lowGain: Math.sqrt(.74 * .65),
-    highGain: Math.sqrt(.23 * .65), contains: wallContains,
+    id: 'left', axis: 'x', value: CINEMA_BOUNDS.minX, contains: wallContains,
   },
   {
-    id: 'right', axis: 'x', value: CINEMA_BOUNDS.maxX, lowGain: Math.sqrt(.74 * .65),
-    highGain: Math.sqrt(.23 * .65), contains: wallContains,
+    id: 'right', axis: 'x', value: CINEMA_BOUNDS.maxX, contains: wallContains,
   },
   {
-    id: 'rear', axis: 'z', value: CINEMA_BOUNDS.maxZ, lowGain: Math.sqrt(.62 * .75),
-    highGain: Math.sqrt(.18 * .75), contains: wallContains,
+    id: 'rear', axis: 'z', value: CINEMA_BOUNDS.maxZ, contains: wallContains,
   },
   {
-    id: 'ceiling', axis: 'y', value: CINEMA_ROOM_HEIGHT, lowGain: Math.sqrt(.79 * .75),
-    highGain: Math.sqrt(.30 * .75), contains: point => point[0] >= CINEMA_BOUNDS.minX - 1e-6
+    id: 'ceiling', axis: 'y', value: CINEMA_ROOM_HEIGHT, contains: point => point[0] >= CINEMA_BOUNDS.minX - 1e-6
       && point[0] <= CINEMA_BOUNDS.maxX + 1e-6 && point[2] >= CINEMA_BOUNDS.minZ - 1e-6
       && point[2] <= CINEMA_BOUNDS.maxZ + 1e-6,
   },
   {
-    id: 'floor', axis: 'y', value: 0, lowGain: .56, highGain: .34,
+    id: 'floor', axis: 'y', value: 0,
     contains: point => point[0] >= CINEMA_BOUNDS.minX - 1e-6 && point[0] <= CINEMA_BOUNDS.maxX + 1e-6
       && point[2] >= CINEMA_BOUNDS.minZ - 1e-6 && point[2] <= CINEMA_BOUNDS.maxZ + 1e-6,
   },
   {
-    id: 'front', axis: 'z', value: CINEMA_BOUNDS.minZ, lowGain: .58, highGain: .40,
+    id: 'front', axis: 'z', value: CINEMA_BOUNDS.minZ,
     contains: wallContains,
   },
 ];
@@ -174,8 +166,9 @@ function makeCandidate(
   const pathLength = legs.slice(1).reduce((sum, point, index) => sum + distance(legs[index], point), 0);
   const delaySamples = speakerDelay + pathLength * SAMPLE_RATE / SOUND_SPEED_METRES_PER_SECOND;
   if (!(delaySamples >= 0 && delaySamples <= MAX_DELAY_SAMPLES)) return undefined;
-  const lowReflection = sequence.reduce((value, surface) => value * surface.lowGain, 1);
-  const highReflection = sequence.reduce((value, surface) => value * surface.highGain, 1);
+  const bandGain = cinemaReflectionBandGain(sequence.map(surface => surface.id));
+  const lowReflection = bandGain[0];
+  const highReflection = bandGain[bandGain.length - 1];
   const gain = REFERENCE_DISTANCE / Math.max(1, pathLength) * lowReflection;
   const highGain = Math.max(0, Math.min(1, highReflection));
   if (!(gain > 0) || !Number.isFinite(gain) || !Number.isFinite(highGain)) return undefined;
@@ -185,6 +178,10 @@ function makeCandidate(
     delaySamples,
     gain,
     highGain,
+    pathLength,
+    launchPoint: points[0],
+    screenCrossings: cinemaScreenCrossings(legs),
+    bandGain,
     strength: gain * (0.55 + 0.45 * highGain),
   };
 }
@@ -226,7 +223,5 @@ export function findCinemaEarlyPaths(position: CinemaPoint, limit = MAX_PATHS): 
     }
   });
   candidates.sort((a, b) => b.strength - a.strength || a.delaySamples - b.delaySamples || a.speaker - b.speaker);
-  return candidates.slice(0, count).map(({ speaker, point, delaySamples, gain, highGain }) => ({
-    speaker, point, delaySamples, gain, highGain,
-  }));
+  return candidates.slice(0, count).map(({ strength: _strength, ...path }) => path);
 }

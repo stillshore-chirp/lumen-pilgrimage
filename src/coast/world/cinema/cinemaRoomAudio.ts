@@ -1,7 +1,12 @@
+import { cinemaScreenCrossings, cinemaSourceBandLoss } from './cinemaPropagation';
+import { cinemaPropagationImpulse } from './cinemaPropagationFilter';
+import { decodeCinemaHrir, type CinemaConvolutionPath } from './cinemaConvolution';
+import { createCinemaKernelBankPreparer } from './cinemaKernelBanks';
 import { Quaternion, Vector3, type Camera } from 'three';
 import { CINEMA_SAMPLE_RATE, type CinemaPoint, type CinemaProgram } from './cinemaProgram';
 import { findCinemaEarlyPaths, type CinemaEarlyPath } from './cinemaReflectionsGeometry';
-import { CINEMA_RENDER_SPEAKERS, createCinemaRouting } from './cinemaSpeakers';
+import { CINEMA_RENDER_SPEAKERS } from './cinemaSpeakers';
+import { createCinemaRoutingPacket } from './cinemaRoutingPacket';
 import { CINEMA_ROOM_PROCESSOR_SOURCE } from './cinemaRoomProcessor';
 
 const SOUND_SPEED_METRES_PER_SECOND = 343;
@@ -9,8 +14,9 @@ const REFERENCE_LISTENER = new Vector3(0, 5, 35.85);
 const REFERENCE_DISTANCE = 38.02;
 const PROCESSOR_COMMON_DELAY_SAMPLES = 128;
 const SPATIAL_STRIDE = 7;
+// Evaluated against the exact shared shelf transfer over all material pairs.
+const PROPAGATION_FIR_TAPS = 256;
 const PATH_UPDATE_SECONDS = 0.05;
-const ROUTING_SEGMENT_SAMPLES = Math.round(CINEMA_SAMPLE_RATE * PATH_UPDATE_SECONDS);
 const GEOMETRY_POSITION_EPSILON_SQUARED = 0.0001;
 const HRTF_BINARY_PATH = `${import.meta.env?.BASE_URL ?? '/'}cinema-audio/cinema-hrtf-kemar-48k-144tap-symmetric.i16le.bin`;
 const HRTF_BINARY_BYTES = 60 * 144 * 2 * 2;
@@ -40,13 +46,15 @@ interface SpeakerSpatialSnapshot {
   readonly values: Float32Array;
   readonly centerDelaySamples: number;
   readonly reflections: readonly CinemaReflectionPacket[];
+  readonly filters: readonly Float32Array[];
 }
 
 interface SpeakerGeometry {
   readonly baseDelaySamples: Float32Array;
   readonly distanceGain: Float32Array;
   readonly centerDelaySamples: number;
-  readonly reflections: readonly CinemaEarlyPath[];
+  readonly reflections: readonly (CinemaEarlyPath & { readonly filter: Float32Array })[];
+  readonly filters: readonly Float32Array[];
 }
 
 interface CinemaReflectionPacket {
@@ -57,6 +65,7 @@ interface CinemaReflectionPacket {
   readonly leftGain: number;
   readonly rightGain: number;
   readonly direction: number;
+  readonly filter: Float32Array;
 }
 
 function speakerKindCode(kind: (typeof CINEMA_RENDER_SPEAKERS)[number]['kind']): number {
@@ -65,10 +74,23 @@ function speakerKindCode(kind: (typeof CINEMA_RENDER_SPEAKERS)[number]['kind']):
   return 0;
 }
 
+function propagationFilter(speaker: (typeof CINEMA_RENDER_SPEAKERS)[number], launch: CinemaPoint,
+  distance: number, screenCrossings: number, reflectionBands?: readonly number[]): Float32Array {
+  const loss = cinemaSourceBandLoss({ position: speaker.position, aim: speaker.aim,
+    subwoofer: speaker.kind === 'screenSub' || speaker.kind === 'surroundSub' }, launch, distance);
+  if (reflectionBands) {
+    // The low-band reflection amplitude is already in path.gain; retain it exactly once.
+    for (let band = 0; band < loss.length; band += 1) loss[band] += 20 * Math.log10(reflectionBands[band] / reflectionBands[0]);
+  }
+  return cinemaPropagationImpulse({ bandDb: loss, screenCrossings }, PROPAGATION_FIR_TAPS);
+}
+
 function createSpeakerGeometry(position: Vector3): SpeakerGeometry {
   const source = new Vector3();
   const baseDelaySamples = new Float32Array(CINEMA_RENDER_SPEAKERS.length);
   const distanceGain = new Float32Array(CINEMA_RENDER_SPEAKERS.length);
+  const filters: Float32Array[] = [];
+  const listener: CinemaPoint = [position.x, position.y, position.z];
   let centerIndex = -1;
   let centerX = Infinity;
   for (let i = 0; i < CINEMA_RENDER_SPEAKERS.length; i += 1) {
@@ -80,6 +102,7 @@ function createSpeakerGeometry(position: Vector3): SpeakerGeometry {
     source.set(speaker.position[0], speaker.position[1], speaker.position[2]);
     const distance = Math.max(1, source.distanceTo(position));
     distanceGain[i] = Math.min(2, REFERENCE_DISTANCE / distance);
+    filters.push(propagationFilter(speaker, listener, distance, cinemaScreenCrossings([speaker.position, listener])));
     baseDelaySamples[i] = Math.max(0,
       speaker.delaySamples + distance * CINEMA_SAMPLE_RATE / SOUND_SPEED_METRES_PER_SECOND);
   }
@@ -95,7 +118,10 @@ function createSpeakerGeometry(position: Vector3): SpeakerGeometry {
     baseDelaySamples,
     distanceGain,
     centerDelaySamples,
-    reflections: findCinemaEarlyPaths([position.x, position.y, position.z]),
+    filters,
+    reflections: findCinemaEarlyPaths(listener).map(path => ({ ...path,
+      filter: propagationFilter(CINEMA_RENDER_SPEAKERS[path.speaker], path.launchPoint, path.pathLength,
+        path.screenCrossings, path.bandGain) })),
   };
 }
 
@@ -131,7 +157,7 @@ export function cinemaHrtfDirectionIndexForPose(
 }
 
 function createReflectionPackets(
-  paths: readonly CinemaEarlyPath[],
+  paths: readonly (CinemaEarlyPath & { readonly filter: Float32Array })[],
   position: Vector3,
   forward: Vector3,
   up: Vector3,
@@ -144,6 +170,7 @@ function createReflectionPackets(
     const angle = (side + 1) * Math.PI * 0.25;
     return {
       speaker: path.speaker,
+      filter: path.filter,
       delaySamples: path.delaySamples,
       gain: path.gain,
       highGain: path.highGain,
@@ -195,6 +222,7 @@ function createSpatialSnapshot(
   }
   return {
     values,
+    filters: geometry.filters,
     centerDelaySamples: geometry.centerDelaySamples,
     reflections: createReflectionPackets(geometry.reflections, position, forward, up),
   };
@@ -230,14 +258,12 @@ function ensureCinemaProcessorModule(context: AudioContext): Promise<void> {
   return loading;
 }
 
-function transferBuffers(channels: readonly Float32Array[], routing: readonly Float32Array[]): ArrayBuffer[] {
+function transferBuffers(channels: readonly Float32Array[], routing: ArrayBuffer): ArrayBuffer[] {
   const buffers: ArrayBuffer[] = [];
   for (const channel of channels) {
     if (channel.buffer instanceof ArrayBuffer && !buffers.includes(channel.buffer)) buffers.push(channel.buffer);
   }
-  for (const matrix of routing) {
-    if (matrix.buffer instanceof ArrayBuffer && !buffers.includes(matrix.buffer)) buffers.push(matrix.buffer);
-  }
+  if (!buffers.includes(routing)) buffers.push(routing);
   return buffers;
 }
 
@@ -262,6 +288,7 @@ export async function createCinemaRoomAudio(
   if (!context.audioWorklet) throw new Error('AudioWorklet is unavailable in this browser');
   await ensureCinemaProcessorModule(context);
   const hrtfBuffer = await loadCinemaHrtf();
+  const prepareFilters = hrtfBuffer ? createCinemaKernelBankPreparer(decodeCinemaHrir(hrtfBuffer)) : undefined;
 
   const lfeIndex = program.bed.findIndex(channel => channel === 'LFE');
   const node = new AudioWorkletNode(context, 'cinema-room-processor', {
@@ -320,6 +347,9 @@ export async function createCinemaRoomAudio(
         underruns: Math.max(0, Math.trunc(message.underruns as number)),
         ...(error ? { error } : {}),
       };
+    } else if (message.type === 'bank-resync') {
+      prepareFilters?.requestFull();
+      filterValues = undefined;
     } else if (message.type === 'error') {
       error = typeof message.message === 'string' ? message.message : 'Cinema room processor failed';
       latest = { ...latest, error };
@@ -331,9 +361,44 @@ export async function createCinemaRoomAudio(
   };
   if (hrtfBuffer) node.port.postMessage({ type: 'hrtf', buffer: hrtfBuffer }, [hrtfBuffer]);
 
+  let filterValues: Float32Array | undefined;
+  let filterGeometry: readonly Float32Array[] | undefined;
+  let filterReflections: readonly CinemaReflectionPacket[] = [];
   const sendSpatial = (snapshot: SpeakerSpatialSnapshot): void => {
+    const changed = filterGeometry !== snapshot.filters || !filterValues || snapshot.values.some((value, index) => value !== filterValues![index])
+      || snapshot.reflections.length !== filterReflections.length
+      || snapshot.reflections.some((path, index) => {
+        const previous = filterReflections[index];
+        return !previous || path.speaker !== previous.speaker || path.delaySamples !== previous.delaySamples
+          || path.gain !== previous.gain || path.highGain !== previous.highGain || path.direction !== previous.direction || path.filter !== previous.filter;
+      });
+    if (prepareFilters && changed) {
+      const paths: CinemaConvolutionPath[] = [];
+      for (let speaker = 0; speaker < CINEMA_RENDER_SPEAKERS.length; speaker += 1) {
+        const base = speaker * SPATIAL_STRIDE;
+        paths.push({ speaker, delaySamples: Math.min(snapshot.values[base], snapshot.values[base + 1]),
+          direction: snapshot.values[base + 6], gain: snapshot.values[base + 5], send: snapshot.values[base + 4], filter: snapshot.filters[speaker] });
+      }
+      for (const path of snapshot.reflections) {
+        const gain = path.gain * (0.12 + 0.18 * path.highGain);
+        paths.push({ speaker: path.speaker, delaySamples: path.delaySamples, direction: path.direction,
+          gain, send: gain, filter: path.filter });
+      }
+      const submission = prepareFilters.prepare(paths);
+      try {
+        node.port.postMessage(submission.message, submission.transfer);
+        submission.commit();
+      } catch (error) {
+        submission.cancel();
+        throw error;
+      }
+      filterValues = snapshot.values.slice();
+      filterGeometry = snapshot.filters;
+      filterReflections = snapshot.reflections;
+    }
     spatial = snapshot;
-    node.port.postMessage({ type: 'pose', spatial: snapshot.values, reflections: snapshot.reflections },
+    node.port.postMessage({ type: 'pose', spatial: snapshot.values,
+      reflections: snapshot.reflections.map(({ filter: _filter, ...path }) => path) },
       [snapshot.values.buffer]);
   };
   sendSpatial(spatial);
@@ -373,30 +438,12 @@ export async function createCinemaRoomAudio(
         throw new RangeError('Cinema PCM planes must have the same non-zero length');
       }
       const start = Number.isFinite(startSample) ? Math.trunc(startSample) : 0;
-      const expected = CINEMA_RENDER_SPEAKERS.length * channels.length;
-      const routingSegments: Array<{
-        readonly offset: number;
-        readonly length: number;
-        readonly start: Float32Array;
-        readonly end: Float32Array;
-      }> = [];
-      for (let offset = 0; offset < frames; offset += ROUTING_SEGMENT_SAMPLES) {
-        const length = Math.min(ROUTING_SEGMENT_SAMPLES, frames - offset);
-        const first = createCinemaRouting(program, start + offset);
-        const last = createCinemaRouting(program, start + offset + length - 1);
-        if (first.length < expected || last.length < expected) {
-          throw new Error('Cinema routing returned an incomplete speaker matrix');
-        }
-        routingSegments.push({
-          offset,
-          length,
-          start: first.length === expected ? first : first.slice(0, expected),
-          end: last.length === expected ? last : last.slice(0, expected),
-        });
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(start + frames)) {
+        throw new RangeError('Cinema PCM sample range must use safe integers');
       }
-      const matrices = routingSegments.flatMap(segment => [segment.start, segment.end]);
-      node.port.postMessage({ type: 'enqueue', startSample: start, channels, routingSegments },
-        transferBuffers(channels, matrices));
+      const packedRouting = createCinemaRoutingPacket(program, start, frames);
+      node.port.postMessage({ type: 'enqueue', startSample: start, channels, packedRouting },
+        transferBuffers(channels, packedRouting));
     },
     setPlaying(active: boolean): void {
       if (disposed) return;
@@ -412,6 +459,9 @@ export async function createCinemaRoomAudio(
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      prepareFilters?.clear();
+      filterValues = undefined;
+      filterReflections = [];
       node.port.postMessage({ type: 'dispose' });
       node.disconnect();
       node.port.close();

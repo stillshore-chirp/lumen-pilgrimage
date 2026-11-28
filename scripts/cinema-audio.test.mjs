@@ -14,6 +14,10 @@ const { CINEMA_SPEAKERS, cinemaReflections, cinemaReflectionTaper, cinemaSeatDrr
   await import('../src/coast/world/cinema/cinemaAcoustics.ts');
 const { CINEMA_DESTINATIONS, CINEMA_ROWS, cinemaGroundHeight } =
   await import('../src/coast/world/cinema/cinemaLayout.ts');
+const { cinemaSourceBandLoss, cinemaSeatingClearance, cinemaPathCrossesScreen, cinemaReflectionBandGain,
+  cinemaBandShelves, cinemaScreenCrossings, CINEMA_SURFACE_GAINS } = await import('../src/coast/world/cinema/cinemaPropagation.ts');
+const { CINEMA_RENDER_SPEAKERS } = await import('../src/coast/world/cinema/cinemaSpeakers.ts');
+const { cinemaPropagationImpulse } = await import('../src/coast/world/cinema/cinemaPropagationFilter.ts');
 hook.deregister();
 
 const [centerSeat, frontSeat, rearSeat, wheelchairSeat] = CINEMA_DESTINATIONS;
@@ -386,4 +390,92 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
   await page.waitForFunction(() => window.cinemaAmbienceFixture.contexts[0].tails[1].disconnected);
   await page.evaluate(() => window.cinemaAmbienceFixture.ambience.dispose());
   await page.waitForFunction(() => window.cinemaAmbienceFixture.contexts[0].state === 'closed');
+});
+
+
+test('shared source spectrum retains legacy air/aim values and keeps subwoofer handling separate', () => {
+  const source = { position: [0, 2, 0], aim: [0, 0, 1], subwoofer: false };
+  const onAxis = cinemaSourceBandLoss(source, [0, 2, 40], 40);
+  assert.deepEqual(onAxis, [.0004, .0013, .0027, .0047, .009, .024].map(value => -40 * value));
+  const offAxis = cinemaSourceBandLoss(source, [40, 2, 0], 40);
+  assert.ok(offAxis[5] < onAxis[5] - 4.99);
+  assert.deepEqual(cinemaSourceBandLoss({ ...source, subwoofer: true }, [40, 2, 0], 40), [0, 0, 0, 0, 0, 0]);
+  const early = cinemaSourceBandLoss(source, [0, 2, 10], 80);
+  assert.equal(early[5], -80 * .024); // Launch direction stays axial; the whole reflected path absorbs air.
+});
+
+test('finite screen crossing, shared reflection bands and shelf sections preserve separate transfer causes', () => {
+  assert.equal(cinemaPathCrossesScreen([[0, 12, -1.4], [0, 5, 35.85]]), true);
+  assert.equal(cinemaPathCrossesScreen([[19, 12, -1.4], [19, 5, 35.85]]), false);
+  assert.equal(cinemaPathCrossesScreen([[0, 1, -1.4], [0, 1, 35.85]]), false);
+  assert.equal(cinemaPathCrossesScreen([[0, 12, 1], [0, 5, 35.85]]), false);
+  const gain = cinemaReflectionBandGain(['left', 'ceiling']);
+  assert.equal(gain.length, 6);
+  for (let band = 0; band < gain.length; band++) {
+    assert.equal(gain[band], CINEMA_SURFACE_GAINS.left[band] * CINEMA_SURFACE_GAINS.ceiling[band]);
+  }
+  const sections = cinemaBandShelves([125, 250, 500], [-.1, -.3, -1]);
+  assert.equal(sections[0].frequency, Math.sqrt(125 * 250));
+  assert.ok(Math.abs(sections[0].gainDb + .2) < 1e-12);
+  assert.ok(Math.abs(sections[1].gainDb + .7) < 1e-12);
+});
+
+test('every speaker has direct seat clearance at all row standing/crouching and aisle inspection poses', t => {
+  let tested = 0;
+  const blocked = [];
+  for (const row of CINEMA_ROWS) {
+    for (const x of [-18.4, -14, -7, -6.66, 0, 6.66, 7, 14, 18.4]) {
+      for (const eye of [1.15, 1.65]) {
+        const listener = [x, cinemaGroundHeight(x, row.z) + eye, row.z];
+        for (const source of CINEMA_RENDER_SPEAKERS) {
+          tested++;
+          const path = cinemaSeatingClearance(source.position, listener);
+          if (path.blocked) blocked.push({ speaker: source.id, row: row.number, x, eye,
+            seatDepth: path.seatDepth, treadDepth: path.treadDepth });
+        }
+      }
+    }
+  }
+  t.diagnostic(`Direct finite seat/tread rays: ${tested}; blocked: ${blocked.length}`);
+  assert.deepEqual(blocked, []);
+});
+
+
+test('causal propagation FIR preserves the analytic shelf transfer without level normalization', () => {
+  const unity = cinemaPropagationImpulse({ bandDb: [0, 0, 0, 0, 0, 0], screenCrossings: 0 }, 256);
+  assert.equal(unity[0], 1); assert.ok(unity.subarray(1).every(value => value === 0));
+  const constant = cinemaPropagationImpulse({ bandDb: [-6, -6, -6, -6, -6, -6], screenCrossings: 0 }, 256);
+  assert.ok(Math.abs(constant[0] - 10 ** (-6 / 20)) < 1e-7);
+  assert.ok(constant.subarray(1).every(value => value === 0));
+  // Independent analytic W3C S=1 reference, generated without the FIR implementation.
+  const oracle = [[63,.985943423661866,-.02860825512326161],[125,.980169727822701,-.058378819586121344],
+    [250,.9561598387198946,-.10541610410767717],[500,.9073173742670725,-.17181126924879758],
+    [1000,.8016164007478866,-.2576817446966986],[2000,.6122296616554151,-.28502747008932267],
+    [4000,.45587778766590137,-.1851171958311123],[8000,.41398189748603736,-.09132091817222615],
+    [16000,.40399198567895983,-.028100149665358332]];
+  const impulse = cinemaPropagationImpulse({ bandDb: [-.116, -.302, -.608, -1.188, -2.86, -5.96],
+    screenCrossings: 1 }, 256);
+  for (const [frequency, real, imaginary] of oracle) {
+    let re = 0, im = 0;
+    impulse.forEach((value, n) => { re += value * Math.cos(2 * Math.PI * frequency * n / 48000);
+      im -= value * Math.sin(2 * Math.PI * frequency * n / 48000); });
+    assert.ok(Math.abs(20 * Math.log10(Math.hypot(re, im) / Math.hypot(real, imaginary))) < .1);
+    assert.ok(Math.abs(Math.atan2(im * real - re * imaginary, re * real + im * imaginary)) < Math.PI / 180);
+  }
+});
+
+
+test('each finite fabric crossing contributes one causal screen transfer', () => {
+  assert.equal(cinemaScreenCrossings([[-12, 14, 10], [-13, 7, -3.1], [-15, 2, 1]]), 2);
+  assert.equal(cinemaScreenCrossings([[16, 14, 10], [16, 7, -3.1], [16, 2, 1]]), 0);
+  const bandDb = [0, 0, 0, 0, 0, 0];
+  const once = cinemaPropagationImpulse({ bandDb, screenCrossings: 1 }, 512);
+  const twice = cinemaPropagationImpulse({ bandDb, screenCrossings: 2 }, 512);
+  let error = 0;
+  for (let n = 0; n < twice.length; n++) {
+    let expected = 0;
+    for (let tap = 0; tap <= n; tap++) expected += once[tap] * once[n - tap];
+    error = Math.max(error, Math.abs(twice[n] - expected));
+  }
+  assert.ok(error < 2e-7, `Two actual traversals must equal two transfers, error ${error}`);
 });
