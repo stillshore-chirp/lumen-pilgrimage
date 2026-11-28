@@ -39,7 +39,7 @@
 
 グリルの接触箱は枠と締結部も含む奥行38 mmです。前板の表面を基準面から+2mmに保つため、箱の前端から前板までは17mmの差があり、この部分も保守的な接触になります。配置試験では中央への実メッシュのレイも使い、この差を確認します。
 
-この判定には[共通飛行の更新 #286](https://github.com/stillshore-chirp/lumen-pilgrimage/issues/286)が必要です。共通Controlsから`blocksFlight(x, z, eyeY, clearance)`へ実際の頭部中心と半径を渡し、垂直を含む3D経路を分割して検査します。旧2引数の経路はYがないため機器の体積を検査できません。Draftではその統合と正規入力・頭部offsetによる実動確認を未完了として扱います。
+この判定には[共通飛行の更新 #286](https://github.com/stillshore-chirp/lumen-pilgrimage/issues/286)が必要です。共通Controlsから`blocksFlight(x, z, eyeY, clearance)`へ実際の頭部中心と半径を渡し、垂直を含む3D経路を分割して検査します。旧2引数の経路はYがないため機器の体積を検査できません。依存の統合と正規入力・頭部offsetによる実動の確認範囲は[検証記録](cinema-reevaluation-verification.md)に記します。
 
 XRの頭部offsetは通常移動の衝突判定に含め、重なりからの退避も確認します。静止中の追跡された頭部の1:1移動を遮断する設計ではありません。その移動で見える閉じた筐体、上面、裏面と取付の奥まで可視包絡へ含めて検証します。頭部の物理的な追跡を止めることと、locomotionを衝突で止めることを区別します。
 
