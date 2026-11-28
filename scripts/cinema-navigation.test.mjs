@@ -68,7 +68,7 @@ test('speaker grilles follow the acoustic center and aim, with connected support
 
 test('finished cabinets, grille frames and fixings stay inside their shared collision envelopes', () => {
   const group = new Group();
-  createCinemaSpeakerEquipment(group);
+  const equipmentFinishes = createCinemaSpeakerEquipment(group);
   group.updateMatrixWorld(true);
   const matrix = new Matrix4();
   const vertex = new Vector3();
@@ -129,6 +129,7 @@ test('finished cabinets, grille frames and fixings stay inside their shared coll
   assert.ok(Math.abs(maximumGrilleRecess - .017) < .00001);
   for (const geometry of geometries) geometry.dispose();
   for (const material of materials) material.dispose();
+  for (const texture of equipmentFinishes.textures) texture.dispose();
   group.clear();
 });
 

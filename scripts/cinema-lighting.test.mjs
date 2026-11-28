@@ -16,6 +16,9 @@ const hooks = registerHooks({
 const { createCinemaLighting } = await import('../src/coast/world/cinema/cinemaLighting.ts');
 const { cinemaFinishes } = await import('../src/coast/world/cinema/cinemaFinishes.ts');
 const { applyCinemaMetricBoxUv } = await import('../src/coast/world/cinema/cinemaMetricUv.ts');
+const { cinemaSpeakerFinishes, CINEMA_SPEAKER_GRILLE } = await import('../src/coast/world/cinema/cinemaSpeakerFinishes.ts');
+const { createCinemaSpeakerEquipment } = await import('../src/coast/world/cinema/cinemaSpeakerEquipment.ts');
+const { createCinemaAuditorium } = await import('../src/coast/world/cinema/cinemaAuditorium.ts');
 const {
   bakeCinemaLightTransport, cinemaLightQuality, cinemaPictureOpening, cinemaProjectionFalloff, cinemaScreenLevels,
   CINEMA_LIGHT_BOUNCE, CINEMA_LIGHT_CROWN, CINEMA_ROOM_RETURN,
@@ -308,5 +311,116 @@ test('metric panel maps and bumps retain cinema lighting hooks across quality ch
     }
     for (const texture of textures) texture.dispose();
     finish.box.dispose();
+  }
+});
+
+test('speaker grille coverage has physical pitch, independent linear height and a single alpha premultiplication', () => {
+  const finish = cinemaSpeakerFinishes();
+  try {
+    const [map, height] = finish.textures;
+    assert.notStrictEqual(map.source, height.source);
+    assert.deepEqual(map.repeat.toArray(), [1, 1]);
+    assert.equal(map.colorSpace, '');
+    assert.equal(height.colorSpace, '');
+    assert.equal(map.premultiplyAlpha, false);
+    assert.equal(finish.grille.premultipliedAlpha, true);
+    assert.equal(finish.grille.transparent, true);
+    assert.equal(finish.grille.depthWrite, false);
+    assert.equal(finish.grille.depthTest, true);
+    assert.equal(finish.grille.alphaTest, 0);
+    assert.equal(finish.grille.alphaHash, false);
+    const data = map.image.data;
+    let alphaSum = 0;
+    for (let index = 3; index < data.length; index += 4) alphaSum += data[index] / 255;
+    const areaOpening = 1 - alphaSum / (512 * 512);
+    const idealOpening = Math.PI * (CINEMA_SPEAKER_GRILLE.diameter / 2) ** 2 / CINEMA_SPEAKER_GRILLE.pitch ** 2;
+    assert.ok(Math.abs(areaOpening - idealOpening) < .002);
+    assert.equal(CINEMA_SPEAKER_GRILLE.period / CINEMA_SPEAKER_GRILLE.pitch, 8);
+    for (const coated of [finish.cabinet, finish.metal, finish.grille, finish.backing]) assert.equal(coated.metalness, 0);
+    assert.equal(finish.fixings.metalness, 1);
+  } finally {
+    for (const texture of finish.textures) texture.dispose();
+    for (const material of [finish.cabinet, finish.metal, finish.grille, finish.backing, finish.fixings]) material.dispose();
+  }
+});
+
+test('dimensioned grille UVs and alpha output retain the production lighting hook at both qualities', () => {
+  const group = new Group();
+  const finish = createCinemaSpeakerEquipment(group);
+  const originalCompile = finish.grille.onBeforeCompile;
+  const lights = createCinemaLighting(new Scene(), group);
+  const geometries = new Set();
+  const materials = new Set();
+  try {
+    let frontInstances = 0;
+    let backingInstances = 0;
+    group.traverse(mesh => {
+      if (!(mesh instanceof InstancedMesh)) return;
+      if (mesh.name === 'Opaque cinema speaker grille backing') backingInstances += mesh.count;
+      if (mesh.name !== 'Recessed cinema speaker grilles') return;
+      frontInstances += mesh.count;
+      const { position, uv } = mesh.geometry.attributes;
+      for (let index = 0; index < position.count; index += 1) {
+        assert.ok(Math.abs(uv.getX(index) * .04 - position.getX(index)) < 1e-7);
+        assert.ok(Math.abs(uv.getY(index) * .04 - position.getY(index)) < 1e-7);
+      }
+    });
+    assert.equal(frontInstances, 48);
+    assert.equal(backingInstances, 48);
+    for (const high of [false, true, false, true, false]) {
+      finish.setHighDetail(high);
+      assert.equal(finish.grille.bumpMap, high ? finish.textures[1] : null);
+      assert.equal(finish.grille.map, finish.textures[0]);
+      const shader = { uniforms: UniformsUtils.clone(ShaderLib.standard.uniforms),
+        vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader };
+      finish.grille.onBeforeCompile(shader, undefined);
+      assert.ok(shader.vertexShader.includes('cinemaWorld ='));
+      assert.ok(shader.fragmentShader.includes('cinemaArchitecturalLight'));
+      assert.equal(shader.fragmentShader.split('#include <opaque_fragment>').length - 1, 1);
+      assert.equal(shader.fragmentShader.split('#include <premultiplied_alpha_fragment>').length - 1, 1);
+    }
+  } finally {
+    lights.dispose();
+    assert.equal(finish.grille.onBeforeCompile, originalCompile);
+    group.traverse(mesh => {
+      if (!(mesh instanceof Mesh)) return;
+      geometries.add(mesh.geometry); materials.add(mesh.material);
+      if (mesh instanceof InstancedMesh) mesh.dispose();
+    });
+    for (const texture of finish.textures) texture.dispose();
+    for (const material of materials) material.dispose();
+    for (const geometry of geometries) geometry.dispose();
+  }
+});
+
+test('auditorium owns the detached grille height texture through light quality and repeated disposal', () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement() { return { getContext() {
+    return new Proxy({}, { get: () => () => undefined });
+  } }; } };
+  let auditorium;
+  try {
+    auditorium = createCinemaAuditorium();
+    auditorium.setQuality('high');
+    const mesh = auditorium.group.getObjectByName('Recessed cinema speaker grilles');
+    const map = mesh.material.map;
+    const height = mesh.material.bumpMap;
+    assert.ok(map && height && map !== height);
+    let mapDisposals = 0;
+    let heightDisposals = 0;
+    map.addEventListener('dispose', () => { mapDisposals += 1; });
+    height.addEventListener('dispose', () => { heightDisposals += 1; });
+    auditorium.setQuality('light');
+    assert.equal(mesh.material.bumpMap, null);
+    auditorium.dispose();
+    auditorium.dispose();
+    auditorium.setQuality('high');
+    assert.equal(mesh.material.bumpMap, null);
+    assert.equal(mapDisposals, 1);
+    assert.equal(heightDisposals, 1);
+  } finally {
+    auditorium?.dispose();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
   }
 });

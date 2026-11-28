@@ -1,10 +1,11 @@
 import {
-  CylinderGeometry, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Vector3,
+  CylinderGeometry, InstancedMesh, Matrix4, Quaternion, Vector3,
   type BufferGeometry, type Group, type Material,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CINEMA_SPEAKER_EQUIPMENT, type CinemaEquipmentBox } from './cinemaSpeakerGeometry';
+import { CINEMA_SPEAKER_GRILLE, cinemaSpeakerFinishes, cinemaSpeakerGrilleUv } from './cinemaSpeakerFinishes';
 
 export const CINEMA_SPEAKER_DETAIL = {
   cabinetRadius: .012,
@@ -87,11 +88,10 @@ function mountFixings(box: CinemaEquipmentBox): Instance[] {
 }
 
 /** Detailed skins remain inside the shared collision/support envelopes. */
-export function createCinemaSpeakerEquipment(group: Group): void {
+export function createCinemaSpeakerEquipment(group: Group) {
   const boxes = CINEMA_SPEAKER_EQUIPMENT.flatMap(({ boxes }) => boxes);
-  const cabinet = new MeshStandardMaterial({ color: 0x272a2d, roughness: .72, metalness: .06 });
-  const grille = new MeshStandardMaterial({ color: 0x15191b, roughness: .86, metalness: .15 });
-  const metal = new MeshStandardMaterial({ color: 0x3b3d40, roughness: .54, metalness: .65 });
+  const finish = cinemaSpeakerFinishes();
+  const { cabinet, grille, metal, backing } = finish;
   const fixings: Instance[] = [];
 
   for (const members of dimensionalGroups(boxes.filter(({ part }) => part === 'cabinet'))) {
@@ -103,8 +103,15 @@ export function createCinemaSpeakerEquipment(group: Group): void {
   for (const members of dimensionalGroups(boxes.filter(({ part }) => part === 'grille'))) {
     const { x, y } = members[0].size;
     const rim = CINEMA_SPEAKER_DETAIL.grilleRim;
-    instanced(group, 'Recessed cinema speaker grilles', new RoundedBoxGeometry(x - 2 * rim, y - 2 * rim, .004, 1, .002),
+    const sheet = CINEMA_SPEAKER_GRILLE;
+    const geometry = cinemaSpeakerGrilleUv(new RoundedBoxGeometry(x - 2 * rim, y - 2 * rim,
+      sheet.sheetThickness, 1, sheet.sheetThickness / 2)).translate(0, 0, sheet.sheetCenter);
+    instanced(group, 'Recessed cinema speaker grilles', geometry,
       grille, members.map(envelope => ({ matrix: pose(envelope), envelope })));
+    instanced(group, 'Opaque cinema speaker grille backing',
+      new RoundedBoxGeometry(x - 2 * rim, y - 2 * rim, sheet.backingThickness, 1, sheet.backingThickness / 2)
+        .translate(0, 0, sheet.backingCenter),
+      backing, members.map(envelope => ({ matrix: pose(envelope), envelope })));
     instanced(group, 'Cinema speaker grille frames', grilleRim(x, y), metal,
       members.map(envelope => ({ matrix: pose(envelope), envelope })));
     for (const envelope of members) for (const u of [-1, 1]) for (const v of [-1, 1]) {
@@ -126,5 +133,6 @@ export function createCinemaSpeakerEquipment(group: Group): void {
   const supports = boxes.filter(({ part }) => part === 'support');
   instanced(group, 'Tubular cinema speaker supports', new CylinderGeometry(.5, .5, 1, 16), metal,
     supports.map(envelope => ({ matrix: envelope.matrix, envelope })));
-  instanced(group, 'Recessed cinema speaker fixings', new CylinderGeometry(.5, .5, 1, 8), metal, fixings);
+  instanced(group, 'Recessed cinema speaker fixings', new CylinderGeometry(.5, .5, 1, 8), finish.fixings, fixings);
+  return finish;
 }

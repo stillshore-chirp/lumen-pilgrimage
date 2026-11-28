@@ -214,9 +214,9 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
   }
 }
 
-function addAuditoriumEquipment(group: Group, finish: CinemaFinishes): void {
+function addAuditoriumEquipment(group: Group, finish: CinemaFinishes) {
   const cabinets: CinemaBox[] = [];
-  createCinemaSpeakerEquipment(group);
+  const speakerFinishes = createCinemaSpeakerEquipment(group);
   const surrounds: CinemaBox[] = [];
   const inner: CinemaBox[] = [];
   const panes: CinemaBox[] = [];
@@ -241,6 +241,7 @@ function addAuditoriumEquipment(group: Group, finish: CinemaFinishes): void {
   cinemaBoxes(group, 'Glazed projection ports', finish.box, glass, panes);
   const lens = new MeshBasicMaterial({ color: 0x283f45, toneMapped: false });
   cinemaBoxes(group, 'Projection optics behind glazing', finish.box, lens, lenses);
+  return speakerFinishes;
 }
 
 export function createCinemaAuditorium() {
@@ -252,21 +253,26 @@ export function createCinemaAuditorium() {
   addWalls(group, finish);
   addScreenSurround(group, finish);
   addOverhead(group, finish);
-  addAuditoriumEquipment(group, finish);
+  const speakerFinishes = addAuditoriumEquipment(group, finish);
   createCinemaExits(group, finish);
   chairDetails.visible = false;
+  let disposed = false;
 
   return {
     group,
     setQuality(quality: CinemaQuality) {
+      if (disposed) return;
       const high = quality === 'high';
       chairDetails.visible = high;
       finish.setHighDetail(high);
+      speakerFinishes.setHighDetail(high);
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       const geometries = new Set<BufferGeometry>();
       const materials = new Set<Material>();
-      const textures = new Set<Texture>();
+      const textures = new Set<Texture>(speakerFinishes.textures);
       group.traverse((object) => {
         if (!(object instanceof Mesh)) return;
         if (object instanceof InstancedMesh) object.dispose();
