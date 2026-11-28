@@ -23,6 +23,8 @@ const { createResidenceMaterials } = await import('../src/coast/world/residence/
 const { createResidenceFurniture } = await import('../src/coast/world/residence/residenceFurniture.ts');
 const { createResidenceShell } = await import('../src/coast/world/residence/residenceShell.ts');
 const { createResidenceReflections } = await import('../src/coast/world/residence/residenceReflections.ts');
+const { RESIDENCE_TOWER_NEIGHBORS, RESIDENCE_TOWER_STOREY } = await import('../src/coast/world/residence/residenceTowerStoreyPlan.ts');
+const { shapeDistrictBuildings } = await import('../src/coast/world/residence/residenceDistrictBuildings.ts');
 hooks.deregister();
 
 const materials = createResidenceMaterials();
@@ -726,4 +728,57 @@ test('balcony navigation follows rendered deck triangles and preserves the flush
     }
     assertClearRoute(nav, [[19.85, 13.55], [20.4, 13.55], [20.8, 13.55], [21.15, 13.55]]);
   } finally { shell.dispose(); }
+});
+
+
+test('the occupied tower storey stays open while its neighbors restore the exterior band', () => {
+  assert.equal(RESIDENCE_TOWER_NEIGHBORS.length, 5);
+  assert.equal(Math.min(...RESIDENCE_TOWER_NEIGHBORS.map(volume => volume.bottom)), RESIDENCE_TOWER_STOREY.bottom);
+  assert.equal(Math.max(...RESIDENCE_TOWER_NEIGHBORS.map(volume => volume.top)), RESIDENCE_TOWER_STOREY.top);
+  for (const { rect: [west, south, east, north] } of RESIDENCE_TOWER_NEIGHBORS) {
+    for (const room of RESIDENCE_ROOMS) for (const rect of room.rectangles) {
+      assert.ok(Math.min(east, rect[2]) <= Math.max(west, rect[0])
+        || Math.min(north, rect[3]) <= Math.max(south, rect[1]), `${room.id} is cut out of the neighboring mass`);
+    }
+  }
+  const facades = [];
+  shapeDistrictBuildings(facades, [], [], [], [], [], []);
+  const neighbors = facades.slice(-RESIDENCE_TOWER_NEIGHBORS.length);
+  assert.equal(neighbors.length, 5);
+  for (const [index, box] of neighbors.entries()) {
+    const { rect: [west, south, east, north], bottom, top } = RESIDENCE_TOWER_NEIGHBORS[index];
+    assert.ok(Math.abs(box.x - (west + east) / 2) < 1e-10);
+    assert.ok(Math.abs(box.z + (south + north) / 2) < 1e-10);
+    assert.ok(Math.abs(box.y - box.h / 2 - bottom) < 1e-10);
+    assert.ok(Math.abs(box.y + box.h / 2 - top) < 1e-10);
+    assert.equal(box.color, 0x869a9c);
+    assert.equal(box.kind, 2);
+  }
+  assert.ok(neighbors[0].z + neighbors[0].d / 2 < 0, 'front recess avoids the Shell jamb cap plane');
+});
+
+
+test('neighbor infill preserves the actual recessed elevator door center gaps', () => {
+  const shell = createResidenceShell(materials);
+  const group = new Group();
+  try {
+    shell.group.updateMatrixWorld(true);
+    for (const { rect: [west, south, east, north], bottom, top } of RESIDENCE_TOWER_NEIGHBORS) {
+      const mesh = new Mesh(new BoxGeometry(east - west, top - bottom, north - south), materials.wall);
+      mesh.position.set((west + east) / 2, (bottom + top) / 2, -(south + north) / 2);
+      group.add(mesh);
+    }
+    group.updateMatrixWorld(true);
+    for (const east of [1.70, 4.15, 6.60]) {
+      const ray = new Raycaster(new Vector3(east, 1.2, -17), new Vector3(0, 0, -1), 0, 2);
+      const shellHit = ray.intersectObject(shell.group, true).find(hit => !hit.object.material.transparent);
+      const neighborHit = ray.intersectObject(group, true)[0];
+      assert.ok(shellHit, 'the existing dark rear plate remains present');
+      assert.ok(neighborHit && neighborHit.distance > shellHit.distance + .10,
+        'the infill stays behind the finite hall wall and its elevator recess');
+    }
+  } finally {
+    shell.dispose();
+    for (const child of group.children) child.geometry.dispose();
+  }
 });

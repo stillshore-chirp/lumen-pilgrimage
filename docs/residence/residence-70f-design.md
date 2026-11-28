@@ -132,4 +132,6 @@
 
 幹線は地区間を通る交通を受け持ち、横断街路が各街区からの交通を集める。建物への出入りは幅の狭い街路に受け持たせ、歩道に面する入口と裏側のサービス用敷地を道路網から割り付ける。東と南へ延びる幹線は、複数の横断街路を経て外側の交差点に接続する。共有都市との境目では、車道と交差点の先に取った見通しに既存棟の基部が重ならないことを描画するメッシュで確認する。 [周辺敷地の配置](../../src/coast/world/residence/residenceDistrictGround.ts) · [FHWAの道路の機能分類](https://www.fhwa.dot.gov/policyinformation/pubs/our_nations_highways_2026/roads.cfm) · [NACTOの歩道と沿道の設計](https://nacto.org/publication/urban-street-design-guide/street-design-elements/sidewalks/sidewalk-zones/)
 
+同じ階の棟全体を空洞にせず、住戸・バルコニー・共用廊下の平面だけを棟の切り欠きとして残す。その外側の隣接棟部は、既存の下階上面から上階下面までを同じ外皮材で閉じる。外周は20 mmの浅い見切りとして控え、住戸の窓や枠、床、既存の出入口を重ねて塞がない。共用廊下北壁の有限厚と高さを保護し、昇降機の中央目地から見える既存の奥板を覆わない。壁の上端と下端の外側は棟部へ接続する。隣接室の内装や新しい移動先は追加しない。 [同階の隣接棟部](../../src/coast/world/residence/residenceTowerStoreyPlan.ts)
+
 内外装の形状はこの機能のために制作した。内装の木、塗り壁、織物にはCC0の表面素材を使う。窓は視角に応じた淡い反射を表現する。交通音は既存のCC0録音を使い、棟間の反射、引戸の透過、床ごとの足音はブラウザ上で処理する。 [住戸の表面素材の出典](../../public/residence-materials/ATTRIBUTION.md) · [既存の地形・街路・録音の出典](../../public/coast-overlook/ATTRIBUTION.md) · [検証手順](../verification.md#ブラウザでの回帰テスト)

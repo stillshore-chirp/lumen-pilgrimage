@@ -1,3 +1,4 @@
+import { RESIDENCE_TOWER_NEIGHBORS, RESIDENCE_TOWER_STOREY } from './residenceTowerStoreyPlan';
 import { seededDetail } from '../overlook/overlookModel';
 import { DISTRICT_SURFACE } from './residenceCityMaterials';
 import { RESIDENCE_CITY_BUILDINGS, RESIDENCE_STREET_LEVEL, RESIDENCE_TOWER, type DistrictBuilding } from './residenceCityPlan';
@@ -287,7 +288,12 @@ export function shapeDistrictBuildings(
   const dwelling = RESIDENCE_FLOOR_ABOVE_STREET;
   // The open storey is fitted by the separately navigable apartment shell.
   body(x, z, w, d, 0, 15, 0xb5afa7, 0, 3.48, 5, 0.52);
-  body(x, z, w, d, 15, dwelling - 0.31, 0x869a9c, 2, 3.48, 3.5, 0.42);
-  body(x, z, w, d, dwelling + 3.25, height - 1.55, 0x869a9c, 2, 3.48, 3.5, 0.32);
+  body(x, z, w, d, 15, dwelling + RESIDENCE_TOWER_STOREY.bottom, 0x869a9c, 2, 3.48, 3.5, 0.42);
+  body(x, z, w, d, dwelling + RESIDENCE_TOWER_STOREY.top, height - 1.55, 0x869a9c, 2, 3.48, 3.5, 0.32);
+  for (const { rect: [west, south, east, north], bottom, top } of RESIDENCE_TOWER_NEIGHBORS) {
+    body((west + east) / 2, -(south + north) / 2, east - west, north - south,
+      dwelling + bottom, dwelling + top,
+      0x869a9c, 2, 3.48, 3.5, .42);
+  }
   buildRoof(x, z, w - 1.3, d - 1.3, height - 1.55, 0, true);
 }
