@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import type { OverlookFinishes, OverlookModel } from './overlookModel';
+import { PAVILION_THRESHOLD, PAVILION_BODY, PAVILION_CENTER_Z, PAVILION_DOME, PAVILION_DRUM, PAVILION_ROOF_COURSES,
+  PAVILION_WING_Z, pavilionDomeProfile, pavilionEntrancePier, pavilionRoof, pavilionWing, pavilionWingCornice } from './overlookPavilionPlan';
 
-const centerZ = 19.1;
-const wingZ = 21.45;
+const centerZ = PAVILION_CENTER_Z;
+const wingZ = PAVILION_WING_Z;
 
 function addEntrySconce(model: OverlookModel, finish: OverlookFinishes, x: number, y: number, z: number): void {
   model.block(finish.bronze, x, y, z + 0.10, 0.32, 1.21, 0.21);
@@ -33,15 +35,16 @@ function addWindow(model: OverlookModel, finish: OverlookFinishes,
 
 function addWing(model: OverlookModel, finish: OverlookFinishes, side: number): void {
   const x = 16.8 * side;
-  model.block(finish.limestone, x, 3.45, wingZ, 14.25, 6.9, 18.1);
+  model.block(finish.limestone, ...pavilionWing(side));
   model.block(finish.shadowStone, x, 0.43, wingZ - 0.02, 14.36, 0.86, 18.15);
   model.block(finish.cream, x, 0.88, wingZ - 0.04, 14.53, 0.16, 18.27);
   model.block(finish.shadowStone, x, 6.70, wingZ - 0.015, 14.43, 0.13, 18.22);
   model.block(finish.cream, x, 6.91, wingZ - 0.025, 14.55, 0.32, 18.28);
-  model.block(finish.cream, x, 7.13, wingZ - 0.035, 14.91, 0.13, 18.53);
+  model.block(finish.cream, ...pavilionWingCornice(side));
+  const roof = pavilionRoof(side);
   if (side < 0) {
-    model.block(finish.limestone, x, 7.41, wingZ + 0.26, 13.79, 0.43, 17.45);
-    model.block(finish.cream, x, 7.69, wingZ + 0.26, 13.95, 0.13, 17.54);
+    model.block(finish.limestone, ...roof[0]);
+    model.block(finish.cream, ...roof[1]);
   }
 
   for (const offset of [-4.64, -1.54, 1.54, 4.64]) {
@@ -58,16 +61,15 @@ function addWing(model: OverlookModel, finish: OverlookFinishes, side: number): 
   const endX = side * 21.7;
   if (side > 0) {
     // Leave the city-facing half of the east roof open for the upper terrace.
-    const rearZ = 26.95;
-    model.block(finish.limestone, x, 7.59, rearZ, 13.82, 0.80, 6.65);
-    model.block(finish.cream, x, 8.04, rearZ, 14.08, 0.14, 6.88);
-    model.block(finish.copperSeam, x, 8.13, rearZ, 14.05, 0.06, 6.86);
+    model.block(finish.limestone, ...roof[0]);
+    model.block(finish.cream, ...roof[1]);
+    model.block(finish.copperSeam, ...roof[2]);
     return;
   }
-  model.block(finish.limestone, endX, 8.3, wingZ + 0.08, 3.45, 1.49, 16.83);
-  model.block(finish.cream, endX, 9.065, wingZ + 0.08, 3.65, 0.17, 16.97);
-  model.block(finish.limestone, endX, 9.28, wingZ + 0.08, 2.96, 0.30, 16.32);
-  model.block(finish.copperSeam, endX, 9.44, wingZ + 0.08, 3.06, 0.054, 16.44);
+  model.block(finish.limestone, ...roof[2]);
+  model.block(finish.cream, ...roof[3]);
+  model.block(finish.limestone, ...roof[4]);
+  model.block(finish.copperSeam, ...roof[5]);
   for (const offset of [-0.68, 0, 0.68]) {
     model.block(finish.cream, endX + offset, 8.15, 13.01, 0.14, 1.28, 0.17);
   }
@@ -97,11 +99,11 @@ function addStarburst(model: OverlookModel, finish: OverlookFinishes): void {
 }
 
 function addPortico(model: OverlookModel, finish: OverlookFinishes): void {
-  model.block(finish.limestone, 0, 4.96, 20.34, 20.6, 9.92, 20.70);
+  model.block(finish.limestone, ...PAVILION_BODY);
   model.block(finish.shadowStone, 0, 0.42, 20.25, 20.75, 0.84, 20.90);
   model.block(finish.cream, 0, 0.86, 20.17, 20.86, 0.14, 21.21);
 
-  model.block(finish.cream, 0, 0.08, 9.30, 10.90, 0.16, 1.47);
+  model.block(finish.cream, ...PAVILION_THRESHOLD);
   model.block(finish.limestone, 0, 0.20, 9.56, 10.10, 0.10, 1.10);
   model.block(finish.shadowStone, 0, 2.93, 9.90, 8.25, 5.35, 0.18);
   for (const x of [-2.59, 0, 2.59]) {
@@ -116,7 +118,7 @@ function addPortico(model: OverlookModel, finish: OverlookFinishes): void {
   }
   for (const side of [-1, 1]) {
     const x = 5.70 * side;
-    model.block(finish.limestone, x, 3.97, 9.59, 2.93, 7.94, 1.64);
+    model.block(finish.limestone, ...pavilionEntrancePier(side));
     model.block(finish.shadowStone, x, 0.39, 9.50, 3.03, 0.78, 1.72);
     model.block(finish.cream, x, 0.83, 9.478, 3.19, 0.15, 1.82);
     for (const offset of [-0.69, -0.451, 0.451, 0.69]) {
@@ -137,28 +139,16 @@ function addPortico(model: OverlookModel, finish: OverlookFinishes): void {
   model.block(finish.cream, 0, 8.52, 9.98, 15.5, 0.22, 2.62);
   addStarburst(model, finish);
 
-  for (const [height, width, y, depth] of [
-    [0.26, 21.01, 9.85, 21.08],
-    [0.13, 21.34, 10.02, 21.31],
-    [0.44, 19.74, 10.25, 20.08],
-    [0.14, 19.97, 10.51, 20.29],
-  ]) {
-    model.block(finish.cream, 0, y, 20.33, width, height, depth);
+  for (const block of PAVILION_ROOF_COURSES) {
+    model.block(finish.cream, ...block);
   }
 }
 
 function addDome(model: OverlookModel, finish: OverlookFinishes): void {
   const drumRotation = Math.PI / 8;
-  const courses = [
-    [10.63, 8.75, 0.28, finish.shadowStone],
-    [10.92, 8.68, 0.37, finish.cream],
-    [11.48, 8.22, 0.78, finish.limestone],
-    [11.96, 8.46, 0.17, finish.cream],
-    [12.14, 8.14, 0.25, finish.cream],
-    [12.31, 7.91, 0.14, finish.copperSeam],
-  ] as const;
-  for (const [y, radius, height, material] of courses) {
-    model.column(material, 0, y, centerZ, radius, radius, height, 8, drumRotation);
+  const courseMaterials = [finish.shadowStone, finish.cream, finish.limestone, finish.cream, finish.cream, finish.copperSeam];
+  for (const [index, [y, radius, height]] of PAVILION_DRUM.entries()) {
+    model.column(courseMaterials[index], 0, y, centerZ, radius, radius, height, 8, drumRotation);
   }
   const face = 8.22 * Math.cos(Math.PI / 8);
   for (let i = 0; i < 8; i += 1) {
@@ -176,13 +166,8 @@ function addDome(model: OverlookModel, finish: OverlookFinishes): void {
   }
 
   const panels = 24;
-  const spring = 12.36;
-  const radius = 7.53;
-  const height = 5.65;
-  const profile = Array.from({ length: 20 }, (_, i) => {
-    const angle = i / 19 * Math.PI * 0.5;
-    return new THREE.Vector2(Math.max(0.015, radius * Math.cos(angle)), height * Math.sin(angle));
-  });
+  const { spring, radius } = PAVILION_DOME;
+  const profile = pavilionDomeProfile().map(point => new THREE.Vector2(point.radius, point.height));
   const palette = [2, 1, 5, 1, 3, 0, 4, 2, 5, 0, 1, 4, 2, 5, 1, 0, 5, 3, 1, 2, 5, 1, 4, 0];
   for (let i = 0; i < panels; i += 1) {
     const start = i * 2 * Math.PI / panels;
@@ -190,12 +175,14 @@ function addDome(model: OverlookModel, finish: OverlookFinishes): void {
     model.mesh(new THREE.LatheGeometry(profile, 6, start, amount).translate(0, spring, centerZ),
       finish.copper[palette[i]]);
     if (i === panels / 2) {
-      model.mesh(new THREE.LatheGeometry(profile.map(p => new THREE.Vector2(p.x + 0.045, p.y + 0.046)),
+      model.mesh(new THREE.LatheGeometry(profile.map(p => new THREE.Vector2(
+        p.x + PAVILION_DOME.raisedPanelOffset, p.y + PAVILION_DOME.raisedPanelRise)),
         7, start + 0.015, amount - 0.03).translate(0, spring, centerZ), finish.copperSeam);
     }
     const points = profile.map(p => new THREE.Vector3(
-      (p.x + 0.024) * Math.sin(start), spring + p.y, centerZ + (p.x + 0.024) * Math.cos(start)));
-    model.mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 24, 0.035, 5, false), finish.copperSeam);
+      (p.x + PAVILION_DOME.seamOffset) * Math.sin(start), spring + p.y,
+      centerZ + (p.x + PAVILION_DOME.seamOffset) * Math.cos(start)));
+    model.mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 24, PAVILION_DOME.seamRadius, 5, false), finish.copperSeam);
   }
   model.column(finish.copperSeam, 0, spring + 0.045, centerZ, radius + 0.045, radius + 0.045, 0.16, 96);
   model.column(finish.copperSeam, 0, 18.035, centerZ, 0.23, 0.49, 0.195, 24);

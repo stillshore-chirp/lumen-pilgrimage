@@ -71,6 +71,21 @@ const fullInputs = /^(?:package(?:-lock)?\.json|tsconfig[^/]*\.json|vite\.config
 const docs = path => /\.(?:md|pdf|png|jpe?g|webp|svg)$/i.test(path)
   && /^(?:docs\/|plans\/|references\/|\.agents\/|\.github\/|README|AGENTS)/.test(path)
   || /(?:^|\/)ATTRIBUTION\.md$/.test(path) || /\.md$/.test(path);
+// These tools and their non-imported inputs produce documentation, not runtime assets.
+// Keep exact declarations so a new generator or revision format still requires review.
+const drawingInputs = new Set([
+  'scripts/draw-cinema-speaker-mounts.mjs',
+  'scripts/revise-residence-drawings.py',
+  'docs/residence/source/residence-70f-revisions.json',
+]);
+// Vite copies these notices from public/ into the build. The gates check packaging and
+// document links; they do not establish license compliance or regeneration equality.
+const softwareNoticeInputs = new Set([
+  'scripts/prepare-cinema-code-licenses.mjs',
+  'public/licenses/ATTRIBUTION.md',
+  'public/licenses/three-0.184.0-LICENSE.txt',
+  'public/licenses/three-0.184.0.json',
+]);
 
 function owner(path) {
   if (/^src\/coast\/world\/lake\/(?:koto|lakeKoto)/.test(path) || path === 'src/coast/lakeKotoTransport.ts') return 'koto';
@@ -379,13 +394,21 @@ export async function planAffected(options = {}) {
   for (const path of comparison.removedPaths) select('harness', `Removed or renamed repository link target: ${path}`);
   for (const path of comparison.changedPaths) {
     if (fullInputs.test(path)) { fallbackReasons.push(`Shared build, dependency or CI configuration changed: ${path}`); continue; }
-    if (docs(path)) { select('harness', `Documentation or reference input: ${path}`); continue; }
+    if (docs(path) && !softwareNoticeInputs.has(path)) { select('harness', `Documentation or reference input: ${path}`); continue; }
     let classified = false;
     for (const item of gates) if (closures.get(item.id).has(path)) {
       select(item.id, `Test dependency: ${path}`); classified = true;
     }
     for (const item of browserGates) if (browserClosures.get(item.id).has(path)) {
       select(item.id, `Runtime or browser-test dependency: ${path}`); classified = true;
+    }
+    if (drawingInputs.has(path)) {
+      classified = true; select('harness', `Offline drawing generator or revision input: ${path}`);
+    }
+    if (softwareNoticeInputs.has(path)) {
+      classified = true;
+      select('build', `Distributed software notice or generator: ${path}`);
+      select('harness', `Software notice documentation or link target: ${path}`);
     }
     if (audioInputs.has(path) || [...managedAudioDirectories].some(directory => path === directory || path.startsWith(`${directory}/`))) {
       select('audio-samples', `Declared audio provenance input: ${path}`); classified = true;

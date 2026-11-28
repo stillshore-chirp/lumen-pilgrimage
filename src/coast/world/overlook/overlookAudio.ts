@@ -8,10 +8,11 @@ import type { CoastTimeOfDay } from '../coastAtmosphere';
 import { createFootfall } from '../residence/residenceAudioSamples';
 import { isMainDeckPaving } from './overlookDeck';
 import { isOverlookStairTread, isUpperDeck, overlookDeckGround } from './overlookUpperDeck';
+import type { OverlookSurfaceHeight } from './overlookTerrain';
 
 type SoundPoint = Readonly<{ x: number; y: number; z: number }>;
-type Corridor = { points: readonly SoundPoint[]; weight: number };
-type RoadSection = { point: SoundPoint; length: number };
+type RoadSection = { point: SoundPoint; length: number; interiorDistance?: number };
+type Corridor = { points: readonly SoundPoint[]; weight: number; sections?: readonly RoadSection[]; playbackRate?: number; offsetSeconds?: number };
 type TrafficVoice = {
   road: readonly RoadSection[];
   weight: number;
@@ -53,6 +54,7 @@ const CRICKET_PATCHES = [
   { x: -19, z: -46, clipStart: 32, firstCall: 1.74, rate: 1.07, gain: 0.50 },
   { x: 17, z: -49, clipStart: 42, firstCall: 2.42, rate: 0.98, gain: 0.73 },
 ];
+const BIRD_PERCHES = [{ x: -41, z: -9 }, { x: 48, z: -31 }] as const;
 
 function roadSections(points: readonly SoundPoint[]): RoadSection[] {
   return points.map((point, i) => {
@@ -80,7 +82,7 @@ function footstepSurface(x: number, z: number): FootstepSurface {
 }
 
 export class OverlookAudio {
-  private readonly roads: { sections: RoadSection[]; weight: number }[];
+  private readonly roads: { sections: readonly RoadSection[]; weight: number; playbackRate?: number; offsetSeconds?: number }[];
   private readonly request = new AbortController();
   private readonly traffic: TrafficVoice[] = [];
   private readonly crickets: CricketVoice[] = [];
@@ -106,9 +108,20 @@ export class OverlookAudio {
   private nextBird = 0;
   private birdPhrase = -1;
 
-  constructor(corridors: readonly Corridor[], private readonly heightAt: (x: number, z: number) => number) {
+  constructor(corridors: readonly Corridor[], private readonly heightAt: (x: number, z: number) => number,
+    private readonly sourceHeightAt?: OverlookSurfaceHeight) {
+    for (const corridor of corridors) {
+      if ((corridor.playbackRate !== undefined && (!Number.isFinite(corridor.playbackRate) || corridor.playbackRate <= 0))
+        || (corridor.offsetSeconds !== undefined && (!Number.isFinite(corridor.offsetSeconds) || corridor.offsetSeconds < 0))) {
+        throw new Error('Invalid traffic playback profile.');
+      }
+    }
+    for (const corridor of corridors) for (const section of corridor.sections ?? []) {
+      if (![section.point.x, section.point.y, section.point.z, section.length, section.interiorDistance ?? 0].every(Number.isFinite)
+        || section.length <= 0 || (section.interiorDistance ?? 0) < 0) throw new Error('Invalid traffic sound path.');
+    }
     this.roads = corridors
-      .map(({ points, weight }) => ({ sections: roadSections(points), weight }))
+      .map(({ points, weight, sections, playbackRate, offsetSeconds }) => ({ sections: sections ?? roadSections(points), weight, playbackRate, offsetSeconds }))
       .filter(({ sections, weight }) => sections.length && weight > 0);
   }
 
@@ -234,6 +247,10 @@ export class OverlookAudio {
   }
 
   private beginLayers(context: AudioContext, traffic: AudioBuffer, crickets: AudioBuffer, birds: AudioBuffer): void {
+    // Validate the local source supports before allocating any output graph.
+    // Road propagation continues to use the original regional height model.
+    const cricketPoints = CRICKET_PATCHES.map(patch => this.sourcePoint(patch.x, patch.z, 0.4));
+    const birdPoints = BIRD_PERCHES.map(perch => this.sourcePoint(perch.x, perch.z, 1.15));
     const night = this.time === 'night';
     const master = context.createGain();
     master.gain.value = this.mix.master * NOMINAL_MASTER_GAIN;
@@ -267,7 +284,7 @@ export class OverlookAudio {
     this.birdBus = birdBus;
     this.birdBuffer = birds;
 
-    for (const [index, { sections, weight }] of this.roads.entries()) {
+    for (const [index, { sections, weight, playbackRate, offsetSeconds }] of this.roads.entries()) {
       const panner = spatialPanner(context, sections[0].point);
       const filter = context.createBiquadFilter();
       filter.type = 'lowpass';
@@ -279,13 +296,15 @@ export class OverlookAudio {
       const level = context.createGain();
       level.gain.value = 0;
       filter.connect(atmosphere).connect(level).connect(panner).connect(trafficBus);
-      this.loop(context, traffic, filter, (index * 23.7) % traffic.duration, 1 - index * 0.011);
+      // The number of arrival voices must not progressively lower the sample pitch.
+      // Explicit profiles retain each road's exposed stream and offset the bores.
+      this.loop(context, traffic, filter, (offsetSeconds ?? index * 23.7) % traffic.duration,
+        playbackRate ?? 1 - index * 0.011);
       this.traffic.push({ road: sections, weight, panner, filter, atmosphere, level });
     }
 
-    for (const patch of CRICKET_PATCHES) {
-      const { x, z } = patch;
-      const point = { x, y: this.heightAt(x, z) + 0.4, z };
+    for (const [index, patch] of CRICKET_PATCHES.entries()) {
+      const point = cricketPoints[index];
       const panner = spatialPanner(context, point);
       const filter = context.createBiquadFilter();
       filter.type = 'lowpass';
@@ -296,14 +315,20 @@ export class OverlookAudio {
       const nextCall = night ? context.currentTime + patch.firstCall + 0.18 * Math.random() : Infinity;
       this.crickets.push({ point, patch, filter, level, nextCall, playing: false });
     }
-    for (const { x, z } of [{ x: -41, z: -9 }, { x: 48, z: -31 }]) {
-      const panner = spatialPanner(context, { x, y: this.heightAt(x, z) + 1.15, z });
+    for (const point of birdPoints) {
+      const panner = spatialPanner(context, point);
       panner.rolloffFactor = 1;
       panner.refDistance = 9;
       panner.connect(birdBus);
       this.birdPerches.push(panner);
     }
     this.nextBird = context.currentTime + 5 + 6 * Math.random();
+  }
+
+  private sourcePoint(x: number, z: number, aboveGround: number): SoundPoint {
+    const ground = this.sourceHeightAt ? this.sourceHeightAt(x, z) : this.heightAt(x, z);
+    if (ground === undefined || !Number.isFinite(ground)) throw new Error('Overlook audio source has no terrain support');
+    return { x, y: ground + aboveGround, z };
   }
 
   private loop(
@@ -375,10 +400,15 @@ export class OverlookAudio {
     let x = 0, y = 0, z = 0;
     let cutoff = 0;
     let lowBand = 0;
-    for (const { point, length } of voice.road) {
+    for (const { point, length, interiorDistance = 0 } of voice.road) {
       const horizontal = Math.hypot(point.x - listener.x, point.z - listener.z);
-      const distance = Math.max(100, Math.hypot(horizontal, point.y - listener.y));
-      const blocked = this.terrainScreen(listener, point, distance, thermalRayLift(horizontal, this.time));
+      const outsideDistance = Math.hypot(horizontal, point.y - listener.y);
+      // The last real opening supplies arrival direction; the same manual
+      // distance law follows the complete internal plus exterior route.
+      // Panner rolloff is zero. This is a bounded point proxy, not a calibrated
+      // tunnel-reflection/directivity model or an added internal low-pass.
+      const distance = Math.max(100, outsideDistance + interiorDistance);
+      const blocked = this.terrainScreen(listener, point, Math.max(100, outsideDistance), thermalRayLift(horizontal, this.time));
       // Sum acoustic power along the road; a long line loses about 3 dB per distance doubling.
       const contribution = length / distance ** 2 * Math.exp(-distance / 5500) * 0.075 ** blocked;
       power += contribution;
