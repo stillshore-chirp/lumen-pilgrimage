@@ -194,9 +194,7 @@ function createSpatialSnapshot(
   for (let i = 0; i < CINEMA_RENDER_SPEAKERS.length; i += 1) {
     const speaker = CINEMA_RENDER_SPEAKERS[i];
     source.set(speaker.position[0], speaker.position[1], speaker.position[2]);
-    direction.copy(source).sub(position);
-    const distance = Math.max(1, direction.length());
-    direction.multiplyScalar(1 / distance);
+    direction.copy(source).sub(position).normalize();
     const side = Math.max(-1, Math.min(1, direction.dot(right)));
     const elevation = Math.abs(direction.dot(up));
     const angle = (side + 1) * Math.PI * 0.25;

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { performance } from 'node:perf_hooks';
-import { PerspectiveCamera } from 'three';
+import { PerspectiveCamera, Vector3 } from 'three';
 import { runInNewContext } from 'node:vm';
 
 const src = new URL('../src/', import.meta.url).href;
@@ -100,6 +100,70 @@ test('KEMAR direction bins preserve front, rear, left/right, elevation and head 
   assert.equal(cinemaHrtfDirectionIndexForPose([0, 1, -1], listener, forward, up), 36);
   assert.equal(cinemaHrtfDirectionIndexForPose([0, -1, -1], listener, forward, up), 0);
   assert.equal(cinemaHrtfDirectionIndexForPose([1, 0, 0], listener, [1, 0, 0], up), 12);
+});
+
+test('production near-source packets keep angular direction independent of the propagation distance floor', async t => {
+  const h = await moduleParityRoom({ bed: ['C'], objects: [], lfeGainDb: 0 }, t);
+  t.after(() => h.room.dispose());
+  const index = CINEMA_RENDER_SPEAKERS.findIndex(speaker => speaker.id === 'top-R-05');
+  const speaker = CINEMA_RENDER_SPEAKERS[index];
+  const positions = [
+    [6.655, 20.05, 32],
+    [speaker.position[0] - .25, speaker.position[1], speaker.position[2]],
+    [speaker.position[0] - .35, speaker.position[1] - .3, speaker.position[2] + .2],
+    [speaker.position[0], speaker.position[1], speaker.position[2]],
+  ];
+  const rotations = [[0, 0], [Math.PI / 4, 0], [0, Math.PI / 2], [-.35, -.6]];
+  const elevations = [-20, 0, 20, 60, 80];
+  let observations = 0;
+  for (const position of positions) for (const [pitch, yaw] of rotations) {
+    const camera = new PerspectiveCamera();
+    camera.position.set(...position); camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    camera.updateMatrixWorld(true); h.context.currentTime += .06; h.room.update(camera);
+    const packet = h.messages.filter(message => message.type === 'pose').at(-1);
+    assert.ok(packet.spatial.every(Number.isFinite));
+    const values = packet.spatial.subarray(index * 7, index * 7 + 7);
+    // The camera inverse gives an independent local-space angular prediction.
+    const local = new Vector3(...speaker.position).applyMatrix4(camera.matrixWorldInverse);
+    const length = Math.hypot(...speaker.position.map((value, axis) => value - position[axis]));
+    const elevation = length > 0 ? Math.atan2(local.y, Math.hypot(local.x, local.z)) * 180 / Math.PI : 0;
+    const horizontal = Math.hypot(local.x, local.z);
+    const azimuth = length > 0 && horizontal > length * 1e-12
+      ? (Math.atan2(local.x, -local.z) * 180 / Math.PI + 360) % 360 : 0;
+    const elevationIndex = elevations.reduce((best, value, i) =>
+      Math.abs(value - elevation) < Math.abs(elevations[best] - elevation) ? i : best, 0);
+    const expectedBin = elevationIndex * 12 + Math.round(azimuth / 30) % 12;
+    assert.equal(values[6], expectedBin, `Near direction ${position}, ${pitch}, ${yaw}`);
+    const side = length > 0 ? Math.max(-1, Math.min(1, local.x / length)) : 0;
+    assert.ok(Math.abs((values[0] - values[1]) - side * 48000 * .0006) < 2e-5);
+    const expectedBase = Math.max(0, speaker.delaySamples + Math.max(1, length) * 48000 / 343);
+    assert.ok(Math.abs(Math.min(values[0], values[1]) - expectedBase) < 2e-5);
+    assert.equal(values[5], Math.fround(Math.min(2, 38.02 / Math.max(1, length))));
+    observations++;
+  }
+  assert.equal(observations, 16);
+});
+
+test('production packets retain the existing unit direction at and beyond one metre', async t => {
+  const h = await moduleParityRoom({ bed: ['C'], objects: [], lfeGainDb: 0 }, t);
+  t.after(() => h.room.dispose());
+  for (const position of [[0, 5, 35.85], [-10, 4, 32], [6.655, 21.0365, 31]]) {
+    const camera = new PerspectiveCamera(); camera.position.set(...position);
+    camera.rotation.set(.15, -.4, 0, 'YXZ'); camera.updateMatrixWorld(true);
+    h.context.currentTime += .06; h.room.update(camera);
+    const packet = h.messages.filter(message => message.type === 'pose').at(-1);
+    for (let i = 0; i < CINEMA_RENDER_SPEAKERS.length; i++) {
+      const speaker = CINEMA_RENDER_SPEAKERS[i];
+      const local = new Vector3(...speaker.position).applyMatrix4(camera.matrixWorldInverse);
+      const length = local.length(); assert.ok(length >= 1);
+      const side = Math.max(-1, Math.min(1, local.x / length));
+      const values = packet.spatial.subarray(i * 7, i * 7 + 7);
+      assert.ok(Math.abs((values[0] - values[1]) - side * 48000 * .0006) < .001);
+      const expectedBase = Math.max(0, speaker.delaySamples + length * 48000 / 343);
+      assert.ok(Math.abs(Math.min(values[0], values[1]) - expectedBase) < .001);
+      assert.equal(values[5], Math.fround(Math.min(2, 38.02 / Math.max(1, length))));
+    }
+  }
 });
 
 test('compact KEMAR runtime asset matches the 60 x 144 x stereo little-endian format', () => {
