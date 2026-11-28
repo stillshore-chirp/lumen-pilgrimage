@@ -149,10 +149,13 @@ function observeAudio() {
     const source = entry.sources.at(-1);
     const outgoing = edges(source).map(edge => edge.node);
     const stereo = outgoing.find(node => node instanceof GainNode && node.channelCount === 2
-      && node.channelCountMode === 'explicit');
+      && node.channelCountMode === 'explicit' && !(edges(node)[0]?.node instanceof ChannelSplitterNode));
     const master = edges(stereo)[0]?.node;
-    const single = outgoing.find(node => node instanceof PannerNode
-      || node instanceof GainNode && node.channelCount === 1 && node.channelCountMode === 'explicit');
+    const single = outgoing.filter(node => node instanceof PannerNode || node instanceof GainNode
+      && node.channelCountMode === 'explicit' && (node.channelCount === 1 || node.channelCount === 2
+        && edges(node)[0]?.node instanceof ChannelSplitterNode))
+      .map(node => ({ node, panners: reachable(node, master).filter(value => value instanceof PannerNode).length }))
+      .filter(candidate => candidate.panners > 0).sort((a, b) => a.panners - b.panners)[0]?.node;
     const surround = outgoing.find(node => node instanceof GainNode && node.channelCount === 6
       && node.channelInterpretation === 'speakers' && edges(node)[0]?.node instanceof ChannelSplitterNode);
     const singleNodes = reachable(single, master);
@@ -172,18 +175,18 @@ function observeAudio() {
     // Preserve their enumeration separately; position checks use connected dry
     // routes whose own gain and branch mode gain can currently contribute.
     const incoming = new Map();
-    let truncated = entry.edges.size > 1024;
-    for (const [node, links] of [...entry.edges].slice(0, 1024)) {
-      if (links.length > 16) truncated = true;
-      for (const edge of links.slice(0, 16)) {
+    let truncated = entry.edges.size > 4096;
+    for (const [node, links] of [...entry.edges].slice(0, 4096)) {
+      if (links.length > 128) truncated = true;
+      for (const edge of links.slice(0, 128)) {
         const inputs = incoming.get(edge.node) ?? [];
         inputs.push(node);
         incoming.set(edge.node, inputs);
       }
     }
     const describe = (panners, level) => {
-      if (panners.length > 32) truncated = true;
-      return panners.slice(0, 32).map(panner => {
+      if (panners.length > 128) truncated = true;
+      return panners.slice(0, 128).map(panner => {
         const inputs = incoming.get(panner) ?? [];
         const dryGain = Math.max(0, ...inputs.map(node => node instanceof GainNode ? Math.abs(node.gain.value) : 1));
         const modeGain = Math.abs(level?.gain.value ?? 0);
