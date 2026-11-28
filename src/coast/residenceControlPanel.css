@@ -116,7 +116,7 @@
 .residence-plan-room-choice { cursor: pointer; }
 .residence-plan-room-choice:hover .residence-plan-floor { fill: #b5d4c9; }
 .residence-plan-room.is-selected .residence-plan-floor { fill: #b5d4c9; stroke: #173d3d; stroke-width: .16; }
-.residence-plan-room-choice:focus { outline: none; }
+.residence-control-dialog .residence-plan-room-choice:focus { outline: none; }
 .residence-plan-room-choice:focus-visible .residence-plan-floor { stroke: #9f3308; stroke-width: .2; }
 .residence-plan-walls { pointer-events: none; }
 .residence-plan-wall { stroke: #264746; stroke-width: .13; stroke-linecap: square; }
