@@ -1,6 +1,6 @@
 import {
   BufferGeometry, CanvasTexture, CylinderGeometry, DataTexture, Float32BufferAttribute,
-  Group, LatheGeometry, LinearFilter, Mesh, MeshStandardMaterial, RepeatWrapping, RGBAFormat,
+  Group, LatheGeometry, LinearFilter, LinearMipmapLinearFilter, Mesh, MeshStandardMaterial, RepeatWrapping, RGBAFormat,
   SRGBColorSpace, TorusGeometry, Vector2, Vector3,
 } from 'three';
 import type { Material } from 'three';
@@ -31,6 +31,9 @@ function surfaceTexture(kind: 'oak' | 'fabric' | 'mineral'): DataTexture {
   const repeat = kind === 'oak' ? .75 : kind === 'fabric' ? 10 : 2;
   texture.repeat.set(repeat, repeat);
   texture.magFilter = LinearFilter;
+  // DataTexture defaults to nearest minification without mipmaps; fine weave needs a filtered pixel footprint.
+  texture.minFilter = LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
   texture.anisotropy = 4;
   texture.needsUpdate = true;
   return texture;
