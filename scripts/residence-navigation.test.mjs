@@ -395,6 +395,8 @@ test('reflection capture waits for main-camera shadow textures and retries uncha
   const camera = new PerspectiveCamera(60, 1, .05, 500);
   camera.position.set(5.5, 1.65, -2);
   const renderer = {
+    domElement: new EventTarget(),
+    getContext() { return { isContextLost() { return false; } }; },
     xr: { isPresenting: false },
     shadowMap: { enabled: true, autoUpdate: false, needsUpdate: false },
     getDrawingBufferSize() { throw new Error('capture reached'); },
@@ -697,4 +699,31 @@ test('facade glazing, guards, wall corners and service shafts are solid at every
       assert.equal(blocked(nav, e, n, foot), true, `unblocked E${e}, N${n}, height ${foot}`);
     }
   }
+});
+
+
+test('balcony navigation follows rendered deck triangles and preserves the flush threshold', () => {
+  const nav = navigation(true);
+  const shell = createResidenceShell(materials);
+  shell.group.updateMatrixWorld(true);
+  try {
+    const ray = new Raycaster();
+    let samples = 0;
+    for (const east of [20.701, 20.8, 21.1, 21.5, 22, 22.4, 22.55]) {
+      for (const north of [11.9, 12.4, 13.5, 14.5, 15.2]) {
+        ray.set(new Vector3(east, .2, -north), new Vector3(0, -1, 0));
+        const hit = ray.intersectObject(shell.group, true).find(value => value.object.material === materials.deck);
+        assert.ok(hit, `missing deck triangle at E${east}, N${north}`);
+        assert.ok(Math.abs(nav.groundHeight(east, -north) - hit.point.y) < 1e-6);
+        samples += 1;
+      }
+    }
+    assert.equal(samples, 35);
+    assert.equal(nav.groundHeight(20.7, -13.5), 0);
+    assert.ok(Math.abs(nav.groundHeight(20.7001, -13.5)) < 1e-6);
+    for (const [east, north] of [[20.69, 13.5], [20, 3], [5.5, 2], [14, 13.5]]) {
+      assert.equal(nav.groundHeight(east, -north), 0);
+    }
+    assertClearRoute(nav, [[19.85, 13.55], [20.4, 13.55], [20.8, 13.55], [21.15, 13.55]]);
+  } finally { shell.dispose(); }
 });

@@ -1,3 +1,4 @@
+import { residenceFloorHeight } from './residenceFloorPlan';
 import type { CoastNavigation, CoastPose } from '../../CoastControls';
 import { createResidenceDoors, RESIDENCE_WALKER_RADIUS, type ResidenceDoors } from './residenceDoors';
 import {
@@ -68,7 +69,7 @@ export function createResidenceNavigation(spawn: CoastPose, furnitureFootprints:
   const obstacles = [...permanentObstacles, ...balconyFurniture];
 
   return {
-    bounds, spawn, groundHeight: () => 0,
+    bounds, spawn, groundHeight: residenceFloorHeight,
     flightCeiling: RESIDENCE_UPPER_SLAB_BOTTOM, walkSpeed: 2.4,
     ceilingHeight(e, z) {
       const n = -z;
