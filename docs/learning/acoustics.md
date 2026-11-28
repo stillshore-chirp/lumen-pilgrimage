@@ -238,6 +238,8 @@ HRIRを短くするときは、左右それぞれの到達時刻、耳間の時�
 
 幾何経路を音速で割った時間と、Pannerや畳み込みの処理遅延を区別する。OfflineとRealtimeは初期化条件も異なる。ChromiumのHRTFは応答データ未準備時に入力コピーへ戻る経路を持つため、最初の一波形だけで遅延を較正しない。十分に初期化した後の複数方向・時点で、波形、相互相関、基準経路との差を比べる。極小閾値で検出されるFFT由来の前駆成分と、主要な到来も分ける。特定ブラウザーのサンプル数を全実装へ固定加算しない。[Chromium HRTF処理](https://raw.githubusercontent.com/chromium/chromium/main/third_party/blink/renderer/platform/audio/hrtf_panner.cc) · [RealtimeとOfflineの初期化](https://raw.githubusercontent.com/chromium/chromium/main/third_party/blink/renderer/modules/webaudio/panner_handler.cc)
 
+映像同期では処理済み位置と出力側の時計を分ける。[W3C Web Audio API 1.1 §1.2.3（2026-09-22 WD）](https://www.w3.org/TR/2026/WD-webaudio-1.1-20260922/#dom-audiocontext-getoutputtimestamp)のgetOutputTimestampは、出力streamの位置をcontextTimeで返す。currentTimeと原点が同じでも、両者の差を信頼できる実測latencyとは扱わない。消費停止を出力待ちの消滅と誤解して負の補正を捨てると、提示位置だけが前へ飛び得る。一方、停止した処理済み終端を提示時計だけで判定すると、終了要求が残り得る。提示位置とrendered終端を分け、通常再生・pause・seek・rebuffer・終端の回帰を行う。この時計の整合は、物理表示と音声出力のAV同期合格を意味しない。
+
 ## 聴取と数値の照合
 
 実用上の聴取は、乾いたモノラルの短音、声、足音の順で行う。既知の位置へ置き、頭を回し、遮蔽物へ近づき、開口を横切る。直接音の方向、最初の反射の壁、移動中の音像の安定を確認し、声の子音が尾部へ埋もれる位置、足音が床材へつながる位置、残響がノイズフロアを持ち上げる位置を聴く。比較時はヘッドホン、音量、HRTF、再生サンプルを固定する。

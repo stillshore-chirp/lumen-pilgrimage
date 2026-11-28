@@ -345,6 +345,12 @@ npm run test:coast:browser
 通常の移動入力では下・横・上・斜めと垂直だけの飛行を試し、模擬XRでは頭部offsetを加えた実際の頭部中心で移動が止まること、重なった位置から安全な向きへ退避できることを確かめます。一方、静止中の追跡された頭部の1:1移動は衝突で遮断しません。その頭部移動で見える閉じた筐体、上面、裏面、取付の奥も可視包絡に含め、隠れた面の欠落や接続の破綻を確認します。locomotionの停止と静止中の頭部追跡を別に記録します。全台の共通定義・実メッシュ検査と危険箇所の連続経路を組み合わせ、少数の写真だけで全台を合格にしません。
 
 
+最終の連続巡回では、R09からR01、左縦通路、R08・R15の車いす位置、後方横通路、右縦通路、R09へ戻ります。座位・立位・低姿勢と回頭を同じ連続経路で記録し、別poseへ移した写真と区別します。幕端、コファー、左右の映写窓の実開口中心、上部機器を含めます。共有映像は実受信寸法とtrack状態、2.39・左右部分白・白・黒8秒・復帰を記録します。再訪時は既存のarrival/auto初期化と、その後の通常UI設定・表示を確認します。worldを越えた照明設定の永続化を仮定しません。
+
+幕の裏は、bodyを`z=0.65m`に置いてから模擬XRを開始し、静止headを`z=-1m`へ動かします。要求値だけでなく実両眼のworld座標（代表値`z=-0.35m`）を記録し、裏・縁を見ます。追加薄膜は閉36indexとrayを保ち、通常描画は可視30index/1group/各眼1回だけであることをactual rendererのcallbackと照合します。後方席で白・部分白をHigh/Light・短い横移動で比べ、同じmain frameのscene/camera/atlasを保った薄膜on/off/restoreが正面のpixelを変えないことも確かめます。これは性能計測と分けた私用観測条件です。
+
+床の帯を調べるときは、High/Light切替でrasterまで変える前に、同じcamera・照明・色map/UV・roughnessを保ってbumpだけを外し復帰します。shaderの再準備は必要でも、world時刻とsource frameを進めず同じnative描画で比べ、復帰像の一致を残します。色柄と法線の寄与を分けた後、近・遠・斜めと短い正規移動で材を評価します。静止した数値だけでHMDの時間品質を合格にしません。
+
 映画館はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:cinema:browser` で確認します。`--no-shell` で導入した Chromium を使う場合は、`COAST_CHROME_CHANNEL=chromium npm run test:cinema:browser` を実行してください。音響試験はチャンネル未指定時に Chromium のヘッドレスシェルを使います。
 
 音響のnative offlineだけを再現する場合は、`CINEMA_AUDIO_BROWSER=1 node --test --test-name-pattern 'Chromium OfflineAudioContext' scripts/cinema-audio.test.mjs` を使います。標準targetは5代表席×2品質を含む21 responseと30帯域clarity、各1秒の51 OfflineAudioContextを描画し、その後に環境音のgesture・4mix・足音・解放を検査します。全体予算は有限180秒です。初期化・描画・後続操作の各stageとcontextの終端を保存し、offline全体の所要時間をrealtime Workletの処理期限とは区別します。
