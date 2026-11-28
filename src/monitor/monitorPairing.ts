@@ -68,7 +68,7 @@ export class MonitorPairingSource {
 
   constructor(host: Window = window) {
     const opener: Window | null = host.opener;
-    // Remove the child page's ability to navigate its opener immediately.
+    // Detach public opener access; the captured reference authenticates this handshake only.
     host.opener = null;
     this.timer = setTimeout(() => this.dispose(), HANDOFF_TIMEOUT);
     if (!opener) return;

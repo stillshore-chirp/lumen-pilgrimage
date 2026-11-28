@@ -2400,6 +2400,16 @@ test('same-device sharing hands off one code without bypassing the chooser or se
     await button(sender, '共有を停止').click();
     await viewer.waitForFunction(selector => document.querySelector(selector).srcObject === null, videoSelector);
     assert.equal(await sender.evaluate(() => window.captureFixture.streams[0].getTracks().every(track => track.readyState === 'ended')), true);
+    if (screenshotDirectory) {
+      for (const size of [{ width: 375, height: 812 }, { width: 1440, height: 900 }]) {
+        await sender.setViewportSize(size);
+        await viewer.setViewportSize(size);
+        for (const [name, page] of [['sender', sender], ['viewer', viewer]]) {
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'monitor controls must not create horizontal page overflow');
+          await page.screenshot({ path: join(screenshotDirectory, `monitor-${name}-${size.width}.png`) });
+        }
+      }
+    }
   } finally {
     await context.close();
   }
