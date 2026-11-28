@@ -194,10 +194,17 @@ export function buildAtriumFrontShell(root: Group, stoneMap: Texture | null): vo
     const frameX = faceX + side * .035;
     const glassX = faceX + side * GLAZING.thickness * .5;
     const top = 3.08;
-    for (const yy of [.10, top]) box(bronze, [frameX, yy, (minZ + maxZ) * .5,
-      .070, .045, maxZ - minZ + .04], `${tenant.id} shopfront supported head and sill`);
     const entryStartZ = minZ + tenant.entryU[0], entryEndZ = minZ + tenant.entryU[1];
-    const frames = new Set([minZ, maxZ, entryStartZ, entryEndZ, (entryStartZ + entryEndZ) * .5]);
+    // The existing 170 mm inner jambs set the finished aperture. Keep both portals aligned.
+    const clearStartZ = entryStartZ + .085, clearEndZ = entryEndZ - .085;
+    box(bronze, [frameX, top, (minZ + maxZ) * .5,
+      .070, .045, maxZ - minZ + .04], `${tenant.id} shopfront supported head and sill`);
+    for (const [start, end] of [[minZ, clearStartZ], [clearEndZ, maxZ]]) {
+      box(bronze, [frameX, .10, (start + end) * .5,
+        .070, .045, end - start], `${tenant.id} shopfront supported head and sill`);
+    }
+    const frames = new Set([minZ, maxZ, clearStartZ - GLAZING.frameWidth * .5,
+      clearEndZ + GLAZING.frameWidth * .5]);
     for (let zz = minZ + 2.2; zz < maxZ - .5; zz += 2.2) {
       if (zz < entryStartZ - .18 || zz > entryEndZ + .18) frames.add(zz);
     }
@@ -205,9 +212,14 @@ export function buildAtriumFrontShell(root: Group, stoneMap: Texture | null): vo
       [...frames].map(position => ({ position, width: GLAZING.frameWidth })));
     const paneBottom = .10 + GLAZING.frameWidth * .5;
     const paneTop = top - GLAZING.frameWidth * .5;
-    for (const [start, end] of clearPanes) box(glass, [glassX, (paneBottom + paneTop) * .5,
-      (start + end) * .5, GLAZING.thickness, paneTop - paneBottom, end - start],
-    `${tenant.id} closed external glass shopfront clear pane`);
+    for (const [start, end] of clearPanes) {
+      for (const [left, right] of [[start, Math.min(end, clearStartZ)], [Math.max(start, clearEndZ), end]]) {
+        if (right <= left) continue;
+        box(glass, [glassX, (paneBottom + paneTop) * .5,
+          (left + right) * .5, GLAZING.thickness, paneTop - paneBottom, right - left],
+        `${tenant.id} closed external glass shopfront clear pane`);
+      }
+    }
     for (const zz of frames) box(bronze, [frameX, (top + .10) * .5, zz, .070, top - .10, .045],
       `${tenant.id} shopfront closed glazing mullion`);
     box(tenant.id === 'W' ? wood : stone, [faceX + side * .07, (3.08 + ceilingY) * .5, (minZ + maxZ) * .5,
@@ -219,12 +231,26 @@ export function buildAtriumFrontShell(root: Group, stoneMap: Texture | null): vo
     }
     revealMeshes.push(box(tenant.id === 'W' ? wood : stone, [innerX, tenant.entryHeight + .08,
       (entryStartZ + entryEndZ) * .5, .14, .16, entryEndZ - entryStartZ + .17], `${tenant.id} internally recessed entrance head`));
-    box(stone, [faceX + side * .08, .025, (entryStartZ + entryEndZ) * .5,
-      .16, .050, entryEndZ - entryStartZ], `${tenant.id} flush closed entrance threshold`);
-    for (const zz of [entryStartZ + .82, entryEndZ - .82]) {
-      box(bronze, [faceX - side * .006, 1.05, zz, .012, .22, .025], `${tenant.id} closed sliding entrance handle`);
+    box(stone, [faceX + side * .08, -.0015, (clearStartZ + clearEndZ) * .5,
+      .16, .003, clearEndZ - clearStartZ], `${tenant.id} flush open entrance finish transition`);
+    for (const [edge, direction] of [[clearStartZ, -1], [clearEndZ, 1]] as const) {
+      const returnDepth = tenant.entryRecess - .07;
+      box(glass, [faceX + side * (.07 + returnDepth * .5), tenant.entryHeight * .5,
+        edge + direction * GLAZING.thickness * .5, returnDepth, tenant.entryHeight, GLAZING.thickness],
+      `${tenant.id} fixed recessed entrance glass return`);
+      const leafWidth = (clearEndZ - clearStartZ) * .5;
+      const leafZ = edge + direction * leafWidth * .5;
+      box(glass, [faceX + side * .110, tenant.entryHeight * .5, leafZ,
+        GLAZING.thickness, tenant.entryHeight, leafWidth], `${tenant.id} parked open sliding entrance leaf`);
+      for (const zz of [edge, edge + direction * leafWidth]) {
+        box(bronze, [faceX + side * .110, tenant.entryHeight * .5, zz,
+          .025, tenant.entryHeight, .025], `${tenant.id} parked sliding leaf stile`);
+      }
+      box(bronze, [faceX + side * .095, 1.05, leafZ,
+        .012, .22, .025], `${tenant.id} parked sliding entrance handle`);
     }
     for (let zz = minZ + 1.05; zz < maxZ; zz += 2.2) {
+      if (zz + .065 > clearStartZ && zz - .065 < clearEndZ) continue;
       for (const yy of [.90, 1.45]) box(marks, [faceX - side * .001, yy, zz, .002, .014, .13],
         `${tenant.id} shop glass recognition mark`);
     }

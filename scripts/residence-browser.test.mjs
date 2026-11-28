@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import childProcess from 'node:child_process';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
+import { registry as playwrightRegistry } from 'playwright-core/lib/coreBundle';
+import { basename, dirname, join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
 import { preview } from 'vite';
@@ -12,25 +16,173 @@ const timeout = 90_000;
 const residenceHeading = '都心の70階住戸';
 let server;
 let browser;
+let browserServer;
+let ownedBrowserProcess;
+const ownedLaunchChildren = [];
 let origin;
+let nativeStartedAt;
+let launchEvidence;
+const pageEvidence = new WeakMap();
+const buildManifest = process.env.RESIDENCE_BUILD_MANIFEST
+  ? JSON.parse(await readFile(process.env.RESIDENCE_BUILD_MANIFEST, 'utf8')) : null;
+const sha256 = value => createHash('sha256').update(value).digest('hex');
+async function withDeadline(promise, milliseconds) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Residence browser operation exceeded its deadline')), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+function waitForOwnedExit(child, milliseconds) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const exited = () => { clearTimeout(timer); resolve(true); };
+    const timer = setTimeout(() => { child.off('exit', exited); resolve(false); }, milliseconds);
+    child.once('exit', exited);
+  });
+}
+
+
+// Wrap declared Playwright API roles, independent of bundled/minified constructor names.
+function createApiGuard(bounded) {
+  const proxies = new WeakMap();
+  const protectedApiObjects = new WeakMap();
+  const locatorMethods = new Set(['locator', 'getByRole', 'getByLabel', 'getByText', 'getByPlaceholder', 'getByTestId', 'getByTitle', 'getByAltText']);
+  const returns = {
+    Browser: { newContext: 'BrowserContext', newPage: 'Page', newBrowserCDPSession: 'CDPSession' },
+    BrowserContext: { newPage: 'Page', browser: 'Browser' },
+    Page: { context: 'BrowserContext', mainFrame: 'Frame', frame: 'Frame', waitForFunction: 'JSHandle' },
+    Frame: { page: 'Page', waitForFunction: 'JSHandle' },
+    Locator: { first: 'Locator', last: 'Locator', nth: 'Locator', filter: 'Locator', and: 'Locator', or: 'Locator' },
+    Route: { fetch: 'APIResponse', request: 'Request' },
+    Response: { request: 'Request', frame: 'Frame' },
+    Request: { frame: 'Frame' },
+    JSHandle: { asElement: 'ElementHandle', getProperty: 'JSHandle' },
+  };
+  function protect(value, role) {
+    if (!value || typeof value !== 'object' || !role) return value;
+    if (proxies.has(value)) return proxies.get(value);
+    const proxy = new Proxy(value, { get(target, name) {
+      const member = Reflect.get(target, name, target);
+      if (typeof member !== 'function') {
+        const propertyRole = role === 'Page' ? { keyboard: 'Keyboard', mouse: 'Mouse', touchscreen: 'Touchscreen' }[name] : null;
+        return protect(member, propertyRole);
+      }
+      return (...args) => {
+        const resultRole = locatorMethods.has(String(name)) && ['Page', 'Frame', 'Locator'].includes(role)
+          ? 'Locator' : returns[role]?.[name];
+        const convert = result => name === 'all' && role === 'Locator' && Array.isArray(result)
+          ? result.map(item => protect(item, 'Locator')) : protect(result, resultRole);
+        const result = member.apply(target, args);
+        if (result && typeof result.then === 'function') {
+          const isWait = ['waitFor', 'waitForFunction', 'waitForURL', 'waitForLoadState'].includes(String(name));
+          const limit = name === 'close' ? 5000 : isWait ? 140000 : name === 'evaluate' ? 15000 : 20000;
+          return bounded(`${role}.${String(name)}`, () => result, limit).then(convert);
+        }
+        return convert(result);
+      };
+    } });
+    proxies.set(value, proxy);
+    protectedApiObjects.set(proxy, role);
+    return proxy;
+  }
+  return { protect, protectedApiObjects };
+}
+
+const { protect: protectApi, protectedApiObjects } = createApiGuard((label, operation, milliseconds) =>
+  withDeadline(Promise.resolve().then(operation), milliseconds));
+
+const spatialCaseNames = new Set([
+  'the residence menu opens individual controls and keeps remote and wall controls in sync',
+  'the residence remote directory keeps its bounds when changing equipment categories',
+  'the residence plan selects real rooms and keeps the individual device location visible',
+]);
 
 before(async () => {
-  server = await preview({ logLevel: 'error', preview: { host: '127.0.0.1', port: 0 } });
+  const channel = process.env.COAST_CHROME_CHANNEL || 'chromium';
+  const registered = playwrightRegistry.registry.findExecutable(channel);
+  assert.ok(registered, 'The requested Playwright Chromium channel must resolve before loading the product');
+  const executablePath = await realpath(registered.executablePathOrDie('javascript'));
+  const require = createRequire(import.meta.url);
+  const browserMetadata = JSON.parse(await readFile(join(dirname(require.resolve('playwright-core/package.json')), 'browsers.json'), 'utf8'));
+  const expectedVersion = channel === 'chromium'
+    ? browserMetadata.browsers.find(entry => entry.name === 'chromium')?.browserVersion : null;
+  const args = ['--enable-unsafe-swiftshader', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'];
+  launchEvidence = { requestedChannel: channel, profile: channel === 'chromium' ? 'playwright-bundled' : 'explicit-channel',
+    expectedVersion, requestedFlags: args };
+
+  // Capture only children spawned by this owned launch, before launch readiness can stall.
+  const spawn = childProcess.spawn;
+  childProcess.spawn = function (...parameters) {
+    const child = spawn.apply(this, parameters);
+    if (child.pid) ownedLaunchChildren.push(child);
+    return child;
+  };
+  syncBuiltinESMExports();
+  try {
+    browserServer = await withDeadline(chromium.launchServer({ executablePath, headless: true,
+      host: '127.0.0.1', args }), 30000);
+  } finally {
+    childProcess.spawn = spawn;
+    syncBuiltinESMExports();
+  }
+  ownedBrowserProcess = browserServer.process();
+  nativeStartedAt = new Date().toISOString();
+  const actualPath = await realpath(ownedBrowserProcess.spawnfile);
+  Object.assign(launchEvidence, { browserPid: ownedBrowserProcess.pid, executableName: basename(actualPath),
+    executableMatches: actualPath === executablePath, executablePathHash: sha256(actualPath),
+    allowedFlags: args.filter(argument => ownedBrowserProcess.spawnargs.includes(argument)),
+    headless: ownedBrowserProcess.spawnargs.some(argument => argument === '--headless' || argument.startsWith('--headless=')) });
+  browser = await withDeadline(chromium.connect(browserServer.wsEndpoint()), 10000);
+  launchEvidence.version = browser.version();
+  launchEvidence.versionMatches = expectedVersion ? browser.version() === expectedVersion : null;
+  assert.ok(launchEvidence.executableMatches && (!expectedVersion || launchEvidence.versionMatches),
+    'The actual browser executable or bundled version differs from the selected profile');
+  assert.ok(args.every(argument => launchEvidence.allowedFlags.includes(argument)) && launchEvidence.headless,
+    'The actual browser flags differ from the selected profile');
+
+  // Validate the browser profile before starting the heavier product page.
+  server = await withDeadline(preview({ logLevel: 'error', preview: { host: '127.0.0.1', port: 0 } }), 10000);
   origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-  browser = await chromium.launch({
-    channel: process.env.COAST_CHROME_CHANNEL || 'chromium',
-    args: ['--enable-unsafe-swiftshader'],
-  });
-  if (screenshots) await mkdir(screenshots, { recursive: true });
-});
+  if (screenshots) {
+    await mkdir(screenshots, { recursive: true });
+    await writeFile(join(screenshots, 'native-owner.json'), JSON.stringify({
+      owner: 'residence-browser', pid: process.pid, browserPid: ownedBrowserProcess.pid, origin,
+      startedAt: nativeStartedAt, status: 'validated', launch: launchEvidence,
+    }, null, 2));
+  }
+}, { timeout });
 
 after(async () => {
-  try {
-    await browser?.close();
-  } finally {
-    await server?.close();
+  await withDeadline(browser?.close() ?? Promise.resolve(), 5000).catch(() => {});
+  await withDeadline(browserServer?.close() ?? Promise.resolve(), 5000).catch(() => {});
+  const children = [...new Set([...ownedLaunchChildren, ownedBrowserProcess].filter(Boolean))];
+  const forced = [];
+  for (const child of children) {
+    if (await waitForOwnedExit(child, 500)) continue;
+    child.kill('SIGTERM'); forced.push({ pid: child.pid, signal: 'SIGTERM' });
+    if (!await waitForOwnedExit(child, 1000)) {
+      child.kill('SIGKILL'); forced.push({ pid: child.pid, signal: 'SIGKILL' });
+      await waitForOwnedExit(child, 1000);
+    }
   }
-});
+  const browserClosed = children.every(child => child.exitCode !== null || child.signalCode !== null);
+  let previewClosed = !server;
+  if (server) {
+    try { await withDeadline(server.close(), 3000); previewClosed = true; }
+    catch {
+      server.httpServer.closeAllConnections();
+      try { await withDeadline(server.close(), 3000); previewClosed = true; } catch { /* recorded below */ }
+    }
+  }
+  if (screenshots && nativeStartedAt) await writeFile(join(screenshots, 'native-owner.json'), JSON.stringify({
+    owner: 'residence-browser', pid: process.pid, browserPid: ownedBrowserProcess?.pid, origin, startedAt: nativeStartedAt,
+    endedAt: new Date().toISOString(), status: browserClosed && previewClosed ? 'closed' : 'cleanup-incomplete',
+    browserClosed, previewClosed, forced, launch: launchEvidence,
+  }, null, 2));
+  assert.ok(browserClosed && previewClosed, 'The residence browser resources did not finish closing');
+}, { timeout: 30_000 });
 
 function observeResidence() {
   const probe = { camera: null, contexts: 0, analyser: null, trafficFilters: new Set(), roomSends: [], loopStarts: 0 };
@@ -117,26 +269,105 @@ function observeResidence() {
   })();
 }
 
+function observeResidenceCamera() {
+  window.residenceProbe = { camera: null };
+  const gl = WebGL2RenderingContext.prototype;
+  const locations = new WeakSet();
+  const locate = gl.getUniformLocation;
+  gl.getUniformLocation = function (program, name) {
+    const location = locate.call(this, program, name);
+    if (location && name === 'cameraPosition') locations.add(location);
+    return location;
+  };
+  const write = gl.uniform3f;
+  gl.uniform3f = function (location, x, y, z) {
+    if (locations.has(location)) window.residenceProbe.camera = { x, y, z };
+    return write.call(this, location, x, y, z);
+  };
+}
+
 async function createPage(t) {
-  const page = await browser.newPage({ viewport });
-  t.after(() => page.close());
+  const spatialCase = spatialCaseNames.has(t.name);
+  const rawPage = await withDeadline(browser.newPage({ viewport }), 15000);
+  const page = spatialCase ? protectApi(rawPage, 'Page') : rawPage;
+  if (spatialCase) assert.equal(protectedApiObjects.get(page.locator('html')), 'Locator');
+  const evidence = { case: t.name, mode: 'acceptance', spatialCase,
+    launch: launchEvidence, errors: [], failedRequests: [], bundles: [], pending: [] };
+  pageEvidence.set(page, evidence);
+  if (screenshots) {
+    page.on('requestfailed', request => evidence.failedRequests.push({
+      path: new URL(request.url()).pathname, failure: request.failure()?.errorText,
+    }));
+    page.on('response', response => {
+      const path = new URL(response.url()).pathname;
+      if (!path.startsWith('/assets/') || !path.endsWith('.js')) return;
+      const pending = response.body().then(body => {
+        const expected = buildManifest?.artifacts?.[`dist${path}`];
+        evidence.bundles.push({ path, status: response.status(), sha256: sha256(body),
+          matchesBuild: expected ? sha256(body) === expected : null,
+          instrumented: path.includes('CoastApp-') && evidence.originalBundle !== undefined,
+          matchesObservation: evidence.observationBundle?.path === path ? sha256(body) === evidence.observationBundle.sha256 : null });
+      }).catch(() => { evidence.bundles.push({ path, status: response.status(), bodyUnavailable: true }); });
+      evidence.pending.push(pending);
+    });
+  }
+  t.after(async () => {
+    if (screenshots && !page.isClosed()) {
+      await Promise.race([Promise.allSettled(evidence.pending), new Promise(resolve => setTimeout(resolve, 1000))]);
+      evidence.page = await withDeadline(page.evaluate(() => {
+        const canvas = document.querySelector('canvas.coast-view');
+        const gl = canvas?.getContext('webgl2');
+        const debug = gl?.getExtension('WEBGL_debug_renderer_info');
+        return { path: location.pathname, world: new URL(location.href).searchParams.get('world'),
+          headings: [...document.querySelectorAll('h1,h2')].map(element => element.textContent),
+          statuses: [...document.querySelectorAll('[role="status"], [role="alert"]')].map(element => element.textContent),
+          appCanvas: !!canvas, glAvailable: !!gl, rendererSource: canvas ? 'app-canvas' : 'not-reached',
+          renderer: gl ? gl.getParameter(debug?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) : null,
+          sceneReached: !!window.residenceProbe?.scene?.isScene,
+          controlHandlesReached: !!window.residenceProbe?.controls?.some(section => section.id === 'kitchen-tap') };
+      }), 3000).catch(() => ({ diagnosticUnavailable: 'deadline-or-page-closed' }));
+      const { pending, ...record } = evidence;
+      const name = t.name.replace(/[^a-zA-Z0-9]+/g, '-');
+      await writeFile(join(screenshots, `${name}-diagnostic.json`), JSON.stringify(record, null, 2));
+      await withDeadline(page.screenshot({ path: join(screenshots, `${name}-final.png`), timeout: 2000 }), 2500).catch(() => {});
+    }
+    await withDeadline(page.close(), 5000);
+  }, { timeout: 15_000 });
   page.setDefaultTimeout(15_000);
   const errors = [];
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('pageerror', error => { errors.push(error.message); evidence.errors.push({ kind: 'pageerror', name: error.name, message: error.message }); });
   page.on('console', message => {
-    if (message.type() === 'error') errors.push(message.text());
+    if (message.type() === 'error') { errors.push(message.text()); evidence.errors.push({ kind: 'console', message: message.text() }); }
   });
-  await page.addInitScript(observeResidence);
+  await page.addInitScript(spatialCase ? observeResidenceCamera : observeResidence);
   return { page, errors };
 }
 
-async function openResidence(t, place = '') {
+async function openResidence(t, place = '', inspect = false) {
   const { page, errors } = await createPage(t);
+  if (inspect) await exposeResidenceScene(page);
   const address = new URL('/?world=residence', origin);
   if (place) address.searchParams.set('place', place);
-  await page.goto(address.href, { waitUntil: 'commit' });
-  await page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor();
-  await page.waitForFunction(() => document.hasFocus() && window.residenceProbe.camera);
+  const started = Date.now();
+  const remaining = () => Math.max(1, 60000 - (Date.now() - started));
+  await withDeadline(page.goto(address.href, { waitUntil: 'commit', timeout: 20000 }), 22000);
+  await withDeadline(page.getByRole('heading', { name: residenceHeading, exact: true }).waitFor({ timeout: remaining() }), remaining() + 1000);
+  await withDeadline(page.bringToFront(), 5000);
+  await withDeadline(page.waitForFunction(() => document.hasFocus() && window.residenceProbe.camera, null,
+    { timeout: remaining() }), remaining() + 1000);
+  const evidence = pageEvidence.get(page);
+  if (evidence?.spatialCase) {
+    evidence.setup = await withDeadline(page.evaluate(() => {
+      const canvas = document.querySelector('canvas.coast-view');
+      const gl = canvas?.getContext('webgl2');
+      const debug = gl?.getExtension('WEBGL_debug_renderer_info');
+      return { camera: window.residenceProbe.camera,
+        raster: canvas ? { css: [canvas.clientWidth, canvas.clientHeight], buffer: [canvas.width, canvas.height], dpr: devicePixelRatio } : null,
+        renderer: gl ? gl.getParameter(debug?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) : null };
+    }), 3000);
+    assert.ok(evidence.setup.raster && evidence.setup.renderer, 'The spatial UI cases must reach the actual application renderer');
+    await page.setViewportSize({ width: 960, height: 600 });
+  }
   return { page, errors };
 }
 
@@ -203,14 +434,23 @@ async function capture(page, name, style) {
 }
 
 async function exposeResidenceScene(page) {
-  await page.route('**/assets/CoastApp-*.js', async route => {
+  await page.route('**/assets/CoastApp-*.js', async rawRoute => {
+    const route = protectApi(rawRoute, 'Route');
     const response = await route.fetch();
     const source = await response.text();
+    const path = new URL(route.request().url()).pathname;
+    const evidence = pageEvidence.get(page);
+    if (evidence) evidence.originalBundle = { path, sha256: sha256(source),
+      matchesBuild: buildManifest?.artifacts?.[`dist${path}`] === sha256(source) };
     const prepare = 'this.world.prepareRender?.(';
     assert.ok(source.includes(prepare), 'The residence test hook requires exploration render preparation');
     const hook = 'window.residenceProbe.scene=this.world.scene,'
-      + 'window.residenceProbe.relocate??=(pose=>this.controls.relocate(pose)),';
-    await route.fulfill({ response, body: source.replace(prepare, hook + prepare) });
+      + 'window.residenceProbe.controls=this.residenceControls,'
+      + (evidence?.spatialCase ? '' : 'window.residenceProbe.relocate??=(pose=>this.controls.relocate(pose)),');
+    const body = source.replace(prepare, hook + prepare);
+    if (evidence) evidence.observationBundle = { path, sha256: sha256(body),
+      modification: 'scene/control reference exposure only' };
+    await route.fulfill({ response, body });
   });
 }
 
@@ -859,13 +1099,18 @@ test('the residence remote directory keeps its bounds when changing equipment ca
       const bottom = element => element.getBoundingClientRect().bottom;
       listGaps.push(await list.evaluate(bottom) - await list.getByRole('button').last().evaluate(bottom));
       categoryBounds.push(await directory.boundingBox());
+      if (size !== shortViewport) assert.ok(await listViewport(name).evaluate(element => element.clientHeight > 0),
+        'The selected equipment list retains its own usable viewport beside the plan');
       await capture(page, `residence-remote-${size.width}x${size.height}-${index + 1}`);
     }
     [bounds] = categoryBounds;
     assert.ok(bounds);
     for (const box of categoryBounds) assert.deepEqual(box, bounds, `Layout moved at ${size.width}×${size.height}`);
     if (size !== shortViewport) {
-      assert.ok(Math.abs(Math.min(...listGaps)) < 1, 'The tallest list fills the shared space');
+      await tab('カーテン').click();
+      await directory.locator('[data-residence-plan] [role="button"]').last().focus();
+      await page.keyboard.press('Tab');
+      assert.ok(await choices('カーテン').getByRole('button').first().evaluate(element => element === document.activeElement));
     }
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= size.width);
     assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= size.height);
@@ -873,6 +1118,12 @@ test('the residence remote directory keeps its bounds when changing equipment ca
     if (screenshots) t.diagnostic(`${size.width}×${size.height}: ${JSON.stringify(bounds)}`);
   }
 
+  await button(directory, '図を拡大').click();
+  const enlargedPlan = residenceDialog(page, '平面図');
+  assert.ok(await enlargedPlan.locator('[data-residence-plan]').isVisible());
+  await capture(page, 'residence-plan-expanded-320x300');
+  await button(enlargedPlan, '前の画面へ戻る').click();
+  assert.deepEqual(await directory.boundingBox(), bounds);
   await tab('カーテン').click();
   assert.ok(await listViewport('カーテン').evaluate(element => {
     element.scrollTop = element.scrollHeight;
@@ -909,11 +1160,183 @@ test('the residence remote directory keeps its bounds when changing equipment ca
 
   await tab('カーテン').press('Space');
   await tab('家電・水栓').press('Tab');
+  assert.ok(await directory.getByLabel('部屋', { exact: true }).evaluate(element => element === document.activeElement));
+  await button(directory, '図を拡大').focus();
+  await page.keyboard.press('Tab');
   const firstCurtain = choices('カーテン').getByRole('button').first();
   assert.ok(await firstCurtain.evaluate(element => element === document.activeElement));
   await page.keyboard.press('Escape');
   await directory.waitFor({ state: 'hidden' });
   assert.ok(await button(page, 'メニュー').evaluate(element => element === document.activeElement));
+  assert.deepEqual(errors, []);
+});
+
+test('the residence plan selects real rooms and keeps the individual device location visible', { timeout }, async t => {
+  const { page, errors } = await openResidence(t, '', true);
+  await page.waitForFunction(() => window.residenceProbe.scene?.isScene
+    && window.residenceProbe.controls.some(section => section.id === 'kitchen-tap'));
+  const entryScripts = await page.evaluate(() => [...document.scripts].filter(script => script.src)
+    .map(script => new URL(script.src).pathname));
+  assert.ok(entryScripts.some(path => /^\/assets\/main-[^/]+\.js$/.test(path)), 'Use the actual built product entry');
+  assert.ok(entryScripts.every(path => !path.includes('@vite/client')), 'The acceptance page must use preview, not dev modules');
+  await button(page, 'メニュー').click();
+  await button(residenceDialog(page, 'メニュー'), '住戸の遠隔操作').click();
+  const directory = residenceDialog(page, '住戸の遠隔操作');
+  const room = directory.getByLabel('部屋', { exact: true });
+  const focusEnds = await directory.evaluate(element => {
+    const nodes = [...element.querySelectorAll('button, select, [tabindex="0"]')]
+      .filter(node => !node.closest('[inert]') && !node.disabled && node.getClientRects().length);
+    nodes[0].dataset.focusEnd = 'first';
+    nodes.at(-1).dataset.focusEnd = 'last';
+    return nodes.length;
+  });
+  assert.ok(focusEnds > 2);
+  await directory.locator('[data-focus-end="first"]').focus();
+  await page.keyboard.press('Shift+Tab');
+  assert.ok(await directory.locator('[data-focus-end="last"]').evaluate(element => element === document.activeElement));
+  await directory.locator('[data-focus-end="last"]').focus();
+  await page.keyboard.press('Tab');
+  assert.ok(await directory.locator('[data-focus-end="first"]').evaluate(element => element === document.activeElement));
+  await directory.getByRole('heading', { name: '住戸の遠隔操作', exact: true }).focus();
+  await page.keyboard.press('Shift+Tab');
+  assert.ok(await directory.locator('[data-focus-end="last"]').evaluate(element => element === document.activeElement));
+  const kitchen = directory.locator('[data-residence-plan] [data-residence-room="K"]');
+  await kitchen.press('Space');
+  assert.equal(await room.inputValue(), 'K');
+  assert.equal(await kitchen.getAttribute('aria-current'), 'true');
+  assert.equal(await directory.locator('[data-residence-choice]:visible').count(), 1);
+  await button(directory, '家電・水栓').click();
+  assert.equal(await directory.locator('[data-residence-choice]:visible').count(), 2);
+  await button(directory, 'キッチンの水栓').press('Enter');
+  const device = residenceDialog(page, 'キッチンの水栓');
+  assert.equal(await device.locator('[data-residence-section]').getAttribute('data-residence-room'), 'K');
+  const marker = device.locator('.residence-plan-markers circle');
+  assert.equal(await marker.count(), 1);
+  const point = await marker.evaluate(element => ({ east: Number(element.dataset.planEast), north: Number(element.dataset.planNorth) }));
+  assert.ok(point.east >= 12.8 && point.east <= 17.35 && point.north >= 6.65 && point.north <= 9.95);
+  const actualWater = await page.evaluate(() => {
+    const flow = window.residenceProbe.scene.getObjectByName('kitchen-tap').children[0];
+    const at = flow.getWorldPosition(flow.position.clone());
+    return { east: at.x, north: -at.z, running: flow.visible };
+  });
+  assert.ok(Math.abs(point.east - actualWater.east) < 1e-8 && Math.abs(point.north - actualWater.north) < 1e-8,
+    'The remote marker must identify the actual rendered water outlet');
+  assert.equal(actualWater.running, false);
+  const tap = button(device, '水栓');
+  await tap.press('Space');
+  assert.equal(await tap.getAttribute('aria-pressed'), 'true');
+  assert.ok(await page.evaluate(() => window.residenceProbe.scene.getObjectByName('kitchen-tap').children[0].visible));
+  assert.match(await device.locator('.residence-plan-caption').textContent(), /キッチン.*水栓/);
+  await capture(page, 'residence-spatial-kitchen-tap');
+  const setWater = on => page.evaluate(on => window.residenceProbe.controls.find(section => section.id === 'kitchen-tap')
+    .controls.find(control => control.id === 'flow').set(on), on);
+  await setWater(false);
+  await page.waitForFunction(() => document.querySelector('[data-residence-control="flow"]').getAttribute('aria-pressed') === 'false');
+  await setWater(true);
+  await page.waitForFunction(() => document.querySelector('[data-residence-control="flow"]').getAttribute('aria-pressed') === 'true');
+  await tap.press('Space');
+  assert.equal(await tap.getAttribute('aria-pressed'), 'false');
+  await button(device, '設備一覧へ戻る').click();
+  assert.ok(await button(directory, 'キッチンの水栓').evaluate(element => element === document.activeElement));
+  await room.selectOption('');
+  await button(directory, '照明').click();
+  await button(directory, 'リビング・ダイニング').click();
+  const lights = residenceDialog(page, 'リビング・ダイニング');
+  const west = button(lights, 'ペンダント灯（西）');
+  const tabPaths = [];
+  const tabToWest = async () => {
+    await page.mouse.move(4, 4);
+    await lights.getByRole('heading', { name: 'リビング・ダイニング', exact: true }).focus();
+    const path = [];
+    for (let step = 0; step < 60; step++) {
+      await page.keyboard.press('Tab');
+      const target = await page.evaluate(() => document.activeElement?.getAttribute('data-residence-control'));
+      path.push(target);
+      if (target === 'LD-pendant-west') {
+        tabPaths.push(path);
+        return;
+      }
+    }
+    assert.fail('Real Tab must reach the west fixture within the finite focus path');
+  };
+  await tabToWest();
+  const lit = on => page.waitForFunction(on => {
+    let amount;
+    window.residenceProbe.scene.traverse(object => {
+      if (object.material?.userData?.residenceFixtureId === 'LD-pendant-west') amount = object.material.emissiveIntensity;
+    });
+    return typeof amount === 'number' && (amount > 0) === on;
+  }, on);
+  const initialOn = await west.getAttribute('aria-pressed') === 'true';
+  await button(lights, '一括点灯').hover();
+  assert.ok(await west.evaluate(node => node === document.activeElement),
+    'Hovering another control must retain the real keyboard target');
+  const hoverPreview = { caption: await lights.locator('.residence-plan-caption').textContent(),
+    markerCount: await lights.locator('.residence-plan-markers circle').count() };
+  await page.keyboard.press('Space');
+  assert.equal(await west.getAttribute('aria-pressed'), String(!initialOn));
+  await lit(!initialOn);
+  assert.equal(await lights.locator('.residence-plan-markers circle').count(), 1);
+  assert.match(await lights.locator('.residence-plan-caption').textContent(), /ペンダント灯（西）/);
+  pageEvidence.get(page).mixedInput = { hoverPreview, activatedControl: 'LD-pendant-west', tabPaths };
+  await page.evaluate(() => window.residenceProbe.controls.find(section => section.id === 'lighting-LD')
+    .controls.find(control => control.id === 'LD-pendant-west').set(true));
+  await page.waitForFunction(() => document.querySelector('[data-residence-control="LD-pendant-west"]').getAttribute('aria-pressed') === 'true');
+  await lit(true);
+  const pendant = lights.locator('.residence-plan-markers circle');
+  assert.equal(Number(await pendant.getAttribute('data-plan-east')), 15.36);
+  assert.equal(Number(await pendant.getAttribute('data-plan-north')), 4.72);
+  await capture(page, 'residence-spatial-pendant');
+  await page.setViewportSize({ width: 375, height: 710 });
+  await tabToWest();
+  assert.ok(await west.evaluate(node => {
+    const box = node.getBoundingClientRect();
+    return node === document.activeElement && box.x >= 0 && box.y >= 0
+      && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1;
+  }), 'Real Tab scrolls the focused mobile control into the visible viewport');
+  await capture(page, 'residence-spatial-pendant-mobile');
+  await page.setViewportSize({ width: 320, height: 300 });
+  await button(lights, '図を拡大').click();
+  const expanded = residenceDialog(page, '平面図');
+  await button(expanded, '前の画面へ戻る').focus();
+  await page.keyboard.press('Shift+Tab');
+  const svgFocus = await expanded.evaluate(dialog => {
+    const active = document.activeElement;
+    const path = active?.querySelector('.residence-plan-floor');
+    const groupStyle = active ? getComputedStyle(active) : null;
+    const pathStyle = path ? getComputedStyle(path) : null;
+    const box = path?.getBoundingClientRect();
+    return { activeSvg: active instanceof SVGElement && dialog.contains(active),
+      focusVisible: active?.matches(':focus-visible'), outlineStyle: groupStyle?.outlineStyle,
+      stroke: pathStyle?.stroke, strokeWidth: Number.parseFloat(pathStyle?.strokeWidth ?? '0'),
+      pathVisible: Boolean(box?.width && box?.height && pathStyle?.display !== 'none'
+        && pathStyle?.visibility === 'visible' && Number(pathStyle?.opacity) > 0) };
+  });
+  assert.ok(svgFocus.activeSvg && svgFocus.focusVisible && svgFocus.outlineStyle === 'none',
+    'The keyboard-focused SVG room must suppress its outer outline');
+  assert.ok(svgFocus.pathVisible && svgFocus.stroke?.replace(/\s/g, '') === 'rgb(159,51,8)' && svgFocus.strokeWidth > 0,
+    'The visible room path must retain its red keyboard focus stroke');
+  await capture(page, 'residence-spatial-pendant-expanded');
+  await button(expanded, '前の画面へ戻る').click();
+  assert.ok(await button(lights, '図を拡大').evaluate(element => element === document.activeElement));
+  assert.ok(await lights.evaluate(element => element.scrollWidth <= element.clientWidth));
+  await page.keyboard.press('Escape');
+  assert.ok(await button(page, 'メニュー').evaluate(element => element === document.activeElement));
+  const previousDocument = await page.evaluate(() => {
+    window.previousResidencePanel = document.querySelector('#residence-control-dialog').parentElement;
+    return { timeOrigin: performance.timeOrigin };
+  });
+  await button(page, '夜').click();
+  await travel(page, '中央展望デッキ', 'overlook', 'main-deck', 'night');
+  await page.getByRole('heading', { name: '丘陵展望台', exact: true }).waitFor();
+  assert.equal(await page.locator('#residence-control-dialog').count(), 0);
+  const replacement = await page.evaluate(previous => ({
+    newDocument: performance.timeOrigin !== previous.timeOrigin,
+    oldPanelConnected: window.previousResidencePanel?.isConnected ?? null,
+  }), previousDocument);
+  assert.ok(replacement.newDocument || replacement.oldPanelConnected === false,
+    'A full document navigation or in-place replacement must remove the old active residence UI');
+  pageEvidence.get(page).worldReplacement = replacement;
   assert.deepEqual(errors, []);
 });
 
@@ -1238,6 +1661,9 @@ test('nearby appliances open individual controls and start localized audio', { t
   await microwave.waitFor();
   assert.equal(await microwave.locator('[data-residence-section]').count(), 1);
   assert.equal(await button(microwave, '設備一覧へ戻る').count(), 0);
+  assert.equal(await microwave.locator('[data-residence-plan]').count(), 0);
+  assert.equal(await button(microwave, '図を拡大').count(), 0);
+  assert.equal(await button(microwave, 'メニューへ戻る').count(), 0);
   assert.equal(await microwave.getByRole('combobox').count(), 0);
   await page.keyboard.press('t');
   assert.equal(await residenceDialog(page, 'ファストトラベル').count(), 0);
@@ -1287,6 +1713,9 @@ test('nearby appliances open individual controls and start localized audio', { t
   await button(page, '洗濯機（入口側）を操作').click();
   const washer = residenceDialog(page, '洗濯機（入口側）');
   assert.equal(await button(washer, '設備一覧へ戻る').count(), 0);
+  assert.equal(await washer.locator('[data-residence-plan]').count(), 0);
+  assert.equal(await button(washer, '図を拡大').count(), 0);
+  assert.equal(await button(washer, 'メニューへ戻る').count(), 0);
   assert.equal(await button(washer, '加熱開始・再開').count(), 0);
   const mode = washer.getByRole('combobox', { name: '運転モード' });
   assert.deepEqual(await mode.locator('option').allTextContents(), ['洗浄', 'すすぎ', '脱水', '乾燥']);

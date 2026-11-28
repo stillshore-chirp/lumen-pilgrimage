@@ -27,6 +27,7 @@ class MockNode {
   disconnect(node) {
     if (node) {
       const index = this.connections.indexOf(node);
+      if (index < 0) throw new DOMException('No connection to this target', 'InvalidAccessError');
       this.connections.splice(index, 1);
       this.outputs.splice(index, 1);
       return;
@@ -162,6 +163,152 @@ function setup(t, { spatial = true, blocked = false } = {}) {
 function near(actual, expected) {
   assert.ok(Math.abs(actual - expected) < 1e-8, `expected ${expected}, got ${actual}`);
 }
+
+test('floating stereo keeps separate edge channels and reuses the shared owner while moving', async t => {
+  const { audio, contexts } = setup(t);
+  const monitor = new Group();
+  monitor.position.set(3, 2, -4);
+  monitor.scale.setScalar(2);
+  const edges = [-1.35, 1.35].map(x => {
+    const emitter = new Group();
+    emitter.position.x = x;
+    monitor.add(emitter);
+    return emitter;
+  });
+  audio.setFloatingSpeakers(edges);
+  audio.setMode('spatial');
+  const track = new MockTrack('audio');
+  audio.setStream(new MockStream([track]));
+  await audio.start();
+  audio.setMode('spatial');
+  const [context] = contexts;
+  const source = context.sources[0];
+  const layout = source.connections.find(node => node.channelCount === 2 && node.channelInterpretation === 'speakers');
+  assert.ok(layout);
+  const splitter = layout.connections[0];
+  assert.equal(splitter.channels, 2);
+  assert.deepEqual(splitter.outputs, [0, 1]);
+  const feeds = splitter.connections;
+  assert.notEqual(feeds[0], feeds[1]);
+  assert.ok(feeds.every(node => node.gain.value === Math.SQRT1_2));
+  const pans = feeds.map(feed => feed.connections[0]);
+  const headphone = source.connections.find(node => node !== layout);
+  assert.equal(headphone.gain.value, 0, 'startup does not begin through the head-locked headphone route');
+  assert.equal(pans[0].connections[0].gain.value, 1);
+  assert.deepEqual(pans.map(pan => pan.positionX.value), [.2999999999999998, 5.7]);
+  monitor.position.x += 2;
+  audio.setFloatingSpeakers(edges);
+  audio.update(new PerspectiveCamera(), monitor);
+  near(pans[0].positionX.value, 2.3);
+  near(pans[1].positionX.value, 7.7);
+  assert.equal(context.sources.length, 1);
+  assert.equal(source.stream.getAudioTracks()[0], track);
+  assert.equal(track.readyState, 'live');
+  audio.stop();
+  assert.ok([layout, splitter, ...feeds, ...pans].every(node => node.disconnected));
+});
+
+test('world speaker selection and renderer failure keep the same track/source/context', async t => {
+  const { audio, contexts } = setup(t);
+  const calls = [];
+  const definition = id => ({ id, label: id, createAudio(context, source, destination, channels) {
+    const input = context.createGain();
+    source.connect(input).connect(destination);
+    const call = { id, input, upstream: source, destination, channels, disposed: 0, updates: 0, fail: false, throwOnDispose: false };
+    calls.push(call);
+    return { setQuality() {}, update() { call.updates++; if (call.fail) throw new Error('renderer failure'); },
+      dispose() {
+        call.disposed++;
+        if (call.throwOnDispose) throw new Error('dispose failure');
+        source.disconnect(input); input.disconnect();
+      } };
+  } });
+  audio.setWorldOutputs([definition('atrium'), definition('cafe')]);
+  audio.setMode('atrium');
+  const track = new MockTrack('audio');
+  audio.setStream(new MockStream([track]));
+  await audio.start();
+  const [context] = contexts;
+  const source = context.sources[0];
+  assert.ok(audio.supportsOutput('atrium') && audio.supportsOutput('cafe'));
+  audio.setMode('atrium');
+  assert.equal(calls[0].destination.gain.value, 1, 'the selected installation is audible on the initial graph');
+  assert.equal(calls[1].destination.gain.value, 0);
+  audio.setMode('cafe');
+  assert.equal(audio.getMode(), 'cafe');
+  calls[1].fail = true;
+  calls[1].throwOnDispose = true;
+  audio.update(new PerspectiveCamera(), new Group());
+  assert.equal(audio.getMode(), 'stereo');
+  assert.equal(calls[1].disposed, 1);
+  assert.equal(calls[1].upstream.disconnected, true);
+  assert.equal(calls[1].destination.disconnected, true);
+  assert.equal(source.connections.includes(calls[1].upstream), false);
+  assert.equal(calls[0].disposed, 0);
+  calls[0].throwOnDispose = true;
+  audio.setWorldOutputs([]);
+  assert.equal(calls[0].disposed, 1);
+  assert.equal(context.sources[0], source);
+  assert.equal(contexts.length, 1);
+  assert.equal(source.stream.getAudioTracks()[0], track);
+  assert.equal(track.readyState, 'live');
+});
+
+test('initialization or update plus throwing disposal cannot strand the shared audio owner', async t => {
+  const { audio, contexts } = setup(t);
+  const calls = [];
+  const factory = (id, failure) => (context, upstream, destination) => {
+    const input = context.createGain();
+    upstream.connect(input).connect(destination);
+    const call = { id, upstream, input, destination, disposed: 0 };
+    calls.push(call);
+    return {
+      setQuality() { if (failure === 'quality') throw new Error('quality failure'); },
+      update() { if (failure === 'update') throw new Error('update failure'); },
+      dispose() {
+        call.disposed++;
+        if (failure) throw new Error('dispose failure before cleanup');
+        upstream.disconnect(input); input.disconnect();
+      },
+    };
+  };
+  audio.setCinema(factory('cinema-initial', 'quality'));
+  audio.setWorldOutputs([
+    { id: 'atrium', label: 'atrium', createAudio: factory('atrium', 'update') },
+    { id: 'cafe', label: 'cafe', createAudio: factory('cafe') },
+  ]);
+  audio.setMode('cinema');
+  const track = new MockTrack('audio');
+  audio.setStream(new MockStream([track]));
+  assert.equal(await audio.start(), true);
+  const [context] = contexts;
+  const source = context.sources[0];
+  assert.equal(audio.getMode(), 'stereo');
+  assert.equal(audio.supportsCinema(), false);
+  assert.equal(audio.supportsOutput('atrium'), false);
+  assert.equal(audio.supportsOutput('cafe'), true);
+  for (const call of calls.filter(call => call.id !== 'cafe')) {
+    assert.equal(call.disposed, 1);
+    assert.equal(call.upstream.disconnected, true);
+    assert.equal(call.destination.disconnected, true);
+    assert.equal(source.connections.includes(call.upstream), false);
+  }
+  audio.setCinema(factory('cinema-update', 'update'));
+  audio.setMode('cinema');
+  audio.update(new PerspectiveCamera(), new Group());
+  assert.equal(audio.getMode(), 'stereo');
+  assert.equal(calls.at(-1).disposed, 1);
+  assert.equal(calls.at(-1).upstream.disconnected, true);
+  audio.setMode('cafe');
+  assert.equal(audio.getMode(), 'cafe');
+  assert.equal(context.sources[0], source);
+  assert.equal(contexts.length, 1);
+  audio.stop();
+  assert.ok(calls.every(call => call.disposed === 1));
+  assert.equal(context.state, 'closed');
+  assert.equal(source.disconnected, true);
+  assert.equal(track.readyState, 'live');
+});
 
 test('attaches late shared audio to one private graph and frees it on replacement, end and stop', async t => {
   const { audio, contexts } = setup(t);

@@ -1,3 +1,4 @@
+import { registerTenantWalkFixture } from './atriumTenantWalking';
 import {
   Color,
   DoubleSide,
@@ -427,8 +428,12 @@ function furnishFixture(
   item: Fixture,
   variant: StoreVariant,
 ): void {
+  const walkingStart = context.group.children.length;
   if (item.id === 'L1-15' || item.id === 'L2-19') {
     addWallLineDisplay(context, assets, item, variant);
+    registerTenantWalkFixture(context.group, walkingStart, {
+      tenantId: context.bay.id, fixtureId: item.id, kind: item.type === 'rack' ? 'rack' : 'rigid',
+    });
     return;
   }
   switch (item.type) {
@@ -458,6 +463,9 @@ function furnishFixture(
     default:
       break;
   }
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: item.type === 'rack' ? 'rack' : 'rigid',
+  });
 }
 
 function addMirror(context: TenantBuildContext, material: MeshStandardMaterial, u: number, wallD: number, name: string): void {
@@ -468,12 +476,17 @@ function addMirror(context: TenantBuildContext, material: MeshStandardMaterial, 
 }
 
 function addL1FittingRoom(context: TenantBuildContext, assets: WestAssets): void {
+  const walkingStart = context.group.children.length;
   addCurtain(context, assets, 4.205, 6.285, 1.05, 2.42, false, 'L1 fitting room privacy curtain');
   context.box(assets.palette.brass, 4.205, 2.42, 6.285, 1.05, 0.025, 0.025, 'L1 fitting curtain rail');
   addMirror(context, assets.palette.caseGlass, 4.205, 8.115, 'L1 fitting room mirror');
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: 'L1-privacy', kind: 'cloth',
+  });
 }
 
 function addL2FittingRooms(context: TenantBuildContext, assets: WestAssets): void {
+  const walkingStart = context.group.children.length;
   const rooms = [
     { u: 1.175, mirrorU: 1.18, name: 'A' },
     { u: 2.995, mirrorU: 3.00, name: 'B' },
@@ -484,15 +497,22 @@ function addL2FittingRooms(context: TenantBuildContext, assets: WestAssets): voi
       `L2 fitting room ${room.name} curtain rail`);
     addMirror(context, assets.palette.caseGlass, room.mirrorU, 9.30, `L2 fitting room ${room.name} mirror`);
   }
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: 'L2-privacy', kind: 'cloth',
+  });
 }
 
 function addL2WhiteForeground(context: TenantBuildContext, assets: WestAssets): void {
   const p = assets.palette;
   for (const id of ['L2-02', 'L2-03'] as const) {
+    const walkingStart = context.group.children.length;
     const item = center(fixture(context, id));
     context.box(p.white, item.u, item.height + 0.012, item.d,
       Math.max(0.14, item.width - 0.08), 0.025, Math.max(0.10, item.length - 0.08),
       `${id} white foreground plinth`);
+    registerTenantWalkFixture(context.group, walkingStart, {
+      tenantId: context.bay.id, fixtureId: id, kind: 'rigid',
+    });
   }
 }
 

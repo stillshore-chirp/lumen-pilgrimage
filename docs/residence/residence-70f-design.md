@@ -111,6 +111,27 @@
 
 この工程差から方式置換を要する明確な一致懸念は確認せず、採用を継続する。現登録簿は未取得で、索引の失効表示やfamily一覧を現存権・地域内の権利不存在の証明にしない。raw積分までspatial filterとする広い請求項解釈、均等論、未発見権利、地域・用途の拡大は未確定であり、無侵害の法的保証ではない。資料の公開や独自実装という事実だけを判断根拠にしない。
 
+### 平面図からの遠隔操作
+
+通常画面の「メニュー」→「住戸の遠隔操作」は、北を上にした実住戸の平面図と設備一覧を並べる。部屋の輪郭を選ぶか「部屋」の選択欄を使い、その室の照明、カーテン、家電・水栓へ進む。設備を開いても平面図を残し、対象室を輪郭と文字で示す。高さ420 CSS px以下では、極小の図を常設する代わりに「図を拡大」で同じ外枠の図専用画面へ切り替える。操作画面には対象室・個別対象の説明と拡大ボタンを残し、図から前の画面へ戻れる。拡大した図から別の部屋を選んだ場合は、その室の設備一覧を開く。
+
+近傍設備で `E` または画面の近傍操作ボタンから開く画面は、対象設備の操作だけを表示する。表示中は視点の移動入力を停止し、「閉じる」または `Escape` で探索へ戻り、起動元の探索画面へフォーカスを戻す。部屋の選択、平面図の拡大、設備一覧への戻りは、メニューから開く遠隔操作の画面で提供する。どちらの入口も、同じ設備のget/set/invokeと状態を共有する。
+
+個別操作へフォーカスまたはポインターを移すと、対応する器具・レール・水栓の位置を図中の印で示す。クリック、[Space/Enterによるボタン操作](https://www.w3.org/WAI/ARIA/apg/patterns/button/#keyboardinteraction)、選択値や色の入力が行われるたびに、その実操作対象の位置と説明を再確定する。フォーカスを保ったまま別の操作をhoverした後も、実操作に対応する印を表示する。外部から状態が変わった場合の同期は、現在の選択・プレビューを維持する。図の室名は省略表示し、選択欄と図の説明には正式な室名を表示する。これは遠隔操作であり、部屋を選んでも視点は移動しない。
+
+| 要求・根拠 | 設計・実装 | 確認する結果 |
+| --- | --- | --- |
+| 操作する場所と建築を対応させる。平面の正本はE/Nメートル座標。 | [図の生成](../../src/coast/ResidenceControlPlan.ts)は[共通平面](../../src/coast/world/residence/residencePlan.ts)の室矩形・壁・窓・開口を同じ投影で描く。L字の主寝室も矩形を合成し、開口は壁線から除く。 | 全室の輪郭、北上の向き、窓と玄関の位置が3Dと同じ。選択室と設備の所属が一致する。 |
+| 正確な地図上の小ターゲットには同等機能の代替を用意する。[WCAG 2.2 SC 2.5.8のEquivalent/EssentialとIntent](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)。 | 正確な室輪郭を動かさず、同じ室を選べるnative selectと高さ44 CSS pxの設備ボタンを併設する。幅・高さが小さい画面では操作一覧だけをスクロールする。 | マウス、Enter/Space、selectから同じ室・設備へ進める。カテゴリ切替で外枠が動かず、戻る・閉じるに到達できる。 |
+| 図の境界と選択状態を識別できること。[SC 1.4.11のUI Components/Graphical Objects](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)。 | 明るい不透明面に濃い壁線を置き、選択を塗色だけでなく太い輪郭と正式室名で示す。操作対象の印は別の濃い線・円と説明文にする。 | 構成色の非文字コントラスト3:1以上、説明文字4.5:1以上。小画面でも選択名を読める。 |
+| modal内の入力とフォーカスを保つ。[APG Modal DialogのKeyboard Interaction/Notes](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)。 | native dialogを維持し、タイトルへ初期フォーカス、Escape/閉じる、設備一覧への戻りと起動元への復帰を使う。可視・有効な操作対象をTab入力ごとに求め、先頭のShift+Tabと末尾のTabだけをアプリ側で循環させる。非選択カテゴリはinertにする。 | 背景の移動入力が停止し、Tabがdialogを出ず、閉じた後に起動元へ戻る。未選択一覧は支援技術・操作対象から外れる。 |
+
+[HTML Living Standard 6.6.5の逐次フォーカス移動、step 8](https://html.spec.whatwg.org/multipage/interaction.html#sequential-focus-navigation)は、候補がないときのブラウザー自身の操作部へのフォーカス移動を認める。この一般的な処理と、採用するAPGのmodal内循環を区別し、このパネルの境界だけを[操作パネル](../../src/coast/ResidenceControlPanel.ts)で補う。閉じたdialog、非表示・inertの区画、無効なcontrolは循環対象にしない。初期フォーカスを置く見出しはTab順の手前なので、そのShift+Tabも末尾へ送る。途中のTab、Ctrl/Alt/Meta併用、IME入力、Escapeや閉じる操作は既存処理を維持する。
+
+位置の正本をUI用に再入力しない。照明は[発光器具](../../src/coast/world/residence/residenceLightField.ts)の実span、カーテンは[レールの生成mountと長さ](../../src/coast/world/residence/residenceCurtains.ts)、家電と水栓は[fixtureの実変換済みanchor](../../src/coast/world/residence/residenceAppliances.ts)を既存sectionへ付加する。茶室の障子は実レール定数、シアター照明は実screenの位置と幅を使う。点は器具の代表anchor、線は器具やレールの平面投影であり、立体の外形寸法や照射範囲を表さない。制御と状態は従来のget/set/invokeのまま共有し、一覧・図に複製した設備状態を持たせない。個別controlの共通変更通知を位置の確定から状態同期へつなぐ。外部から呼ぶ状態同期はgetterに従うDOM状態だけを更新し、位置の確定は呼ばない。
+
+位置対応は[照明・カーテンの単体検査](../../scripts/residence-lighting.test.mjs)と[家電の単体検査](../../scripts/residence-appliances.test.mjs)で生成座標と照合する。[住戸ブラウザー検査](../../scripts/residence-browser.test.mjs)では実パネルの室選択、個別器具の印、現地操作との状態同期、通常・375px幅・320×300、非選択カテゴリ、戻る・閉じるを直接確認する。画面上のsemantic情報と模擬キーボードの検査は、全screen reader製品の実音声出力を保証しない。
+
 ### 編集と再検証の入口
 
 | 変更する対象 | 正本となる実装と確認 |

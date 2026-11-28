@@ -78,6 +78,12 @@ const drawingInputs = new Set([
   'scripts/revise-residence-drawings.py',
   'docs/residence/source/residence-70f-revisions.json',
   'scripts/draw-cinema-ventilation.mjs',
+  'scripts/draw-atrium-cafe.mjs',
+]);
+// Standalone capture tools exercise a built scene without being package test roots.
+// Declare exact inputs; unknown capture tools still require classification.
+const browserEvidenceInputs = new Map([
+  ['scripts/atrium-cafe-views.mjs', 'atrium-browser'],
 ]);
 // Vite copies these notices from public/ into the build. The gates check packaging and
 // document links; they do not establish license compliance or regeneration equality.
@@ -402,6 +408,9 @@ export async function planAffected(options = {}) {
     }
     for (const item of browserGates) if (browserClosures.get(item.id).has(path)) {
       select(item.id, `Runtime or browser-test dependency: ${path}`); classified = true;
+    }
+    if (browserEvidenceInputs.has(path)) {
+      classified = true; select(browserEvidenceInputs.get(path), `Browser scene evidence tooling: ${path}`);
     }
     if (drawingInputs.has(path)) {
       classified = true; select('harness', `Offline drawing generator or revision input: ${path}`);

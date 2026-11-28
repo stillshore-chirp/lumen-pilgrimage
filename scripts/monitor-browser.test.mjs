@@ -169,10 +169,13 @@ function observeAudio() {
     const source = entry.sources.at(-1);
     const outgoing = edges(source).map(edge => edge.node);
     const stereo = outgoing.find(node => node instanceof GainNode && node.channelCount === 2
-      && node.channelCountMode === 'explicit');
+      && node.channelCountMode === 'explicit' && !(edges(node)[0]?.node instanceof ChannelSplitterNode));
     const master = edges(stereo)[0]?.node;
-    const single = outgoing.find(node => node instanceof PannerNode
-      || node instanceof GainNode && node.channelCount === 1 && node.channelCountMode === 'explicit');
+    const single = outgoing.filter(node => node instanceof PannerNode || node instanceof GainNode
+      && node.channelCountMode === 'explicit' && (node.channelCount === 1 || node.channelCount === 2
+        && edges(node)[0]?.node instanceof ChannelSplitterNode))
+      .map(node => ({ node, panners: reachable(node, master).filter(value => value instanceof PannerNode).length }))
+      .filter(candidate => candidate.panners > 0).sort((a, b) => a.panners - b.panners)[0]?.node;
     const surround = outgoing.find(node => node instanceof GainNode && node.channelCount === 6
       && node.channelInterpretation === 'speakers' && edges(node)[0]?.node instanceof ChannelSplitterNode);
     const singleNodes = reachable(single, master);
@@ -192,18 +195,18 @@ function observeAudio() {
     // Preserve their enumeration separately; position checks use connected dry
     // routes whose own gain and branch mode gain can currently contribute.
     const incoming = new Map();
-    let truncated = entry.edges.size > 1024;
-    for (const [node, links] of [...entry.edges].slice(0, 1024)) {
-      if (links.length > 16) truncated = true;
-      for (const edge of links.slice(0, 16)) {
+    let truncated = entry.edges.size > 4096;
+    for (const [node, links] of [...entry.edges].slice(0, 4096)) {
+      if (links.length > 128) truncated = true;
+      for (const edge of links.slice(0, 128)) {
         const inputs = incoming.get(edge.node) ?? [];
         inputs.push(node);
         incoming.set(edge.node, inputs);
       }
     }
     const describe = (panners, level) => {
-      if (panners.length > 32) truncated = true;
-      return panners.slice(0, 32).map(panner => {
+      if (panners.length > 128) truncated = true;
+      return panners.slice(0, 128).map(panner => {
         const inputs = incoming.get(panner) ?? [];
         const dryGain = Math.max(0, ...inputs.map(node => node instanceof GainNode ? Math.abs(node.gain.value) : 1));
         const modeGain = Math.abs(level?.gain.value ?? 0);
@@ -903,6 +906,15 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     const video = viewer.locator(videoSelector);
     await video.evaluate(element => { window.originalMonitorStream = element.srcObject; });
 
+    await viewer.evaluate(() => {
+      const prototype = window.AudioContext.prototype;
+      const createSource = prototype.createMediaStreamSource;
+      prototype.createMediaStreamSource = function (...args) {
+        const source = createSource.apply(this, args);
+        window.monitorTravelAudioSource = source;
+        return source;
+      };
+    });
     const audioToggle = button(viewer, 'モニター音声');
     await audioToggle.click();
     await mode.selectOption('television');
@@ -969,9 +981,11 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     });
     await viewer.evaluate(selector => {
       const video = document.querySelector(selector);
+      const audioSource = window.monitorTravelAudioSource;
       window.sharedMonitor = {
         video, peer: window.monitorPeers[0], canvas: document.querySelector('.coast-view'),
         stream: video.srcObject, tracks: video.srcObject.getTracks(),
+        audioSource, audioContext: audioSource.context,
       };
     }, videoSelector);
 
@@ -997,12 +1011,16 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
 
     async function assertLiveMedia(beforeTravel, muted = false) {
       assert.equal(await viewer.evaluate(selector => {
-        const { video, peer, canvas, stream, tracks } = window.sharedMonitor;
+        const { video, peer, canvas, stream, tracks, audioSource, audioContext } = window.sharedMonitor;
         return video === document.querySelector(selector) && video.srcObject === stream
           && canvas === document.querySelector('.coast-view') && window.monitorPeers.length === 1
           && window.monitorPeers[0] === peer && peer.connectionState === 'connected'
-          && stream.getTracks().every(track => tracks.includes(track) && track.readyState === 'live');
-      }, videoSelector), true, 'the receiver, tracks, media element and canvas are preserved');
+          && stream.getTracks().length === tracks.length
+          && stream.getTracks().every(track => tracks.includes(track) && track.readyState === 'live')
+          && window.monitorTravelAudioSource === audioSource && audioSource.context === audioContext
+          && audioContext.state === 'running' && audioContext.probe.sources.length === 1
+          && audioContext.probe.sources[0] === audioSource;
+      }, videoSelector), true, 'the receiver, tracks, media element, canvas, audio source and context are preserved');
       await viewer.waitForFunction(({ selector, beforeTravel, muted }) => {
         const video = document.querySelector(selector);
         const audio = window.monitorSound.read().filter(context => context.hasStream);
@@ -1011,8 +1029,60 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
       }, { selector: videoSelector, beforeTravel, muted });
     }
 
+    async function assertFloatingSound() {
+      await viewer.waitForFunction(() => {
+        const audio = window.monitorSound.read().find(context => context.hasStream);
+        const routes = audio?.spatialRoutes.filter(route => route.contributing) ?? [];
+        return audio?.spatial > .98 && audio.stereo < .02 && audio.surround < .02 && audio.peak > .001
+          && audio.master > 0 && !audio.routesTruncated
+          && routes.length === 2 && routes.every(route => route.pose[3] === 'HRTF'
+            && route.pose.slice(0, 3).every(Number.isFinite))
+          && Math.hypot(...routes[0].pose.slice(0, 3).map((value, axis) => value - routes[1].pose[axis])) > .25;
+      });
+      try {
+        await viewer.evaluate(() => {
+          const { audioSource, audioContext } = window.sharedMonitor;
+          const edges = node => audioContext.probe.edges.get(node) ?? [];
+          const layout = edges(audioSource).map(edge => edge.node).find(node => node instanceof GainNode
+            && node.channelCount === 2 && node.channelCountMode === 'explicit'
+            && edges(node).some(edge => edge.node instanceof ChannelSplitterNode));
+          const splitter = edges(layout).find(edge => edge.node instanceof ChannelSplitterNode)?.node;
+          const feeds = [0, 1].map(channel => edges(splitter).find(edge => edge.output === channel)?.node);
+          if (feeds.some(feed => !(feed instanceof GainNode)) || feeds[0] === feeds[1]) {
+            throw new Error('Floating audio must retain separate splitter outputs for L and R');
+          }
+          window.sharedMonitor.edgeTaps = [];
+          for (const feed of feeds) {
+            const analyser = audioContext.createAnalyser();
+            window.sharedMonitor.edgeTaps.push({ feed, analyser });
+            feed.connect(analyser);
+          }
+        });
+        await viewer.waitForFunction(() => {
+          const taps = window.sharedMonitor.edgeTaps;
+          return taps.length === 2 && taps.every(({ analyser }) => {
+            const samples = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(samples);
+            return samples.every(Number.isFinite) && samples.some(sample => Math.abs(sample) > .001);
+          });
+        });
+      } finally {
+        await viewer.evaluate(() => {
+          const { audioContext, edgeTaps = [] } = window.sharedMonitor;
+          for (const { feed, analyser } of edgeTaps) {
+            if ((audioContext.probe.edges.get(feed) ?? []).some(edge => edge.node === analyser)) {
+              feed.disconnect(analyser);
+            }
+            analyser.disconnect();
+          }
+          window.sharedMonitor.edgeTaps = [];
+        });
+      }
+    }
+
     async function assertPlaybackContinues(beforeTravel, muted = false) {
       await assertLiveMedia(beforeTravel, muted);
+      if (!muted) await assertFloatingSound();
       assert.equal(await viewer.locator('[data-monitor-volume]').inputValue(), '50');
       assert.equal(await viewer.getByRole('slider', { name: '全体音量', exact: true }).inputValue(), '125');
       assert.equal(await button(viewer, 'モニターを隠す').isVisible(), true);
@@ -1046,7 +1116,7 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
       resumeTerrain.resolve();
     }
     assert.equal(await target.inputValue(), 'floating');
-    assert.equal(await mode.inputValue(), 'stereo');
+    assert.equal(await mode.inputValue(), 'spatial');
     await assertPlaybackContinues(beforeTravel);
 
     const cinemaUrl = viewer.url();
@@ -1071,11 +1141,11 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     beforeTravel = await video.evaluate(element => element.currentTime);
     await travelTo('入り江の浜', 'coast', 'inlet');
     assert.equal(await viewer.locator('[data-monitor-display-target]').isVisible(), false);
-    assert.equal(await mode.inputValue(), 'stereo');
+    assert.equal(await mode.inputValue(), 'spatial');
     assert.equal(await audioToggle.getAttribute('aria-pressed'), 'false');
     await assertPlaybackContinues(beforeTravel, true);
     await audioToggle.click();
-    await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak > .001);
+    await assertFloatingSound();
     await setSliderValue(viewer, '全体音量', 0);
     await viewer.waitForFunction(() => window.monitorSound.read().find(context => context.hasStream)?.peak < .0001);
     await setSliderValue(viewer, '全体音量', 125);

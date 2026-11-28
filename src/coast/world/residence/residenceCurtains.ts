@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FurnitureModel } from './residenceFurnitureModel';
 import type { ResidenceMaterials } from './residenceMaterials';
-import { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS } from './residencePlan';
+import { RESIDENCE_BALCONY_DOOR, RESIDENCE_ROOMS, type ResidenceRect } from './residencePlan';
 
 type Mount = readonly [east: number, north: number, heading: number];
 
@@ -240,6 +240,11 @@ export function createResidenceCurtains(m: ResidenceMaterials) {
     return {
       section: {
         id: `curtains-${id}`, title: displayLabel ?? label, category: 'curtains' as const,
+        location: { roomId: id, markers: tracks.map(({ mount: [e, n, angle], length }): ResidenceRect => {
+          const dx = Math.abs(Math.cos(angle)) * length / 2;
+          const dn = Math.abs(Math.sin(angle)) * length / 2;
+          return [e - dx, n - dn, e + dx, n + dn];
+        }) },
         controls: [{ kind: 'toggle' as const, id: 'open', label: 'カーテン',
           get: () => target === 1, set: setOpen }],
       },

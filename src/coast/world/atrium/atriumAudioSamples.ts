@@ -53,6 +53,7 @@ const FOOTFALLS: Record<AtriumSurface, {
   contact: number; contactCutoff: number; brush: number; brushCutoff: number; decay: number; gain: number;
 }> = {
   stone: { contact: 0.142, contactCutoff: 520, brush: 0.104, brushCutoff: 1_680, decay: 44, gain: 0.62 },
+  wood: { contact: 0.126, contactCutoff: 350, brush: 0.082, brushCutoff: 1_120, decay: 32, gain: 0.54 },
   rug: { contact: 0.046, contactCutoff: 255, brush: 0.038, brushCutoff: 720, decay: 19, gain: 0.38 },
   stair: { contact: 0.176, contactCutoff: 620, brush: 0.122, brushCutoff: 2_040, decay: 39, gain: 0.69 },
   gallery: { contact: 0.108, contactCutoff: 430, brush: 0.069, brushCutoff: 1_260, decay: 31, gain: 0.53 },

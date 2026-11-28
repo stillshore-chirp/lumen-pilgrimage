@@ -15,10 +15,12 @@ import {
 } from './atriumTenantPlan';
 import type { TenantBay, TenantWorldPoint } from './atriumTenantPlan';
 import { ATRIUM_FRONT_GLAZING, ATRIUM_FRONT_GLASS_PLANES } from './atriumFrontPlan';
+import { atriumTenantFloorAt, atriumTenantRoomCeilingAt } from './atriumTenantWalking';
+import { ATRIUM_CAFE_EQUIPMENT_POSITION, ATRIUM_CAFE_PLAN, inAtriumCafe } from './atriumCafePlan';
 
 type MutablePoint = { x: number; y: number; z: number };
 export type AtriumPoint = Readonly<MutablePoint>;
-export type AtriumSurface = 'stone' | 'rug' | 'stair' | 'gallery';
+export type AtriumSurface = 'stone' | 'wood' | 'rug' | 'stair' | 'gallery';
 type ReflectionSurface = 'floor' | 'gallery-floor' | 'soffit' | 'ceiling' | 'left-wall' | 'right-wall' | 'rear-wall'
   | 'front-glass';
 type Axis = 'x' | 'y' | 'z';
@@ -99,7 +101,6 @@ function tenantPanels(bay: TenantBay): VerticalPanel[] {
 }
 
 const TENANT_PANELS = ATRIUM_TENANTS.flatMap(tenantPanels);
-const SERVICE_BAY = ATRIUM_TENANTS.find(bay => bay.id === 'R2')!;
 
 export const ATRIUM_AIR_SOURCES: readonly AtriumPoint[] = [
   { x: ATRIUM_BOUNDS.minX + 1.7, y: ATRIUM_LEVELS[0] - 0.62, z: -13.5 },
@@ -108,7 +109,8 @@ export const ATRIUM_AIR_SOURCES: readonly AtriumPoint[] = [
 ];
 
 export const ATRIUM_SERVICE_SOURCES: readonly AtriumPoint[] = [
-  { ...tenantWorldPoint(SERVICE_BAY, 2.00, 4.52), y: 0.65 },
+  { x: ATRIUM_CAFE_EQUIPMENT_POSITION[0], y: ATRIUM_CAFE_EQUIPMENT_POSITION[1],
+    z: ATRIUM_CAFE_EQUIPMENT_POSITION[2] },
   // The storefront opening is the point where the filtered interior noise enters the gallery.
   { x: ATRIUM_BOUNDS.maxX - 0.03, y: ATRIUM_WALK_LEVEL + 1.15, z: -18.5 },
 ];
@@ -133,6 +135,9 @@ function inSkylightOpening(x: number, z: number): boolean {
 
 /** The local response gains weight near low soffits. The void still returns sound to these open areas. */
 export function atriumLocalTailMix(listener: AtriumPoint): number {
+  if (inAtriumCafe(listener.x, listener.z) && listener.y < ATRIUM_CAFE_PLAN.ceiling) return .92;
+  const roomCeiling = atriumTenantRoomCeilingAt(listener.x, listener.z);
+  if (roomCeiling !== undefined && listener.y < roomCeiling) return .92;
   let covered = 0;
   for (let index = 0; index < ATRIUM_LEVELS.length; index += 1) {
     const headroom = ATRIUM_LEVELS[index] - SOFFIT_DEPTH - listener.y;
@@ -315,6 +320,7 @@ export function atriumSoundPath(
 }
 
 export function atriumSurfaceAt(x: number, z: number, floorY = 0): AtriumSurface {
+  if (floorY < .27 && atriumTenantFloorAt(x, z) === 'wood') return 'wood';
   const stair = atriumStairDistance(x, z);
   if ((stair !== undefined && Math.abs(atriumStairHeight(stair) - floorY) < 0.27)
     || Math.abs(atriumUpperStairHeight(x, z) - floorY) < 0.27) return 'stair';

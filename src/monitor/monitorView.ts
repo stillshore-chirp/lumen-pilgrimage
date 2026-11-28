@@ -1,5 +1,5 @@
 import { PerspectiveCamera, Vector2, type Raycaster, type Scene, type WebGLRenderer } from 'three';
-import { MonitorAudio, type MonitorAudioMode, type WorldMonitorPlaybackFactory } from './monitorAudio';
+import { MonitorAudio, type MonitorAudioMode, type WorldMonitorOutput, type WorldMonitorPlaybackFactory } from './monitorAudio';
 import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
 import { MonitorObject, type MonitorTheater } from './monitorObject';
 import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
@@ -20,6 +20,7 @@ export interface MonitorViewBinding {
   releaseDesktopGrab?(target: DesktopGrabTarget): void;
   readonly createSpatialAudio?: WorldMonitorPlaybackFactory;
   readonly audioQuality?: () => 'light' | 'high';
+  readonly worldAudioOutputs?: readonly WorldMonitorOutput[];
 }
 
 export class MonitorView {
@@ -144,11 +145,13 @@ export class MonitorView {
         </div>
         <label class="monitor-view-mode">モニターの音響
           <select data-monitor-sound-mode>
-            <option value="stereo">ステレオ</option>
-            <option value="spatial">空間音響</option>
+            <option value="stereo">ヘッドホンのステレオ</option>
+            <option value="spatial" selected>モニター左右から</option>
             <option value="television" hidden disabled>リビングのテレビから</option>
             <option value="surround" hidden disabled>リビングの5.1chスピーカー</option>
             <option value="cinema" hidden disabled>映画館の空間音響</option>
+            <option value="atrium" hidden disabled>館内スピーカー</option>
+            <option value="cafe" hidden disabled>カフェのスピーカー</option>
           </select>
         </label>
         <p id="monitor-audio-status" role="status" data-monitor-audio-status></p>
@@ -327,9 +330,9 @@ export class MonitorView {
     if (floating || !theater) this.displayTarget.value = 'floating';
     if (floating) {
       if (this.audioMode.value !== 'stereo' && this.audioMode.value !== 'spatial') {
-        this.audioMode.value = 'stereo';
+        this.audioMode.value = 'spatial';
         // The former room's audio branch is removed immediately below.
-        this.audio.setMode('stereo', 0);
+        this.audio.setMode('spatial', 0);
       }
     } else if (cinema) {
       this.displayTarget.value = screenOption.value;
@@ -340,9 +343,11 @@ export class MonitorView {
       this.audioMode.value = cinema ? 'cinema' : 'television';
     }
     const source = this.audioMode.value === 'television' ? theater?.screen : this.screen.group;
+    this.audio.setFloatingSpeakers(this.screen.isFloating ? this.screen.audioEmitters : null);
     this.audio.setPlaybackSpace(this.binding.createSpatialAudio ?? null, theater?.speakers ?? null,
       this.binding.camera, source ?? this.screen.group, this.binding.audioQuality?.() ?? 'light');
     this.audio.setCinema(cinema?.createAudio ?? null);
+    this.audio.setWorldOutputs(this.binding.worldAudioOutputs ?? []);
     this.updateAudioModes();
     this.syncSharedAudio();
   }
@@ -364,6 +369,7 @@ export class MonitorView {
       this.syncSharedAudio();
     }
     const soundSource = this.audioMode.value === 'television' ? this.theater?.screen : this.screen.group;
+    this.audio.setFloatingSpeakers(this.screen.isFloating ? this.screen.audioEmitters : null);
     this.audio.setWorldQuality(this.binding.audioQuality?.() ?? 'light');
     this.audio.update(viewer, soundSource ?? this.screen.group);
     if (this.audioMode.value !== this.audio.getMode() || this.audioCapabilities !== this.audioCapabilityState()) {
@@ -455,13 +461,19 @@ export class MonitorView {
       } else if (option.value === 'cinema') {
         option.hidden = !this.theater?.cinema;
         option.disabled = !cinema;
+      } else if (option.value === 'atrium' || option.value === 'cafe') {
+        const definition = this.binding.worldAudioOutputs?.find(output => output.id === option.value);
+        option.hidden = !definition;
+        if (definition) option.textContent = definition.label;
+        option.disabled = option.hidden || !this.audio.supportsOutput(option.value);
       }
     }
     if (this.audioMode.value === 'spatial' && !floating && canSpatialize) {
       this.audioMode.value = cinema ? 'cinema' : 'television';
     }
     if (this.audioMode.selectedOptions[0]?.disabled) this.audioMode.value = 'stereo';
-    this.audioMode.disabled = !canSpatialize && !surround && !cinema;
+    this.audioMode.disabled = !canSpatialize && !surround && !cinema
+      && !this.audio.supportsOutput('atrium') && !this.audio.supportsOutput('cafe');
     this.audioMode.title = this.audioMode.disabled ? 'このブラウザで空間音響を利用できません。' : '';
     this.audio.setMode(this.audioMode.value as MonitorAudioMode);
     this.audioMode.value = this.audio.getMode();
@@ -469,7 +481,8 @@ export class MonitorView {
 
   private audioCapabilityState(): number {
     return (this.audio.supportsSpatial() ? 1 : 0) | (this.audio.supportsSurround() ? 2 : 0)
-      | (this.audio.supportsCinema() ? 4 : 0);
+      | (this.audio.supportsCinema() ? 4 : 0) | (this.audio.supportsOutput('atrium') ? 8 : 0)
+      | (this.audio.supportsOutput('cafe') ? 16 : 0);
   }
 
   private setXRPresentation(presenting: boolean): void {

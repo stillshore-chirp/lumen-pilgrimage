@@ -214,3 +214,19 @@ test('the nine water outlets run independently and the nearby controls stay with
     assert.equal(appliances.nearby({ x, y: 1.64, z })?.sectionId, sectionId, `E${x}, N${-z}`);
   }
 });
+
+
+test('every remote appliance points to its generated fixture anchor in the owning room', async () => {
+  const { RESIDENCE_ROOMS } = await import('../src/coast/world/residence/residencePlan.ts');
+  assert.equal(appliances.sections.length, appliances.audioSources.length);
+  for (const section of appliances.sections) {
+    const voice = source(section.id);
+    const room = RESIDENCE_ROOMS.find(room => room.id === section.location.roomId);
+    assert.ok(room);
+    const [point] = section.location.markers;
+    assert.deepEqual(point, [voice.position.x, -voice.position.z, voice.position.x, -voice.position.z]);
+    assert.ok(room.rectangles.some(([west, south, east, north]) =>
+      point[0] >= west && point[0] <= east && point[1] >= south && point[1] <= north), section.id);
+    assert.ok(appliances.group.getObjectByName(section.id));
+  }
+});

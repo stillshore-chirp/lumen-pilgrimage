@@ -29,6 +29,7 @@ export interface MonitorTheater {
 
 export class MonitorObject {
   readonly group = new THREE.Group();
+  readonly audioEmitters = [new THREE.Object3D(), new THREE.Object3D()] as const;
   private readonly screen: MonitorSurface;
   private readonly statusCanvas = document.createElement('canvas');
   private readonly statusTexture: THREE.CanvasTexture;
@@ -82,6 +83,11 @@ export class MonitorObject {
     };
     this.screen.scale.set(SCREEN_WIDTH, SCREEN_HEIGHT, 1);
     this.group.add(this.screen);
+    this.audioEmitters.forEach((emitter, index) => {
+      emitter.name = index === 0 ? 'monitor-audio-L' : 'monitor-audio-R';
+      emitter.position.set(index === 0 ? -0.5 : 0.5, 0, 0.006);
+      this.screen.add(emitter);
+    });
     this.setStatus(INITIAL_STATUS);
   }
 

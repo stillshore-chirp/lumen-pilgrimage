@@ -1,3 +1,4 @@
+import { registerTenantWalkFixture } from './atriumTenantWalking';
 import {
   BoxGeometry,
   DoubleSide,
@@ -9,14 +10,13 @@ import {
   Vector3,
 } from 'three';
 import type { TenantBuildContext } from './atriumTenantArchitecture';
+import { buildAtriumCafe } from './atriumCafe';
 
 type Fixture = TenantBuildContext['bay']['fixtures'][number];
 type Mount = NonNullable<TenantBuildContext['bay']['mounts']>[number];
 type PaletteMaterial = TenantBuildContext['palette'][keyof TenantBuildContext['palette']];
 
 const PRODUCT_COLORS = [0xb16e4e, 0xd4b47c, 0xc9d2d2, 0x8c9eae, 0x8f6b70, 0xe8d8bd];
-const LEAF_COLOR = 0x4f6b4c;
-const LEAF_LIGHT = 0x75936d;
 
 function tint(base: PaletteMaterial, name: string, color: number, roughness = 0.42): PaletteMaterial {
   const material = base.clone();
@@ -41,6 +41,7 @@ function addTable(
   legMaterial: PaletteMaterial,
   name: string,
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = fixtureRect(item);
   const top = item.height;
   context.box(topMaterial, u + width * 0.5, top - 0.04, d + depth * 0.5,
@@ -54,6 +55,9 @@ function addTable(
         legWidth, legHeight, legDepth, `${name} leg`);
     }
   }
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+  });
 }
 
 function addCase(
@@ -64,6 +68,7 @@ function addCase(
   glassMaterial: PaletteMaterial,
   name: string,
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = fixtureRect(item);
   const top = item.height;
   const baseHeight = Math.max(0.42, top - 0.18);
@@ -75,6 +80,9 @@ function addCase(
     width, 0.03, 0.05, `${name} front rim`);
   context.box(frameMaterial, u + 0.025, top - 0.015, d + depth * 0.5,
     0.05, 0.03, depth, `${name} side rim`);
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+  });
 }
 
 function addShelf(
@@ -87,6 +95,7 @@ function addShelf(
   rows: number,
   rearTrim?: PaletteMaterial,
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = fixtureRect(item);
   const top = item.height;
   const boardDepth = Math.max(0.16, depth * 0.72);
@@ -109,7 +118,12 @@ function addShelf(
     }
   }
 
-  if (!rearTrim) return;
+  if (!rearTrim) {
+    registerTenantWalkFixture(context.group, walkingStart, {
+      tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+    });
+    return;
+  }
   const divisions = Math.max(2, Math.round(width / 0.95));
   const backingShade = tint(backing, `${name} backing shade`, 0xb9a78f, 0.72);
   for (let index = 0; index <= divisions; index += 1) {
@@ -121,6 +135,9 @@ function addShelf(
         0.018, top - 0.20, 0.012, `${name} backing seam ${index}`);
     }
   }
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+  });
 }
 
 function addWallPanel(
@@ -130,6 +147,7 @@ function addWallPanel(
   trim: PaletteMaterial,
   name: string,
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = fixtureRect(item);
   context.box(material, u + width * 0.5, item.height * 0.5, d + depth * 0.5,
     width, item.height, depth, name);
@@ -137,46 +155,9 @@ function addWallPanel(
     width, 0.045, 0.024, `${name} top reveal`);
   context.box(trim, u + width * 0.5, 0.075, d - 0.012,
     width, 0.15, 0.024, `${name} base reveal`);
-}
-
-function addCounter(
-  context: TenantBuildContext,
-  item: Fixture,
-  body: PaletteMaterial,
-  topMaterial: PaletteMaterial,
-  name: string,
-): void {
-  const [u, d, width, depth] = fixtureRect(item);
-  const top = item.height;
-  const topThickness = 0.10;
-  context.box(body, u + width * 0.5, (top - topThickness) * 0.5, d + depth * 0.5,
-    width, top - topThickness, depth, `${name} cabinet`);
-  context.box(topMaterial, u + width * 0.5, top - topThickness * 0.5, d + depth * 0.5,
-    width + 0.04, topThickness, depth + 0.04, `${name} worktop`);
-  context.box(body, u + width * 0.5, 0.08, d - 0.014,
-    width * 0.84, 0.16, 0.025, `${name} toe kick`);
-}
-
-function addSeat(
-  context: TenantBuildContext,
-  item: Fixture,
-  fabric: PaletteMaterial,
-  frame: PaletteMaterial,
-  name: string,
-): void {
-  const [u, d, width, depth] = fixtureRect(item);
-  const seatHeight = Math.min(item.height, 0.48);
-  context.box(fabric, u + width * 0.5, seatHeight - 0.045, d + depth * 0.5,
-    width, 0.09, depth, `${name} cushion`);
-  context.box(frame, u + width * 0.5, seatHeight * 0.54, d + depth - 0.035,
-    width * 0.84, seatHeight * 0.76, 0.06, `${name} back`);
-  const legHeight = Math.max(0.12, seatHeight - 0.09);
-  for (const sideU of [0.16, 0.84]) {
-    for (const sideD of [0.20, 0.80]) {
-      context.cylinder(frame, u + width * sideU, legHeight * 0.5, d + depth * sideD,
-        0.018, legHeight, `${name} leg`);
-    }
-  }
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+  });
 }
 
 function addPlant(
@@ -186,6 +167,7 @@ function addPlant(
   leafMaterial: PaletteMaterial,
   name: string,
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = fixtureRect(item);
   const potRadius = Math.min(width, depth) * 0.33;
   const potHeight = Math.min(0.34, item.height * 0.22);
@@ -208,6 +190,9 @@ function addPlant(
     leaf.rotation.z = tilt;
     leaf.rotation.y = (index - 2) * 0.42;
   });
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'plant',
+  });
 }
 
 function addLineLight(
@@ -216,10 +201,14 @@ function addLineLight(
   material: MeshStandardMaterial,
   name: string,
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = fixtureRect(item);
   const y = Math.min(context.bay.ceiling - 0.10, item.height - 0.10);
   context.box(material, u + width * 0.5, y, d + depth * 0.5,
     width, 0.035, depth, name);
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+  });
 }
 
 function localBasis(context: TenantBuildContext): { u: Vector3; d: Vector3; up: Vector3 } {
@@ -267,6 +256,7 @@ function addLocalInstances(
 }
 
 function addHangingTransparentStrips(context: TenantBuildContext, mount: Mount): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = mount.rect;
   const mainPitch = mount.id === 'R1-M01' ? 0.12 : 0.065;
   const innerPitch = mount.id === 'R1-M01' ? 0.12 : 0.13;
@@ -302,9 +292,13 @@ function addHangingTransparentStrips(context: TenantBuildContext, mount: Mount):
     side: DoubleSide,
   });
   addLocalInstances(context, glass, strips, `${mount.id} suspended transparent strips`);
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: mount.id, kind: 'rigid',
+  });
 }
 
 function addR1LightBundle(context: TenantBuildContext, mount: Mount, material: MeshStandardMaterial): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = mount.rect;
   const instances: InstanceSpec[] = [];
   for (let index = 0; index < 4; index += 1) {
@@ -319,6 +313,9 @@ function addR1LightBundle(context: TenantBuildContext, mount: Mount, material: M
     });
   }
   addLocalInstances(context, material, instances, `${mount.id} dimmable vertical light bundle`);
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: mount.id, kind: 'rigid',
+  });
 }
 
 function addBottle(
@@ -363,6 +360,7 @@ function addR1ProductRun(
   name: string,
   surfaceBase?: number,
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = fixtureRect(item);
   const base = surfaceBase ?? item.height + 0.025;
   const insideCase = surfaceBase !== undefined;
@@ -383,6 +381,9 @@ function addR1ProductRun(
         `${name} ${index + 1}`);
     }
   }
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+  });
 }
 
 function addR1ShelfProducts(
@@ -392,6 +393,7 @@ function addR1ShelfProducts(
   rows: number,
   name: string,
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, depth] = fixtureRect(item);
   for (let row = 0; row < rows; row += 1) {
     const y = 0.23 + (item.height - 0.34) * (rows === 1 ? 0.5 : row / (rows - 1));
@@ -409,6 +411,9 @@ function addR1ShelfProducts(
       }
     }
   }
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+  });
 }
 
 function addR1SideWallShelf(
@@ -417,6 +422,7 @@ function addR1SideWallShelf(
   shelfGlow: MeshStandardMaterial,
   productMaterials: readonly PaletteMaterial[],
 ): void {
+  const walkingStart = context.group.children.length;
   const [u, d, width, length] = fixtureRect(item);
   const { height } = item;
   const backU = u + width * 0.84;
@@ -478,6 +484,9 @@ function addR1SideWallShelf(
       }
     });
   });
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: item.id, kind: 'rigid',
+  });
 }
 
 function furnishR1(context: TenantBuildContext): void {
@@ -529,81 +538,8 @@ function furnishR1(context: TenantBuildContext): void {
   }
 }
 
-function addCupSet(context: TenantBuildContext, item: Fixture, name: string): void {
-  const [u, d, width, depth] = fixtureRect(item);
-  const base = item.height + 0.02;
-  const ceramic = tint(context.palette.white, `${name} ceramic`, 0xf1eee6, 0.34);
-  const coffee = tint(context.palette.darkWood, `${name} coffee`, 0x593b2d, 0.58);
-  const count = Math.max(2, Math.floor(width / 0.62));
-  for (let index = 0; index < count; index += 1) {
-    const cupU = u + width * ((index + 0.5) / count);
-    const cupD = d + depth * (0.32 + (index % 2) * 0.28);
-    context.cylinder(ceramic, cupU, base + 0.055, cupD, 0.055, 0.11, `${name} cup ${index + 1}`);
-    context.cylinder(coffee, cupU, base + 0.115, cupD, 0.040, 0.016, `${name} coffee ${index + 1}`);
-  }
-}
-
-function addR2PlantBand(
-  context: TenantBuildContext,
-  potMaterial: PaletteMaterial,
-  leafMaterial: PaletteMaterial,
-  leafLight: PaletteMaterial,
-): void {
-  const band = context.bay.elevation.bands.find(item => item.kind === 'plant');
-  const opening = context.bay.frontage.find(item => item.kind === 'open');
-  if (!band || !opening) return;
-  const [low, high] = opening.u;
-  const width = high - low - 0.24;
-  const center = (low + high) * 0.5;
-  const depth = context.bay.entry[2] + 0.18;
-  context.box(potMaterial, center, band.low + 0.06, depth, width, 0.12, 0.30,
-    'R2 overhead planting band container');
-  const count = Math.max(4, Math.floor(width / 0.78));
-  for (let index = 0; index < count; index += 1) {
-    const u = low + 0.12 + width * ((index + 0.5) / count);
-    const leaf = index % 2 === 0 ? leafMaterial : leafLight;
-    const mesh = context.box(leaf, u, band.low + 0.19 + (index % 3) * 0.08,
-      depth + 0.01, 0.10, 0.30 + (index % 3) * 0.08, 0.22,
-      `R2 overhead planting band leaf ${index + 1}`);
-    mesh.rotation.z = (index % 2 === 0 ? -1 : 1) * 0.22;
-    mesh.rotation.y = (index - count * 0.5) * 0.18;
-  }
-}
-
 function furnishR2(context: TenantBuildContext): void {
-  const { palette } = context;
-  const cafeGlow = context.glow('East R2 service and table glow', 0xffc88c, 1.20);
-  const leaf = tint(palette.dark, 'East R2 broad leaf', LEAF_COLOR, 0.82);
-  const leafLight = tint(palette.lightWood, 'East R2 leaf highlight', LEAF_LIGHT, 0.78);
-  addR2PlantBand(context, palette.cream, leaf, leafLight);
-
-  const counter = fixture(context, 'R2-01');
-  if (counter) addCounter(context, counter, palette.darkWood, palette.stone, 'R2 service counter');
-  const serviceShelf = fixture(context, 'R2-02');
-  if (serviceShelf) {
-    addShelf(context, serviceShelf, palette.darkWood, palette.wood, cafeGlow, 'R2 rear service shelf', 3);
-  }
-
-  for (const id of ['R2-03', 'R2-06', 'R2-09']) {
-    const item = fixture(context, id);
-    if (!item) continue;
-    addTable(context, item, palette.stone, palette.darkWood, `${id} cafe table`);
-    addCupSet(context, item, `${id} cafe table`);
-  }
-  for (const id of ['R2-04', 'R2-05', 'R2-07', 'R2-08', 'R2-10', 'R2-11']) {
-    const item = fixture(context, id);
-    if (item) addSeat(context, item, palette.fabric, palette.darkWood, `${id} cafe seat`);
-  }
-  for (const id of ['R2-12', 'R2-13']) {
-    const item = fixture(context, id);
-    if (item) addPlant(context, item, palette.cream, id === 'R2-12' ? leaf : leafLight, `${id} planter`);
-  }
-  const rearShelf = fixture(context, 'R2-14');
-  if (rearShelf) {
-    addShelf(context, rearShelf, palette.darkWood, palette.wood, undefined, 'R2 rear supplies shelf', 3);
-    addBoxProduct(context, palette.cream, rearShelf.rect[0] + rearShelf.rect[2] * 0.5,
-      rearShelf.rect[1] + rearShelf.rect[3] * 0.42, 0.42, 0.28, 0.18, 0.18, 'R2 rear supplies box');
-  }
+  buildAtriumCafe(context);
 }
 
 function furnishR3(context: TenantBuildContext): void {
@@ -643,10 +579,14 @@ function furnishR4(context: TenantBuildContext): void {
   const dimGlow = context.glow('East R4 low shelf light', 0xc9d9de, 0.72);
   const entryCase = fixture(context, 'R4-01');
   if (entryCase) {
+    const walkingStart = context.group.children.length;
     addCase(context, entryCase, palette.darkWood, palette.dark, palette.caseGlass, 'R4 narrow entry case');
     addBoxProduct(context, palette.cream, entryCase.rect[0] + entryCase.rect[2] * 0.5,
       entryCase.rect[1] + entryCase.rect[3] * 0.45, entryCase.height + 0.02,
       0.11, 0.10, 0.14, 'R4 entry case box');
+    registerTenantWalkFixture(context.group, walkingStart, {
+      tenantId: context.bay.id, fixtureId: entryCase.id, kind: 'rigid',
+    });
   }
   const sideShelf = fixture(context, 'R4-02');
   if (sideShelf) {
