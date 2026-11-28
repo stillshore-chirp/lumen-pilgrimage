@@ -51,6 +51,7 @@ export interface CoastNavigation {
   readonly blocksFlight?: (x: number, z: number, eyeY: number, clearance: number) => boolean;
   readonly allowFlight?: boolean;
   readonly flightCeiling: number;
+  // foot is the candidate body's lower world Y, in metres, not the support below an airborne body.
   readonly ceilingHeight?: (x: number, z: number, foot: number) => number;
   readonly walkSpeed?: number;
 }
@@ -515,7 +516,8 @@ export class CoastControls {
 
     const support = followedFloor ?? this.supportHeight(position.x, position.z, foot + FOOT_CLEARANCE);
     const floorY = support + this.eyeHeight;
-    const ceilingY = this.ceilingY(position.x, position.z, support);
+    const ceilingFoot = followedFloor !== undefined ? support : Math.max(support, foot + verticalStep);
+    const ceilingY = this.ceilingY(position.x, position.z, ceilingFoot);
     const targetY = followedFloor !== undefined ? floorY : Math.max(floorY, Math.min(ceilingY, position.y + verticalStep));
     // Support changes have already been checked at each horizontal step, including its height.
     position.y = followedFloor !== undefined ? targetY : this.limitHeadY(position, targetY, offset);
@@ -531,9 +533,11 @@ export class CoastControls {
   private setPosture(posture: 'walk' | 'crouch'): void {
     if (posture === this.posture) return;
     const foot = this.camera.position.y - this.eyeHeight;
-    this.posture = posture;
     const { x, z } = this.camera.position;
-    this.camera.position.y = Math.min(this.ceilingY(x, z), foot + this.eyeHeight);
+    const eyeHeight = posture === 'walk' ? EYE_HEIGHT : this.crouchEyeHeight;
+    if (foot + eyeHeight > this.ceilingY(x, z, foot)) return;
+    this.posture = posture;
+    this.camera.position.y = foot + this.eyeHeight;
   }
 
   private updateDive(verticalInput: number, dt: number, offset?: Vector3): void {
@@ -634,7 +638,8 @@ export class CoastControls {
       const blocked = this.navigation.blocksFlight
         ? this.navigation.blocksFlight(sampleX, sampleZ, sampleY, CAMERA_SURFACE_CLEARANCE)
         : this.navigation.blocksWalking?.(sampleX, sampleZ, sampleY - CAMERA_SURFACE_CLEARANCE);
-      if (blocked || sampleY < this.flightFloorHeight(sampleX, sampleZ) || sampleY > this.ceilingY(sampleX, sampleZ)
+      if (blocked || sampleY < this.flightFloorHeight(sampleX, sampleZ)
+        || sampleY > this.ceilingY(sampleX, sampleZ, sampleY - this.eyeHeight)
         || !this.headCanFollow(previousX, previousY, previousZ, sampleX, sampleY, sampleZ, offset)) {
         break;
       }
@@ -663,10 +668,12 @@ export class CoastControls {
       const walkableRise = distance * (MAX_WALK_SLOPE + WALK_SLOPE_EPSILON);
       const previousFoot = followSupport ? support : footAtStep;
       const height = this.supportHeight(x, z, followSupport ? support + walkableRise : footAtStep + FOOT_CLEARANCE);
-      const nextFoot = followSupport ? height : footAtStep;
-      if (this.navigation.blocksWalking?.(x, z, nextFoot, previousFoot)
-        || nextFoot + this.eyeHeight > this.ceilingY(x, z, height)) return false;
       const rise = height - support;
+      // Cross a descending edge at the old foot height, then fall. Testing its
+      // lower support first would place the body inside the side of that edge.
+      const nextFoot = followSupport ? rise < -walkableRise ? previousFoot : height : footAtStep;
+      if (this.navigation.blocksWalking?.(x, z, nextFoot, previousFoot)
+        || nextFoot + this.eyeHeight > this.ceilingY(x, z, nextFoot)) return false;
       if (followSupport ? rise > walkableRise : height > footAtStep + FOOT_CLEARANCE) return false;
       if (!this.headCanFollow(position.x, previousFoot + this.eyeHeight, position.z,
         x, nextFoot + this.eyeHeight, z, offset)) return false;
@@ -707,13 +714,14 @@ export class CoastControls {
       ? this.navigation.blocksFlight(x, z, y, CAMERA_SURFACE_CLEARANCE)
       : this.navigation.blocksWalking?.(x, z, foot) === true;
     return this.clampX(x) !== x || this.clampZ(z) !== z || foot < this.navigation.groundHeight(x, z)
-      || y > this.ceilingY(x, z) || blocked;
+      || y > this.ceilingY(x, z, foot) || blocked;
   }
 
   private limitHeadY(position: Vector3, targetY: number, offset?: Vector3): number {
     if (!offset || targetY === position.y) return targetY;
     const x = position.x + offset.x, z = position.z + offset.z;
-    if (targetY > position.y) return Math.min(targetY, Math.max(position.y, this.ceilingY(x, z) - offset.y));
+    if (targetY > position.y) return Math.min(targetY, Math.max(position.y,
+      this.ceilingY(x, z, targetY - this.eyeHeight) - offset.y));
     const floor = this.navigation.groundHeight(x, z) + CAMERA_SURFACE_CLEARANCE - offset.y;
     return Math.max(targetY, Math.min(position.y, floor));
   }

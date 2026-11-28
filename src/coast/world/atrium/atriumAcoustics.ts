@@ -15,11 +15,12 @@ import {
 } from './atriumTenantPlan';
 import type { TenantBay, TenantWorldPoint } from './atriumTenantPlan';
 import { ATRIUM_FRONT_GLAZING, ATRIUM_FRONT_GLASS_PLANES } from './atriumFrontPlan';
-import { ATRIUM_CAFE_EQUIPMENT_POSITION } from './atriumCafePlan';
+import { atriumTenantFloorAt, atriumTenantRoomCeilingAt } from './atriumTenantWalking';
+import { ATRIUM_CAFE_EQUIPMENT_POSITION, ATRIUM_CAFE_PLAN, inAtriumCafe } from './atriumCafePlan';
 
 type MutablePoint = { x: number; y: number; z: number };
 export type AtriumPoint = Readonly<MutablePoint>;
-export type AtriumSurface = 'stone' | 'rug' | 'stair' | 'gallery';
+export type AtriumSurface = 'stone' | 'wood' | 'rug' | 'stair' | 'gallery';
 type ReflectionSurface = 'floor' | 'gallery-floor' | 'soffit' | 'ceiling' | 'left-wall' | 'right-wall' | 'rear-wall'
   | 'front-glass';
 type Axis = 'x' | 'y' | 'z';
@@ -134,6 +135,9 @@ function inSkylightOpening(x: number, z: number): boolean {
 
 /** The local response gains weight near low soffits. The void still returns sound to these open areas. */
 export function atriumLocalTailMix(listener: AtriumPoint): number {
+  if (inAtriumCafe(listener.x, listener.z) && listener.y < ATRIUM_CAFE_PLAN.ceiling) return .92;
+  const roomCeiling = atriumTenantRoomCeilingAt(listener.x, listener.z);
+  if (roomCeiling !== undefined && listener.y < roomCeiling) return .92;
   let covered = 0;
   for (let index = 0; index < ATRIUM_LEVELS.length; index += 1) {
     const headroom = ATRIUM_LEVELS[index] - SOFFIT_DEPTH - listener.y;
@@ -316,6 +320,7 @@ export function atriumSoundPath(
 }
 
 export function atriumSurfaceAt(x: number, z: number, floorY = 0): AtriumSurface {
+  if (floorY < .27 && atriumTenantFloorAt(x, z) === 'wood') return 'wood';
   const stair = atriumStairDistance(x, z);
   if ((stair !== undefined && Math.abs(atriumStairHeight(stair) - floorY) < 0.27)
     || Math.abs(atriumUpperStairHeight(x, z) - floorY) < 0.27) return 'stair';

@@ -11,7 +11,8 @@ import { batchAtriumOpaqueMeshes } from './atriumBatches';
 import { createAtriumFloor } from './atriumFloor';
 import { buildAtriumFurnishings } from './atriumFurnishings';
 import { buildAtriumFrontCommons } from './atriumFrontCommons';
-import { atriumNavigation } from './atriumNavigation';
+import { createAtriumNavigation } from './atriumNavigation';
+import { createAtriumTenantWalking } from './atriumTenantWalking';
 import { buildAtriumRetail } from './atriumRetail';
 import { buildAtriumRoof } from './atriumRoof';
 import { buildAtriumShell } from './atriumShell';
@@ -85,6 +86,7 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
   const furnishings = buildAtriumFurnishings(room);
   const frontCommons = await buildAtriumFrontCommons(room, floor.wallStone);
   createAtriumMonitorSpeakers(room);
+  const navigation = createAtriumNavigation(createAtriumTenantWalking(room));
   batchAtriumOpaqueMeshes(room);
   let mode: WorldLightingMode = 'auto';
   let time: CoastTimeOfDay = 'day';
@@ -112,7 +114,7 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
   updateLighting();
   return {
     id: 'atrium',
-    navigation: atriumNavigation,
+    navigation,
     audio: new AtriumAudio(),
     world: {
       scene,
