@@ -112,6 +112,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     this.renderedSinceStatus = 0;
     this.lastConsumedContextTime = 0;
     this.lastBlockFrames = 0;
+    this.mixRangeError = false;
     this.port.onmessage = event => this.receive(event.data || {});
   }
 
@@ -144,7 +145,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         this.receiveSeek(Number(data.sample), data.generation);
         break;
       case 'playing':
-        this.playing = Boolean(data.active);
+        this.playing = Boolean(data.active) && !this.mixRangeError;
         if (!this.playing) {
           this.blockConsumed = false;
           this.wasUnderrun = false;
@@ -170,6 +171,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
   }
 
   receiveEnqueue(data) {
+    if (this.mixRangeError) return;
     const channels = (data.channels || []).map(asFloat32Array);
     const start = Math.trunc(Number(data.startSample));
     const frames = channels.length === 0 ? 0 : channels[0].length;
@@ -341,6 +343,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     this.queue = [];
     this.queueHead = 0;
     this.wasUnderrun = false;
+    this.mixRangeError = false;
     this.lastConsumedContextTime = typeof currentTime === 'number' ? currentTime : 0;
     this.resetDsp();
     this.postStatus(true);
@@ -413,7 +416,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
   }
 
   sampleFromChunk(chunk) {
-    if (!chunk) return;
+    if (!chunk || this.mixRangeError) return;
     const offset = this.playhead - chunk.start;
     if (offset < 0 || offset >= chunk.end - chunk.start) return;
     let segmentIndex = chunk.segmentHead || 0, segmentStart = chunk.segmentStart || 0;
@@ -474,8 +477,28 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         if (channelIndex === this.lfeIndex) sum += this.lfeState * coefficient;
         else if (channel && offset < channel.length) sum += channel[offset] * coefficient;
       }
-      this.speakerValues[speaker] = sum;
+      // Assignment already rounds to Float32; inspect that same value before
+      // it can overflow persistent low-pass/FFT/ring state.
+      const stored = Math.fround(sum);
+      if (!Number.isFinite(stored)) {
+        this.failMixRange();
+        return;
+      }
+      this.speakerValues[speaker] = stored;
     }
+  }
+
+  failMixRange() {
+    if (this.mixRangeError) return;
+    this.mixRangeError = true;
+    this.playing = false;
+    this.blockConsumed = false;
+    this.queue = [];
+    this.queueHead = 0;
+    this.wasUnderrun = false;
+    this.resetDsp();
+    this.port.postMessage({ type: 'error', message: 'Cinema mixed signal exceeds the Float32 range' });
+    this.postStatus(true);
   }
 
   convolveHrtf(ring, write, delay, kernels, offset, taps) {
@@ -505,7 +528,9 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       if (kind === 0) {
         const state = this.lowpass[speaker]
           + (this.speakerValues[speaker] - this.lowpass[speaker]) * BASS_SEND_ALPHA;
-        this.lowpass[speaker] = state;
+        const stored = Math.fround(state);
+        if (!Number.isFinite(stored)) { this.failMixRange(); return; }
+        this.lowpass[speaker] = stored;
         roomLow += state;
       }
     }
@@ -514,12 +539,15 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       let value = this.speakerValues[speaker];
       if (kind === 1) value += roomLow * 0.16;
       else if (kind === 2) value += roomLow * 0.20;
-      this.speakerRings[speaker][this.writeIndex] = value;
+      const stored = Math.fround(value);
+      if (!Number.isFinite(stored)) { this.failMixRange(); return; }
+      this.speakerRings[speaker][this.writeIndex] = stored;
     }
   }
 
   renderSample(chunk) {
     this.writeSpeakerRings();
+    if (this.mixRangeError) return;
     let reflection = 0;
     let directLeft = 0;
     let directRight = 0;
@@ -633,7 +661,9 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     for (let frame = 0; frame < count; frame++) {
       const chunk = this.currentChunk();
       this.sampleFromChunk(chunk);
+      if (this.mixRangeError) return;
       this.writeSpeakerRings();
+      if (this.mixRangeError) return;
       this.playhead++;
       this.writeTotal++;
       this.writeIndex = (this.writeIndex + 1) & RING_MASK;
@@ -685,6 +715,10 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         ? this.availableFrames(Math.min(CONV_HOP, left.length - frame)) : 0;
       if (count > 0) {
         this.renderQuantum(left, right, frame, count);
+        if (this.mixRangeError) {
+          left.fill(0); if (right !== left) right.fill(0);
+          return true;
+        }
         this.blockConsumed = true;
         consumedFrames += count;
         frame += count - 1;
@@ -695,6 +729,10 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       const chunk = this.currentChunk();
       if (chunk) {
         this.sampleFromChunk(chunk);
+        if (this.mixRangeError) {
+          left.fill(0); if (right !== left) right.fill(0);
+          return true;
+        }
         this.blockConsumed = true;
       } else {
         this.speakerValues.fill(0);
@@ -705,6 +743,10 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         continue;
       }
       this.renderSample(chunk);
+      if (this.mixRangeError) {
+        left.fill(0); if (right !== left) right.fill(0);
+        return true;
+      }
       left[frame] = Math.max(-1, Math.min(1, this.renderedLeft * 0.78));
       if (right !== left) right[frame] = Math.max(-1, Math.min(1, this.renderedRight * 0.78));
       this.playhead += 1;

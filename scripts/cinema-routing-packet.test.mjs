@@ -9,7 +9,8 @@ const hook = registerHooks({ resolve(s, c, next) {
 const { createCinemaRoutingPacket, CINEMA_ROUTING_PACKET_PROCESSOR_SOURCE } =
   await import('../src/coast/world/cinema/cinemaRoutingPacket.ts');
 const { CINEMA_ROOM_PROCESSOR_SOURCE } = await import('../src/coast/world/cinema/cinemaRoomProcessor.ts');
-const { createCinemaRoutingShapes } = await import('../src/coast/world/cinema/cinemaSpeakers.ts');
+const { createCinemaRoutingShapes, createCinemaRouting } = await import('../src/coast/world/cinema/cinemaSpeakers.ts');
+const { prepareCinemaConvolution } = await import('../src/coast/world/cinema/cinemaConvolution.ts');
 hook.deregister();
 const decode = new Function(`${CINEMA_ROUTING_PACKET_PROCESSOR_SOURCE};return decodeCinemaRoutingPacket;`)();
 
@@ -123,4 +124,60 @@ test('packet storage is independent of later scratch use, with one-sample, inact
     }
   }
   assert.throws(() => createCinemaRoutingPacket(programme(), 1e20, 1), RangeError);
+});
+
+test('Float32 mix overflow stops and resets before state writes for packed and legacy routing', () => {
+  const make = db => ({ bed: [], lfeGainDb: 0, objects: Array.from({ length: 32 }, () => ({
+    keys: [{ sample: 0, position: [0,8,0], gainDb: db }],
+  })) });
+  const enqueue = (target, packed, db, start = 0, amplitude = 0x7fffff / 0x800000) => {
+    const program = make(db), channels = Array.from({ length: 32 }, () => new Float32Array(2).fill(amplitude));
+    target.send({ type: 'enqueue', startSample: start, channels, ...(packed
+      ? { packedRouting: createCinemaRoutingPacket(program, start, 2) }
+      : { routing: createCinemaRouting(program, start) }) });
+  };
+  for (const packed of [false, true]) for (const banked of [false, true]) {
+    const target = processor(32), p = target.value; p.lfeIndex = -1;
+    if (banked) {
+      const hrir = new Float32Array(60 * 144 * 2); hrir[12 * 288] = hrir[12 * 288 + 1] = 1;
+      p.hrtf = hrir;
+      p.convolver.setPacket(prepareCinemaConvolution(hrir, [{ speaker: 2, delaySamples: 0, direction: 12, gain: 1, send: 0 }]));
+    }
+    enqueue(target, packed, 760); target.send({ type: 'playing', active: true });
+    const output = [new Float32Array(2), new Float32Array(2)];
+    assert.equal(p.process([], [output]), true);
+    assert.ok(output.every(ear => ear.every(value => value === 0)));
+    assert.equal(p.mixRangeError, true); assert.equal(p.playing, false); assert.equal(p.playhead, 0);
+    assert.equal(p.queue.length, 0); assert.equal(p.underruns, 0);
+    assert.ok(p.speakerValues.every(value => value === 0) && p.lowpass.every(value => value === 0));
+    assert.ok(p.speakerRings.every(ring => ring.every(value => value === 0)));
+    assert.equal(target.messages.filter(message => message.type === 'error').length, 1);
+    enqueue(target, packed, -18, 0, .001); target.send({ type: 'playing', active: true });
+    p.process([], [output]); assert.equal(p.playing, false); assert.equal(p.queue.length, 0);
+    assert.equal(target.messages.filter(message => message.type === 'error').length, 1);
+    target.send({ type: 'seek', sample: 16, generation: 1 });
+    assert.equal(p.mixRangeError, false); enqueue(target, packed, -18, 16, .001);
+    target.send({ type: 'playing', active: true }); p.process([], [output]);
+    assert.equal(p.playhead, 18); assert.equal(p.playing, true);
+    assert.ok(output.every(ear => ear.every(Number.isFinite)));
+    target.send({ type: 'dispose' }); assert.equal(p.process([], [output]), false);
+    target.send({ type: 'seek', sample: 0 }); assert.equal(p.disposed, true);
+  }
+});
+
+
+test('finite distributed bass values cannot overflow a subwoofer Float32 ring', () => {
+  const target = processor(32), p = target.value;
+  // A finite steady low-pass state is reachable from a sustained finite input.
+  // No individual speaker exceeds Float32; only the common bass sum does.
+  p.speakerValues.fill(1e38, 0, 32); p.lowpass.fill(1e38, 0, 32);
+  assert.ok(p.speakerValues.every(Number.isFinite) && p.lowpass.every(Number.isFinite));
+  p.playing = true; p.writeSpeakerRings();
+  assert.equal(p.mixRangeError, true); assert.equal(p.playing, false);
+  assert.ok(p.speakerValues.every(v => v === 0) && p.lowpass.every(v => v === 0));
+  assert.ok(p.speakerRings.every(ring => ring.every(v => v === 0)));
+  assert.equal(target.messages.filter(message => message.type === 'error').length, 1);
+  target.send({ type: 'seek', sample: 0 }); p.speakerValues[0] = .01;
+  p.writeSpeakerRings(); assert.equal(p.mixRangeError, false);
+  assert.ok(p.speakerRings.every(ring => Number.isFinite(ring[p.writeIndex])));
 });
