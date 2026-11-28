@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { Group, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Raycaster, Scene, Vector2, Vector3 } from 'three';
+import { ArrayCamera, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Raycaster, Scene, Vector2, Vector3 } from 'three';
 import { MonitorObject, MONITOR_MIN_SCALE, MONITOR_MAX_SCALE } from '../src/monitor/monitorObject.ts';
 
 const desktopUrl = new URL('../src/monitor/monitorDesktop.ts', import.meta.url).href;
@@ -239,4 +239,88 @@ test('fixed television reuses the live texture and preserves the floating placem
   assert.equal(tv.visible, true);
   assert.equal(screen.visible, false);
   assert.equal(screen.material.map.isVideoTexture, undefined);
+});
+
+test('video supply diagnostics count actual surface draws and distinct texture updates, not update calls', t => {
+  const { monitor, scene } = createMonitor(t);
+  monitor.setVisible(true);
+  const track = { readyState: 'live', enabled: true, muted: false };
+  monitor.setVideo({
+    srcObject: { getVideoTracks: () => [track] }, paused: false, ended: false,
+    readyState: 2, HAVE_CURRENT_DATA: 2, videoWidth: 320, videoHeight: 180,
+  });
+  const screen = monitor.group.children[0];
+  let renderTarget = null;
+  const renderer = { info: { render: { frame: 1 } }, getRenderTarget: () => renderTarget };
+  const camera = makeCamera();
+  monitor.beginPresentationFrame(camera);
+  monitor.update();
+  monitor.update();
+  assert.equal(monitor.surfaceFrames().renderedFrames, 0);
+  assert.equal(monitor.surfaceFrames().videoFrames, 0);
+  screen.material.map.onUpdate(screen.material.map);
+  screen.onAfterRender(renderer, scene, camera);
+  screen.onAfterRender(renderer, scene, camera);
+  assert.equal(monitor.surfaceFrames().renderedFrames, 1);
+  assert.equal(monitor.surfaceFrames().videoFrames, 1);
+  renderer.info.render.frame = 2;
+  screen.onAfterRender(renderer, scene, camera.clone());
+  assert.equal(monitor.surfaceFrames().renderedFrames, 1, 'a reflection camera is excluded even when its renderer frame differs');
+  renderTarget = {};
+  screen.onAfterRender(renderer, scene, camera);
+  assert.equal(monitor.surfaceFrames().renderedFrames, 1, 'an auxiliary render target with the main camera is excluded');
+  renderTarget = null;
+  monitor.beginPresentationFrame(camera);
+  screen.onAfterRender(renderer, scene, camera);
+  assert.equal(monitor.surfaceFrames().renderedFrames, 2);
+  assert.equal(monitor.surfaceFrames().videoFrames, 1, 'redrawing a frozen texture is not a new video frame');
+  screen.material.map.needsUpdate = true;
+  renderer.info.render.frame = 3;
+  screen.material.map.onUpdate(screen.material.map);
+  monitor.beginPresentationFrame(camera);
+  screen.onAfterRender(renderer, scene, camera);
+  assert.equal(monitor.surfaceFrames().videoFrames, 2);
+  const left = makeCamera();
+  const right = makeCamera();
+  monitor.beginPresentationFrame(new ArrayCamera([left, right]));
+  screen.onAfterRender(renderer, scene, left);
+  screen.onAfterRender(renderer, scene, right);
+  assert.equal(monitor.surfaceFrames().renderedFrames, 4, 'two main XR eyes count as one presentation tick');
+  assert.equal(monitor.surfaceFrames().videoFrames, 2);
+  const target = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial());
+  monitor.setTarget(target, true);
+  assert.equal(monitor.surfaceFrames(), null, 'projection through a separate shader is outside this surface observer');
+  monitor.setTarget(null);
+  monitor.setVisible(false);
+  assert.equal(monitor.surfaceFrames(), null);
+  target.geometry.dispose();
+  target.material.dispose();
+});
+
+test('texture dirty flags and repeated draws are not counted as fresh upload submissions', t => {
+  const { monitor, scene } = createMonitor(t);
+  const camera = makeCamera();
+  const renderer = { getRenderTarget: () => null };
+  monitor.setVisible(true);
+  monitor.setVideo({ srcObject: { getVideoTracks: () => [{ readyState: 'live', enabled: true, muted: false }] },
+    paused: false, ended: false, readyState: 2, HAVE_CURRENT_DATA: 2, videoWidth: 320, videoHeight: 180 });
+  const surface = monitor.group.children[0];
+  const texture = surface.material.map;
+  monitor.beginPresentationFrame(camera);
+  surface.onAfterRender(renderer, scene, camera);
+  assert.equal(monitor.surfaceFrames().videoFrames, 0, 'a dirty version without upload is not fresh supply');
+  texture.onUpdate(texture);
+  surface.onAfterRender(renderer, scene, camera);
+  assert.equal(monitor.surfaceFrames().videoFrames, 1);
+  const version = texture.version;
+  for (let index = 0; index < 10; ++index) { monitor.update(); monitor.beginPresentationFrame(camera); surface.onAfterRender(renderer, scene, camera); }
+  assert.equal(texture.version, version);
+  assert.equal(monitor.surfaceFrames().videoFrames, 1, 'repeated frozen or low-fps frames are not fresh');
+  texture.needsUpdate = true;
+  texture.needsUpdate = true;
+  texture.onUpdate(texture);
+  monitor.beginPresentationFrame(camera);
+  surface.onAfterRender(renderer, scene, camera);
+  assert.equal(monitor.surfaceFrames().uploadFrames, 2);
+  assert.equal(monitor.surfaceFrames().videoFrames, 2, 'coalesced versions produce one latest upload and fresh draw');
 });

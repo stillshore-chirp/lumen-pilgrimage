@@ -97,6 +97,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
         measurement?.abort();
         measurement = undefined;
         statistics.textContent = '';
+        delete statistics.dataset.monitorVideoMeasurement;
         generation += 1;
         capture.stop();
         choosing = false;
@@ -153,6 +154,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     measurement?.abort();
     measurement = undefined;
     statistics.textContent = '';
+    delete statistics.dataset.monitorVideoMeasurement;
     capture.stop();
     choosing = false;
     deciding = false;
@@ -243,11 +245,15 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     if (measurement || state?.phase !== 'connected') return;
     const attempt = new AbortController();
     measurement = attempt;
+    delete statistics.dataset.monitorVideoMeasurement;
     statistics.textContent = 'この画面を手前に置き、動きのある映像でお待ちください。';
     render();
     try {
       const result = await measureMonitorVideo(() => sender.videoStats(), attempt.signal);
-      if (!attempt.signal.aborted) statistics.textContent = describeMonitorVideo(result);
+      if (!attempt.signal.aborted) {
+        statistics.dataset.monitorVideoMeasurement = JSON.stringify(result);
+        statistics.textContent = describeMonitorVideo(result, 'sender');
+      }
     } catch {
       if (!attempt.signal.aborted) statistics.textContent = '映像を計測できませんでした。接続とブラウザーの対応を確認してください。';
     } finally {

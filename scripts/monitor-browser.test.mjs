@@ -21,7 +21,8 @@ before(async () => {
   url = new URL(`http://127.0.0.1:${server.httpServer.address().port}/`);
   browser = await chromium.launch({
     channel: process.env.COAST_CHROME_CHANNEL || 'chromium',
-    args: ['--enable-unsafe-swiftshader', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
+    args: [...(process.env.MONITOR_BROWSER_GPU === 'metal' ? ['--enable-gpu', '--use-angle=metal'] : ['--enable-unsafe-swiftshader']),
+      '--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
   });
   if (screenshotDirectory) await mkdir(screenshotDirectory, { recursive: true });
 });
@@ -53,8 +54,8 @@ function installSyntheticCapture() {
       fixture.activeGesture = navigator.userActivation.isActive;
 
       const canvas = document.createElement('canvas');
-      canvas.width = mode === 'video-only' ? 180 : 320;
-      canvas.height = mode === 'video-only' ? 320 : 180;
+      canvas.width = fixture.width ?? (mode === 'video-only' ? 180 : 320);
+      canvas.height = fixture.height ?? (mode === 'video-only' ? 320 : 180);
       const context = canvas.getContext('2d');
       let frame = 0;
       const draw = () => {
@@ -79,10 +80,29 @@ function installSyntheticCapture() {
         const settings = videoTrack.getSettings();
         Object.defineProperty(videoTrack, 'getSettings', { value: () => ({ ...settings, displaySurface: 'browser' }) });
       }
-      const timer = setInterval(() => {
-        if (videoTrack.readyState === 'ended') clearInterval(timer);
-        else draw();
-      }, fixture.frameRate ? 1000 / fixture.frameRate : 55);
+      if (fixture.frameRate) {
+        let next = performance.now();
+        const period = 1000 / fixture.frameRate;
+        const paintTimes = [];
+        fixture.paintTimes = paintTimes;
+        const paint = now => {
+          if (videoTrack.readyState === 'ended') return;
+          if (now >= next - .5) {
+            draw();
+            paintTimes.push(now);
+            if (paintTimes.length > 512) paintTimes.shift();
+            next += period;
+            if (now - next > period) next = now + period;
+          }
+          requestAnimationFrame(paint);
+        };
+        requestAnimationFrame(paint);
+      } else {
+        const timer = setInterval(() => {
+          if (videoTrack.readyState === 'ended') clearInterval(timer);
+          else draw();
+        }, 55);
+      }
       fixture.streams.push(stream);
       fixture.options = options;
 
@@ -365,7 +385,7 @@ async function requestPairing(sender, viewer) {
   assert.equal(await viewer.locator(videoSelector).evaluate(video => video.srcObject), null);
 }
 
-async function waitForVideo(viewer, expectedAudioTracks, [width, height] = [320, 180]) {
+async function waitForVideo(viewer, expectedAudioTracks, dimensions = [320, 180]) {
   await viewer.waitForFunction(({ selector, expectedAudioTracks }) => {
     const video = document.querySelector(selector);
     return video?.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.currentTime > 0.15
@@ -379,8 +399,10 @@ async function waitForVideo(viewer, expectedAudioTracks, [width, height] = [320,
     playsInline: video.playsInline,
     frames: video.getVideoPlaybackQuality().totalVideoFrames,
   }));
-  assert.equal(playback.width, width);
-  assert.equal(playback.height, height);
+  if (dimensions) {
+    assert.equal(playback.width, dimensions[0]);
+    assert.equal(playback.height, dimensions[1]);
+  }
   assert.equal(playback.muted, true);
   assert.equal(playback.playsInline, true);
   assert.ok(playback.frames > 1, 'Chrome decoded successive native WebRTC video frames');
@@ -2383,54 +2405,72 @@ test('same-device sharing hands off one code without bypassing the chooser or se
   }
 });
 
-// A single observation window covers acquisition, transport, decoding and video composition.
-// Only numeric video counters are returned; network addresses, SDP and track labels stay in the browser.
-async function measurePipelinePage(page, durationMs) {
-  return page.evaluate(async ({ durationMs, videoSelector }) => {
-    const peer = window.monitorPeers[0];
-    const video = document.querySelector(videoSelector);
-    const names = ['frames', 'framesEncoded', 'framesSent', 'framesReceived', 'framesDecoded'];
-    const read = async () => {
-      const result = [];
-      (await peer.getStats()).forEach(row => {
-        if (row.kind !== 'video' || !['media-source', 'outbound-rtp', 'inbound-rtp'].includes(row.type)) return;
-        const count = { id: row.id, type: row.type, timestamp: row.timestamp };
-        for (const name of names) if (Number.isFinite(row[name])) count[name] = row[name];
-        result.push(count);
+// Exercise the production diagnostics: one three-second interval includes transport,
+// video composition, the main-camera surface draw and distinct VideoTexture versions.
+async function measurePipelinePage(page) {
+  return page.evaluate(async () => {
+    const control = document.querySelector('[data-monitor-measure-video]');
+    const output = document.querySelector('[data-monitor-video-statistics]');
+    const started = Date.now();
+    const video = document.querySelector('[data-monitor-video]');
+    const observationStarted = performance.now();
+    const domQualityBefore = video?.getVideoPlaybackQuality?.();
+    let firstObservation;
+    let lastObservation;
+    let observationCallbacks = 0;
+    let observationHandle;
+    const observe = (now, metadata) => {
+      const frame = { now, frames: metadata.presentedFrames };
+      firstObservation ??= frame;
+      lastObservation = frame;
+      ++observationCallbacks;
+      observationHandle = video.requestVideoFrameCallback(observe);
+    };
+    if (video) observationHandle = video.requestVideoFrameCallback(observe);
+    control.click();
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { observer.disconnect(); reject(new Error('Video measurement did not complete')); }, 10_000);
+      const observer = new MutationObserver(() => {
+        if (control.disabled) return;
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve();
       });
-      return result;
+      observer.observe(control, { attributes: true });
+    });
+    const observationEnded = performance.now();
+    const domQualityAfter = video?.getVideoPlaybackQuality?.();
+    const domQualityObservation = domQualityBefore && domQualityAfter ? { scope: video.hidden ? 'unavailable-for-hidden-webgl-video' : 'visible-dom', totalDelta: domQualityAfter.totalVideoFrames - domQualityBefore.totalVideoFrames, droppedDelta: domQualityAfter.droppedVideoFrames - domQualityBefore.droppedVideoFrames } : undefined;
+    if (observationHandle !== undefined) video.cancelVideoFrameCallback(observationHandle);
+    const presentationObservation = video ? {
+      elapsedMs: observationEnded - observationStarted, callbacks: observationCallbacks,
+      firstDelayMs: firstObservation ? firstObservation.now - observationStarted : undefined,
+      lastGapMs: lastObservation ? observationEnded - lastObservation.now : undefined,
+      frameSpan: firstObservation && lastObservation ? lastObservation.frames - firstObservation.frames + 1 : 0,
+    } : undefined;
+    const text = output.textContent;
+    const measured = JSON.parse(output.dataset.monitorVideoMeasurement ?? 'null');
+    if (!measured) throw new Error('Raw video measurement is unavailable');
+    const canvas = document.querySelector('canvas');
+    const gl = canvas?.getContext('webgl2');
+    const extension = gl?.getExtension('WEBGL_debug_renderer_info');
+    const renderer = extension ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : '';
+    const graphicsApi = /metal/i.test(renderer) ? 'Metal' : /vulkan/i.test(renderer) ? 'Vulkan' : /opengl/i.test(renderer) ? 'OpenGL' : /d3d/i.test(renderer) ? 'D3D' : 'unknown';
+    const backend = /swiftshader|software|llvmpipe/i.test(renderer) ? 'software'
+      : /metal|apple|nvidia|amd|intel/i.test(renderer) ? 'hardware' : 'unknown';
+    return {
+      started, elapsedMs: Date.now() - started, visibility: document.visibilityState, backend, graphicsApi, presentationObservation, domQualityObservation,
+      frames: measured.captureFps, framesEncoded: measured.encodedFps, framesSent: measured.sentFps,
+      framesReceived: measured.receivedFps, framesDecoded: measured.decodedFps, presentedFps: measured.presentedFps,
+      renderedFps: measured.renderedFps, suppliedFps: measured.suppliedFps, uploadFps: measured.uploadFps, playbackPresentedFps: measured.playbackPresentedFps, playbackDroppedFps: measured.playbackDroppedFps, raw: measured,
+      surface: text.includes('（浮遊面）') ? 'floating' : text.includes('（テレビ面）') ? 'television' : 'unavailable',
     };
-    const before = await read();
-    const started = performance.now();
-    let first;
-    let last;
-    let callback;
-    const frame = (_now, metadata) => {
-      first ??= metadata.presentedFrames;
-      last = metadata.presentedFrames;
-      callback = video.requestVideoFrameCallback(frame);
-    };
-    if (video) callback = video.requestVideoFrameCallback(frame);
-    await new Promise(resolve => setTimeout(resolve, durationMs));
-    const elapsedMs = performance.now() - started;
-    if (callback !== undefined) video.cancelVideoFrameCallback(callback);
-    const after = await read();
-    const result = { elapsedMs, visibility: document.visibilityState };
-    for (const end of after) {
-      const start = before.find(row => row.id === end.id && row.type === end.type);
-      if (!start || end.timestamp <= start.timestamp) continue;
-      for (const name of names) {
-        if (Number.isFinite(start[name]) && Number.isFinite(end[name]) && end[name] >= start[name]) {
-          result[name] = (end[name] - start[name]) * 1000 / (end.timestamp - start.timestamp);
-        }
-      }
-    }
-    if (video) result.presentedFps = (first === undefined ? 0 : last - first + 1) * 1000 / elapsedMs;
-    return result;
-  }, { durationMs, videoSelector });
+  });
 }
 
 test('15 30 and 60fps inputs are measured separately across the native video pipeline', { timeout: 120_000 }, async t => {
+  const resolution = (process.env.MONITOR_FRAME_SIZE ?? '320x180').split('x').map(Number);
+  assert.ok(resolution.length === 2 && resolution.every(value => Number.isSafeInteger(value) && value > 0 && value <= 3840), 'frame fixture dimensions must be valid');
   const results = [];
   for (const inputFps of [15, 30, 60]) {
     const sender = await newPage();
@@ -2441,21 +2481,69 @@ test('15 30 and 60fps inputs are measured separately across the native video pip
       await viewer.addInitScript(observePeers);
       await sender.goto(new URL('?monitor=sender', url).href);
       await viewer.goto(url.href);
-      await sender.evaluate(fps => { window.captureFixture.frameRate = fps; }, inputFps);
+      await sender.evaluate(({ fps, resolution }) => {
+        Object.assign(window.captureFixture, { frameRate: fps, width: resolution[0], height: resolution[1] });
+      }, { fps: inputFps, resolution });
       await button(viewer, '仮想モニター').click();
       await button(viewer, 'モニターを表示').click();
       await requestPairing(sender, viewer);
       await button(sender, '接続を許可').click();
-      await waitForVideo(viewer, 1);
+      await waitForVideo(viewer, 1, null);
+      const captureGeometry = await sender.evaluate(() => {
+        const track = window.captureFixture.streams[0].getVideoTracks()[0];
+        const settings = track.getSettings();
+        return {
+          canvas: track.canvas instanceof HTMLCanvasElement ? [track.canvas.width, track.canvas.height] : null,
+          settings: [settings.width, settings.height], frameRate: settings.frameRate,
+          requestedFrameRate: window.captureFixture.options.video.frameRate,
+        };
+      });
+      assert.deepEqual(captureGeometry.canvas, resolution, 'the actual canvas pixel dimensions must remain identical across rates');
+      assert.deepEqual(captureGeometry.settings, resolution, 'native track settings must agree with the actual canvas');
       // Allow the encoder's initial ramp and ICE setup to settle before using cumulative counters.
-      await viewer.waitForFunction(selector => document.querySelector(selector).currentTime > 2, videoSelector);
-      const [sent, received] = await Promise.all([measurePipelinePage(sender, 4_000), measurePipelinePage(viewer, 4_000)]);
-      const result = { inputFps, resolution: [320, 180], durationMs: 4000, sent, received };
+      const warmupSeconds = Number(process.env.MONITOR_FRAME_WARMUP_SECONDS ?? 2);
+      assert.ok(Number.isFinite(warmupSeconds) && warmupSeconds >= 0 && warmupSeconds <= 30);
+      // Fixed warm-up is an explicit measurement condition, not a readiness substitute.
+      await new Promise(resolve => setTimeout(resolve, warmupSeconds * 1000));
+      const encoder = await sender.evaluate(async () => {
+        const peer = window.monitorPeers[0];
+        const sender = peer.getSenders().find(sender => sender.track.kind === 'video');
+        const params = sender.getParameters();
+        const stats = await peer.getStats();
+        const report = { encodings: params.encodings.map(row => ({
+          maxFramerate: row.maxFramerate, scaleResolutionDownBy: row.scaleResolutionDownBy,
+          maxBitrate: row.maxBitrate, active: row.active,
+        })), source: [], outbound: [] };
+        stats.forEach(row => {
+          if (row.kind !== 'video') return;
+          if (row.type === 'media-source') report.source.push({ width: row.width, height: row.height, framesPerSecond: row.framesPerSecond });
+          if (row.type === 'outbound-rtp') report.outbound.push({ codec: stats.get(row.codecId)?.mimeType, width: row.frameWidth, height: row.frameHeight,
+            framesPerSecond: row.framesPerSecond, qualityLimitation: row.qualityLimitationReason,
+            qualityLimitationDurations: row.qualityLimitationDurations, targetBitrate: row.targetBitrate, powerEfficientEncoder: row.powerEfficientEncoder });
+        });
+        const paints = window.captureFixture.paintTimes;
+        const deltas = paints.slice(1).map((time, index) => time - paints[index]).sort((a, b) => a - b);
+        report.paintCadence = deltas.length ? { samples: deltas.length, minMs: deltas[0], medianMs: deltas[Math.floor(deltas.length / 2)], maxMs: deltas.at(-1) } : null;
+        return report;
+      });
+      const [sent, received] = await Promise.all([measurePipelinePage(sender), measurePipelinePage(viewer)]);
+      const stages = { capture: sent.frames, encode: sent.framesEncoded, send: sent.framesSent, receive: received.framesReceived, decode: received.framesDecoded, videoComposition: received.presentedFps, surfaceSupply: received.suppliedFps };
+      const frameWindowTolerance = 1000 / Math.min(sent.raw.durationMs, received.raw.durationMs, received.raw.presentationDurationMs);
+      const target60Compatible = inputFps === 60 ? Object.values(stages).every(value => Number.isFinite(value) && Math.abs(value - 60) <= frameWindowTolerance) : undefined;
+      const decodedResolution = await viewer.locator(videoSelector).evaluate(video => [video.videoWidth, video.videoHeight]);
+      const result = { inputFps, resolution, captureGeometry, decodedResolution, encoder, warmupSeconds, durationMs: 3000, startSkewMs: Math.abs(sent.started - received.started), sent, received, stages, frameWindowTolerance, target60Compatible };
       results.push(result);
+      if (screenshotDirectory) await writeFile(join(screenshotDirectory, 'monitor-frame-rates.json'), `${JSON.stringify({ browser: browser.version(), results }, null, 2)}\n`);
       t.diagnostic(JSON.stringify(result));
       assert.ok(sent.frames > inputFps * .65 && sent.frames <= inputFps * 1.2, 'source rate must identify the supplied input');
       assert.ok(sent.framesSent > 0 && received.framesReceived > 0 && received.framesDecoded > 0);
       assert.ok(received.presentedFps > 0 && received.presentedFps <= received.framesDecoded * 1.3);
+      assert.equal(received.surface, 'floating');
+      assert.ok(received.renderedFps > 0 && received.suppliedFps > 0);
+      assert.ok(received.suppliedFps <= received.renderedFps * 1.1, 'reflections and extra passes must not be counted as displayed frames');
+      if (inputFps === 60 && process.env.MONITOR_REQUIRE_60_FPS === '1') {
+        assert.equal(target60Compatible, true, 'every raw measured stage must match60 within one frame per observation window;56fps is not60');
+      }
       assert.ok((await screenPixels(viewer)).count > 2_000, 'the actual scene contains the received video texture');
       assert.equal(await sender.evaluate(() => window.monitorPeers[0].getSenders().find(sender => sender.track.kind === 'video').getParameters().encodings[0].maxFramerate), 60);
       assert.equal(await sender.evaluate(() => window.captureFixture.streams[0].getVideoTracks()[0].contentHint), 'motion');
@@ -2464,7 +2552,6 @@ test('15 30 and 60fps inputs are measured separately across the native video pip
       await viewer.context().close();
     }
   }
-  if (screenshotDirectory) await writeFile(join(screenshotDirectory, 'monitor-frame-rates.json'), `${JSON.stringify({ browser: browser.version(), results }, null, 2)}\n`);
   const high = results.find(row => row.inputFps === 60);
   const low = results.find(row => row.inputFps === 15);
   assert.ok(high.sent.framesSent > low.sent.framesSent * 2, 'the transport must preserve a materially higher rate for the 60fps source');

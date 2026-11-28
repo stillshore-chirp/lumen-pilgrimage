@@ -348,6 +348,7 @@ export class MonitorView {
   }
 
   update(viewer: PerspectiveCamera, frame?: XRFrame): void {
+    this.screen.beginPresentationFrame(this.renderer.xr.isPresenting ? this.renderer.xr.getCamera() : this.binding.camera, this.renderer.getRenderTarget());
     if (frame && this.pendingXRSummon) {
       this.pendingXRSummon = false;
       this.setScreenVisible(true, viewer);
@@ -516,6 +517,7 @@ export class MonitorView {
       this.measureVideo.disabled = true;
       this.measureVideo.textContent = '映像の滑らかさを計測';
       this.videoStatistics.textContent = '';
+      delete this.videoStatistics.dataset.monitorVideoMeasurement;
       this.audioPlayback = 'off';
       this.audioStart = null;
       this.audio.stop();
@@ -590,10 +592,14 @@ export class MonitorView {
     this.measurement = attempt;
     this.measureVideo.disabled = true;
     this.measureVideo.textContent = '3秒間計測しています…';
-    this.videoStatistics.textContent = 'この画面を手前に置き、動きのある映像でお待ちください。';
+    delete this.videoStatistics.dataset.monitorVideoMeasurement;
+    this.videoStatistics.textContent = '映像面を視野内に保ち、この画面を手前に置いてお待ちください。';
     try {
-      const result = await measureMonitorVideo(() => this.receiver.videoStats(), attempt.signal, this.video);
-      if (!attempt.signal.aborted) this.videoStatistics.textContent = describeMonitorVideo(result);
+      const result = await measureMonitorVideo(() => this.receiver.videoStats(), attempt.signal, this.video, 3_000, () => this.screen.surfaceFrames());
+      if (!attempt.signal.aborted) {
+        this.videoStatistics.dataset.monitorVideoMeasurement = JSON.stringify(result);
+        this.videoStatistics.textContent = describeMonitorVideo(result, 'viewer');
+      }
     } catch {
       if (!attempt.signal.aborted) this.videoStatistics.textContent = '映像を計測できませんでした。接続とブラウザーの対応を確認してください。';
     } finally {

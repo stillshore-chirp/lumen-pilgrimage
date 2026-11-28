@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MonitorReceiver, MonitorSender } from '../src/monitor/monitorSession.ts';
+import { MonitorReceiver, MonitorSender, monitorVideoBitrate } from '../src/monitor/monitorSession.ts';
 
 class Track extends EventTarget {
   readyState = 'live';
@@ -10,6 +10,8 @@ class Track extends EventTarget {
     super();
     this.kind = kind;
   }
+
+  getSettings() { return { width: 320, height: 180, frameRate: 60 }; }
 
   stop() {
     this.readyState = 'ended';
@@ -176,7 +178,7 @@ test('sender waits for one approval and gathers LAN candidates before sharing', 
     ['video', 'sendonly'], ['audio', 'sendonly'],
   ]);
 
-  assert.deepEqual(peers[0].transceivers[0].options.sendEncodings, [{ maxFramerate: 60 }]);
+  assert.deepEqual(peers[0].transceivers[0].options.sendEncodings, [{ maxFramerate: 60, maxBitrate: 2_000_000 }]);
   assert.equal(peers[0].transceivers[1].options.sendEncodings, undefined);
   peers[0].finishIce();
   await until(() => calls.some(({ action }) => action === 'offer'), 'offer was not sent');
@@ -491,7 +493,7 @@ test('a receiver requires expiration information before accepting approved media
 
 // Local pairing authenticates the exact launched window before transferring a private port.
 const { MonitorLocalPairing, MonitorPairingSource } = await import('../src/monitor/monitorPairing.ts');
-const { monitorVideoSnapshot, monitorVideoRates, measureMonitorVideo } = await import('../src/monitor/monitorVideoMetrics.ts');
+const { monitorVideoSnapshot, monitorVideoRates, measureMonitorVideo, describeMonitorVideo } = await import('../src/monitor/monitorVideoMetrics.ts');
 
 function postEvent(host, { source, origin = host.location.origin, data, ports = [] }) {
   host.dispatchEvent(Object.assign(new Event('message'), { source, origin, data, ports }));
@@ -615,6 +617,8 @@ test('video measurement cancels promptly and never converts absent counters into
   const result = await measureMonitorVideo(read, new AbortController().signal, undefined, 1);
   assert.equal(result.sentFps, undefined);
   assert.equal(result.presentedFps, undefined);
+  assert.match(describeMonitorVideo(result, 'sender'), /取得 未取得.*送信 未取得/);
+  assert.match(describeMonitorVideo(result, 'viewer'), /受信 未取得.*デコード 未取得/);
 });
 
 test('presentation measurements include frozen time and distinguish zero, one and missing callbacks', async () => {
@@ -687,4 +691,27 @@ test('handoff expiry removes the temporary window and port authority without ext
   source.publish('AAAA-BBBB-CCCC');
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(received, []);
+});
+
+
+test('surface supply rates use the surface observation interval and keep the target explicit', async () => {
+  let reads = 0;
+  const surface = () => ++reads === 1
+    ? { renderedFrames: 60, videoFrames: 30, timestamp: 1000, surface: 'floating' }
+    : { renderedFrames: 120, videoFrames: 60, timestamp: 2000, surface: 'floating' };
+  const result = await measureMonitorVideo(async () => ({ counters: [] }), new AbortController().signal, undefined, 1, surface);
+  assert.equal(result.renderedFps, 60);
+  assert.equal(result.suppliedFps, 30);
+  assert.equal(result.surface, 'floating');
+  assert.match(describeMonitorVideo(result, 'viewer'), /景観描画 60.0fps.*景観への映像供給 30.0fps（浮遊面）/);
+});
+
+
+test('video upper budgets scale with source geometry and rate while remaining bounded', () => {
+  assert.equal(monitorVideoBitrate({ width: 1280, height: 720, frameRate: 60 }), 5_529_600);
+  assert.equal(monitorVideoBitrate({ width: 1280, height: 720, frameRate: 30 }), 2_764_800);
+  assert.equal(monitorVideoBitrate({ width: 1280, height: 720, frameRate: 15 }), 2_000_000);
+  assert.equal(monitorVideoBitrate({ width: 1920, height: 1080, frameRate: 60 }), 12_000_000);
+  assert.equal(monitorVideoBitrate({ width: 10000, height: 10000, frameRate: 240 }), 12_000_000);
+  assert.equal(monitorVideoBitrate({ width: NaN, height: -1, frameRate: 0 }), 5_529_600);
 });

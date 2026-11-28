@@ -134,6 +134,14 @@ function closeRemote(credentials: Credentials): void {
   void signal('close', {}, credentials).catch(() => {});
 }
 
+/** Engineering upper budget, not a minimum allocation or a quality guarantee. */
+export function monitorVideoBitrate(settings: MediaTrackSettings): number {
+  const positive = (value: number | undefined, fallback: number) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+  const pixels = positive(settings.width, 1280) * positive(settings.height, 720);
+  const fps = Math.min(MONITOR_TARGET_FRAME_RATE, positive(settings.frameRate, MONITOR_TARGET_FRAME_RATE));
+  return Math.round(Math.max(2_000_000, Math.min(12_000_000, pixels * fps * .1)));
+}
+
 function liveTrack(tracks: MediaStreamTrack[]): MediaStreamTrack | undefined {
   return tracks.find((track) => track.readyState === 'live');
 }
@@ -540,7 +548,7 @@ export class MonitorSender extends MonitorSession<SenderConnection> {
         this.publish(connection, { ...connection.state, phase: 'connected', detail: '画面を共有しています。' });
       });
       const options: RTCRtpTransceiverInit = { direction: 'sendonly', streams: [connection.stream] };
-      peer.addTransceiver(connection.video, { ...options, sendEncodings: [{ maxFramerate: MONITOR_TARGET_FRAME_RATE }] });
+      peer.addTransceiver(connection.video, { ...options, sendEncodings: [{ maxFramerate: MONITOR_TARGET_FRAME_RATE, maxBitrate: monitorVideoBitrate(connection.video.getSettings?.() ?? {}) }] });
       if (connection.audioTrack?.readyState === 'live') peer.addTransceiver(connection.audioTrack, options);
       const offer = await localDescription(peer, await peer.createOffer(), abort);
       await this.request(connection, 'offer', { description: offer });
