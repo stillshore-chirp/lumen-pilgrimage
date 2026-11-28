@@ -16,6 +16,7 @@ import { buildAtriumRetail } from './atriumRetail';
 import { buildAtriumRoof } from './atriumRoof';
 import { buildAtriumShell } from './atriumShell';
 import { buildAtriumStair } from './atriumStair';
+import { createAtriumMonitorOutputs, createAtriumMonitorSpeakers } from './atriumMonitorAudio';
 
 // A compact indoor radiance map gives metal and glazing their broad reflected light sources.
 // The floor additionally uses a spatial reflection of the actual architecture.
@@ -83,6 +84,7 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
   const retail = await buildAtriumRetail(room, floor.wallStone);
   const furnishings = buildAtriumFurnishings(room);
   const frontCommons = await buildAtriumFrontCommons(room, floor.wallStone);
+  createAtriumMonitorSpeakers(room);
   batchAtriumOpaqueMeshes(room);
   let mode: WorldLightingMode = 'auto';
   let time: CoastTimeOfDay = 'day';
@@ -114,6 +116,7 @@ export async function loadAtriumScene(): Promise<ExplorationScene> {
     audio: new AtriumAudio(),
     world: {
       scene,
+      monitorAudioOutputs: createAtriumMonitorOutputs(),
       get artificialLightingMode() { return mode; },
       setArtificialLightingMode(value) {
         mode = value;

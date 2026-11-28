@@ -471,7 +471,7 @@ WindowsのChromeで `chrome://gpu` を開き、Graphics Feature StatusのWebGL�
 
 ## 仮想モニターの実機確認
 
-共有音響の開発側確認では、`scripts/monitor-audio.test.mjs` と `scripts/monitor-pose.test.mjs` が左右の実表示縁、独立配線、出力切替後の同一音源・トラック保持を検査します。
+共有音響の開発側確認では、`scripts/monitor-audio.test.mjs` と `scripts/monitor-pose.test.mjs` が左右の実表示縁、独立配線、出力切替後の同一音源・トラック保持を検査します。`scripts/cinema-audio.test.mjs` は共通設備表の57出力の配分、`scripts/atrium-audio.test.mjs` は館内18台・カフェ6台と入口／隔壁の伝搬を検査します。側壁・後壁・天井の取付48台と、幕裏・低域を含む共有音響57台は検証対象が異なります。
 
 実ブラウザーの音声出力では、左右識別、モノラル、反相、無音、低域の位相合成、最大音量、近接・背面・移動・出力切替・品質切替を、同じ入力と耳位置で記録します。圧縮前後の有限値・ピーク・エネルギー、前方と拡散の到来順、尾の残り方、実時間の欠落と負荷を照合します。PCM測定、直接の試聴と独立評価、OSの画面共有・物理HMDの運用確認はそれぞれ別の結果として残します。
 
