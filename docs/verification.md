@@ -332,7 +332,30 @@ npm run test:coast:browser
 
 住戸の音響browser試験は、音源から伝搬用Gain・Delayを経由して最初のBiquadまでの接続を追跡します。二つの遅延tapが同じfilterへ合流しても一つとして数えます。襖・バルコニー引戸・玄関戸の実操作後に、交通音の帯域係数、室への送り、乾いた成分のgainが変わることを確認します。家電の完了音は短音の種類・非loop・実際のstartイベントを区別し、伝搬入力への接続から追跡します。接続・係数・イベントの通過を、最終波形の帯域応答や聴感の合格と同一視しません。PCMの到来・尾部・欠測や聞こえ方は、同じ入力と姿勢による直接確認へ分けて記録します。
 
+### 映画館の機器接続と接近
+
+[筐体と取付の現行設計](cinema/cinema-speaker-mounts.md)を基準に、全48台の放射面と音響中心・向き、支持材両端と取付板、屋根・壁への接続を配置試験で照合します。実メッシュの詳細が共通の接触箱内にあることと、丸みで生じる保守的な差も確認します。
+
+実画面では清掃モードで、天井機器を横からと上から、後壁機器を壁沿いの斜めから観察します。同じ位置・quaternion・projection・描画解像度・画質・照明で比較し、筐体、背面板、2本の支持材、屋根・壁側の取付座まで接続が読めることを確認します。
+
+前面材は0.35m・1mの正面と斜め、複数台が重なる浅い視角で、円孔、縁、黒い裏当て、alphaの縁と裏抜けを確認します。白・黒・赤を実際の上映入力から映し、照明が安定してから同条件で比べます。黒刺激で全画素が0の像を細部の証拠にしません。High→Light→Highでbumpの有無と復元、色とheightの別所有、退出後の解放も確認します。
+
+[還気口](cinema/cinema-ventilation.md)は4か所の下面・斜めと、元のコファー下面を貫通する実空隙を確認します。口の下から正規飛行で上昇・保持・逆向き退避し、有限の実姿勢と最終clear判定を保存します。静止頭部追跡から見た内面は別に記録します。環境音は同ループ位相・音量・頭部で前後の距離、帯域レベル、左右差とオン・オフ、退出再訪を比較します。対象版ごとの実施範囲は[再評価の検証記録](cinema/cinema-reevaluation-verification.md)に記します。
+
+通常の移動入力では下・横・上・斜めと垂直だけの飛行を試し、模擬XRでは頭部offsetを加えた実際の頭部中心で移動が止まること、重なった位置から安全な向きへ退避できることを確かめます。一方、静止中の追跡された頭部の1:1移動は衝突で遮断しません。その頭部移動で見える閉じた筐体、上面、裏面、取付の奥も可視包絡に含め、隠れた面の欠落や接続の破綻を確認します。locomotionの停止と静止中の頭部追跡を別に記録します。全台の共通定義・実メッシュ検査と危険箇所の連続経路を組み合わせ、少数の写真だけで全台を合格にしません。
+
+
+最終の連続巡回では、R09からR01、左縦通路、R08・R15の車いす位置、後方横通路、右縦通路、R09へ戻ります。座位・立位・低姿勢と回頭を同じ連続経路で記録し、別poseへ移した写真と区別します。幕端、コファー、左右の映写窓の実開口中心、上部機器を含めます。共有映像は実受信寸法とtrack状態、2.39・左右部分白・白・黒8秒・復帰を記録します。再訪時は既存のarrival/auto初期化と、その後の通常UI設定・表示を確認します。worldを越えた照明設定の永続化を仮定しません。
+
+幕の裏は、bodyを`z=0.65m`に置いてから模擬XRを開始し、静止headを`z=-1m`へ動かします。要求値だけでなく実両眼のworld座標（代表値`z=-0.35m`）を記録し、裏・縁を見ます。追加薄膜は閉36indexとrayを保ち、通常描画は可視30index/1group/各眼1回だけであることをactual rendererのcallbackと照合します。後方席で白・部分白をHigh/Light・短い横移動で比べ、同じmain frameのscene/camera/atlasを保った薄膜on/off/restoreが正面のpixelを変えないことも確かめます。これは性能計測と分けた私用観測条件です。
+
+床の帯を調べるときは、High/Light切替でrasterまで変える前に、同じcamera・照明・色map/UV・roughnessを保ってbumpだけを外し復帰します。shaderの再準備は必要でも、world時刻とsource frameを進めず同じnative描画で比べ、復帰像の一致を残します。色柄と法線の寄与を分けた後、近・遠・斜めと短い正規移動で材を評価します。静止した数値だけでHMDの時間品質を合格にしません。
+
 映画館はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:cinema:browser` で確認します。`--no-shell` で導入した Chromium を使う場合は、`COAST_CHROME_CHANNEL=chromium npm run test:cinema:browser` を実行してください。音響試験はチャンネル未指定時に Chromium のヘッドレスシェルを使います。
+
+音響のnative offlineだけを再現する場合は、`CINEMA_AUDIO_BROWSER=1 node --test --test-name-pattern 'Chromium OfflineAudioContext' scripts/cinema-audio.test.mjs` を使います。標準targetは5代表席×2品質を含む21 responseと30帯域clarity、各1秒の51 OfflineAudioContextを描画し、その後に環境音のgesture・4mix・足音・解放を検査します。全体予算は有限180秒です。初期化・描画・後続操作の各stageとcontextの終端を保存し、offline全体の所要時間をrealtime Workletの処理期限とは区別します。
+
+環境音のゲイン検査では、観測器とgraph/contextの準備を有限予算で先に行い、元の4秒・誤差0.002の全条件を50ms timerで観測します。試験用の連続入力を実3バスへ加え、実バスとtrim/limiter前masterのnative振幅も確認します。getterの条件成立後、analyserの1窓＋2render quantumがaudio clock上で進んでから読み、窓の開始・取得時刻を残します。probeは実足音のBufferSource計数から分けてstop・disconnectします。フレーム性能の検査をtimerへ置き換える手順ではありません。
 
 ローカル上映の回帰試験には、H.264をデコードできるChromeと、`libx264` を使えるFFmpegが必要です。WindowsのPowerShellでは `$env:COAST_CHROME_CHANNEL = "chrome"` を設定してから `npm run test:cinema:browser` を実行します。[上映のブラウザー試験](../scripts/cinema-screening.browser.test.mjs) は、生成した7.1.4素材と位置付き音源の組を利用者と同じファイル選択から開き、映像フレームとテスト信号の出力、シーク、非常点検中の停止と復帰、模擬WebXRでの再生継続を確かめます。
 

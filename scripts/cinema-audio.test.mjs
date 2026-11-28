@@ -14,6 +14,10 @@ const { CINEMA_SPEAKERS, cinemaReflections, cinemaReflectionTaper, cinemaSeatDrr
   await import('../src/coast/world/cinema/cinemaAcoustics.ts');
 const { CINEMA_DESTINATIONS, CINEMA_ROWS, cinemaGroundHeight } =
   await import('../src/coast/world/cinema/cinemaLayout.ts');
+const { cinemaSourceBandLoss, cinemaSeatingClearance, cinemaPathCrossesScreen, cinemaReflectionBandGain,
+  cinemaBandShelves, cinemaScreenCrossings, CINEMA_SURFACE_GAINS } = await import('../src/coast/world/cinema/cinemaPropagation.ts');
+const { CINEMA_RENDER_SPEAKERS } = await import('../src/coast/world/cinema/cinemaSpeakers.ts');
+const { cinemaPropagationImpulse } = await import('../src/coast/world/cinema/cinemaPropagationFilter.ts');
 hook.deregister();
 
 const [centerSeat, frontSeat, rearSeat, wheelchairSeat] = CINEMA_DESTINATIONS;
@@ -64,10 +68,13 @@ test('deterministic stereo room tails start after 55 ms and have independent inp
 
 const browserChannel = process.env.COAST_CHROME_CHANNEL;
 const runBrowser = browserChannel || process.env.CINEMA_AUDIO_BROWSER || process.env.npm_lifecycle_event === 'test:cinema:browser';
-test('Chromium OfflineAudioContext verifies cinema signals at every seat and playback quality', {
+test('Chromium OfflineAudioContext verifies cinema signals at representative seats and playback quality', {
   skip: !runBrowser,
-  timeout: 90_000,
+  timeout: 180_000,
 }, async t => {
+  const testStarted = performance.now();
+  const mark = stage => t.diagnostic(JSON.stringify({ stage, elapsedMs: performance.now() - testStarted }));
+  t.after(() => mark('teardown'));
   const { createServer } = await import('vite');
   const { chromium } = await import('playwright');
   const server = await createServer({
@@ -81,9 +88,17 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
   const page = await browser.newPage();
   const address = server.httpServer.address();
   await page.goto(`http://127.0.0.1:${address.port}/@vite/client`);
+  mark('browser-ready');
+  // Initialize Playwright's main-world observer separately from AudioParam convergence.
+  await page.waitForFunction(() => true, undefined, { timeout: 15000, polling: 50 });
+  mark('audio-observer-ready');
   const metrics = await page.evaluate(async seats => {
+    const evaluationStarted = performance.now();
+    const responseTimings = [];
+    const clarityTimings = [];
     const { PerspectiveCamera } = await import('/node_modules/three/build/three.module.js');
     const { createCinemaPlayback } = await import('/src/coast/world/cinema/cinemaPlayback.ts');
+    const importMs = performance.now() - evaluationStarted;
     const rate = 48_000;
     const time = 0.16;
     const first = Math.round(rate * time);
@@ -96,6 +111,8 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
       return sum;
     };
     async function response(mode, seat, input, yaw = 0, options = {}) {
+      const started = performance.now();
+      const suspensions = [];
       const context = new OfflineAudioContext(2, rate, rate);
       const buffer = context.createBuffer(input.length, rate / 3, rate);
       input.forEach((level, channel) => {
@@ -116,7 +133,13 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
       playback.update(camera);
       if (options.transition) {
         for (const [at, next] of [[0.21, 'high'], [0.25, 'light'], [0.27, 'high']]) {
-          void context.suspend(at).then(() => { playback.setQuality(next); playback.update(camera); return context.resume(); });
+          void context.suspend(at).then(() => {
+            const configurationStarted = performance.now();
+            playback.setQuality(next);
+            playback.update(camera);
+            suspensions.push({ at, contextTime: context.currentTime, configurationMs: performance.now() - configurationStarted });
+            return context.resume();
+          });
         }
       }
       if (options.disposed) {
@@ -126,11 +149,18 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
         playback.dispose();
       }
       source.start(time);
+      const renderStarted = performance.now();
       const result = await context.startRendering();
+      const rendered = performance.now();
       playback.dispose();
+      responseTimings.push({ mode, seat, input, yaw, options,
+        initializationMs: renderStarted - started, renderMs: rendered - renderStarted,
+        disposalMs: performance.now() - rendered, totalMs: performance.now() - started,
+        terminalState: context.state, suspensions });
       return result;
     }
     async function clarity(buffer, band, onset) {
+      const started = performance.now();
       const context = new OfflineAudioContext(2, buffer.length, rate);
       const source = context.createBufferSource();
       source.buffer = buffer;
@@ -145,6 +175,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
       source.connect(highPass).connect(lowPass).connect(context.destination);
       source.start();
       const result = await context.startRendering();
+      clarityTimings.push({ band, totalMs: performance.now() - started, terminalState: context.state });
       return 10 * Math.log10(energy(result, first, onset + 0.05 * rate) / energy(result, onset + 0.05 * rate, result.length));
     }
     const responseStats = [];
@@ -176,6 +207,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
     };
     return {
       responseStats,
+      timing: { evaluationMs: performance.now() - evaluationStarted, importMs, responseTimings, clarityTimings },
       l: balance(left), r: balance(right), unknown: balance(unknown), c: balance(facing), turned: balance(turned),
       surround: balance(surround),
       monoAfterDispose: bypass.getChannelData(0)[first], bypassRight: bypass.getChannelData(1)[first],
@@ -184,6 +216,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
       switchingEnergy: [0.20, 0.24, 0.28, 0.38].map(time => energy(switching, Math.round(rate * time), Math.round(rate * (time + 0.02)))),
     };
   }, seats);
+  mark('offline-evaluation-complete');
   t.diagnostic(JSON.stringify(metrics));
   for (const quality of ['light', 'high']) {
     const records = metrics.responseStats.filter(stats => stats.quality === quality);
@@ -207,6 +240,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
   assert.ok(Math.abs(metrics.monoAfterDispose - 0.4) < 1e-6);
   assert.equal(metrics.bypassRight, 0);
   assert.ok(Math.min(...metrics.switchingEnergy) / Math.max(...metrics.switchingEnergy) > 0.25);
+  mark('offline-signal-assertions-complete');
 
   const silentBeforeGesture = await page.evaluate(async () => {
     const { CinemaAmbience } = await import('/src/coast/world/cinema/cinemaAmbience.ts');
@@ -283,6 +317,36 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
     const preview = routes.get(previewOutput);
     const footsteps = routes.get(context.panners.at(-1));
     fixture.gains = [routes.get(wind), wind, preview, footsteps].map(node => node.gain);
+    // Ended sources can leave an unpulled bus's AudioParam getter at its last rendered value.
+    // Keep the three actual audio inputs active and verify their output, not just automation commands.
+    // Oscillators leave the BufferSource-based footfall event counter unchanged.
+    const buses = [wind, preview, footsteps];
+    const analysisFrames = 8192;
+    const frequencies = [2001, 2201, 2401].map(bin => context.sampleRate * bin / analysisFrames);
+    const carrierLevel = .01;
+    const nativeConnect = AudioNode.prototype.connect;
+    const probes = buses.map((bus, i) => {
+      const source = context.createOscillator();
+      source.frequency.value = frequencies[i];
+      const gain = context.createGain();
+      gain.gain.value = carrierLevel;
+      source.connect(gain).connect(bus);
+      source.start();
+      return { source, gain };
+    });
+    // Tap the master before the shared trim/limiter, so compression cannot alter the measured gain.
+    // Integer analysis-bin carriers separate all three paths without normalizing their raw output.
+    const taps = [routes.get(wind), ...buses].map(bus => {
+      const analyser = context.createAnalyser();
+      analyser.fftSize = analysisFrames;
+      const sink = context.createGain();
+      sink.gain.value = 0;
+      nativeConnect.call(bus, analyser);
+      analyser.connect(sink).connect(context.destination);
+      return { analyser, sink };
+    });
+    fixture.gainProbes = { probes, taps, frequencies, carrierLevel };
+
     return {
       fans: fanPanners.length, elevation: point.positionY.value, roomTails: context.tails.length,
       sharedWind: fanPanners.every(pan => routes.get(pan) === wind),
@@ -295,10 +359,70 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
     isolatedFootstepTail: true, isolatedPreviewTail: true,
   });
 
-  const expectGains = targets => page.waitForFunction(expected => {
-    const { ambience, gains } = window.cinemaAmbienceFixture;
-    return ambience.isRunning() && expected.every((value, i) => Math.abs(gains[i].value - value) < .002);
-  }, targets, { timeout: 4000 });
+  await page.waitForFunction(() => {
+    const { ambience, contexts: [context] } = window.cinemaAmbienceFixture;
+    return context.state === 'running' && ambience.isRunning();
+  }, undefined, { timeout: 15000, polling: 50 });
+  mark('ambient-graph-context-ready');
+
+  const gainObservations = [];
+  const expectGains = async targets => {
+    let failure = false;
+    let analysisWindowReady = false;
+    const started = Date.now();
+    try {
+      await page.waitForFunction(expected => {
+        const fixture = window.cinemaAmbienceFixture;
+        const { ambience, gains, contexts: [context] } = fixture;
+        const matched = ambience.isRunning() && expected.every((value, i) => Math.abs(gains[i].value - value) < .002);
+        if (matched) fixture.gainSettledAt = context.currentTime;
+        return matched;
+      }, targets, { timeout: 4000, polling: 50 });
+      // A retrospective analyser window must contain only samples after the gain predicate succeeded.
+      // Two 128-sample quanta cover the render/readback boundary without using a frame or wall sleep.
+      await page.waitForFunction(() => {
+        const { contexts: [context], gainSettledAt, gainProbes } = window.cinemaAmbienceFixture;
+        return context.state === 'running'
+          && context.currentTime >= gainSettledAt + (gainProbes.taps[0].analyser.fftSize + 256) / context.sampleRate;
+      }, undefined, { timeout: 4000, polling: 50 });
+      analysisWindowReady = true;
+    } catch { failure = true; }
+    const record = await page.evaluate(expected => {
+      const { ambience, gains, contexts: [context], gainProbes, gainSettledAt } = window.cinemaAmbienceFixture;
+      const { taps, frequencies, carrierLevel } = gainProbes;
+      const readAudioTime = context.currentTime;
+      const data = taps.map(({ analyser }) => {
+        const samples = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(samples);
+        return samples;
+      });
+      function amplitude(samples, frequency) {
+        let ss=0, cc=0, sc=0, ys=0, yc=0;
+        for (let i=0; i<samples.length; i++) {
+          const phase=2*Math.PI*frequency*i/context.sampleRate, s=Math.sin(phase), c=Math.cos(phase);
+          ss+=s*s; cc+=c*c; sc+=s*c; ys+=samples[i]*s; yc+=samples[i]*c;
+        }
+        const det=ss*cc-sc*sc;
+        return Math.hypot((ys*cc-yc*sc)/det,(yc*ss-ys*sc)/det);
+      }
+      const busOutputGains = frequencies.map((f,i)=>amplitude(data[i+1],f)/carrierLevel);
+      const masterOutputGains = frequencies.map(f=>amplitude(data[0],f)/carrierLevel);
+      return { expected, state:context.state, time:readAudioTime, readEndAudioTime:context.currentTime, gainSettledAt,
+        analysisFrames:data[0].length, conservativeWindowStart:readAudioTime-(data[0].length+256)/context.sampleRate,
+        isRunning:ambience.isRunning(),
+        values:gains.map(g=>g.value), busOutputGains, masterOutputGains,
+        nonFinite:data.map(a=>a.reduce((n,x)=>n+(!Number.isFinite(x)?1:0),0)),
+        raw:data.map(a=>Array.from(a)), frequencies, carrierLevel,
+        voices:Array.from(ambience.voices,v=>({loop:v.source.loop,duration:v.source.buffer?.duration})),
+        previewCount:ambience.previews.size };
+    }, targets);
+    record.waitFailed=failure; record.analysisWindowReady=analysisWindowReady; record.elapsedMs=Date.now()-started;
+    record.busOutputWithinOriginalTolerance=record.busOutputGains.every((v,i)=>Math.abs(v-targets[i+1])<.002);
+    record.masterOutputWithinOriginalTolerance=record.masterOutputGains.every((v,i)=>Math.abs(v-targets[0]*targets[i+1])<.002);
+    gainObservations.push(record);
+    const {raw, ...summary} = record;
+    console.log(JSON.stringify({gainObservation:summary}));
+  };
   await expectGains([2.1, .21, .35, .62]);
   await page.evaluate(() => {
     const { ambience, mix } = window.cinemaAmbienceFixture;
@@ -384,6 +508,101 @@ test('Chromium OfflineAudioContext verifies cinema signals at every seat and pla
   assert.ok(footfalls.stair[0].texture > Math.max(...footfalls.carpet.map(step => step.texture)) * 2);
 
   await page.waitForFunction(() => window.cinemaAmbienceFixture.contexts[0].tails[1].disconnected);
-  await page.evaluate(() => window.cinemaAmbienceFixture.ambience.dispose());
+  await page.evaluate(() => {
+    const {ambience,gainProbes} = window.cinemaAmbienceFixture;
+    gainProbes.probes.forEach(({source,gain})=>{source.stop();source.disconnect();gain.disconnect();});
+    gainProbes.taps.forEach(({analyser,sink})=>{analyser.disconnect();sink.disconnect();});
+    ambience.dispose();
+  });
   await page.waitForFunction(() => window.cinemaAmbienceFixture.contexts[0].state === 'closed');
+  mark('ambient-final-assertions-complete');
+  assert.ok(gainObservations.length===4 && gainObservations.every(r=>!r.waitFailed && r.analysisWindowReady && r.conservativeWindowStart>=r.gainSettledAt && r.nonFinite.every(n=>n===0) && r.busOutputWithinOriginalTolerance && r.masterOutputWithinOriginalTolerance), 'Every original gain state must also match measured native bus/master carrier output');
+});
+
+
+test('shared source spectrum retains legacy air/aim values and keeps subwoofer handling separate', () => {
+  const source = { position: [0, 2, 0], aim: [0, 0, 1], subwoofer: false };
+  const onAxis = cinemaSourceBandLoss(source, [0, 2, 40], 40);
+  assert.deepEqual(onAxis, [.0004, .0013, .0027, .0047, .009, .024].map(value => -40 * value));
+  const offAxis = cinemaSourceBandLoss(source, [40, 2, 0], 40);
+  assert.ok(offAxis[5] < onAxis[5] - 4.99);
+  assert.deepEqual(cinemaSourceBandLoss({ ...source, subwoofer: true }, [40, 2, 0], 40), [0, 0, 0, 0, 0, 0]);
+  const early = cinemaSourceBandLoss(source, [0, 2, 10], 80);
+  assert.equal(early[5], -80 * .024); // Launch direction stays axial; the whole reflected path absorbs air.
+});
+
+test('finite screen crossing, shared reflection bands and shelf sections preserve separate transfer causes', () => {
+  assert.equal(cinemaPathCrossesScreen([[0, 12, -1.4], [0, 5, 35.85]]), true);
+  assert.equal(cinemaPathCrossesScreen([[19, 12, -1.4], [19, 5, 35.85]]), false);
+  assert.equal(cinemaPathCrossesScreen([[0, 1, -1.4], [0, 1, 35.85]]), false);
+  assert.equal(cinemaPathCrossesScreen([[0, 12, 1], [0, 5, 35.85]]), false);
+  const gain = cinemaReflectionBandGain(['left', 'ceiling']);
+  assert.equal(gain.length, 6);
+  for (let band = 0; band < gain.length; band++) {
+    assert.equal(gain[band], CINEMA_SURFACE_GAINS.left[band] * CINEMA_SURFACE_GAINS.ceiling[band]);
+  }
+  const sections = cinemaBandShelves([125, 250, 500], [-.1, -.3, -1]);
+  assert.equal(sections[0].frequency, Math.sqrt(125 * 250));
+  assert.ok(Math.abs(sections[0].gainDb + .2) < 1e-12);
+  assert.ok(Math.abs(sections[1].gainDb + .7) < 1e-12);
+});
+
+test('every speaker has direct seat clearance at all row standing/crouching and aisle inspection poses', t => {
+  let tested = 0;
+  const blocked = [];
+  for (const row of CINEMA_ROWS) {
+    for (const x of [-18.4, -14, -7, -6.66, 0, 6.66, 7, 14, 18.4]) {
+      for (const eye of [1.15, 1.65]) {
+        const listener = [x, cinemaGroundHeight(x, row.z) + eye, row.z];
+        for (const source of CINEMA_RENDER_SPEAKERS) {
+          tested++;
+          const path = cinemaSeatingClearance(source.position, listener);
+          if (path.blocked) blocked.push({ speaker: source.id, row: row.number, x, eye,
+            seatDepth: path.seatDepth, treadDepth: path.treadDepth });
+        }
+      }
+    }
+  }
+  t.diagnostic(`Direct finite seat/tread rays: ${tested}; blocked: ${blocked.length}`);
+  assert.deepEqual(blocked, []);
+});
+
+
+test('causal propagation FIR preserves the analytic shelf transfer without level normalization', () => {
+  const unity = cinemaPropagationImpulse({ bandDb: [0, 0, 0, 0, 0, 0], screenCrossings: 0 }, 256);
+  assert.equal(unity[0], 1); assert.ok(unity.subarray(1).every(value => value === 0));
+  const constant = cinemaPropagationImpulse({ bandDb: [-6, -6, -6, -6, -6, -6], screenCrossings: 0 }, 256);
+  assert.ok(Math.abs(constant[0] - 10 ** (-6 / 20)) < 1e-7);
+  assert.ok(constant.subarray(1).every(value => value === 0));
+  // Independent analytic W3C S=1 reference, generated without the FIR implementation.
+  const oracle = [[63,.985943423661866,-.02860825512326161],[125,.980169727822701,-.058378819586121344],
+    [250,.9561598387198946,-.10541610410767717],[500,.9073173742670725,-.17181126924879758],
+    [1000,.8016164007478866,-.2576817446966986],[2000,.6122296616554151,-.28502747008932267],
+    [4000,.45587778766590137,-.1851171958311123],[8000,.41398189748603736,-.09132091817222615],
+    [16000,.40399198567895983,-.028100149665358332]];
+  const impulse = cinemaPropagationImpulse({ bandDb: [-.116, -.302, -.608, -1.188, -2.86, -5.96],
+    screenCrossings: 1 }, 256);
+  for (const [frequency, real, imaginary] of oracle) {
+    let re = 0, im = 0;
+    impulse.forEach((value, n) => { re += value * Math.cos(2 * Math.PI * frequency * n / 48000);
+      im -= value * Math.sin(2 * Math.PI * frequency * n / 48000); });
+    assert.ok(Math.abs(20 * Math.log10(Math.hypot(re, im) / Math.hypot(real, imaginary))) < .1);
+    assert.ok(Math.abs(Math.atan2(im * real - re * imaginary, re * real + im * imaginary)) < Math.PI / 180);
+  }
+});
+
+
+test('each finite fabric crossing contributes one causal screen transfer', () => {
+  assert.equal(cinemaScreenCrossings([[-12, 14, 10], [-13, 7, -3.1], [-15, 2, 1]]), 2);
+  assert.equal(cinemaScreenCrossings([[16, 14, 10], [16, 7, -3.1], [16, 2, 1]]), 0);
+  const bandDb = [0, 0, 0, 0, 0, 0];
+  const once = cinemaPropagationImpulse({ bandDb, screenCrossings: 1 }, 512);
+  const twice = cinemaPropagationImpulse({ bandDb, screenCrossings: 2 }, 512);
+  let error = 0;
+  for (let n = 0; n < twice.length; n++) {
+    let expected = 0;
+    for (let tap = 0; tap <= n; tap++) expected += once[tap] * once[n - tap];
+    error = Math.max(error, Math.abs(twice[n] - expected));
+  }
+  assert.ok(error < 2e-7, `Two actual traversals must equal two transfers, error ${error}`);
 });

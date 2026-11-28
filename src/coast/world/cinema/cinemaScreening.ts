@@ -137,14 +137,22 @@ export class CinemaScreeningPlayer {
     }
     this.fill(room, status.sample);
     const outputTime = context.getOutputTimestamp?.().contextTime ?? context.currentTime;
-    const advance = Math.max(-PREROLL_SAMPLES, Math.min(1024, secondsToSample(outputTime - status.contextTime)));
-    const consumed = Math.min(this.nextRead, status.sample + (status.playing ? advance : 0));
+    // Stopping consumption does not make already rendered samples audible.
+    // Keep the negative output-clock offset while the device drains them, but
+    // never extrapolate beyond the last consumed sample while stopped.
+    const advance = Math.max(-PREROLL_SAMPLES,
+      Math.min(status.playing ? 1024 : 0, secondsToSample(outputTime - status.contextTime)));
+    const rendered = Math.min(this.nextRead, status.sample);
+    const consumed = Math.min(this.nextRead, status.sample + advance);
     const presentation = Math.max(this.cursor, Math.min(this.asset.durationSamples,
       consumed - room.centerDelaySamples()));
     const videoReady = this.present(presentation);
     if (videoReady) this.cursor = presentation;
     const primed = this.nextRead >= Math.min(this.endSample, status.sample + PREROLL_SAMPLES);
-    const finished = consumed >= this.endSample - 1;
+    // A stopped, fully rendered end must finish even if the output timestamp
+    // remains behind. Preserve the rendered-end completion used before the
+    // output clock was also applied to stopped presentation.
+    const finished = (status.playing ? consumed : rendered) >= this.endSample - 1;
     if (finished) this.requested = false;
     const play = videoReady && (this.active || primed) && !finished && context.state === 'running';
     if (this.active !== play) {

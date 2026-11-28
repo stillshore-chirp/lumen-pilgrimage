@@ -11,11 +11,11 @@ const codeExtension = /\.(?:[cm]?js|tsx?)$/;
 const testExtension = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const worlds = ['coast', 'monitor', 'residence', 'cinema', 'atrium', 'lake', 'koto'];
 const tests = {
-  coast: ['coast-controls', 'coast-terrain', 'coast-acoustics', 'exploration-route'],
+  coast: ['coast-controls', 'coast-texture-lifetime', 'coast-terrain', 'coast-acoustics', 'exploration-route'],
   monitor: ['monitor-signaling', 'monitor-session', 'monitor-capture', 'monitor-pose', 'monitor-xr', 'monitor-audio'],
   residence: ['residence-navigation', 'residence-audio', 'residence-street', 'residence-lighting', 'residence-appliances',
     'residence-acoustic-paths', 'residence-monitor-audio', 'residence-screen-occlusion'],
-  cinema: ['cinema-navigation', 'cinema-lighting', 'cinema-audio', 'cinema-source', 'cinema-routing', 'cinema-reflections-geometry', 'cinema-room-audio'],
+  cinema: ['cinema-navigation', 'cinema-ventilation', 'cinema-lighting', 'cinema-audio', 'cinema-source', 'cinema-movie-output', 'cinema-screening-clock', 'cinema-routing', 'cinema-routing-packet', 'cinema-reflections-geometry', 'cinema-room-audio'],
   atrium: ['atrium-navigation', 'atrium-audio', 'atrium-facility'],
   lake: ['lake-navigation', 'lake-audio', 'lake-geometry', 'lake-fish', 'lake-vegetation'],
   koto: ['koto-analysis', 'koto-physical', 'koto-sample', 'koto-playback', 'koto-transport', 'koto-score', 'koto-production', 'koto-recorded-modal-study', 'koto-recording-performance-study', 'koto-excitation-color', 'koto-recorded-sustain-study'],
@@ -77,6 +77,7 @@ const drawingInputs = new Set([
   'scripts/draw-cinema-speaker-mounts.mjs',
   'scripts/revise-residence-drawings.py',
   'docs/residence/source/residence-70f-revisions.json',
+  'scripts/draw-cinema-ventilation.mjs',
 ]);
 // Vite copies these notices from public/ into the build. The gates check packaging and
 // document links; they do not establish license compliance or regeneration equality.

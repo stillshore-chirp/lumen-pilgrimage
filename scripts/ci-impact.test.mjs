@@ -72,7 +72,7 @@ test('documentation and binary references run the harness without compilation or
 });
 
 const drawingPaths = ['scripts/draw-cinema-speaker-mounts.mjs', 'scripts/revise-residence-drawings.py',
-  'docs/residence/source/residence-70f-revisions.json'];
+  'docs/residence/source/residence-70f-revisions.json', 'scripts/draw-cinema-ventilation.mjs'];
 const noticePaths = ['scripts/prepare-cinema-code-licenses.mjs', 'public/licenses/ATTRIBUTION.md',
   'public/licenses/three-0.184.0-LICENSE.txt', 'public/licenses/three-0.184.0.json'];
 const toolingFiles = Object.fromEntries([...drawingPaths, ...noticePaths].map(path => [path, '']));

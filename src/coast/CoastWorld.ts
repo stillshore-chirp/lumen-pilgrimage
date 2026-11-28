@@ -112,6 +112,7 @@ export class CoastWorld {
   private readonly inariTrail: ReturnType<typeof createInariTrail>;
   private readonly sky: ReturnType<typeof createCoastSky>;
   private readonly terrain: ReturnType<typeof createCoastTerrain>;
+  private readonly terrainSand: THREE.Texture;
   private readonly vegetation: ReturnType<typeof createCoastVegetation>;
   private readonly waterfalls: ReturnType<typeof createWaterfalls>;
   private readonly ocean: ReturnType<typeof createCoastOcean>;
@@ -129,7 +130,7 @@ export class CoastWorld {
     this.scene.add(this.sky.dome, this.sky.clouds);
 
     const stone = loadCoastTexture('limestone.webp', true);
-    const sand = loadCoastTexture('sand.webp', true);
+    const sand = this.terrainSand = loadCoastTexture('sand.webp', true);
     this.terrain = createCoastTerrain(stone, sand, this.time);
     this.scene.add(this.terrain.mesh, createShoreRocks(stone), createForestRocks(this.terrain.mossRock));
     this.ocean = createCoastOcean(this.time, this.atmosphere, sand);
@@ -225,7 +226,12 @@ export class CoastWorld {
   }
 
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
+    this.terrain.disposeTextures();
+    this.vegetation.disposeTextures();
+    // Reflector owns a distinct wrapper; the original terrain sampler stays here.
+    this.terrainSand.dispose();
     this.ocean.mesh.dispose();
     this.lake.mesh.dispose();
     this.lighting.dispose();

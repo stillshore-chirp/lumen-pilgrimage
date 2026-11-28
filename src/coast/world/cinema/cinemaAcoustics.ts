@@ -1,15 +1,15 @@
 import { Vector3 } from 'three';
 import {
   CINEMA_BOUNDS, CINEMA_DESTINATIONS, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN,
-  CINEMA_SEAT_BANKS, CINEMA_SIDE_SURROUNDS, CINEMA_TREADS,
+  CINEMA_SIDE_SURROUNDS,
   cinemaGroundHeight,
 } from './cinemaLayout';
 
-export const CINEMA_BANDS = [125, 250, 500, 1_000, 2_000, 4_000] as const;
+import {
+  CINEMA_BANDS, CINEMA_SURFACE_GAINS, cinemaSeatingClearance, cinemaSourceBandLoss,
+} from './cinemaPropagation';
+export { CINEMA_BANDS, CINEMA_SCREEN_BANDS, CINEMA_WOVEN_FABRIC } from './cinemaPropagation';
 export const CINEMA_T60 = [1.25, 1.12, 1, 0.92, 0.80, 0.65] as const;
-export const CINEMA_WOVEN_FABRIC = [0, 0, 0, 0, -0.18, -0.79, -1.20, -1.90] as const;
-export const CINEMA_SCREEN_BANDS = [125, 250, 500, 1_000, 2_000, 4_000, 6_000, 10_000] as const;
-const AIR_DB_PER_METRE = [0.0004, 0.0013, 0.0027, 0.0047, 0.009, 0.024] as const;
 const SOUND_SPEED = 343;
 const MAX_REFLECTION_DELAY = 0.080;
 const LATE_START = 0.055;
@@ -46,15 +46,14 @@ interface Reflector {
   id: 'left' | 'right' | 'rear' | 'ceiling';
   axis: 'x' | 'y' | 'z';
   at: number;
-  absorption: readonly number[];
-  scatter: number;
+  gain: readonly number[];
 }
 
 const surfaces: readonly Reflector[] = [
-  { id: 'left', axis: 'x', at: CINEMA_BOUNDS.minX, absorption: [.26, .45, .65, .70, .74, .77], scatter: .35 },
-  { id: 'right', axis: 'x', at: CINEMA_BOUNDS.maxX, absorption: [.26, .45, .65, .70, .74, .77], scatter: .35 },
-  { id: 'rear', axis: 'z', at: CINEMA_BOUNDS.maxZ, absorption: [.38, .61, .78, .81, .83, .82], scatter: .25 },
-  { id: 'ceiling', axis: 'y', at: CINEMA_ROOM_HEIGHT, absorption: [.21, .37, .55, .63, .66, .70], scatter: .25 },
+  { id: 'left', axis: 'x', at: CINEMA_BOUNDS.minX, gain: CINEMA_SURFACE_GAINS.left },
+  { id: 'right', axis: 'x', at: CINEMA_BOUNDS.maxX, gain: CINEMA_SURFACE_GAINS.right },
+  { id: 'rear', axis: 'z', at: CINEMA_BOUNDS.maxZ, gain: CINEMA_SURFACE_GAINS.rear },
+  { id: 'ceiling', axis: 'y', at: CINEMA_ROOM_HEIGHT, gain: CINEMA_SURFACE_GAINS.ceiling },
 ];
 
 export interface CinemaReflection {
@@ -83,11 +82,10 @@ export function cinemaSeatDrr(listener: Vector3): number {
 }
 
 export function cinemaSpeakerLoss(speaker: CinemaSpeaker, point: Vector3, distance: number): number[] {
-  if (speaker.id === 'LFE') return CINEMA_BANDS.map(() => 0);
-  const ray = point.clone().sub(speaker.position).normalize();
-  // A smooth first estimate for the horn until a selected speaker has measured polar data.
-  const offAxis = Math.min(1, (1 - Math.max(0, speaker.aim.dot(ray))) / (1 - Math.cos(Math.PI / 3)));
-  return AIR_DB_PER_METRE.map((loss, i) => -loss * distance - offAxis * [0.1, 0.25, 0.5, 1, 2.5, 5][i]);
+  return cinemaSourceBandLoss({
+    position: [speaker.position.x, speaker.position.y, speaker.position.z],
+    aim: [speaker.aim.x, speaker.aim.y, speaker.aim.z], subwoofer: speaker.id === 'LFE',
+  }, [point.x, point.y, point.z], distance);
 }
 
 function insideRoom(point: Vector3): boolean {
@@ -98,16 +96,7 @@ function insideRoom(point: Vector3): boolean {
 }
 
 function blockedBySeating(from: Vector3, to: Vector3): boolean {
-  if (Math.abs(to.z - from.z) < 0.01) return false;
-  const crosses = (z: number, height: number, seatBack: boolean) => {
-    const t = (z - from.z) / (to.z - from.z);
-    if (t <= 0.01 || t >= 0.99 || from.y + (to.y - from.y) * t >= height) return false;
-    if (!seatBack) return true;
-    const x = from.x + (to.x - from.x) * t;
-    return CINEMA_SEAT_BANKS.some(bank => x >= bank.minX && x <= bank.maxX);
-  };
-  return CINEMA_TREADS.some(tread => crosses(tread.z, tread.y, false))
-    || CINEMA_ROWS.some(row => !row.hasWheelchairBays && crosses(row.z + 0.4, row.y + 0.86, true));
+  return cinemaSeatingClearance([from.x, from.y, from.z], [to.x, to.y, to.z]).blocked;
 }
 
 export function cinemaReflectionTaper(seconds: number): number {
@@ -131,8 +120,7 @@ export function cinemaReflections(speaker: CinemaSpeaker, listener: Vector3): Ci
     const delay = (path - direct) / SOUND_SPEED;
     if (delay <= 0) return [];
     const losses = cinemaSpeakerLoss(speaker, point, path);
-    const amplitude = surface.absorption.map((absorption, i) => cinemaDecibels(losses[i]) * direct / path
-      * Math.sqrt((1 - absorption) * (1 - surface.scatter)));
+    const amplitude = surface.gain.map((gain, i) => cinemaDecibels(losses[i]) * direct / path * gain);
     return [{ surface: surface.id, point, delay, amplitude }];
   });
 }

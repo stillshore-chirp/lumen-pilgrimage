@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
+import { getEventListeners } from 'node:events';
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Ray, Raycaster, Scene, Triangle, Vector3 } from 'three';
 import { createDesktopGrabOcclusion } from '../src/coast/desktopGrabOcclusion.ts';
 import { blocksPavilionFlight, pavilionDomeProfile, PAVILION_DOME } from '../src/coast/world/overlook/overlookPavilionPlan.ts';
@@ -9,15 +10,18 @@ import {
   groundHeight, restSiteYaw, SEA_LEVEL, SPAWN,
 } from '../src/coast/terrain.ts';
 
+const soundControlsUrl = new URL('../src/coast/CoastSoundControls.ts', import.meta.url).href;
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
 // Vite resolves the extensionless terrain import in the app. Resolve that same file in the Node test.
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === './explorationSound' && context.parentURL === soundControlsUrl) return nextResolve('./explorationSound.ts', context);
     const path = specifier === './terrain' && context.parentURL === controlsUrl ? './terrain.ts' : specifier;
     return nextResolve(path, context);
   },
 });
 const { CoastControls } = await import(controlsUrl);
+const { bindCoastSoundControls } = await import(soundControlsUrl);
 hooks.deregister();
 
 class FakeEventTarget {
@@ -1075,4 +1079,92 @@ test('XR walking, flying and diving can retreat from head clearance without diag
       }
     });
   }
+});
+
+
+class SoundFixtureElement extends EventTarget {
+  textContent = '';
+  hidden = false;
+  valueAsNumber = 100;
+  attributes = new Map();
+  nextElementSibling;
+  setAttribute(name, value) { this.attributes.set(name, value); }
+  closest() { return null; }
+}
+
+function createSoundControlsFixture({ initialOn = false, rejectStart = false } = {}) {
+  const windowTarget = new EventTarget(), panel = new SoundFixtureElement();
+  const controls = new Map();
+  panel.insertAdjacentHTML = () => {};
+  panel.querySelector = selector => {
+    if (!controls.has(selector)) {
+      const element = new SoundFixtureElement();
+      element.nextElementSibling = new SoundFixtureElement();
+      controls.set(selector, element);
+    }
+    return controls.get(selector);
+  };
+  const controllers = [], NativeController = globalThis.AbortController;
+  const saved = { master: 1, environmentOn: initialOn, footstepsOn: false, levels: {} };
+  let finish, running = false;
+  const pending = new Promise((resolve, reject) => { finish = () => {
+    if (rejectStart) reject(new Error('fixture start failure')); else { running = true; resolve(); }
+  }; });
+  const audio = { starts: 0, mixes: [],
+    start() { this.starts++; return pending; }, isRunning: () => running,
+    setMix(mix) { this.mixes.push(mix); } };
+  const restore = [
+    overrideGlobal('window', windowTarget),
+    overrideGlobal('localStorage', { getItem: () => JSON.stringify(saved), setItem() {} }),
+    overrideGlobal('AbortController', class extends NativeController {
+      constructor() { super(); controllers.push(this); }
+    }),
+  ];
+  const sound = bindCoastSoundControls(panel, 'cinema', audio, () => {});
+  const events = () => ['pageshow', 'click', 'keydown'].reduce((sum, type) => sum + getEventListeners(windowTarget, type).length, 0)
+    + [...controls.values()].reduce((sum, element) => sum
+      + getEventListeners(element, 'click').length + getEventListeners(element, 'input').length, 0);
+  const snapshot = () => [...controls].map(([selector, element]) => ({ selector,
+    text: element.textContent, hidden: element.hidden, attributes: [...element.attributes] }));
+  return { sound, audio, controls, controllers, finish, pending, events, snapshot,
+    cleanup() { sound.dispose(); restore.reverse().forEach(restoreGlobal => restoreGlobal()); } };
+}
+
+for (const rejectStart of [false, true]) {
+  test(`sound controls retire UI subscriptions without a stack reason and ignore late ${rejectStart ? 'rejection' : 'resolution'}`, async () => {
+    const f = createSoundControlsFixture({ rejectStart });
+    try {
+      assert.equal(f.events(), 8, 'same sound input/button/pageshow registrations');
+      f.controls.get('.coast-audio').dispatchEvent(new Event('click'));
+      assert.equal(f.audio.starts, 1);
+      const signal = f.controllers[0].signal;
+      let aborted = 0;
+      signal.addEventListener('abort', () => aborted++);
+      f.sound.dispose(); f.sound.dispose();
+      assert.equal(signal.aborted, true);
+      assert.equal(signal.reason, null, 'private UI cancellation does not retain an exception stack');
+      assert.equal(aborted, 1);
+      assert.equal(f.events(), 0, 'input, button and global subscriptions are removed');
+      const snapshot = f.snapshot(), mixes = f.audio.mixes.length;
+      f.controls.get('.coast-audio').dispatchEvent(new Event('click'));
+      f.controls.get('#coast-volume').dispatchEvent(new Event('input'));
+      assert.equal(f.audio.starts, 1); assert.equal(f.audio.mixes.length, mixes);
+      f.finish(); await f.pending.catch(() => {}); await Promise.resolve();
+      assert.deepEqual(f.snapshot(), snapshot, 'late start does not update retired UI');
+    } finally { f.cleanup(); }
+  });
+}
+
+test('sound control retirement preserves the distinct restore-retry cancellation contract', async () => {
+  const f = createSoundControlsFixture({ initialOn: true });
+  try {
+    assert.equal(f.controllers.length, 2);
+    assert.equal(f.events(), 10, 'restore retry adds its two global subscriptions');
+    f.sound.dispose();
+    assert.equal(f.controllers[0].signal.reason, null);
+    assert.equal(f.controllers[1].signal.aborted, true);
+    assert.equal(f.controllers[1].signal.reason.name, 'AbortError', 'other cancellation reasons are unchanged');
+    assert.equal(f.events(), 0);
+    f.finish(); await f.pending;
+  } finally { f.cleanup(); }
 });

@@ -4,7 +4,8 @@ import {
 } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CINEMA_PLACES, CINEMA_SEAT_BACK_CUSHION, CINEMA_SEAT_BACK_SHELL } from './cinemaLayout';
-import type { CinemaFinishes } from './cinemaFinishes';
+import { CINEMA_WEAVE_PERIOD, type CinemaFinishes } from './cinemaFinishes';
+import { cinemaUpholsteryGeometry } from './cinemaUpholsteryGeometry';
 
 type SeatPart = readonly [
   x: number, y: number, z: number, width: number, height: number, depth: number, tilt?: number,
@@ -32,6 +33,37 @@ export function createCinemaSeats(group: Group, finish: CinemaFinishes) {
     rounding: number,
   ): void {
     const geometry = rounding === 0 ? finish.box : new RoundedBoxGeometry(1, 1, 1, 1, rounding);
+    if (material === finish.seatFabric) {
+      // Bake each existing physical scale, then retain the exact translation and
+      // tilt. Native rounded charts need dimension-specific edge arc lengths.
+      for (let part = 0; part < parts.length; part += 1) for (const companionPart of [false, true]) {
+        const members = places.map((place, index) => ({ place, index }))
+          .filter(({ place }) => (place.kind === 'companion') === companionPart);
+        if (members.length === 0) continue;
+        const [dx, dy, dz, width, height, depth, tilt = 0] = parts[part];
+        const sideClearance = companionPart ? .98 : 1;
+        const skin = cinemaUpholsteryGeometry(geometry, [width * sideClearance, height, depth], rounding, CINEMA_WEAVE_PERIOD);
+        const mesh = new InstancedMesh(skin, material, members.length);
+        mesh.name = name;
+        mesh.userData.cinemaSeatSourceIndices = members.map(({ index }) => index * parts.length + part);
+        members.forEach(({ place: { x, y, z, kind, row }, index }, local) => {
+          const shade = .28 + .68 * (Math.sin(index * 17.327 + row * 2.456) * .5 + .5);
+          dye.copy(darkPine).lerp(lightPine, shade);
+          if (kind === 'companion') dye.copy(companion);
+          transform.position.set(x + dx * sideClearance, y + dy, z + dz);
+          transform.rotation.x = tilt;
+          transform.scale.set(1, 1, 1);
+          transform.updateMatrix();
+          mesh.setMatrixAt(local, transform.matrix);
+          mesh.setColorAt(local, dye);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        parent.add(mesh);
+      }
+      if (rounding !== 0) geometry.dispose();
+      return;
+    }
     const mesh = new InstancedMesh(geometry, material, places.length * parts.length);
     mesh.name = name;
     places.forEach(({ x, y, z, kind, row }, i) => {

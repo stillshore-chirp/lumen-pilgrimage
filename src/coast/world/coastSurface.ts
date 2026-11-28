@@ -309,9 +309,17 @@ export function createCoastTerrain(rock: THREE.Texture, sand: THREE.Texture, tim
   terrain.castShadow = true;
   terrain.receiveShadow = true;
   registerTerrainOcclusion(terrain, xs, zs);
+  let texturesDisposed = false;
   return {
     mesh: terrain,
     mossRock,
+    // The returned moss map and borrowed rock/sand also serve other scene users.
+    // Only the shader-private maps have no owner in the drawable traversal.
+    disposeTextures(): void {
+      if (texturesDisposed) return;
+      texturesDisposed = true;
+      for (const texture of [litter, mud, relief]) texture.dispose();
+    },
     setQuality(quality: CoastQuality): void {
       microRelief.value = quality === 'high' ? 1.20 : 0.52;
     },

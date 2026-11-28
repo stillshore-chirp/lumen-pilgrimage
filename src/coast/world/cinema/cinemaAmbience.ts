@@ -9,6 +9,7 @@ import {
   CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CROSS_AISLES, CINEMA_DESTINATIONS, CINEMA_TREADS, cinemaGroundHeight,
 } from './cinemaLayout';
 import { CINEMA_SPEAKERS, createCinemaTail } from './cinemaAcoustics';
+import { CINEMA_RETURN_OUTLETS } from './cinemaVentilation';
 
 export type CinemaDemoCue = 'left' | 'right' | 'center' | 'overhead' | 'rear';
 
@@ -259,8 +260,8 @@ export class CinemaAmbience {
       cue: cueTone(context),
     };
     this.setMix(this.mix);
-    [new Vector3(-14, 19.8, 19), new Vector3(14, 19.8, 19), new Vector3(-14, 19.9, 43), new Vector3(14, 19.9, 43)]
-      .forEach((position, i) => this.playAt('wind', fanLoop(context, 2_173 + i * 977), position, 0.17, 0, 0.5 + 0.95 * i, 7));
+    CINEMA_RETURN_OUTLETS.forEach((position, i) =>
+      this.playAt('wind', fanLoop(context, 2_173 + i * 977), new Vector3(...position), 0.17, 0, 0.5 + 0.95 * i, 7));
   }
 
   private beginPreview(context: AudioContext, graph: CinemaAmbienceGraph): PreviewGraph {

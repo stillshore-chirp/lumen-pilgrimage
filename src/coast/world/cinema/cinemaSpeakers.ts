@@ -1,6 +1,7 @@
 import { CINEMA_SCREEN, CINEMA_SIDE_SURROUNDS } from './cinemaLayout';
+import { createCinemaObjectRouter } from './cinemaObjectRouting';
 import {
-  CINEMA_SAMPLE_RATE, type CinemaChannel, type CinemaObjectKey, type CinemaPoint, type CinemaProgram,
+  CINEMA_SAMPLE_RATE, type CinemaChannel, type CinemaPoint, type CinemaProgram,
 } from './cinemaProgram';
 
 export type CinemaRenderSpeakerKind = 'screen' | 'side' | 'rear' | 'top' | 'screenSub' | 'surroundSub';
@@ -189,88 +190,30 @@ function withSpeakerGains(weights: readonly { readonly index: number; readonly v
   }));
 }
 
-function distanceSquared(position: CinemaPoint, speaker: CinemaRenderSpeaker): number {
-  const dx = position[0] - speaker.position[0];
-  const dy = position[1] - speaker.position[1];
-  const dz = position[2] - speaker.position[2];
-  return dx * dx + dy * dy + dz * dz;
+const objectRouter = createCinemaObjectRouter(CINEMA_RENDER_SPEAKERS);
+
+function interpolateNumber(previous: number, next: number, fraction: number): number {
+  const difference = next - previous;
+  return Number.isFinite(difference)
+    ? previous + difference * fraction
+    : previous * (1 - fraction) + next * fraction;
 }
 
-function screenObjectWeights(position: CinemaPoint): readonly { index: number; value: number }[] {
-  const x = Math.max(FRONT_SCREEN_X[0], Math.min(FRONT_SCREEN_X[FRONT_SCREEN_X.length - 1], position[0]));
-  const upper = FRONT_SCREEN_X.findIndex(screenX => screenX >= x);
-  if (upper <= 0) return [{ index: speakerIndex.get(screenSpeakers[0].id)!, value: 1 }];
-  if (upper === -1) {
-    const last = screenSpeakers.length - 1;
-    return [{ index: speakerIndex.get(screenSpeakers[last].id)!, value: 1 }];
-  }
-  if (Math.abs(FRONT_SCREEN_X[upper] - x) < 1e-9) {
-    return [{ index: speakerIndex.get(screenSpeakers[upper].id)!, value: 1 }];
-  }
-  const lower = upper - 1;
-  const fraction = (x - FRONT_SCREEN_X[lower]) / (FRONT_SCREEN_X[upper] - FRONT_SCREEN_X[lower]);
-  return [
-    { index: speakerIndex.get(screenSpeakers[lower].id)!, value: Math.cos(fraction * Math.PI / 2) },
-    { index: speakerIndex.get(screenSpeakers[upper].id)!, value: Math.sin(fraction * Math.PI / 2) },
-  ];
-}
-
-function objectCandidates(position: CinemaPoint): readonly { index: number; value: number }[] {
-  let candidates = fullRangeSpeakers;
-  if (position[1] >= 14) {
-    candidates = fullRangeSpeakers.filter(({ speaker }) => speaker.kind === 'top');
-  } else if (position[2] <= 5) {
-    return screenObjectWeights(position);
-  } else if (position[2] >= 47) {
-    candidates = fullRangeSpeakers.filter(({ speaker }) => speaker.kind === 'rear');
-  } else {
-    candidates = fullRangeSpeakers.filter(({ speaker }) => speaker.kind === 'side');
-  }
-  const nearest = candidates
-    .map(({ speaker, index }) => ({ index, distance: distanceSquared(position, speaker) }))
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, candidates === fullRangeSpeakers ? 4 : 3);
-  if (nearest.length === 0) return [];
-  if (nearest[0].distance < Number.EPSILON) return [{ index: nearest[0].index, value: 1 }];
-  return nearest.map(({ index, distance }) => ({ index, value: 1 / Math.sqrt(distance + 1e-6) }));
-}
-
-function objectAtSample(keys: readonly CinemaObjectKey[], sample: number): { position: CinemaPoint; gainDb: number } | undefined {
-  if (keys.length === 0) return undefined;
-  if (sample <= keys[0].sample) return { position: keys[0].position, gainDb: keys[0].gainDb };
-  for (let i = 1; i < keys.length; i += 1) {
-    const previous = keys[i - 1];
-    const next = keys[i];
-    if (sample > next.sample) continue;
-    const span = next.sample - previous.sample;
-    const fraction = span > 0 ? Math.max(0, Math.min(1, (sample - previous.sample) / span)) : 1;
-    return {
-      position: point(
-        previous.position[0] + (next.position[0] - previous.position[0]) * fraction,
-        previous.position[1] + (next.position[1] - previous.position[1]) * fraction,
-        previous.position[2] + (next.position[2] - previous.position[2]) * fraction,
-      ),
-      gainDb: previous.gainDb + (next.gainDb - previous.gainDb) * fraction,
-    };
-  }
-  const last = keys[keys.length - 1];
-  return { position: last.position, gainDb: last.gainDb };
-}
-
-/**
- * Build an energy-normalized speaker-by-input matrix for one playback sample.
- * Inputs are the program bed in declared order, followed by its object tracks.
- */
-export function createCinemaRouting(
+function buildCinemaRouting(
   program: CinemaProgram,
   sample: number,
   target?: Float32Array,
+  objectGainDbTarget?: Float64Array,
 ): Float32Array {
   const inputCount = program.bed.length + program.objects.length;
   const outputLength = CINEMA_RENDER_SPEAKERS.length * inputCount;
   const output = target ?? new Float32Array(outputLength);
   if (output.length < outputLength) throw new RangeError('Cinema routing target is too small');
+  if (objectGainDbTarget && objectGainDbTarget.length < program.objects.length) {
+    throw new RangeError('Cinema object dB target is too small');
+  }
   output.fill(0);
+  objectGainDbTarget?.fill(0);
   if (!Number.isFinite(sample)) return output;
 
   program.bed.forEach((channel, inputIndex) => {
@@ -281,15 +224,71 @@ export function createCinemaRouting(
     });
   });
 
-  program.objects.forEach((object, objectIndex) => {
+  for (let objectIndex = 0; objectIndex < program.objects.length; objectIndex += 1) {
+    const keys = program.objects[objectIndex].keys;
+    if (keys.length === 0) continue;
+    let lower = 0;
+    let upper = keys.length - 1;
+    if (sample <= keys[0].sample) upper = 0;
+    else if (sample >= keys[upper].sample) lower = upper;
+    else {
+      // Source metadata permits 100,000 keys per track. Endpoint lookup must not
+      // scan the whole history at every PCM packet or key split.
+      while (upper - lower > 1) {
+        const middle = (lower + upper) >>> 1;
+        if (keys[middle].sample < sample) lower = middle;
+        else upper = middle;
+      }
+    }
+    const previous = keys[lower];
+    const next = keys[upper];
+    const span = next.sample - previous.sample;
+    const fraction = span > 0 ? Math.max(0, Math.min(1, (sample - previous.sample) / span)) : 0;
+    const x = interpolateNumber(previous.position[0], next.position[0], fraction);
+    const y = interpolateNumber(previous.position[1], next.position[1], fraction);
+    const z = interpolateNumber(previous.position[2], next.position[2], fraction);
+    const gainDb = interpolateNumber(previous.gainDb, next.gainDb, fraction);
     const inputIndex = program.bed.length + objectIndex;
-    const state = objectAtSample(object.keys, sample);
-    if (!state) return;
-    const weights = objectCandidates(state.position);
-    const gain = linearGain(state.gainDb);
-    energyNormalize(withSpeakerGains(weights), gain).forEach(({ index, value }) => {
-      output[index * inputCount + inputIndex] = value;
-    });
-  });
+    const active = objectRouter.write(x, y, z, output, inputCount, inputIndex);
+    if (objectGainDbTarget) {
+      // Keep the original dB value in Float64: a Float32 linear endpoint would
+      // erase e.g. -1000 dB before interpolation back towards audible levels.
+      objectGainDbTarget[objectIndex] = active ? gainDb : 0;
+    } else {
+      const amplitude = linearGain(gainDb);
+      const gain = Number.isFinite(amplitude) ? amplitude : 0;
+      for (let index = 0; index < CINEMA_RENDER_SPEAKERS.length; index += 1) {
+        output[index * inputCount + inputIndex] *= gain;
+      }
+    }
+  }
   return output;
+}
+
+/**
+ * Build an energy-normalized speaker-by-input matrix including programme gain.
+ * Inputs are the declared bed channels, followed by object tracks. Retained for
+ * callers and packets that have no separate object dB metadata.
+ */
+export function createCinemaRouting(
+  program: CinemaProgram,
+  sample: number,
+  target?: Float32Array,
+): Float32Array {
+  return buildCinemaRouting(program, sample, target);
+}
+
+/**
+ * Bed columns retain complete gain; object columns contain calibrated unit
+ * spatial shapes. objectGainDbTarget receives programme dB in object order.
+ * Empty keys or inactive calibration produce zero shapes. The renderer applies
+ * programme dB once on the PCM/key clock and never reapplies speaker calibration.
+ */
+export function createCinemaRoutingShapes(
+  program: CinemaProgram,
+  sample: number,
+  target: Float32Array,
+  objectGainDbTarget: Float64Array,
+): Float32Array {
+  return buildCinemaRouting(program, sample, target, objectGainDbTarget);
 }

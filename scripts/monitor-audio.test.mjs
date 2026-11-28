@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { getEventListeners } from 'node:events';
 import { Group, PerspectiveCamera } from 'three';
 import { MonitorAudio } from '../src/monitor/monitorAudio.ts';
 
@@ -516,12 +517,13 @@ test('a short world output handoff preserves media and restores the latest user 
   assert.equal(contexts.length, 1);
 });
 
-test('aborted/stale world handoffs restore output safely and respect mute and stop', async t => {
+for (const reason of [undefined, null]) test(`aborted/stale world handoffs preserve mute and stop with ${reason === null ? 'null' : 'default'} reason`, async t => {
   const { audio, contexts } = setup(t);
   audio.setPlaybackSpace(providerFixture().factory, null, new PerspectiveCamera(), new Group(), 'light');
   audio.setMode('spatial');
-  audio.setStream(new MockStream([new MockTrack('audio')])); await audio.start();
-  const context = contexts[0], master = context.gains[0];
+  const track = new MockTrack('audio'), stream = new MockStream([track]);
+  audio.setStream(stream); await audio.start();
+  const context = contexts[0], master = context.gains[0], source = context.sources[0];
   context.currentTime = 11;
   const first = audio.prepareWorldChange(new AbortController().signal);
   const abort = new AbortController();
@@ -531,9 +533,20 @@ test('aborted/stale world handoffs restore output safely and respect mute and st
   staleFinish();
   assert.equal(master.gain.events.length, before, 'an older caller cannot release the current handoff');
   audio.setEnabled(false);
-  abort.abort();
+  assert.equal(getEventListeners(abort.signal, 'abort').length, 1);
+  assert.equal(getEventListeners(context, 'statechange').length, 1);
+  abort.abort(reason);
   const finish = await second; finish();
+  assert.equal(abort.signal.aborted, true);
+  assert.equal(getEventListeners(abort.signal, 'abort').length, 0);
+  assert.equal(getEventListeners(context, 'statechange').length, 0);
+  if (reason === null) assert.equal(abort.signal.reason, null);
+  else assert.equal(abort.signal.reason.name, 'AbortError');
   assert.equal(master.gain.events.at(-1)[1], 0, 'cancelled world loading preserves a user mute');
+  assert.equal(context.sources[0], source);
+  assert.equal(source.stream.getAudioTracks()[0], track);
+  assert.equal(track.readyState, 'live');
+  assert.equal(contexts.length, 1);
   audio.setEnabled(true);
   const last = audio.prepareWorldChange(new AbortController().signal);
   audio.stop();

@@ -9,8 +9,9 @@ const hook = registerHooks({
     return nextResolve(internal ? `${specifier}.ts` : specifier, context);
   },
 });
-const { CINEMA_RENDER_SPEAKERS, createCinemaRouting } =
+const { CINEMA_RENDER_SPEAKERS, createCinemaRouting, createCinemaRoutingShapes } =
   await import('../src/coast/world/cinema/cinemaSpeakers.ts');
+const { createCinemaObjectRouter } = await import('../src/coast/world/cinema/cinemaObjectRouting.ts');
 hook.deregister();
 
 const counts = kind => CINEMA_RENDER_SPEAKERS.filter(speaker => speaker.kind === kind).length;
@@ -138,4 +139,171 @@ test('LFE gain and object interpolation preserve independent input energy', () =
   assert.equal(reused[indexOf('screen-C')], 1);
   assert.equal(reused[indexOf('screen-R')], 0);
   assert.equal(reused[119], 0);
+});
+
+function objectProgram(position, gainDb = 0) {
+  return { bed: [], lfeGainDb: 0, objects: [{ keys: [{ sample: 0, position, gainDb }] }] };
+}
+
+function difference(a, b) {
+  return Math.hypot(...a.map((value, index) => value - b[index]));
+}
+
+test('object role interiors retain their original groups and never feed LFE outputs', () => {
+  for (const [position, kind] of [
+    [[-7, 8, 3], 'screen'], [[5, 8, 30], 'side'],
+    [[4, 8, 49], 'rear'], [[-3, 16, 30], 'top'],
+  ]) {
+    const matrix = createCinemaRouting(objectProgram(position), 0);
+    assert.ok(activeSpeakers(matrix, 1, 0).every(speaker => speaker.kind === kind));
+    assert.ok(Math.abs(energy(matrix) - 1) < 2e-7);
+    assert.deepEqual([...matrix.slice(-4)], [0, 0, 0, 0]);
+  }
+  // The retained role rule takes priority here; it is not a universal nearest
+  // physical speaker renderer at the rearmost side station (z=49).
+  const lastSide = CINEMA_RENDER_SPEAKERS.find(speaker => speaker.id === 'side-L-10');
+  const routed = createCinemaRouting(objectProgram(lastSide.position), 0);
+  assert.ok(activeSpeakers(routed, 1, 0).every(speaker => speaker.kind === 'rear'));
+});
+
+test('object routing is continuous at category intersections, stations and the centre line', () => {
+  const points = [
+    [0, 14, 5], [0, 14, 47], [0, 14, 30], [0, 8, 5], [0, 8, 47],
+    ...[13, 15].flatMap(y => [4, 6, 46, 48].map(z => [0, y, z])),
+    ...CINEMA_RENDER_SPEAKERS.filter(speaker =>
+      ['screen', 'rear', 'side', 'top'].includes(speaker.kind)).map(speaker => speaker.position),
+  ];
+  for (const point of points) {
+    for (const axis of [0, 1, 2]) {
+      for (const epsilon of [1e-3, 1e-6]) {
+        const before = [...point];
+        const after = [...point];
+        before[axis] -= epsilon;
+        after[axis] += epsilon;
+        const a = createCinemaRouting(objectProgram(before), 0);
+        const b = createCinemaRouting(objectProgram(after), 0);
+        assert.ok(difference(a, b) < epsilon * 4,
+          `${point} axis ${axis}: coefficient step ${difference(a, b)}`);
+      }
+    }
+  }
+});
+
+test('dense auditorium and outer-envelope routing retains finite unit power and local support', () => {
+  let probes = 0;
+  for (let x = -22; x <= 22; x += 2) {
+    for (let y = -1; y <= 25; y += 2) {
+      for (let z = -5; z <= 57; z += 2) {
+        const matrix = createCinemaRouting(objectProgram([x, y, z]), 0);
+        assert.ok(matrix.every(Number.isFinite));
+        assert.ok(Math.abs(energy(matrix) - 1) < 3e-7, `${x}/${y}/${z}`);
+        assert.ok(activeSpeakers(matrix, 1, 0).length <= 10);
+        assert.deepEqual([...matrix.slice(-4)], [0, 0, 0, 0]);
+        probes += 1;
+      }
+    }
+  }
+  assert.equal(probes, 10304);
+});
+
+test('calibration belongs to the unit spatial shape once, including non-unity and inactive profiles', () => {
+  const modified = CINEMA_RENDER_SPEAKERS.map(speaker => ({ ...speaker,
+    gain: speaker.id === 'screen-LC' ? 2 : 1,
+  }));
+  const router = createCinemaObjectRouter(modified);
+  const output = new Float64Array(57);
+  assert.equal(router.write(-9.9825, 8, 0, output), true);
+  assert.ok(Math.abs(output[indexOf('screen-L')] - Math.sqrt(.2)) < 1e-12);
+  assert.ok(Math.abs(output[indexOf('screen-LC')] - Math.sqrt(.8)) < 1e-12);
+  assert.ok(Math.abs(energy(output) - 1) < 1e-12);
+  const uniform = createCinemaObjectRouter(CINEMA_RENDER_SPEAKERS.map(speaker => ({ ...speaker, gain: 2 })));
+  const normal = createCinemaObjectRouter(CINEMA_RENDER_SPEAKERS);
+  const a = new Float64Array(57);
+  const b = new Float64Array(57);
+  for (const position of [[1, 14, 5], [7, 8, 35], [-5, 16, 47]]) {
+    uniform.write(...position, a);
+    normal.write(...position, b);
+    assert.ok(difference(a, b) < 1e-12);
+  }
+  const muted = createCinemaObjectRouter(CINEMA_RENDER_SPEAKERS.map(speaker => ({ ...speaker, gain: 0 })));
+  assert.equal(muted.write(0, 14, 47, output), false);
+  assert.ok(output.every(value => value === 0));
+});
+
+test('routing validates actual straight paired-bank geometry before use', () => {
+  const copy = () => CINEMA_RENDER_SPEAKERS.map(speaker => ({ ...speaker, position: [...speaker.position] }));
+  for (const mutate of [
+    table => { table[indexOf('side-L-02')].position[0] -= .01; },
+    table => { table[indexOf('side-L-02')].position[1] += .01; },
+    table => { table[indexOf('top-R-02')].position[1] += .01; },
+    table => { table[indexOf('top-R-02')].position[2] = table[indexOf('top-R-01')].position[2]; },
+    table => { table.splice(indexOf('side-R-10'), 1); },
+  ]) {
+    const table = copy();
+    mutate(table);
+    assert.throws(() => createCinemaObjectRouter(table), /Cinema/);
+  }
+});
+
+test('object column writes preserve adjacent inputs and fail closed for invalid coordinates', () => {
+  const router = createCinemaObjectRouter(CINEMA_RENDER_SPEAKERS);
+  const output = new Float64Array(57 * 3).fill(7);
+  assert.equal(router.write(0, 14, 5, output, 3, 1), true);
+  for (let speaker = 0; speaker < 57; speaker += 1) {
+    assert.equal(output[speaker * 3], 7);
+    assert.equal(output[speaker * 3 + 2], 7);
+  }
+  assert.equal(router.write(NaN, 14, 5, output, 3, 1), false);
+  assert.ok(column(output, 3, 1).every(value => value === 0));
+  assert.throws(() => router.write(0, 0, 0, output, 3, 3), RangeError);
+  assert.throws(() => router.write(0, 0, 0, new Float32Array(56)), RangeError);
+});
+
+test('separate Float64 dB metadata retains extreme programme curves without changing bed/LFE', () => {
+  const program = { bed: ['LFE'], lfeGainDb: 10, objects: [
+    { keys: [
+      { sample: 0, position: [0, 8, 0], gainDb: -1000 },
+      { sample: 100, position: [0, 8, 0], gainDb: 0 },
+    ] },
+    { keys: [{ sample: 0, position: [0, 8, 0], gainDb: 10000 }] },
+    { keys: [] },
+  ] };
+  const matrix = new Float32Array(57 * 4);
+  const gainDb = new Float64Array(3);
+  for (const sample of [0, 25, 50, 100]) {
+    assert.strictEqual(createCinemaRoutingShapes(program, sample, matrix, gainDb), matrix);
+    assert.deepEqual([...gainDb], [-1000 + 10 * sample, 10000, 0]);
+    assert.ok(Math.abs(energy(column(matrix, 4, 0)) - 10) < 1e-5);
+    assert.equal(energy(column(matrix, 4, 1)), 1);
+    assert.equal(energy(column(matrix, 4, 2)), 1);
+    assert.equal(energy(column(matrix, 4, 3)), 0);
+    const complete = createCinemaRouting(program, sample);
+    assert.equal(energy(column(complete, 4, 2)), 0); // Legacy non-finite amplitude handling.
+    assert.deepEqual(column(matrix, 4, 0), column(complete, 4, 0));
+    const amplitude = 10 ** (gainDb[0] / 20);
+    assert.equal(complete[indexOf('screen-C') * 4 + 1], Math.fround(amplitude));
+  }
+  createCinemaRoutingShapes(program, NaN, matrix, gainDb);
+  assert.ok(matrix.every(value => value === 0));
+  assert.ok(gainDb.every(value => value === 0));
+  assert.throws(() => createCinemaRoutingShapes(program, 0, matrix, new Float64Array(2)), RangeError);
+});
+
+test('binary key lookup preserves exact keys, held endpoints and interpolated dB for long tracks', () => {
+  const keys = Array.from({ length: 100000 }, (_, sample) => ({
+    sample: sample * 4, position: [sample % 2 ? 6.655 : -6.655, 8, 0], gainDb: -sample / 100,
+  }));
+  const program = { bed: [], lfeGainDb: 0, objects: [{ keys }] };
+  const shape = new Float32Array(57);
+  const gainDb = new Float64Array(1);
+  for (const sample of [-1, 0, 1, 4, 12345, 200002, 399995, 399996, 400000]) {
+    const clamped = Math.max(0, Math.min(399996, sample));
+    createCinemaRoutingShapes(program, sample, shape, gainDb);
+    assert.ok(Math.abs(gainDb[0] + clamped / 400) < 1e-12);
+    assert.ok(Math.abs(energy(shape) - 1) < 2e-7);
+    if (clamped % 4 === 0) {
+      assert.deepEqual(activeSpeakers(shape, 1, 0).map(speaker => speaker.id),
+        [clamped / 4 % 2 ? 'screen-RC' : 'screen-LC']);
+    }
+  }
 });

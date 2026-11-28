@@ -21,6 +21,9 @@
 | `public/**/ATTRIBUTION.md` | 各素材の出典、ライセンス、必要なクレジット、再配布条件を記録する正本です。README からは素材案内などの関連ページを経由して参照します。 | 素材の追加・差し替え・加工や、出典・ライセンス条件が変わるとき。 |
 | [展望台の道路と地形の設計](overlook/road-terrain-design.md)・[平面/断面図](overlook/figures/road-terrain-plan-section.svg) | 道路の設計標高と描画地盤、坑口・切土・支持、交通と道路音の共通座標・生成順を定めます。 | 道路線形/標高・地形接続・支持・坑口と音源の対応、共有地勢への適用領域が変わるとき。 |
 | [映画館の上映音響設計](cinema/cinema-sound-design.md) | 大型映画館の上映音の入力、スピーカーへの配線、室内伝搬、非VRとPC VRの品質目標を定めます。 | 上映用音声の受入形式、館内の配線、耳への音響処理、上映時の性能目標を変えるとき。 |
+| [映画館のスピーカー筐体と取付](cinema/cinema-speaker-mounts.md)・[取付図](cinema/cinema-speaker-mounts.svg) | 可視スピーカーの放射面、筐体の実寸、取付と支持、接触の共通定義と再生成方法です。 | 機器の形・向き・支持・材・接触や、図面の生成方法を変えるとき。 |
+| [映画館の還気口と環境音](cinema/cinema-ventilation.md)・[断面図](cinema/cinema-ventilation.svg) | コファーの開口・内面、側壁貫通とダクト、支持・移動体積、可視口と環境音の共通位置です。 | 還気口の構造、環境音源位置、移動との共通定義や図面生成を変えるとき。 |
+| [映画館再評価の検証範囲](cinema/cinema-reevaluation-verification.md) | 変更した形・材・音の対象版、直接出力の確認範囲、証拠再利用の入力条件と未確認事項です。 | 対象版の直接評価が増えたとき、入力閉包や測定の意味・限界が変わるとき。 |
 | [住戸の設計資料](residence/residence-70f-design.md)・[寸法図 PDF](residence/residence-70f-drawings.pdf) | 現行の70階住戸の寸法、平面、視線、制作時の受け入れ条件を記録します。 | 現行住戸の設計寸法、眺望、素材、制作受け入れ条件が変わるとき。 |
 | [映画館の基本設計 PDF](cinema/cinema-floor-plan.pdf)・[音響・照明設計 PDF](cinema/cinema-light-sound-design.pdf) | 映画館の客席、平面、照明、音響の設計資料です。利用者向け操作は探索ガイド、実装契約は各設計文書に記載します。 | 映画館の設計前提を変更するとき。実装、利用手順、検証方法にも影響する場合は該当する正本を更新します。 |
 | [商業アトリウム1階の内装詳細設計](atrium/tenant-interior-design.md)・[寸法図 PDF](atrium/tenant-interior-drawings.pdf) | 1階の店舗・展示島の詳細設計。間口、入口、什器の座標正本は [設計データ](atrium/tenant-interiors.json) です。 | 写真との照合位置、区画と什器の寸法、仕上げ、照明・音響の製作条件を変えるとき。 |

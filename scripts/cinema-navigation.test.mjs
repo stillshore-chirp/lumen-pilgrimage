@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { Box2, Group, Matrix4, Scene, Vector2, Vector3 } from 'three';
+import { Box2, Box3, Group, Matrix4, Mesh, MeshBasicMaterial, Raycaster, Scene, Vector2, Vector3 } from 'three';
+import { OBB } from 'three/addons/math/OBB.js';
 
 const source = new URL('../src/coast/world/cinema/', import.meta.url).href;
 const hooks = registerHooks({
@@ -11,7 +12,7 @@ const hooks = registerHooks({
   },
 });
 const {
-  CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CEILING_COFFERS, CINEMA_CROSS_AISLES, CINEMA_DESTINATIONS, CINEMA_DOOR_WIDTH,
+  CINEMA_AISLES, CINEMA_BOUNDS, CINEMA_CEILING_BAFFLES, CINEMA_CEILING_COFFERS, CINEMA_CROSS_AISLES, CINEMA_DESTINATIONS, CINEMA_DOOR_WIDTH,
   CINEMA_EXITS, CINEMA_PLACES, CINEMA_ROOM_HEIGHT, CINEMA_ROWS, CINEMA_SCREEN, CINEMA_TREADS,
   CINEMA_WHEELCHAIR_BAY, cinemaGroundHeight,
 } = await import('../src/coast/world/cinema/cinemaLayout.ts');
@@ -19,7 +20,118 @@ const { cinemaNavigation } = await import('../src/coast/world/cinema/cinemaNavig
 const { createCinemaFloor } = await import('../src/coast/world/cinema/cinemaFloor.ts');
 const { cinemaFinishes } = await import('../src/coast/world/cinema/cinemaFinishes.ts');
 const { createCinemaSeatTransition } = await import('../src/coast/world/cinema/cinemaSeatTransition.ts');
+const { CINEMA_SPEAKER_EQUIPMENT, cinemaSpeakerEquipmentBlocked } =
+  await import('../src/coast/world/cinema/cinemaSpeakerGeometry.ts');
+const { CINEMA_RENDER_SPEAKERS } = await import('../src/coast/world/cinema/cinemaSpeakers.ts');
+const { createCinemaSpeakerEquipment, CINEMA_SPEAKER_DETAIL } =
+  await import('../src/coast/world/cinema/cinemaSpeakerEquipment.ts');
 hooks.deregister();
+
+test('speaker grilles follow the acoustic center and aim, with connected supports clear of ceiling linings', () => {
+  const finish = cinemaFinishes();
+  const material = new MeshBasicMaterial();
+  const unitBox = new Box3(new Vector3(-.5, -.5, -.5), new Vector3(.5, .5, .5));
+  const linings = [...CINEMA_CEILING_BAFFLES, ...CINEMA_CEILING_COFFERS].map(([x, y, z, w, h, d]) =>
+    new OBB(new Vector3(x, y, z), new Vector3(w / 2, h / 2, d / 2)));
+  assert.equal(CINEMA_SPEAKER_EQUIPMENT.length, 48);
+  for (const equipment of CINEMA_SPEAKER_EQUIPMENT) {
+    const source = CINEMA_RENDER_SPEAKERS.find(({ id }) => id === equipment.id);
+    const grille = equipment.boxes.find(({ part }) => part === 'grille');
+    const center = new Vector3().setFromMatrixPosition(grille.matrix);
+    const normal = new Vector3(0, 0, 1).transformDirection(grille.matrix);
+    assert.ok(center.distanceTo(new Vector3(...source.position)) < 1e-6, equipment.id);
+    assert.ok(normal.dot(new Vector3(...source.aim)) > 1 - 1e-6, equipment.id);
+    const mounts = equipment.boxes.filter(({ part }) => part === 'mount').map(box => {
+      const mesh = new Mesh(finish.box, material);
+      mesh.matrixAutoUpdate = false;
+      mesh.matrix.copy(box.matrix);
+      mesh.updateMatrixWorld(true);
+      return mesh;
+    });
+    for (const part of equipment.boxes) {
+      assert.ok(cinemaSpeakerEquipmentBlocked(part.center.x, part.center.y, part.center.z), equipment.id);
+      if (part.part === 'mount') continue;
+      const volume = new OBB().fromBox3(unitBox).applyMatrix4(part.matrix);
+      assert.ok(linings.every(lining => !volume.intersectsOBB(lining)), `${equipment.id}: lining overlap`);
+      if (part.part !== 'support') continue;
+      const axis = new Vector3(0, 1, 0).applyQuaternion(part.rotation);
+      for (const sign of [-1, 1]) {
+        const ray = new Raycaster(part.center, axis.clone().multiplyScalar(sign), 0, part.size.y / 2 + .03);
+        assert.ok(ray.intersectObjects(mounts, false).length > 0, `${equipment.id}: disconnected support`);
+      }
+    }
+  }
+  assert.equal(cinemaSpeakerEquipmentBlocked(.39, 4.4, 33.45), false);
+  finish.box.dispose();
+  material.dispose();
+});
+
+test('finished cabinets, grille frames and fixings stay inside their shared collision envelopes', () => {
+  const group = new Group();
+  const equipmentFinishes = createCinemaSpeakerEquipment(group);
+  group.updateMatrixWorld(true);
+  const matrix = new Matrix4();
+  const vertex = new Vector3();
+  const normal = new Vector3(1, 1, 1).normalize();
+  const geometries = new Set();
+  const materials = new Set();
+  let maximumCabinetCornerGap = 0;
+  let maximumGrilleRecess = 0;
+  let inspectedInstances = 0;
+  for (const mesh of group.children) {
+    const envelopes = mesh.userData.cinemaEquipmentEnvelopes;
+    assert.equal(envelopes.length, mesh.count);
+    const positions = mesh.geometry.attributes.position;
+    geometries.add(mesh.geometry);
+    materials.add(mesh.material);
+    for (let instance = 0; instance < mesh.count; instance += 1) {
+      mesh.getMatrixAt(instance, matrix);
+      const envelope = envelopes[instance];
+      for (let i = 0; i < positions.count; i += 1) {
+        vertex.fromBufferAttribute(positions, i).applyMatrix4(matrix).applyMatrix4(envelope.inverse);
+        // Instance transforms use Float32 matrices: compare the residual in metres,
+        // rather than magnifying it by the inverse of a 30 mm mounting plate.
+        const excess = Math.max((Math.abs(vertex.x) - .5) * envelope.size.x,
+          (Math.abs(vertex.y) - .5) * envelope.size.y, (Math.abs(vertex.z) - .5) * envelope.size.z);
+        assert.ok(excess <= .00001,
+          `${mesh.name}: finished surface exceeds collision envelope`);
+      }
+      if (mesh.name === 'Rounded cinema speaker enclosures') {
+        const corner = new Vector3(.5, .5, .5).applyMatrix4(envelope.matrix);
+        const direction = normal.clone().applyQuaternion(envelope.rotation);
+        const single = new Mesh(mesh.geometry, mesh.material);
+        single.matrixAutoUpdate = false;
+        single.matrix.copy(matrix);
+        single.updateMatrixWorld(true);
+        const ray = new Raycaster(corner.clone().addScaledVector(direction, .05), direction.clone().negate(), 0, .10);
+        const hit = ray.intersectObject(single, false)[0];
+        assert.ok(hit);
+        maximumCabinetCornerGap = Math.max(maximumCabinetCornerGap, hit.distance - .05);
+      }
+      if (mesh.name === 'Recessed cinema speaker grilles') {
+        const direction = new Vector3(0, 0, 1).applyQuaternion(envelope.rotation);
+        const single = new Mesh(mesh.geometry, mesh.material);
+        single.matrixAutoUpdate = false;
+        single.matrix.copy(matrix);
+        single.updateMatrixWorld(true);
+        const ray = new Raycaster(envelope.center.clone().addScaledVector(direction, .1), direction.clone().negate(), 0, .2);
+        const hit = ray.intersectObject(single, false)[0];
+        assert.ok(hit);
+        maximumGrilleRecess = Math.max(maximumGrilleRecess, envelope.size.z / 2 - (.1 - hit.distance));
+      }
+      inspectedInstances += 1;
+    }
+    mesh.dispose();
+  }
+  assert.ok(inspectedInstances > 48 * 7);
+  assert.ok(maximumCabinetCornerGap <= CINEMA_SPEAKER_DETAIL.cabinetRadius * (Math.sqrt(3) - 1) + .00001);
+  assert.ok(maximumCabinetCornerGap > .008);
+  assert.ok(Math.abs(maximumGrilleRecess - .017) < .00001);
+  for (const geometry of geometries) geometry.dispose();
+  for (const material of materials) material.dispose();
+  for (const texture of equipmentFinishes.textures) texture.dispose();
+  group.clear();
+});
 
 function clearRoute(a, b) {
   const samples = Math.ceil(Math.hypot(a.x - b.x, a.z - b.z) / .04);
@@ -107,7 +219,7 @@ test('chair backs support landing and the ceiling follows the baffles and side c
   assert.equal(cinemaNavigation.blocksWalking(x, z, floor), false);
   assert.equal(cinemaNavigation.ceilingHeight(x, z), CINEMA_ROOM_HEIGHT);
   for (const [cx, cy, cz, , height] of CINEMA_CEILING_COFFERS) {
-    assert.ok(cinemaNavigation.ceilingHeight(cx, cz) <= cy - height / 2);
+    assert.ok(cinemaNavigation.ceilingHeight(cx, cz) <= cy - height / 2 + 1e-12);
   }
 });
 

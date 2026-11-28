@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="960" viewBox="0 0 1400 960"><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 Z" fill="#718b91"/></marker></defs><g font-family="Arial,Helvetica,sans-serif"><rect x="0" y="0" width="1400" height="960" fill="#f4f5f1" />
+<text x="60" y="52" font-size="28" fill="#273c42">LUMEN PILGRIMAGE / CINEMA SPEAKER MOUNTS</text>
+<text x="60" y="84" font-size="17" fill="#273c42">Nominal dimensions in millimetres; positions in metres. Generated from the runtime geometry.</text>
+<text x="80" y="134" font-size="22" fill="#273c42">TOP-R-05: transverse section at z = 32 m</text>
+<rect x="80" y="160.00000000000023" width="600" height="20" fill="#c2c9c6" />
+<line x1="80" y1="180.00000000000023" x2="680" y2="180.00000000000023" stroke="#40575c" stroke-width="3" />
+<rect x="402.50000000000006" y="190.50000000000023" width="277.49999999999994" height="99" fill="#d7d8d0" />
+<text x="422" y="242.50000000000023" font-size="16" fill="#273c42">Adjacent coffer</text>
+<text x="422" y="266.5000000000002" font-size="14" fill="#273c42">lining; no support load</text>
+<line x1="343.98874409242626" y1="521.8491194137164" x2="284.9485956961023" y2="185.72714147222246" stroke="#59666a" stroke-width="10.500000000000002" />
+<line x1="438.07520949872514" y1="562.5378421318896" x2="364.65574836745793" y2="185.73322587366386" stroke="#59666a" stroke-width="10.500000000000002" />
+<polygon points="325.095,516.939 328.669,508.679 456.313,563.908 452.739,572.168" fill="#737e80" stroke="#344b50" stroke-width="1.5"/>
+<polygon points="258.26,172.5 312.26,172.5 312.26,190.5 258.26,190.5" fill="#737e80" stroke="#344b50" stroke-width="1.5"/>
+<polygon points="338,172.5 392,172.5 392,190.5 338,190.5" fill="#737e80" stroke="#344b50" stroke-width="1.5"/>
+<polygon points="254.311,625.235 305.536,506.842 473.489,579.512 422.263,697.905" fill="#485659" stroke="#193d45" stroke-width="2"/>
+<polygon points="261.273,639.362 265.8,628.899 411.727,692.038 407.2,702.501" fill="#192b31" stroke="#193d45" stroke-width="2"/>
+<circle cx="336.5000000000001" cy="665.7000000000002" r="5" fill="#bc753b"/>
+<line x1="336.5000000000001" y1="665.7000000000002" x2="259.06550167520646" y2="844.6661936489336" stroke="#bc753b" stroke-width="3" marker-end="url(#arrow)"/>
+<text x="86" y="746" font-size="17" fill="#273c42">Grille centre = acoustic centre</text>
+<text x="86" y="771" font-size="17" fill="#273c42">(6.655, 20.381, 32.000)</text>
+<text x="86" y="802" font-size="17" fill="#9b5c2b">Front axis follows the shared aim</text>
+<text x="86" y="878" font-size="17" fill="#273c42">Roof pad centres stay inside |x| = 6.750 m.</text>
+<text x="86" y="903" font-size="17" fill="#273c42">Coffer starts at |x| = 6.875 m; support paths clear it.</text>
+<text x="780" y="134" font-size="22" fill="#273c42">TOP ENCLOSURE: front elevation</text>
+<rect x="840" y="211" width="305" height="385" fill="#485659" rx="6"/>
+<rect x="860" y="246" width="265" height="315" fill="#7a8485" rx="3"/>
+<rect x="873" y="259" width="239" height="289" fill="#192b31" rx="2"/>
+<circle cx="866.5" cy="252.5" r="2" fill="#bec6c3"/>
+<circle cx="866.5" cy="554.5" r="2" fill="#bec6c3"/>
+<circle cx="1118.5" cy="252.5" r="2" fill="#bec6c3"/>
+<circle cx="1118.5" cy="554.5" r="2" fill="#bec6c3"/>
+<line x1="840" y1="181" x2="1145" y2="181" stroke="#718b91" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="974.5" y="169" font-size="19" fill="#273c42">610</text>
+<line x1="1180" y1="211" x2="1180" y2="596" stroke="#718b91" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="1193" y="403.5" font-size="19" fill="#273c42">770</text>
+<text x="780" y="658" font-size="18" fill="#273c42">Closed enclosure: 12 mm corner radius</text>
+<text x="780" y="688" font-size="18" fill="#273c42">Grille frame: 26 mm; fixings: diameter 8 mm</text>
+<text x="780" y="718" font-size="18" fill="#273c42">Supports: diameter 35 mm; mount edge radius: 3 mm</text>
+<text x="780" y="766" font-size="19" fill="#273c42">Nominal enclosure width x height x depth</text>
+<text x="780" y="797" font-size="17" fill="#273c42">Side: 610 x 920 x 750 / Rear: 620 x 910 x 630</text>
+<text x="780" y="824" font-size="17" fill="#273c42">Top: 610 x 770 x 430 / Roof pad: 180 x 60 x 180</text>
+<text x="780" y="872" font-size="17" fill="#273c42">Collision uses the shared oriented envelopes.</text>
+<text x="780" y="898" font-size="17" fill="#273c42">Maximum enclosure corner difference: 8.8 mm.</text>
+<text x="60" y="940" font-size="15" fill="#273c42">Source: cinemaSpeakerGeometry.ts + cinemaSpeakerEquipment.ts / node scripts/draw-cinema-speaker-mounts.mjs</text></g></svg>

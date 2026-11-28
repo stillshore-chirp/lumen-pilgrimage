@@ -12,6 +12,18 @@ type Level = { group: THREE.Object3D; limit: Range };
 type Tile = { origin: THREE.Vector3; levels: Level[]; active: number };
 
 class CoastVegetation extends THREE.Group {
+  private texturesDisposed = false;
+
+  constructor(private readonly shaderTextures: readonly THREE.Texture[]) {
+    super();
+  }
+
+  disposeTextures(): void {
+    if (this.texturesDisposed) return;
+    this.texturesDisposed = true;
+    for (const texture of this.shaderTextures) texture.dispose();
+  }
+
   readonly leafDetail = { value: 0 };
   private readonly tiles: Tile[] = [];
   private quality: Quality = 'high';
@@ -528,7 +540,8 @@ function groupFloor(parent: CoastVegetation, plants: FloorPlant[], leaves: Folia
 
 export function createCoastVegetation(time: THREE.IUniform<number>, distanceToPath: PlantingDistance = () => Infinity,
   streamDistance: PlantingDistance = () => Infinity): CoastVegetation {
-  const vegetation = new CoastVegetation();
+  const shaderTextures: THREE.Texture[] = [];
+  const vegetation = new CoastVegetation(shaderTextures);
   vegetation.name = 'Rainforest canopy, palms and understory';
   const floor = createFoliage(time, 'understory', vegetation.leafDetail);
   const canopy = createFoliage(time, 'canopy', vegetation.leafDetail);
@@ -536,6 +549,7 @@ export function createCoastVegetation(time: THREE.IUniform<number>, distanceToPa
   const barkAlbedo = loadCoastTexture('forest-bark.webp', true);
   const barkHeight = loadCoastTexture('forest-bark-height.webp', true);
   barkHeight.colorSpace = THREE.NoColorSpace;
+  shaderTextures.push(barkAlbedo, barkHeight);
   const forest = plantForest(distanceToPath, streamDistance);
   groupTrees(vegetation, plantShoreBroadleaf(distanceToPath).concat(forest.trees), canopy, distant,
     createBark(barkAlbedo, barkHeight), createBark(barkAlbedo, barkHeight, true));

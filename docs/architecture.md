@@ -39,6 +39,16 @@ flowchart LR
 - [CoastXR](../src/coast/CoastXR.ts) は、ワールドを交換しても同じ没入型セッションとXR rigを維持する。ワールド側の到着姿勢と支持面へXRの床と向きを合わせ、ヘッドセットから得た視点を景観更新と音響に渡す。デスクトップの画角は保存設定を使い、没入型の両眼投影はヘッドセットに従う。 [XRセッション](../src/xr/ImmersiveSession.ts) · [ワールドの操作契約](worlds.md#フレームと入力)
 - [CoastSoundControls](../src/coast/CoastSoundControls.ts) が環境音、歩行音、全体と種類別の音量を各ワールドの音響へ渡します。全体音量は [MonitorView](../src/monitor/monitorView.ts) にも渡し、接続した共有音に反映します。 [音の設定の保存形式](worlds.md#設定の保存)
 
+## GPU画像の所有とワールド終了
+
+`CoastApp.disposeWorld` はワールド固有の終了処理を先に呼び、その後で [disposeSceneDrawables](../src/coast/disposeSceneDrawables.ts) がscene内の材・画像・形状を回収する。通常のmaterialプロパティとShaderMaterialのuniformから参照する画像は後者が扱い、`onBeforeCompile` のclosureだけにあるsamplerは生成側が明示して解放する。
+
+海岸では [地形factory](../src/coast/world/coastSurface.ts) がlitter・mud・reliefの3画像、[植生factory](../src/coast/world/coastVegetation.ts) がbarkの色・高さ2画像を所有する。`disposeTextures` は繰返し呼出しで再解放しない。地形へ渡すstone・sandと、外へ返すmossRockは子factoryの解放対象へ入れない。元のsand Textureは [CoastWorld](../src/coast/CoastWorld.ts) が所有し、水面Reflectorのuniform cloneはscene回収側が扱う。この2つは画像Sourceを共有しても別のTextureである。
+
+[CPU寿命回帰](../scripts/coast-texture-lifetime.test.mjs) はcompile前後、独立した2world、借用画像とuniform clone、終了の反復を確認する。実GPUの滞留は同一documentでワールドを有限回往復し、warm後のrenderer画像数とWebGLの生成・削除差を併記して確認する。CPUのdisposeイベントだけでGPU数の安定を認定しない。[TextureとSourceの説明](learning/modeling-materials.md#textureと画像sourceの寿命を分ける)
+
+Appと音量UIの [イベント購読解除](../src/coast/CoastSoundControls.ts) に使うprivate AbortControllerは、終了理由へ `null` を明示する。これらのsignalの利用者はDOM listener、遅延完了時の `aborted` 判定とモニターの短い音量移行の中止であり、終了時に新しい例外stackを保持する必要がない。fetch、認証や他のキャンセル理由・音声開始エラーは変更しない。[入力の回帰](../scripts/coast-controls.test.mjs) と [共有音の回帰](../scripts/monitor-audio.test.mjs) は購読解除、反復終了、遅れた音声開始の完了・失敗と、中止時のミュート/配信寿命を確認する。
+
 ## 仮想モニターの設計
 
 ここでは主要な実装接続を示します。遷移・権限・接続期限・対応ブラウザーの詳細は [仮想モニター仕様](monitor.md) を正本として参照してください。
@@ -90,13 +100,32 @@ flowchart LR
 
 ## 映画館シアター
 
+- 側壁・後壁・天井の可視48台は、音響中心と`aim`から筐体、放射面、取付板と支持材を組み立てる。飛行時の接触も同じ向き付き箱を使い、描画の丸みは箱内へ収める。天井の取付座は中央の屋根面へ接続し、コファーを避ける。 [形と接触の基準](../src/coast/world/cinema/cinemaSpeakerGeometry.ts) · [機器の描画](../src/coast/world/cinema/cinemaSpeakerEquipment.ts) · [寸法・支持・再生成](cinema/cinema-speaker-mounts.md)
+- 平面吸音パネルの模様は、単位boxの各面へinstanceの実寸と周期を一度適用し、samplerのrepeatを1にする。色とbumpで同じ座標を使い、室内照明のshader hookと合成する。丸い座席や筐体はこのunit box専用の写像へ含めない。 [平面の実寸UV](../src/coast/world/cinema/cinemaMetricUv.ts) · [材の周期と振幅](../src/coast/world/cinema/cinemaFinishes.ts) · [原理と適用条件](learning/modeling-materials.md#面の寸法と模様の周期を結び付ける)
+- 丸角のクッションは形とnormalを実寸へ焼き、6面chartの平坦部と円弧に距離を割り当てる。名目の糸pitchは0.5mmで、球角では局所尺度の近似が残る。座席のrepeat1は独立したtexture変換に持たせ、同じ画像Sourceを使う垂幕の既存repeatを変えない。壁の不透明な孔模様は512pxで面積samplingし、スピーカー前板の透過coverageとは分ける。 [張地の写像](../src/coast/world/cinema/cinemaUpholsteryGeometry.ts) · [曲面の適用限界](learning/modeling-materials.md#丸い張地のchartと繊維の尺度)
+- 上部4か所の還気口は、コファーの実切欠き、ライナー、空間、側壁を貫通するダクトと屋根への支持を共通定義から作る。環境音の出口は可視口のY21.62mを共有する。上映スピーカーの位置・照準は変えず、ダクト内伝搬や風量を再現するモデルとは分ける。 [還気口と断面図](cinema/cinema-ventilation.md) · [共通定義](../src/coast/world/cinema/cinemaVentilation.ts)
 - 幕面を `z=0`、客席方向を正とする。室内40 × 57 × 22 m、幕の幅30 m、高さ16.875 m、中心高9.8 m。段床・座席・扉と、照明の受光面・音響の経路は配置データを共有する。588席のうち8席が同伴席で、車いすスペース8か所を含む収容人数は596。座席の背は歩行を止め、縦通路では各列の段を歩行用の支持面でつなぐ。車いす席の前後では、前列の頭上に幕の下端が見えるよう段数を増やし、横通路から扉までは同じ高さを通す。 [平面と断面 PDF](cinema/cinema-floor-plan.pdf) · [配置](../src/coast/world/cinema/cinemaLayout.ts) · [歩行判定](../src/coast/world/cinema/cinemaNavigation.ts)
 - 受信した映像を元の縦横比のまま幕に投影し、幕を色が場所ごとに変わる拡散面として扱う。幕の各区画から床・壁・天井・座席へ届く光は、受光点の距離と向きから求める。座席の前面と上端は別に計算し、壁のリブと手すりには面の向きに応じた弱い反射を加える。軽量は16×7区画と受光面ごとに4×5点で毎秒最大15回、高品質は32×14区画と7×9点で最大30回更新し、座席の遮蔽と幕への位置別の戻り光も計算する。 [照明](../src/coast/world/cinema/cinemaLighting.ts) · [光の伝達](../src/coast/world/cinema/cinemaLightTransport.ts) · [面光源の放射計算](https://pbr-book.org/4ed/Radiometry%2C_Spectra%2C_and_Color/Working_with_Radiometric_Integrals)
 - 入場時は壁上部の間接灯を起点に壁面を照らし、暗転中は段鼻・壁下の足元灯と出口誘導灯が点灯する。非常点検では映写を停止し、扉上の灯具から出入口と通路を白く照らす。露出は固定し、明るさの履歴は入退場時の照明切替に使う。技術設計PDFの光の分布図と受光点数は初版の記録で、現行の設定は実装に記載する。 [灯具の位置](../src/coast/world/cinema/cinemaFixtureLighting.ts) · [光と音の技術設計 PDF・第3–4ページ](cinema/cinema-light-sound-design.pdf) · [実館の迷光とコントラストの研究](https://journal.smpte.org/periodicals/SMPTE%20Motion%20Imaging%20Journal/125/4/17/)
 - 上映の暗転後、共有映像を隠して試映も停止すると、幕から場内へ届く光は途切れる。段鼻と壁下の灯具は遮光された足元の範囲を照らし、出口表示は発光を続ける。天井や離れた客席の照明は、点灯中の場内灯と再生中の映像から求める。幕面に残る迷光は安全照明を残す映像測定環境を参考にした設計上の近似値とする。 [室内と幕の描画](../src/coast/world/cinema/cinemaLightShaders.ts) · [DCI 試験計画 §7.1](https://ctp.dcimovies.com/5a469c66c7393136f99eb06c7039e10cfea457e3/ctp.html)
 - 共有音から直接音、幕の透過、鏡像法の反射、帯域別の後期残響を合成する。直接音には座席までの距離に応じたゲインを使い、反射に経路差の遅れを加える。高品質は頭部伝達関数と最大12本、軽量は等電力パンと最大4本の初期反射を使う。足音、空調、試聴の音声は共有音と独立する。 [音響](../src/coast/world/cinema/cinemaPlayback.ts) · [光と音の技術設計 PDF](cinema/cinema-light-sound-design.pdf)
+- 本編と内蔵試映の57出力は、担当群と隣接台へ連続に配分した信号を、各台の伝搬と耳への応答へ渡す。校正後の空間係数と作品のdBを分離し、全144tapのHRIR、帯域別の伝搬FIRと分割畳み込みを使う。既存共有音の固定feedフィルターと、57出力の有限幕を通る経路別処理は適用単位が異なる。方式と方向範囲、処理負荷、開発検証は[上映音響設計](cinema/cinema-sound-design.md)、対象版の証拠と限界は[検証記録](cinema/cinema-reevaluation-verification.md)を参照する。
 - 清掃・非常点検では現行の投影と共有音の出力を一時停止する。出口扉・表示灯は閉じた館内景観として保ち、館外への移動はファストトラベルで行う。実施設計に必要な屋外避難・廊下以降の設備は、基本設計PDFに建物側の条件として記録した。
 - 同じシアター内で座席を変えると、デスクトップとWebXRで全画面を短時間暗くして着地点を変える。WebXRは座位と頭の向きを追跡し、スクリーンの投影を停止した状態で入っても停止を維持する。 [座席移動](../src/coast/world/cinema/cinemaSeatTransition.ts)
+
+### 幕の裏面と縁
+
+正面の投影面は既存の幅30 m・高さ16.875 m・`z = 0`を保つ。その直後に閉じた薄膜形状を置き、静止した頭部追跡で裏へ回った場合も、裏面と四周の断面が不透明に見えるようにする。制作上の寸法仮定は厚さ1.2 mm、正面投影面から薄膜前面まで0.5 mm、背面は`z = −1.7 mm`。開口より幅・高さを各2 mm大きくし、既存枠へ四周1 mmずつ差し込む。寸法は`CINEMA_SCREEN`から生成し、実枠との重なりと前後・四辺のrayで照合する。製造品の構造・耐力を再現した寸法ではない。
+
+裏と縁は既存の非発光・不透明な低反射材（色0x101114、roughness 0.97）を場内照明で受光させる。専用の閉Box geometryは36 indexを保ち、正面投影面と重なる+Z capの6 indexだけを非表示材のgroupへ分離する。裏と四周の30 indexは一つの可視groupとして描き、通常の追加drawは1回とする。物理volumeとRaycasterは非表示groupを含む閉形状を参照する。共有Box geometry・matte材・正面投影shaderは変更せず、depth test/writeとLessEqual判定を維持する。薄膜の描画順は−1、正面投影面は既存の0とするが、深度のfloat誤差を描画順だけで解決する設計にはしない。正面動画shader、投影面の位置、音響上の幕交差判定と穿孔による帯域近似は変更しない。この薄膜は光学的な裏面表現であり、新たな遮音板や二枚目の音響境界を意味しない。孔の微細形状・裏側の局所透光は解像しない。専用geometry・非表示材と既存の共有matte材はauditoriumの所有で一度だけ解放する。静止1:1頭部追跡を制限して裏面を隠すことはしない。
+
+### 床の表面
+
+座席段床と通路のカーペットは、既存の形・UV密度3.4周期/m・128px・seed・材参照と所有を保つ。tileは約294.1mm、1texelは約2.30mmで、tile自体の反復は残る。従来の位相がそろった正弦2項を除き、同じseedからの188〜208未満の細粒変動を使う。float値の理論期待平均は198であり、8bit切り捨て後の期待平均は197.5、有限tileの実byte平均は197.501831（旧197.502747）、実範囲は188–207だった。近接の細粒と遠方の平均化を表す光学近似で、実製品の織り・厚さを再現したデータではない。
+
+roughness 0.98、既存colorとbumpの画像共有、HighのbumpScale 0.018/0.020、Lightの切替を維持する。新しいtexture・GPU処理やanisotropy増加は加えない。理論的なheightmap変動の上限は約1.41/1.57mmで、実byte範囲からの変動は約1.34/1.49mmだった。これは描画上の高さ差で、実カーペットの厚さ・性能・音響吸音率ではない。床の音響材係数やseat/tread伝搬近似は変更しない。垂幕・座席・壁材の画像はこの変更へ混ぜない。
+
+[幕の実形状](../src/coast/world/cinema/cinemaScreenSurface.ts) · [周囲との接続](../src/coast/world/cinema/cinemaAuditorium.ts) · [床材の生成](../src/coast/world/cinema/cinemaFinishes.ts) · [対象版と実出力](cinema/cinema-reevaluation-verification.md)
 
 ## 音響
 

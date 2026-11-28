@@ -20,7 +20,7 @@ test('CinemaMovieVideo decodes a local H.264 MP4 with seek and a bounded present
   try {
     await exec('ffmpeg', [
       '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=96x54:rate=5',
-      '-t', '2.0', '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', fixture,
+      '-t', '2.0', '-an', '-c:v', 'libx264', '-g', '5', '-keyint_min', '5', '-sc_threshold', '0', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', fixture,
     ]);
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
@@ -47,6 +47,17 @@ test('CinemaMovieVideo decodes a local H.264 MP4 with seek and a bounded present
     const { openCinemaMovieVideo } = await import('/src/coast/world/cinema/cinemaMovieVideo.ts');
     const file = new File([Uint8Array.from(atob(encoded), char => char.charCodeAt(0))], 'fixture.mp4', { type: 'video/mp4' });
     const movie = await openCinemaMovieVideo(file);
+    const cache = Object.create(Object.getPrototypeOf(movie));
+    cache.video = { samples: Array.from({ length: 40 }, (_, index) => ({ presentationTime: index / 24 })) };
+    cache.frames = new Map();
+    cache.lastPresentedIndex = 4;
+    cache.presentationTarget = 5;
+    const cacheClosed = [];
+    for (let index = 4; index <= 12; index += 1) {
+      cache.frames.set(index, { index, frame: { close: () => cacheClosed.push(index) } });
+      cache.trimFrames();
+    }
+    const cacheRetained = [...cache.frames.keys()];
     const initialVersion = movie.frameVersion;
     const initial = movie.present(0);
     const repeated = movie.present(0.001);
@@ -69,6 +80,8 @@ test('CinemaMovieVideo decodes a local H.264 MP4 with seek and a bounded present
     const endRepeated = movie.present(movie.duration + 10);
     const result = {
       duration: movie.duration,
+      syncKeys: movie.video.samples.filter(sample => sample.key).map(sample => sample.index),
+      cacheClosed, cacheRetained,
       size: [movie.canvas.width, movie.canvas.height],
       initialVersion,
       initial,
@@ -86,6 +99,9 @@ test('CinemaMovieVideo decodes a local H.264 MP4 with seek and a bounded present
   }, Buffer.from(bytes).toString('base64'));
   assert.ok(result.duration > 1.9 && result.duration < 2.1, result);
   assert.deepEqual(result.size, [96, 54]);
+  assert.deepEqual(result.syncKeys, [0, 5], 'the two 32-bit sync sample entries retain their four-byte stride');
+  assert.deepEqual(result.cacheClosed, [12], 'evict the farthest future frame while retaining the next requested frame');
+  assert.deepEqual(result.cacheRetained, [4, 5, 6, 7, 8, 9, 10, 11]);
   assert.equal(result.initial, true);
   assert.equal(result.repeated, true);
   assert.equal(result.initialVersion, 0);

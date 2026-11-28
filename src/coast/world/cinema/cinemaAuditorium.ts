@@ -4,12 +4,14 @@ import { CINEMA_COVE_LENS_X, CINEMA_COVE_LENS_Y, CINEMA_EXIT_LAMPS, CINEMA_WALL_
 import { createCinemaExits } from './cinemaFixtures';
 import { createCinemaFloor } from './cinemaFloor';
 import {
-  CINEMA_BOUNDS, CINEMA_CEILING_BAFFLES, CINEMA_CEILING_COFFERS, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH,
+  CINEMA_BOUNDS, CINEMA_CEILING_BAFFLES, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH,
   CINEMA_EXITS, CINEMA_PROJECTION_Y,
   CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, cinemaGroundHeight,
 } from './cinemaLayout';
 import { createCinemaSeats } from './cinemaSeats';
-import { CINEMA_RENDER_SPEAKERS } from './cinemaSpeakers';
+import { cinemaScreenSubstrateBox, cinemaScreenSubstrateGeometry } from './cinemaScreenSurface';
+import { createCinemaSpeakerEquipment } from './cinemaSpeakerEquipment';
+import { CINEMA_RETURN_COFFER_BOXES, CINEMA_VENTILATION_PARTS, cinemaVentilationWallBoxes } from './cinemaVentilation';
 
 type CinemaQuality = 'light' | 'high';
 
@@ -120,7 +122,7 @@ function addWalls(group: Group, finish: CinemaFinishes): void {
     furring.push([x, bottom + 0.043, 53.65, 2.77, 0.087, 0.24]);
   }
 
-  cinemaBoxes(group, 'Isolated auditorium envelope and ceiling', finish.box, finish.shell, shell);
+  cinemaBoxes(group, 'Isolated auditorium envelope and ceiling', finish.box, finish.shell, cinemaVentilationWallBoxes(shell));
   cinemaBoxes(group, 'Raked dark lower wall lining', finish.box, finish.bulkhead, lining);
   cinemaBoxes(group, 'Perforated acoustic panels', finish.box, finish.acoustic, panels);
   cinemaBoxes(group, 'Vertical sound scattering ribs', finish.box, finish.ribs, ribs);
@@ -165,6 +167,10 @@ function addScreenSurround(group: Group, finish: CinemaFinishes): void {
     }
   }
 
+  const substrate = cinemaBoxes(group, 'Opaque cinema screen substrate', cinemaScreenSubstrateGeometry(),
+    finish.matte, [cinemaScreenSubstrateBox()]);
+  substrate.material = [finish.matte, new MeshBasicMaterial({ visible: false })];
+  substrate.renderOrder = -1;
   cinemaBoxes(group, 'Black acoustic masking around the screen opening', finish.box, finish.matte, masks);
   cinemaBoxes(group, 'Side drapery and folds', finish.box, finish.drape, drapes);
   cinemaBoxes(group, 'Low-reflection proscenium and screen frame', finish.box, finish.protection, frame);
@@ -198,7 +204,11 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
   }
 
   cinemaBoxes(group, 'Four ceiling smoke baffles', finish.box, finish.protection, CINEMA_CEILING_BAFFLES);
-  cinemaBoxes(group, 'Ceiling coffers and cove returns', finish.box, finish.bulkhead, CINEMA_CEILING_COFFERS);
+  cinemaBoxes(group, 'Ceiling coffers and cove returns', finish.box, finish.bulkhead, CINEMA_RETURN_COFFER_BOXES);
+  for (const kind of ['frame', 'liner', 'duct', 'support'] as const) {
+    cinemaBoxes(group, 'Cinema return ventilation ' + kind, finish.box, kind === 'liner' ? finish.matte : finish.darkSteel,
+      CINEMA_VENTILATION_PARTS.filter(part => part.kind === kind).map(part => part.box));
+  }
   cinemaBoxes(group, 'Light housings', finish.box, finish.darkSteel, housings);
   for (const [name, color, locations] of [
     ['cove', 0xe4b678, cove], ['service', 0xe1e0d6, service], ['emergency', 0xeeeee5, emergency],
@@ -209,25 +219,9 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
   }
 }
 
-function addAuditoriumEquipment(group: Group, finish: CinemaFinishes): void {
+function addAuditoriumEquipment(group: Group, finish: CinemaFinishes) {
   const cabinets: CinemaBox[] = [];
-  const grilles: CinemaBox[] = [];
-  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'side')) {
-    const [x, y, z] = speaker.position;
-    const sign = x < 0 ? -1 : 1;
-    cabinets.push([x + sign * 0.388, y + 0.015, z, 0.75, 0.92, 0.61]);
-    grilles.push([x, y, z, 0.038, 0.78, 0.51]);
-  }
-  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'top')) {
-    const [x, y, z] = speaker.position;
-    cabinets.push([x, y + 0.229, z, 0.61, 0.43, 0.77]);
-    grilles.push([x, y, z, 0.53, 0.034, 0.65]);
-  }
-  for (const speaker of CINEMA_RENDER_SPEAKERS.filter(({ kind }) => kind === 'rear')) {
-    const [x, y, z] = speaker.position;
-    cabinets.push([x, y + 0.02, z + 0.331, 0.62, 0.91, 0.63]);
-    grilles.push([x, y, z, 0.52, 0.76, 0.038]);
-  }
+  const speakerFinishes = createCinemaSpeakerEquipment(group);
   const surrounds: CinemaBox[] = [];
   const inner: CinemaBox[] = [];
   const panes: CinemaBox[] = [];
@@ -245,14 +239,14 @@ function addAuditoriumEquipment(group: Group, finish: CinemaFinishes): void {
     lenses.push([x, PROJECTION_Y, 54.033, 0.315, 0.224, 0.026]);
     panes.push([x, PROJECTION_Y, 53.998, WINDOW_WIDTH, WINDOW_HEIGHT, 0.016]);
   }
-  cinemaBoxes(group, 'Ceiling and surround loudspeaker cabinets', finish.box, finish.darkSteel, cabinets);
-  cinemaBoxes(group, 'Sound equipment grilles', finish.box, finish.acoustic, grilles);
+  cinemaBoxes(group, 'Projection equipment cabinets', finish.box, finish.darkSteel, cabinets);
   cinemaBoxes(group, 'Recessed projection window frames', finish.box, finish.darkSteel, surrounds);
   cinemaBoxes(group, 'Dark projection booth wall', finish.box, finish.matte, inner);
   const glass = new MeshStandardMaterial({ color: 0x64838c, roughness: 0.21, metalness: 0.24, transparent: true, opacity: 0.28, depthWrite: false });
   cinemaBoxes(group, 'Glazed projection ports', finish.box, glass, panes);
   const lens = new MeshBasicMaterial({ color: 0x283f45, toneMapped: false });
   cinemaBoxes(group, 'Projection optics behind glazing', finish.box, lens, lenses);
+  return speakerFinishes;
 }
 
 export function createCinemaAuditorium() {
@@ -264,21 +258,26 @@ export function createCinemaAuditorium() {
   addWalls(group, finish);
   addScreenSurround(group, finish);
   addOverhead(group, finish);
-  addAuditoriumEquipment(group, finish);
+  const speakerFinishes = addAuditoriumEquipment(group, finish);
   createCinemaExits(group, finish);
   chairDetails.visible = false;
+  let disposed = false;
 
   return {
     group,
     setQuality(quality: CinemaQuality) {
+      if (disposed) return;
       const high = quality === 'high';
       chairDetails.visible = high;
       finish.setHighDetail(high);
+      speakerFinishes.setHighDetail(high);
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       const geometries = new Set<BufferGeometry>();
       const materials = new Set<Material>();
-      const textures = new Set<Texture>();
+      const textures = new Set<Texture>(speakerFinishes.textures);
       group.traverse((object) => {
         if (!(object instanceof Mesh)) return;
         if (object instanceof InstancedMesh) object.dispose();
