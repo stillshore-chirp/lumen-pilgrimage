@@ -293,14 +293,16 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
       enlargeDevice.focus();
     }));
     activeItems = section.controls.map(control => {
-      const item = createControl(control, section.category, sync);
-      item.element.dataset.residenceControl = control.id;
       const locate = () => {
         targetLocation = control.location ?? section.location;
         targetLabel = control.label;
         target.textContent = `${roomLabel} ／ ${targetLabel}`;
         devicePlan.select(targetLocation, targetLabel);
       };
+      // Every actual control event confirms its own target, even when a hover
+      // preview changed while keyboard focus stayed on this control.
+      const item = createControl(control, section.category, () => { locate(); sync(); });
+      item.element.dataset.residenceControl = control.id;
       item.element.addEventListener('focusin', locate);
       item.element.addEventListener('pointerenter', locate);
       item.sync();
@@ -345,6 +347,28 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
     if (dialog.open) return;
     showMenu();
     showModal(trigger);
+  });
+  dialog.addEventListener('keydown', event => {
+    if (!dialog.open || event.key !== 'Tab' || event.defaultPrevented || event.isComposing
+      || event.altKey || event.ctrlKey || event.metaKey) return;
+    // Native dialog navigation can reach browser controls. Apply the panel's
+    // modal boundary only; its intermediate tab order remains browser-owned.
+    const targets = [...dialog.querySelectorAll<HTMLElement | SVGElement>('button, input, select, textarea, a[href], [tabindex]')]
+      .filter(target => target.tabIndex >= 0 && !target.matches(':disabled, [aria-disabled="true"]')
+        && !target.closest('[hidden], [inert]') && target.getClientRects().length > 0
+        && getComputedStyle(target).visibility === 'visible');
+    const first = targets[0];
+    const last = targets.at(-1);
+    if (!first || !last) return;
+    const active = document.activeElement;
+    // The initial static title precedes the tab sequence, so reverse Tab there
+    // also reaches the leading boundary without changing initial focus.
+    const next = event.shiftKey && (active === first || active === heading) ? last
+      : !event.shiftKey && active === last ? first : null;
+    if (next) {
+      event.preventDefault();
+      next.focus();
+    }
   });
   dialog.addEventListener('click', event => {
     if (event.target === dialog) dialog.close();
