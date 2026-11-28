@@ -48,7 +48,7 @@ flowchart LR
 - [視聴パネル](../src/monitor/monitorView.ts) を初めて開くと、一枚の [映像面](../src/monitor/monitorObject.ts) を景観に追加できる。映像面の位置・向き・大きさはワールド座標に保持する。映像の縦横比に合わせて同じ平面を描き、映像を失ったらそこに状態を表示する。配置編集時はFPSのマウスロックを解除し、ドラッグを映像面に渡す。
 - 住戸のテレビは同じ映像テクスチャを壁の固定画面に描く。表示先と音の出力方式は別に選べる。5.1ch出力では、受信したチャンネルを音声の数に応じて割り当て、住戸内のスピーカーの位置から頭部伝達関数で定位させる。 [テレビとスピーカーの配置](../src/coast/world/residence/residenceTheater.ts) · [ITU-R BS.775-4](https://www.itu.int/rec/R-REC-BS.775-4-202212-I/en) · [Web Audioのチャンネル順序](https://www.w3.org/TR/webaudio/#ChannelOrdering)
 - [モニターのVR入力](../src/monitor/monitorXR.ts) は探索と同じXR rigを使う。コントローラーのグリップと手の関節座標によるピンチを扱う。追跡を失うと掴みを解除し、その時点の姿勢に固定する。 [W3C WebXR Hand Input](https://www.w3.org/TR/webxr-hand-input-1/)
-- [モニター音声](../src/monitor/monitorAudio.ts) は受信音声専用のWeb Audioコンテキストを持つ。音量と受信音声のオン・オフを滑らかに変更し、頭部固定ステレオとHRTFによる定位・距離減衰・指向性を切り替える。映像要素はミュートし、Web Audioに再生を集約する。描画品質は自然環境音・共有音声の処理に影響しない。
+- [モニター音声](../src/monitor/monitorAudio.ts) は受信音声専用のWeb Audioコンテキストを持つ。音量と受信音声のオン・オフを滑らかに変更し、頭部固定ステレオとHRTFによる定位・距離減衰・指向性を切り替える。映像要素はミュートし、Web Audioに再生を集約する。描画品質の変更は配信接続と利用者の音量を変えない。ワールドが音の伝搬を提供する場合は、その品質契約で経路数などを選ぶ。
 
 ## 地形と移動
 
@@ -82,6 +82,9 @@ flowchart LR
 - 住戸周辺のビルも、画面に投影された窓の大きさに合わせて個別の窓明かりを数室のまとまりへ連続的に移行させる。小さい窓の点灯が画素の境界を横切る際の明滅を減らし、遠くでの平均の明るさを保つ。 [近景の窓明かり](../src/coast/world/residence/residenceCityMaterials.ts)
 - 室内はオークや漆喰、織物の実寸の色・凹凸・粗さを使う。窓からの日射、間接光、夜の照明を組み合わせる。高品質では家具の実形状から床際の影を作る。デスクトップでは視点に応じて窓・鏡の反射を描き、高品質では室内の深度を使った近接陰影と、床材の粗さに応じた平面反射も加える。 [室内照明](../src/coast/world/residence/residenceLighting.ts) · [反射](../src/coast/world/residence/residenceReflections.ts) · [内装材の出典](../public/residence-materials/ATTRIBUTION.md)
 - 録音した交通音を南と東の街路に分散する。壁や扉を通る音と開口を回る音の低域・高域の強さを別々に見積もり、到来方向と室内の反射へ反映する。室内の反射は部屋の寸法に合わせ、扉を開けると接続先の残響を滑らかに混ぜる。歩行音には室内履きの柔らかな接地音と擦れを加え、床材ごとに音を変える。閉じた建具の係数はこの住戸モデル向けの推定値。 [住戸の音響](../src/coast/world/residence/residenceAudio.ts) · [開口の伝搬に関する実測・解析](https://gakui.dl.itc.u-tokyo.ac.jp/cgi-bin/gazo.cgi?no=124544) · [動的開口の研究](https://arxiv.org/abs/2107.11548) · [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
+
+- 住戸の局所天井と水勾配は描画と移動が同じ面を使う。同階の隣接棟部は全室・バルコニー・共用廊下と昇降機の有限壁を除いたvolumeだけを既存外皮batchへ補う。反射・近接陰影・影はcontext喪失時に所有画像の世代を退役し、復元時は主カメラの影から再生成する。[編集入口と近似の範囲](residence/residence-70f-design.md#編集と再検証の入口)
+- 住戸の環境音とTV/浮遊モニターは共通の室・有限壁・実戸板・開口経路を使う。共有モニターはcontext、入力source、利用者音量、配信寿命を所有し、住戸の同期providerはその下流の伝搬と7種類の室内応答を所有する。[音の経路と所有境界](residence/residence-70f-design.md#音の経路と近似)
 
 - 住戸から見える遠方の旅客機は展望台と機体・灯火の描画を共有する。住戸の機体は南と東に通過経路を持ち、都市の地形を反転する変換から独立した座標に置く。機体は視覚だけで表現する。 [航空機の描画](../src/coast/world/overlook/overlookAirTraffic.ts) · [衝突防止灯の資料](https://www.govinfo.gov/content/pkg/CFR-2025-title14-vol1/xhtml/CFR-2025-title14-vol1-sec25-1401.html)
 
