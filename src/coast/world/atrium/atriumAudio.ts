@@ -72,6 +72,7 @@ const FOOTFALL_ROOM_SEND = 0.64;
 const FOOTFALL_INTERVAL = 0.30;
 const FOOTFALL_STRIDES: Record<AtriumSurface, number> = {
   stone: 0.72,
+  wood: 0.72,
   rug: 0.78,
   stair: 0.58,
   gallery: 0.70,
@@ -79,6 +80,7 @@ const FOOTFALL_STRIDES: Record<AtriumSurface, number> = {
 const MIN_FOOTFALL_STRIDE = Math.min(...Object.values(FOOTFALL_STRIDES));
 const FOOTFALL_GAINS: Record<AtriumSurface, number> = {
   stone: 0.85,
+  wood: 0.79,
   rug: 0.68,
   stair: 0.92,
   gallery: 0.76,

@@ -16,6 +16,7 @@ import type { FrontMaterials } from './atriumFrontMaterials';
 import { getAtriumFrontSurfaces } from './atriumFrontShell';
 import { applyAtriumFrontOcclusion } from './atriumFrontOcclusion';
 import type { FrontAoContact, FrontAoReceiver } from './atriumFrontOcclusion';
+import { buildTenantWalkFixture } from './atriumTenantWalking';
 
 type Rect = Readonly<{ x: number; z: number; width: number; depth: number; height: number }>;
 type PhysicalContact = { object: Object3D; shape: 'rect' | 'ellipse'; strength: number; falloff: number };
@@ -355,21 +356,27 @@ function storeInterior(parent: Build, tenant: AtriumFrontTenant): void {
   const middle = tenantRect(tenant, tenant.fixtures.middleDisplay);
   const back = tenantRect(tenant, tenant.fixtures.backShelf);
   const service = tenantRect(tenant, tenant.fixtures.serviceCounter);
-  table(build, front, tenant.id === 'W' ? palette.oak : palette.stone, 0, `${tenant.id} low display table`);
-  table(build, middle, tenant.id === 'W' ? palette.darkOak : palette.stone, 0, `${tenant.id} middle display`);
-  shelf(build, back, 0, tenant.id === 'W' ? 'books' : 'craft', `${tenant.id} deep display shelf`);
-  if (tenant.id === 'W') {
-    paperDisplay(build, front, front.height);
-    paperDisplay(build, middle, middle.height);
-  } else {
-    craftDisplay(build, front, front.height, 0);
-    craftDisplay(build, middle, middle.height, 2);
-  }
-  const cabinet = box(build, palette.darkOak, service.x, .44, service.z, service.width - .08, .88, service.depth - .06,
-    `${tenant.id} service cabinet with toe recess`, .014);
-  build.occlusion.contacts.push({ object: cabinet, shape: 'rect', strength: .25, falloff: .055 });
-  box(build, palette.stone, service.x, service.height - .020, service.z,
-    service.width, .040, service.depth, `${tenant.id} service worktop`, .010);
+  const tenantId = `front-${tenant.id}` as const;
+  buildTenantWalkFixture(build.group, tenantId, 'frontTable', 'rigid', () => {
+    table(build, front, tenant.id === 'W' ? palette.oak : palette.stone, 0, `${tenant.id} low display table`);
+    if (tenant.id === 'W') paperDisplay(build, front, front.height);
+    else craftDisplay(build, front, front.height, 0);
+  });
+  buildTenantWalkFixture(build.group, tenantId, 'middleDisplay', 'rigid', () => {
+    table(build, middle, tenant.id === 'W' ? palette.darkOak : palette.stone, 0, `${tenant.id} middle display`);
+    if (tenant.id === 'W') paperDisplay(build, middle, middle.height);
+    else craftDisplay(build, middle, middle.height, 2);
+  });
+  buildTenantWalkFixture(build.group, tenantId, 'backShelf', 'rigid', () => {
+    shelf(build, back, 0, tenant.id === 'W' ? 'books' : 'craft', `${tenant.id} deep display shelf`);
+  });
+  buildTenantWalkFixture(build.group, tenantId, 'serviceCounter', 'rigid', () => {
+    const cabinet = box(build, palette.darkOak, service.x, .44, service.z, service.width - .08, .88, service.depth - .06,
+      `${tenant.id} service cabinet with toe recess`, .014);
+    build.occlusion.contacts.push({ object: cabinet, shape: 'rect', strength: .25, falloff: .055 });
+    box(build, palette.stone, service.x, service.height - .020, service.z,
+      service.width, .040, service.depth, `${tenant.id} service worktop`, .010);
+  });
   const sign = tenant.side < 0 ? 1 : -1;
   for (const u of tenant.entryU) {
     box(build, tenant.id === 'W' ? palette.oak : palette.bronze,

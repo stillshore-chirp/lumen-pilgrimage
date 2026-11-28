@@ -1,3 +1,4 @@
+import { registerTenantWalkFixture } from './atriumTenantWalking';
 import type { MeshStandardMaterial } from 'three';
 import type { TenantBuildContext } from './atriumTenantArchitecture';
 
@@ -140,6 +141,7 @@ function addGenericFixture(
 }
 
 function addFixture(context: TenantBuildContext, fixture: RearFixture, glow: MeshStandardMaterial): void {
+  const walkingStart = context.group.children.length;
   const isF1 = context.bay.id === 'F1';
   const shelfFinish = isF1 ? context.palette.darkWood : context.palette.lightWood;
   const caseFinish = isF1 ? context.palette.dark : context.palette.cream;
@@ -166,6 +168,9 @@ function addFixture(context: TenantBuildContext, fixture: RearFixture, glow: Mes
       addGenericFixture(context, fixture, shelfFinish);
       break;
   }
+  registerTenantWalkFixture(context.group, walkingStart, {
+    tenantId: context.bay.id, fixtureId: fixture.id, kind: 'rigid',
+  });
 }
 
 /** Build the display fixtures inside a single rear tenant bay. */
