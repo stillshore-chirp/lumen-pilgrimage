@@ -762,8 +762,9 @@ export class MonitorAudio {
     if (!output) return;
     graph.cinema = null;
     graph.source.disconnect(output.input);
-    output.input.disconnect();
+    // Retire the renderer's own input edge before forcing leftover edges off.
     this.disposeSpeakerPlayback(output.playback);
+    output.input.disconnect();
     output.level.node.disconnect();
   }
 
@@ -776,8 +777,8 @@ export class MonitorAudio {
     if (!output) return;
     graph.outputs.delete(id);
     graph.source.disconnect(output.input);
-    output.input.disconnect();
     this.disposeSpeakerPlayback(output.playback);
+    output.input.disconnect();
     output.level.node.disconnect();
   }
 

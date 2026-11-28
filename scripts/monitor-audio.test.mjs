@@ -27,6 +27,7 @@ class MockNode {
   disconnect(node) {
     if (node) {
       const index = this.connections.indexOf(node);
+      if (index < 0) throw new DOMException('No connection to this target', 'InvalidAccessError');
       this.connections.splice(index, 1);
       this.outputs.splice(index, 1);
       return;
