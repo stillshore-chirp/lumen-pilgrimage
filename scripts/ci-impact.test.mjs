@@ -72,7 +72,8 @@ test('documentation and binary references run the harness without compilation or
 });
 
 const drawingPaths = ['scripts/draw-cinema-speaker-mounts.mjs', 'scripts/revise-residence-drawings.py',
-  'docs/residence/source/residence-70f-revisions.json', 'scripts/draw-cinema-ventilation.mjs'];
+  'docs/residence/source/residence-70f-revisions.json', 'scripts/draw-cinema-ventilation.mjs',
+  'scripts/draw-atrium-cafe.mjs'];
 const noticePaths = ['scripts/prepare-cinema-code-licenses.mjs', 'public/licenses/ATTRIBUTION.md',
   'public/licenses/three-0.184.0-LICENSE.txt', 'public/licenses/three-0.184.0.json'];
 const toolingFiles = Object.fromEntries([...drawingPaths, ...noticePaths].map(path => [path, '']));
@@ -86,6 +87,52 @@ test('each offline drawing generator and revision input selects only the documen
     assert.deepEqual(browser(plan), [], path);
     assert.ok(plan.selected[0].reasons.some(reason => reason.includes(path)), path);
   }
+});
+
+test('standalone atrium capture tooling selects its scene browser gate with a reason', async t => {
+  const path = 'scripts/atrium-cafe-views.mjs';
+  const root = await fixture(t, { [path]: '' });
+  const plan = await planAffected({ root, changedPaths: [path] });
+  assert.deepEqual(plan.fallbackReasons, []);
+  assert.deepEqual(selected(plan), []);
+  assert.deepEqual(browser(plan), ['atrium-browser']);
+  assert.ok(plan.browser.find(gate => gate.id === 'atrium-browser').reasons
+    .includes(`Browser scene evidence tooling: ${path}`));
+});
+
+test('declared atrium capture tooling retains additional test and browser consumers', async t => {
+  const path = 'scripts/atrium-cafe-views.mjs';
+  const root = await fixture(t, {
+    [path]: '',
+    'scripts/coast-controls.test.mjs': `import './atrium-cafe-views.mjs';`,
+    'src/coast/world/lake/LakeWorld.ts': `import '../../../../${path}';`,
+  });
+  const plan = await planAffected({ root, changedPaths: [path] });
+  assert.deepEqual(plan.fallbackReasons, []);
+  assert.deepEqual(selected(plan), ['coast']);
+  assert.deepEqual(browser(plan), ['atrium-browser', 'lake-browser']);
+});
+
+test('imported case modules and their transitive sources remain suite inputs', async t => {
+  const cases = 'scripts/atrium-cafe-cases.mjs';
+  const source = 'src/coast/world/atrium/atriumCafePlan.ts';
+  const root = await fixture(t, {
+    'scripts/atrium-navigation.test.mjs': `import './atrium-cafe-cases.mjs';`,
+    [cases]: `import { readFile } from 'node:fs/promises'; await readFile(new URL('../${source}', import.meta.url));`,
+    [source]: 'export const width = 10.1;',
+  });
+  for (const [path, expected] of [[cases, ['atrium']], [source, ['build', 'atrium']]]) {
+    const plan = await planAffected({ root, changedPaths: [path] });
+    assert.deepEqual(plan.fallbackReasons, [], path);
+    assert.deepEqual(plan.blockingReasons, [], path);
+    assert.deepEqual(selected(plan), expected, path);
+    assert.deepEqual(browser(plan), [], path);
+  }
+  await put(root, 'scripts/atrium-navigation.test.mjs', '');
+  const orphan = await planAffected({ root, changedPaths: [cases] });
+  assert.deepEqual(orphan.fallbackReasons, [`Unclassified input: ${cases}`]);
+  assert.equal(orphan.skipped.length, 0);
+  assert.ok(orphan.browser.every(gate => gate.selected));
 });
 
 test('each distributed software notice and its generator selects packaging and document checks', async t => {
@@ -104,7 +151,8 @@ test('unregistered sibling generators, revision JSON and notice versions retain 
   for (const path of ['scripts/draw-cinema-other.mjs', 'scripts/revise-other-drawings.py',
     'scripts/prepare-other-code-licenses.mjs', 'docs/residence/source/other-revisions.json',
     'docs/cinema/other-revisions.json', 'public/licenses/other-LICENSE.txt',
-    'public/licenses/three-0.185.0-LICENSE.txt', 'public/licenses/three-0.185.0.json']) {
+    'public/licenses/three-0.185.0-LICENSE.txt', 'public/licenses/three-0.185.0.json',
+    'scripts/draw-atrium-cafe-v2.mjs', 'scripts/atrium-cafe-views-v2.mjs']) {
     const plan = await planAffected({ root, changedPaths: [path] });
     assert.equal(plan.selectionMode, 'fallback', path);
     assert.ok(plan.fallbackReasons.includes(`Unclassified input: ${path}`), path);

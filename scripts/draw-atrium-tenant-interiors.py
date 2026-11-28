@@ -889,6 +889,8 @@ def draw_section(c: Canvas, model: Mapping[str, Any], bay: Mapping[str, Any], in
         f"共通基準: FL±0 / 庇光帯下端 +{fmt(soffit)} m / 階上FL +{fmt(first_floor)} m\n"
         f"当該区画天井: +{fmt(height)} m / 入口有効幅: {fmt(entry_width)} m / 主通路幅: {fmt(num(bay.get('clearWidth'), 1.2))} m"
     )
+    if bay.get("id") == "R2":
+        note += "\n屋根・梁・音源詳細: cafe-plan-section.svg / cafe-interior-design.md"
     label_box(c, px + pw * .69, py + 12, pw * .27, ph * .14, "高さ基準", note, HexColor("#f4f6f2"), text_size=7.5)
 
 

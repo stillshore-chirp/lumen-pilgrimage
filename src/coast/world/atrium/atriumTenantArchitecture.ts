@@ -2,7 +2,7 @@ import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial, Vecto
 import type { Material } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { createTenantFinishes, TenantPalette } from './atriumTenantLighting';
-import { ATRIUM_TENANT_COMMON, ATRIUM_TENANT_GLAZING_DEPTH, tenantWidth, tenantWorldPoint } from './atriumTenantPlan';
+import { ATRIUM_TENANT_COMMON, ATRIUM_TENANT_GLAZING_DEPTH, tenantEntryGeometry, tenantWidth, tenantWorldPoint } from './atriumTenantPlan';
 import type { TenantBay, TenantFixture } from './atriumTenantPlan';
 
 export interface TenantBuildContext {
@@ -36,7 +36,7 @@ const storefrontProfiles: Readonly<Record<TenantBay['id'], StorefrontProfile>> =
   L4: { floor: 'cream', wall: 'plaster', back: 'lightWood', ceiling: 'cream', reveal: 'stone', frame: 'brass', glazing: [1.22, .028, .036] },
   L5: { floor: 'wood', wall: 'plaster', back: 'wood', ceiling: 'cream', reveal: 'stone', frame: 'bronze', glazing: [1, .025, .046] },
   R1: { floor: 'stone', wall: 'cream', back: 'cream', ceiling: 'cream', reveal: 'stone', frame: 'bronze', glazing: [1.35, .017, .11] },
-  R2: { floor: 'stone', wall: 'lightWood', back: 'wood', ceiling: 'cream', reveal: 'stone', frame: 'bronze', glazing: [1.02, .035, .055] },
+  R2: { floor: 'stone', wall: 'plaster', back: 'plaster', ceiling: 'cream', reveal: 'stone', frame: 'bronze', glazing: [1.02, .035, .055] },
   R3: { floor: 'cream', wall: 'plaster', back: 'plaster', ceiling: 'cream', reveal: 'stone', frame: 'brass', glazing: [1, .027, .033] },
   R4: { floor: 'stone', wall: 'dark', back: 'dark', ceiling: 'dark', reveal: 'dark', frame: 'bronze', glazing: [.85, .023, .033] },
   F1: { floor: 'stone', wall: 'dark', back: 'dark', ceiling: 'dark', reveal: 'dark', frame: 'bronze', glazing: [1.18, .028, .12] },
@@ -146,8 +146,9 @@ function addRoom(context: TenantBuildContext, width: number, profile: Storefront
 
   // The doorway can sit below the main portal head even when the shop ceiling drops behind it.
   const portalHead = bay.elevation.portalHead;
-  surface(context, profile.reveal, width / 2, portalHead + .031, (setback + .035) / 2,
-    width, .062, setback + .035, `${id} storefront soffit reveal`);
+  const entryGeometry = tenantEntryGeometry(bay);
+  surface(context, profile.reveal, width / 2, portalHead + .031, entryGeometry.soffitDepth / 2,
+    width, .062, entryGeometry.soffitDepth, `${id} storefront soffit reveal`);
   if (portalHead > ceiling) {
     box(palette[profile.ceiling], width / 2, (portalHead + ceiling) / 2, setback + .032,
       width, portalHead - ceiling, .064, `${id} ceiling transition`);
@@ -455,7 +456,7 @@ function addDoorway(context: TenantBuildContext, profile: StorefrontProfile): vo
     box(frame, mid, portalHead - .016, setback, width, .032, .063, `${id} transom head frame`);
   } else {
     surface(context, profile.reveal, mid, entryHeight + transom / 2, setback,
-      width, transom, id === 'R4' ? .24 : .15, `${id} open entrance lintel`);
+      width, transom, tenantEntryGeometry(bay).lintelDepth, `${id} open entrance lintel`);
     if (id === 'R4') {
       box(frame, mid, entryHeight + .008, setback - .026, width - .036, .016, .034, `${id} concealed shutter slot`);
     }
