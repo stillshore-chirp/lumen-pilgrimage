@@ -204,6 +204,10 @@ PY
 
 これらの PDF は設計参照資料です。映画館の室内は [`cinemaLayout.ts`](../src/coast/world/cinema/cinemaLayout.ts)・[`cinemaAuditorium.ts`](../src/coast/world/cinema/cinemaAuditorium.ts) が生成し、仕上げ画像も [`cinemaFinishes.ts`](../src/coast/world/cinema/cinemaFinishes.ts) がコードから作ります。住戸の現在の寸法と室配置は `residencePlan.ts` にあります。PDF の生成メタデータには映画館資料の Creator `HeadlessChrome/157`・Producer `Skia/PDF m157`、住戸図面の Producer `ReportLab PDF Library` が記録されていますが、編集用の原稿・図面ファイルや書き出しコマンドは追跡されていません。訪問者向けの画面キャプチャは[ワールドギャラリー](gallery/README.md)に掲載しています。[撮影条件と再取得](gallery/capture.md)には撮影版・原寸・変換方法を記録します。回帰検証用の撮影の入口は[検証手順](verification.md)にあります。
 
+## コード依存のライセンス同梱
+
+共通描画と形状生成で使用するThree.js 0.184.0のMIT本文は、[ソフトウェア表示](../public/licenses/ATTRIBUTION.md)とともに `public/licenses/` に保持します。[再生成](../scripts/prepare-cinema-code-licenses.mjs)ではロック済みのpackage versionと原文を確認し、Viteが配布先の `dist/licenses/` へ同じbytesを同梱することを確認します。照明shaderの独自記述と既存Three由来の処理を区別し、資料の公開を特許許諾や無侵害の保証として扱いません。
+
 ## 差し替え後の確認
 
 `public/` の既存パスを変えずに素材を差し替え、まず `npm run build` で配布用の読込を確認します。開発サーバーは `npm run dev` で起動します。既定 URL で海岸、`?world=overlook` で展望台、`?world=residence` で現行住戸、`?world=cinema` で映画館を開けます。

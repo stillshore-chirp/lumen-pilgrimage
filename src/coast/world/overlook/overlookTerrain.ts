@@ -4,6 +4,7 @@ import { coastNoise } from '../coastNoise';
 export const DECK_LEVEL = 346;
 export const DECK_FRONT = -24;
 export const DECK_SIDE = 35;
+export const OVERLOOK_SURFACE_BOUNDS = { minX: -23000, maxX: 23000, minZ: -26000, maxZ: 11000 } as const;
 const HEADER_BYTES = 24;
 const FRONT_FOOTING = DECK_FRONT - 0.45;
 const SIDE_FOOTING = DECK_SIDE + 0.45;
@@ -46,7 +47,7 @@ function elevation(grid: ElevationGrid, x: number, z: number): number {
   return THREE.MathUtils.lerp(upper, lower, south) * 0.25;
 }
 
-export async function loadOverlookTerrain(): Promise<(x: number, z: number) => number> {
+export async function loadOverlookSurvey(): Promise<(x: number, z: number) => number> {
   const [regional, nearby] = await Promise.all([loadElevation('overlook-elevation.bin'), loadElevation('overlook-detail.bin')]);
   return (x, z) => {
     const edge = Math.max(Math.abs(x), Math.abs(z));
@@ -55,22 +56,37 @@ export async function loadOverlookTerrain(): Promise<(x: number, z: number) => n
     if (edge > 810) {
       h = THREE.MathUtils.lerp(h, elevation(regional, x, z), THREE.MathUtils.smoothstep(edge, 810, 1030));
     }
-    const side = Math.max(Math.abs(x) - SIDE_FOOTING, 0);
-    const front = Math.max(FRONT_FOOTING - z, 0);
-    const rear = Math.max(z - 30.9, 0);
-    const terraceEdge = Math.hypot(side, front, rear);
-    const foundation = DECK_LEVEL - 0.35;
-    const apron = THREE.MathUtils.lerp(foundation, h, THREE.MathUtils.smoothstep(terraceEdge, 0, 20));
-
-    // A short, steep cut at the retaining wall turns into a gentler slope below the terrace.
-    const distance = Math.hypot(side, front);
-    const run = THREE.MathUtils.lerp(Math.max(side, front), distance, THREE.MathUtils.smoothstep(distance, 6, 20));
-    const cut = foundation - 12.5 * (1 - Math.exp(-run * 0.36))
-      - 23 * (1 - Math.exp(-run * 0.026)) - 0.30 * run;
-    const southFace = 1 - THREE.MathUtils.smoothstep(z, -11, 6);
-    const surveyBlend = 1 - THREE.MathUtils.smoothstep(run, 330, 780);
-    return THREE.MathUtils.lerp(apron, Math.min(apron, cut), southFace * surveyBlend);
+    return h;
   };
+}
+
+export function gradeBeforeLocalWorks(x: number, z: number, surveyedHeight: number): number {
+  const side = Math.max(Math.abs(x) - SIDE_FOOTING, 0);
+  const front = Math.max(FRONT_FOOTING - z, 0);
+  const rear = Math.max(z - 30.9, 0);
+  const foundation = DECK_LEVEL - 0.35;
+  const apron = THREE.MathUtils.lerp(foundation, surveyedHeight,
+    THREE.MathUtils.smoothstep(Math.hypot(side, front, rear), 0, 20));
+  const distance = Math.hypot(side, front);
+  const run = THREE.MathUtils.lerp(Math.max(side, front), distance, THREE.MathUtils.smoothstep(distance, 6, 20));
+  // Keep the established wall/toe cut. Close the excavation locally rather than
+  // lowering the basin and returning to the survey across one fixed Z strip.
+  const cut = foundation - 12.5 * (1 - Math.exp(-run * 0.36))
+    - 23 * (1 - Math.exp(-run * 0.026)) - 0.30 * run;
+  const footprint = 1 - THREE.MathUtils.smootherstep(run, 35, 240);
+  const roundedEnd = 1 - THREE.MathUtils.smootherstep(z, -11, 6 + side * 2);
+  const depth = Math.max(0, apron - cut);
+  // The positive-part transition has a continuous derivative where cut meets
+  // the survey. The DEM's own bilinear slope changes remain survey evidence.
+  return apron - depth * THREE.MathUtils.smootherstep(depth, 0, 0.5) * footprint * roundedEnd;
+}
+
+// Existing callers retain the pre-road-earthwork compact surface explicitly.
+export const gradeOverlookSurvey = gradeBeforeLocalWorks;
+
+export async function loadOverlookTerrain(): Promise<(x: number, z: number) => number> {
+  const survey = await loadOverlookSurvey();
+  return (x, z) => gradeBeforeLocalWorks(x, z, survey(x, z));
 }
 
 function terrainAxis(minimum: number, maximum: number): number[] {
@@ -88,11 +104,43 @@ function terrainAxis(minimum: number, maximum: number): number[] {
   return coordinates;
 }
 
+export type OverlookSurfaceHeight = (x: number, z: number) => number | undefined;
+
+function surfaceSampler(positions: Float32Array, columns: number, rows: number): OverlookSurfaceHeight {
+  const coordinate = (index: number, axis: 'x' | 'z') => positions[(axis === 'x' ? index : index * columns) * 3 + (axis === 'x' ? 0 : 2)];
+  const cell = (value: number, count: number, axis: 'x' | 'z'): number => {
+    let low = 0, high = count - 1;
+    while (high - low > 1) {
+      const middle = (low + high) >>> 1;
+      if (coordinate(middle, axis) <= value) low = middle;
+      else high = middle;
+    }
+    return low;
+  };
+  return (x, z) => {
+    // This is the local, untransformed terrain mesh. Do not silently clamp a
+    // placement outside it, or substitute the source DEM's bilinear height.
+    if (!Number.isFinite(x) || !Number.isFinite(z)
+      || x < coordinate(0, 'x') || x > coordinate(columns - 1, 'x')
+      || z < coordinate(0, 'z') || z > coordinate(rows - 1, 'z')) return undefined;
+    const column = cell(x, columns, 'x'), row = cell(z, rows, 'z');
+    const a = (row * columns + column) * 3, b = a + columns * 3;
+    const u = (x - positions[a]) / (positions[a + 3] - positions[a]);
+    const v = (z - positions[a + 2]) / (positions[b + 2] - positions[a + 2]);
+    // Match [a,b,a+1] / [b,b+1,a+1], including Float32 vertex rounding.
+    return u + v <= 1
+      ? positions[a + 1] + u * (positions[a + 4] - positions[a + 1]) + v * (positions[b + 1] - positions[a + 1])
+      : positions[b + 4] + (1 - u) * (positions[b + 1] - positions[b + 4])
+        + (1 - v) * (positions[a + 4] - positions[b + 4]);
+  };
+}
+
 export function createOverlookSurface(
   heightAt: (x: number, z: number) => number, streets: { texture: THREE.Texture; bounds: THREE.Vector4 },
   night: THREE.IUniform<number>, high?: THREE.IUniform<number>,
 ) {
-  const xs = terrainAxis(-23000, 23000), zs = terrainAxis(-26000, 11000);
+  const bounds = OVERLOOK_SURFACE_BOUNDS;
+  const xs = terrainAxis(bounds.minX, bounds.maxX), zs = terrainAxis(bounds.minZ, bounds.maxZ);
   // Sample the top and toe of the cut independently of the regular grid.
   xs.push(-SIDE_FOOTING - 1.4, -SIDE_FOOTING, SIDE_FOOTING, SIDE_FOOTING + 1.4);
   zs.push(FRONT_FOOTING - 1.4, FRONT_FOOTING);
@@ -134,6 +182,7 @@ export function createOverlookSurface(
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
   geometry.computeVertexNormals();
+  const sampleHeight = surfaceSampler(positions, xs.length, zs.length);
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
   material.customProgramCacheKey = () => high ? 'overlook-terrain-detail' : 'overlook-terrain';
   material.onBeforeCompile = shader => {
@@ -233,7 +282,7 @@ export function createOverlookSurface(
   // The residence uses one unshadowed mesh: the main city view keeps almost every tile in view.
   if (!high) {
     group.add(new THREE.Mesh(geometry, material));
-    return { group, material, dispose() { geometry.dispose(); material.dispose(); } };
+    return { group, material, sampleHeight, dispose() { geometry.dispose(); material.dispose(); } };
   }
   const tileCells = 96;
   const point = new THREE.Vector3();
@@ -275,6 +324,7 @@ export function createOverlookSurface(
   return {
     group,
     material,
+    sampleHeight,
     dispose() {
       for (const tile of tiles) tile.dispose();
       material.dispose();

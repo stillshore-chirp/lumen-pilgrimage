@@ -3,6 +3,7 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Ray, Raycaster, Scene, Triangle, Vector3 } from 'three';
 import { createDesktopGrabOcclusion } from '../src/coast/desktopGrabOcclusion.ts';
+import { blocksPavilionFlight, pavilionDomeProfile, PAVILION_DOME } from '../src/coast/world/overlook/overlookPavilionPlan.ts';
 import {
   COAST_REST_SITES, COAST_WALKS, FOREST_WALKS, INARI_WALKS, UPLAND_LAKE, UPLAND_WALKS,
   groundHeight, restSiteYaw, SEA_LEVEL, SPAWN,
@@ -223,11 +224,131 @@ test('low flight meets a cliff without snapping the camera upward', () => {
     browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW', repeat: false });
     controls.update(0.05);
 
-    assert.equal(camera.position.z, z, 'flight crossed the cliff face');
+    assert.ok(camera.position.z <= z && camera.position.z > z - 20.5 * .05,
+      'flight retains only the clear portion of the horizontal step');
+    assert.ok(camera.position.y >= groundHeight(x, camera.position.z) + .25,
+      'the retained sample remains above the actual cliff surface');
     assert.equal(camera.position.y, startY, 'flight was pushed vertically to the cliff top');
   } finally {
     controls.dispose();
     browser.cleanup();
+  }
+});
+
+test('flight sweeps vertical and diagonal paths and retains the last safe height', async t => {
+  for (const direction of ['up', 'down', 'diagonal']) {
+    await t.test(direction, () => {
+      const browser = createBrowser();
+      const camera = new PerspectiveCamera();
+      const samples = [];
+      const controls = createControls(browser, camera, {}, {
+        bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+        spawn: { x: 0, z: 0, yaw: 0, pitch: 0 }, groundHeight: () => 0, flightCeiling: 10,
+        blocksFlight: (_x, _z, eyeY, clearance) => {
+          samples.push({ eyeY, clearance });
+          return eyeY >= 2 - clearance && eyeY <= 2.2 + clearance;
+        },
+      });
+      try {
+        if (direction === 'down') camera.position.y = 3.2;
+        controls.toggleFlight();
+        const key = code => browser.window.dispatch('keydown', { target: browser.canvas, code });
+        key(direction === 'down' ? 'KeyC' : 'Space');
+        if (direction === 'diagonal') key('KeyW');
+        for (let frame = 0; frame < 5; frame++) controls.update(0.05);
+        assert.ok(samples.length > 0, 'pure vertical travel must be sampled');
+        assert.ok(samples.every(sample => sample.clearance === .25 && Number.isFinite(sample.eyeY)));
+        if (direction === 'down') {
+          assert.ok(camera.position.y > 2.45 && camera.position.y < 3.2, 'descent retains the clear sample above the volume');
+        } else {
+          assert.ok(camera.position.y < 1.75, 'upward movement never commits a height inside or beyond the volume');
+        }
+      } finally {
+        controls.dispose(); browser.cleanup();
+      }
+    });
+  }
+});
+
+test('XR flight applies the height-aware volume to the actual head and permits retreat', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera, {}, {
+    bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+    spawn: { x: 0, z: 0, yaw: 0, pitch: 0 }, groundHeight: () => 0, flightCeiling: 10,
+    blocksWalking: () => true,
+    blocksFlight: (_x, _z, eyeY, clearance) => eyeY >= 2.4 - clearance && eyeY <= 3 + clearance,
+  });
+  const motion = { forward: 0, right: 0, vertical: 0, jump: false, dive: false, flight: false };
+  try {
+    controls.toggleFlight();
+    const view = { yaw: 0, headOffset: new Vector3(0, .45, 0) };
+    controls.updateXR(.05, { ...motion, vertical: 1 }, view);
+    assert.equal(camera.position.y, 1.65, 'the head, not just the locomotion origin, stops at the underside');
+    const overlappedView = { yaw: 0, headOffset: new Vector3(0, .7, 0) };
+    controls.updateXR(.05, { ...motion, vertical: 1 }, overlappedView);
+    assert.equal(camera.position.y, 1.65, 'existing head overlap cannot advance upward');
+    controls.updateXR(.05, { ...motion, vertical: -1 }, overlappedView);
+    assert.ok(camera.position.y < 1.5, 'descending away from an existing head overlap remains possible');
+    camera.position.y = 4;
+    controls.updateXR(.05, { ...motion, forward: 1 }, view);
+    assert.ok(camera.position.z < 0, 'above the roof, the walking footprint does not become an infinite head wall');
+  } finally {
+    controls.dispose(); browser.cleanup();
+  }
+});
+
+test('legacy planar flight blockers retain horizontal stops and allow vertical movement', () => {
+  const browser = createBrowser();
+  const camera = new PerspectiveCamera();
+  const controls = createControls(browser, camera, {}, {
+    bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+    spawn: { x: 0, z: 0, yaw: 0, pitch: 0 }, groundHeight: () => 0, flightCeiling: 10,
+    blocksFlight: (_x, z) => z <= -.5,
+  });
+  try {
+    controls.toggleFlight();
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW' });
+    controls.update(.05);
+    assert.ok(camera.position.z < 0 && camera.position.z > -.5);
+    const stoppedZ = camera.position.z;
+    browser.window.dispatch('keyup', { code: 'KeyW' });
+    browser.window.dispatch('keydown', { target: browser.canvas, code: 'Space' });
+    controls.update(.05);
+    assert.equal(camera.position.z, stoppedZ);
+    assert.ok(camera.position.y > 2.5);
+  } finally {
+    controls.dispose(); browser.cleanup();
+  }
+});
+
+test('pavilion flight clearance follows the stepped roofs and dome without restricting high airspace', () => {
+  assert.equal(blocksPavilionFlight(0, 20, 3, .25), true, 'main body remains closed');
+  assert.equal(blocksPavilionFlight(16.8, 16, 7.6, .25), false, 'air above the low east roof remains available');
+  assert.equal(blocksPavilionFlight(16.8, 27, 8, .25), true, 'raised rear east roof is solid');
+  assert.equal(blocksPavilionFlight(-21.7, 21, 9.4, .25), true, 'west roof tower is solid');
+  assert.equal(blocksPavilionFlight(0, 19.1, 16, .25), true, 'dome interior is solid');
+  assert.equal(blocksPavilionFlight(7.5, 19.1, 16, .25), false, 'the tapered dome has no full-height cylindrical wall');
+  for (const [x, z] of [[0, 20], [16.8, 27], [-21.7, 21]]) {
+    assert.equal(blocksPavilionFlight(x, z, 54, .25), false, 'air at world Y400 remains open');
+  }
+});
+
+test('dome clearance includes crown and sloping normals on both sides of the boundary', () => {
+  assert.equal(blocksPavilionFlight(.7, 19.1, 18.11, .25), true, 'camera sphere cannot enter the dome crown');
+  const profile = pavilionDomeProfile();
+  const shell = Math.max(PAVILION_DOME.seamOffset + PAVILION_DOME.seamRadius,
+    Math.hypot(PAVILION_DOME.raisedPanelOffset, PAVILION_DOME.raisedPanelRise));
+  for (const index of [4, 10, 16]) {
+    const a = profile[index], b = profile[index + 1];
+    const dr = b.radius - a.radius, dy = b.height - a.height, length = Math.hypot(dr, dy);
+    for (const epsilon of [-.00001, .00001]) {
+      const distance = .25 + shell + epsilon;
+      const x = (a.radius + b.radius) / 2 + dy / length * distance;
+      const y = PAVILION_DOME.spring + (a.height + b.height) / 2 - dr / length * distance;
+      assert.equal(blocksPavilionFlight(x, 19.1, y, .25), epsilon < 0,
+        `dome segment ${index}, normal boundary ${epsilon}`);
+    }
   }
 });
 

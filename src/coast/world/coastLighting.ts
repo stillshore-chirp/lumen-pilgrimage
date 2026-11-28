@@ -3,6 +3,13 @@ import type { CoastQuality } from '../CoastWorld';
 import { groundHeight } from '../terrain';
 import { bindCoastSky, coastAerialGlsl, coastSkyGlsl, type CoastAtmosphere, type CoastTimeOfDay } from './coastAtmosphere';
 import { coastForestLight } from './coastForestLight';
+import { createFiniteReceiverVisibility } from './coastFiniteReceiverShadow';
+
+type CoastReceiverShadowDomain = {
+  readonly material: THREE.Material;
+  readonly min: THREE.Vector3;
+  readonly max: THREE.Vector3;
+};
 
 const broadHalfWidth = 230;
 const broadMapSize = 1024;
@@ -87,6 +94,98 @@ const sunVisibility = /* glsl */`
   }
 `;
 
+// Keep the legacy source intact for all materials without opt-in.
+const receiverPlaneShadowGlsl = /* glsl */`
+  #if defined( USE_SHADOWMAP ) && defined( SHADOWMAP_TYPE_PCF ) && ( NUM_DIR_LIGHT_SHADOWS > 0 )
+    vec3 coastBroadReceiverPlane;
+    #if NUM_DIR_LIGHT_SHADOWS > 1
+      vec3 coastLocalReceiverPlane;
+    #endif
+
+    // xy is depth per normalized shadow UV; z marks a well-conditioned plane.
+    vec3 coastReceiverPlane(vec3 p) {
+      vec3 dx = dFdx(p);
+      vec3 dy = dFdy(p);
+      float scale = length(dx.xy) * length(dy.xy);
+      float det = dx.x * dy.y - dx.y * dy.x;
+      if (!(scale > 1e-20) || !(abs(det) > max(1e-20, scale * 1e-4))) return vec3(0.0);
+      vec2 gradient = vec2(dx.z * dy.y - dy.z * dx.y, dy.z * dx.x - dx.z * dy.x) / det;
+      // Reject grazing/invalid estimates rather than introducing an unbounded offset.
+      if (!(max(abs(gradient.x), abs(gradient.y)) <= 8.0)) return vec3(0.0);
+      return vec3(gradient, 1.0);
+    }
+
+    float coastReceiverPlaneTexel(sampler2DShadow map, vec2 size, vec3 p, vec2 texel, vec2 gradient) {
+      vec2 uv = (clamp(texel, vec2(0.0), size - 1.0) + 0.5) / size;
+      float depth = p.z + dot(gradient, uv - p.xy);
+      // Exact texel centers make LinearFilter's other weights zero; keep the shared sampler unchanged.
+      return texture(map, vec3(uv, depth));
+    }
+
+    float coastReceiverPlaneSample(sampler2DShadow map, vec2 size, vec3 p, vec2 uv, vec3 plane) {
+      if (plane.z < 0.5) return texture(map, vec3(uv, p.z));
+      vec2 grid = uv * size - 0.5;
+      vec2 first = floor(grid);
+      vec2 f = fract(grid);
+      float a = coastReceiverPlaneTexel(map, size, p, first, plane.xy);
+      float b = coastReceiverPlaneTexel(map, size, p, first + vec2(1.0, 0.0), plane.xy);
+      float c = coastReceiverPlaneTexel(map, size, p, first + vec2(0.0, 1.0), plane.xy);
+      float d = coastReceiverPlaneTexel(map, size, p, first + 1.0, plane.xy);
+      return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+
+    #if NUM_DIR_LIGHT_SHADOWS > 1
+      float coastReceiverPlaneLocalShadow(DirectionalLightShadow shadow, vec4 coord) {
+        vec3 p = coord.xyz / coord.w;
+        p.z += shadow.shadowBias;
+        bool inside = p.x >= 0.0 && p.x <= 1.0 && p.y >= 0.0 && p.y <= 1.0 && p.z <= 1.0;
+        if (!inside) return 1.0;
+        float radius = shadow.shadowRadius / shadow.shadowMapSize.x;
+        float phi = interleavedGradientNoise(gl_FragCoord.xy) * PI2;
+        float visible = 0.0;
+        for (int i = 0; i < 5; i++) {
+          vec2 uv = p.xy + vogelDiskSample(i, 5, phi) * radius;
+          visible += coastReceiverPlaneSample(directionalShadowMap[1], shadow.shadowMapSize, p, uv,
+            coastLocalReceiverPlane);
+        }
+        return mix(1.0, visible * 0.2, shadow.shadowIntensity);
+      }
+    #endif
+  #endif
+
+  // Called at main entry, before clipping/alpha tests and any spatial cascade/receiver branch.
+  void coastPrepareReceiverPlanes() {
+    #if defined( USE_SHADOWMAP ) && defined( SHADOWMAP_TYPE_PCF ) && ( NUM_DIR_LIGHT_SHADOWS > 0 )
+      coastBroadReceiverPlane = coastReceiverPlane(vDirectionalShadowCoord[0].xyz / vDirectionalShadowCoord[0].w);
+      #if NUM_DIR_LIGHT_SHADOWS > 1
+        coastLocalReceiverPlane = coastReceiverPlane(vDirectionalShadowCoord[1].xyz / vDirectionalShadowCoord[1].w);
+      #endif
+    #endif
+  }
+`;
+
+const receiverPlaneSunVisibility = receiverPlaneShadowGlsl + sunVisibility
+  .replace('texture(directionalShadowMap[0], p)',
+    'coastReceiverPlaneSample(directionalShadowMap[0], shadow.shadowMapSize, p, p.xy, coastBroadReceiverPlane)')
+  .replace('texture(directionalShadowMap[0], p + vec3(r.x, 0.0, 0.0))',
+    'coastReceiverPlaneSample(directionalShadowMap[0], shadow.shadowMapSize, p, p.xy + vec2(r.x, 0.0), coastBroadReceiverPlane)')
+  .replace('texture(directionalShadowMap[0], p - vec3(r.x, 0.0, 0.0))',
+    'coastReceiverPlaneSample(directionalShadowMap[0], shadow.shadowMapSize, p, p.xy - vec2(r.x, 0.0), coastBroadReceiverPlane)')
+  .replace('texture(directionalShadowMap[0], p + vec3(0.0, r.y, 0.0))',
+    'coastReceiverPlaneSample(directionalShadowMap[0], shadow.shadowMapSize, p, p.xy + vec2(0.0, r.y), coastBroadReceiverPlane)')
+  .replace('texture(directionalShadowMap[0], p - vec3(0.0, r.y, 0.0))',
+    'coastReceiverPlaneSample(directionalShadowMap[0], shadow.shadowMapSize, p, p.xy - vec2(0.0, r.y), coastBroadReceiverPlane)')
+  .replace(`nearby = getShadow(directionalShadowMap[1], localShadow.shadowMapSize,
+              localShadow.shadowIntensity, localShadow.shadowBias, localShadow.shadowRadius, nearCoord);`, `
+            #ifdef SHADOWMAP_TYPE_PCF
+              nearby = coastReceiverPlaneLocalShadow(localShadow, nearCoord);
+            #else
+              nearby = getShadow(directionalShadowMap[1], localShadow.shadowMapSize,
+                localShadow.shadowIntensity, localShadow.shadowBias, localShadow.shadowRadius, nearCoord);
+            #endif`);
+
+const finiteReceiverSunVisibility = createFiniteReceiverVisibility(receiverPlaneShadowGlsl, receiverPlaneSunVisibility);
+
 const forestBounce = /* glsl */`
   float coastOpening(vec2 p, vec2 center, vec2 radius) {
     vec2 d = (p - center) / radius;
@@ -120,7 +219,8 @@ const directLight = THREE.ShaderChunk.lights_fragment_begin.replace(
 );
 
 function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
-  updated: WeakSet<THREE.Material>, nightIntensityScale: number, forestScattering: boolean): void {
+  updated: WeakSet<THREE.Material>, nightIntensityScale: number, forestScattering: boolean,
+  receiverPlaneShadowMaterials?: ReadonlySet<THREE.Material>, receiverDomains?: ReadonlyMap<THREE.Material, CoastReceiverShadowDomain>): void {
   scene.traverse(object => {
     if (!(object instanceof THREE.Mesh)) return;
     const materials: THREE.Material[] = Array.isArray(object.material) ? object.material : [object.material];
@@ -135,7 +235,9 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
       const compile = material.onBeforeCompile;
       const programKey = material.customProgramCacheKey();
       const forestAir = forestScattering && (standard || water);
-      material.customProgramCacheKey = () => `${programKey}|coast-lighting${forestAir ? '|forest-air' : ''}`;
+      const receiverPlaneShadow = standard && receiverPlaneShadowMaterials?.has(material) === true;
+      const receiverDomain = receiverPlaneShadow ? receiverDomains?.get(material) : undefined;
+      material.customProgramCacheKey = () => `${programKey}|coast-lighting${forestAir ? '|forest-air' : ''}${receiverPlaneShadow ? '|receiver-plane-pcf-v1' : ''}${receiverDomain ? '|finite-receiver-domain-v2' : ''}`;
       material.onBeforeCompile = (shader, renderer) => {
         compile.call(material, shader, renderer);
         bindCoastSky(shader.uniforms, atmosphere);
@@ -171,9 +273,35 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
               gl_FragColor.rgb = mix(coastUnfogged, gl_FragColor.rgb, uCoastSubmersion);
             #endif`);
         if (standard || water) {
+          if (receiverDomain) {
+            // Directional shadow cameras are orthographic: interpolate unbiased UV separately.
+            // The depth comparison retains the existing normalBias coordinates.
+            shader.vertexShader = `
+              #if defined( USE_SHADOWMAP ) && defined( SHADOWMAP_TYPE_PCF ) && ( NUM_DIR_LIGHT_SHADOWS > 0 )
+                varying vec2 vCoastUnbiasedBroadShadowUV;
+                #if NUM_DIR_LIGHT_SHADOWS > 1
+                  varying vec2 vCoastUnbiasedLocalShadowUV;
+                #endif
+              #endif
+              ${shader.vertexShader}`.replace('#include <shadowmap_vertex>', `#include <shadowmap_vertex>
+              #if defined( USE_SHADOWMAP ) && defined( SHADOWMAP_TYPE_PCF ) && ( NUM_DIR_LIGHT_SHADOWS > 0 )
+                vec4 coastUnbiasedBroad = directionalShadowMatrix[0] * worldPosition;
+                vCoastUnbiasedBroadShadowUV = coastUnbiasedBroad.xy / coastUnbiasedBroad.w;
+                #if NUM_DIR_LIGHT_SHADOWS > 1
+                  vec4 coastUnbiasedLocal = directionalShadowMatrix[1] * worldPosition;
+                  vCoastUnbiasedLocalShadowUV = coastUnbiasedLocal.xy / coastUnbiasedLocal.w;
+                #endif
+              #endif`);
+            shader.uniforms.uCoastReceiverDomainMin = { value: receiverDomain.min.clone() };
+            shader.uniforms.uCoastReceiverDomainMax = { value: receiverDomain.max.clone() };
+          }
           shader.fragmentShader = shader.fragmentShader
-            .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${sunVisibility}`)
+            .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${receiverDomain ? finiteReceiverSunVisibility : receiverPlaneShadow ? receiverPlaneSunVisibility : sunVisibility}`)
             .replaceAll('getShadowMask()', 'coastSunShadow()');
+          if (receiverPlaneShadow) {
+            shader.fragmentShader = shader.fragmentShader.replace('void main() {',
+              `void main() {\n${receiverDomain ? 'coastPrepareFiniteReceiverPlanes(vCoastWorldPoint);' : 'coastPrepareReceiverPlanes();'}`);
+          }
         }
         if (!standard) return;
         shader.uniforms.uCoastNightIntensityScale = { value: nightIntensityScale };
@@ -195,7 +323,10 @@ function applyCoastLighting(scene: THREE.Object3D, atmosphere: CoastAtmosphere,
 }
 
 export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosphere, heightAt = groundHeight,
-  { nightIntensityScale = 1, forestScattering = false }: { nightIntensityScale?: number; forestScattering?: boolean } = {}): {
+  { nightIntensityScale = 1, forestScattering = false, receiverPlaneShadowMaterials, receiverPlaneShadowDomains }: {
+    nightIntensityScale?: number; forestScattering?: boolean; receiverPlaneShadowMaterials?: readonly THREE.Material[];
+    receiverPlaneShadowDomains?: readonly CoastReceiverShadowDomain[];
+  } = {}): {
   addScenery: (scenery: THREE.Object3D) => void;
   setQuality: (quality: CoastQuality) => void;
   setTimeOfDay: (time: CoastTimeOfDay) => void;
@@ -222,6 +353,9 @@ export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosph
   const focus = new THREE.Vector3();
   const broadAnchor = new THREE.Vector3(Infinity, Infinity, Infinity);
   const materials = new WeakSet<THREE.Material>();
+  const planeReceivers = receiverPlaneShadowMaterials === undefined ? undefined : new Set(receiverPlaneShadowMaterials);
+  const receiverDomains = receiverPlaneShadowDomains === undefined ? undefined
+    : new Map(receiverPlaneShadowDomains.map(domain => [domain.material, domain]));
   let lastShadow = -Infinity;
   const snapToGrid = (point: THREE.Vector3, texel: number) => {
     const u = point.dot(lightRight);
@@ -230,11 +364,11 @@ export function createCoastLighting(scene: THREE.Scene, atmosphere: CoastAtmosph
     point.addScaledVector(lightUp, Math.round(v / texel) * texel - v);
   };
   scene.add(skyFill, bounce, sun, sun.target, local, local.target);
-  applyCoastLighting(scene, atmosphere, materials, nightIntensityScale, forestScattering);
+  applyCoastLighting(scene, atmosphere, materials, nightIntensityScale, forestScattering, planeReceivers, receiverDomains);
 
   return {
     addScenery(scenery) {
-      applyCoastLighting(scenery, atmosphere, materials, nightIntensityScale, forestScattering);
+      applyCoastLighting(scenery, atmosphere, materials, nightIntensityScale, forestScattering, planeReceivers, receiverDomains);
       sun.shadow.needsUpdate = true;
       lastShadow = -Infinity;
     },
