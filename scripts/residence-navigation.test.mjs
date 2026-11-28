@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { after, test } from 'node:test';
-import { ArrayCamera, BoxGeometry, Group, InstancedBufferAttribute, InstancedBufferGeometry, Mesh,
+import { ArrayCamera, BoxGeometry, DirectionalLight, Group, InstancedBufferAttribute, InstancedBufferGeometry, Mesh,
   PerspectiveCamera, Raycaster, Scene, Vector3, Vector4 } from 'three';
 
 const src = new URL('../src/', import.meta.url).href;
@@ -16,12 +16,15 @@ const { bindResidenceCityVisibility } = await import('../src/coast/world/residen
 const { ResidenceShaderPreparation } = await import('../src/coast/world/residence/residenceShaderPreparation.ts');
 const { createResidenceDoors } = await import('../src/coast/world/residence/residenceDoors.ts');
 const { createResidenceNavigation } = await import('../src/coast/world/residence/residenceNavigation.ts');
-const { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS,
-  RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS } =
+const { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS, RESIDENCE_ROOMS, RESIDENCE_TEA_CEILING_SUSPENSION,
+  RESIDENCE_TEA_HEARTH, RESIDENCE_TEA_MATS, RESIDENCE_TEA_TATAMI, RESIDENCE_WALLS } =
   await import('../src/coast/world/residence/residencePlan.ts');
 const { createResidenceMaterials } = await import('../src/coast/world/residence/residenceMaterials.ts');
 const { createResidenceFurniture } = await import('../src/coast/world/residence/residenceFurniture.ts');
 const { createResidenceShell } = await import('../src/coast/world/residence/residenceShell.ts');
+const { createResidenceReflections } = await import('../src/coast/world/residence/residenceReflections.ts');
+const { RESIDENCE_TOWER_NEIGHBORS, RESIDENCE_TOWER_STOREY } = await import('../src/coast/world/residence/residenceTowerStoreyPlan.ts');
+const { shapeDistrictBuildings } = await import('../src/coast/world/residence/residenceDistrictBuildings.ts');
 hooks.deregister();
 
 const materials = createResidenceMaterials();
@@ -308,6 +311,127 @@ test('the finished ceilings, recessed balcony soffit and door lintels bound aeri
   assert.equal(blocked(nav, 22.79, 13.58), true);
 });
 
+test('tea seating ceiling and exposed beams stop flight at the rendered underside', () => {
+  const nav = navigation(true);
+  furniture.group.updateMatrixWorld(true);
+  for (const [east, north, underside] of [
+    [5.5, 2.85, 2.479], // A clear panel between the transverse beams.
+    [5.5, 2.073, 2.4275], // The middle transverse beam projects below the panel.
+    [3.944, 2.8, 2.443], // The west longitudinal beam.
+  ]) {
+    const ray = new Raycaster(new Vector3(east, 2.30, -north), new Vector3(0, 1, 0), 0, .6);
+    const hit = ray.intersectObject(furniture.group, true).find(({ object }) => !object.material.transparent);
+    assert.ok(hit, `No rendered tea ceiling at E${east}, N${north}`);
+    assert.ok(Math.abs(hit.point.y - underside) < 1e-5, `Unexpected rendered underside at E${east}, N${north}`);
+    assert.equal(nav.ceilingHeight(east, -north), underside);
+  }
+  assert.equal(nav.ceilingHeight(6.45, -4.45), 2.85, 'The entrance keeps its higher ceiling');
+});
+
+test('interior glazing visible in captures never samples facade reflection targets', () => {
+  const shell = createResidenceShell(materials);
+  const reflections = createResidenceReflections(new Scene(), new Group(), shell.group, furniture.group, materials);
+  try {
+    let interiorPanes = 0;
+    furniture.group.traverse(object => {
+      if (!(object instanceof Mesh)) return;
+      assert.notEqual(object.material, materials.glass, 'Interior geometry must not use the recursive facade material');
+      if (object.material === materials.interiorGlass) interiorPanes++;
+    });
+    assert.equal(interiorPanes, 2, 'Both shower panes remain present in captures');
+    for (const property of ['opacity', 'roughness', 'ior', 'side', 'forceSinglePass']) {
+      assert.equal(materials.interiorGlass[property], materials.glass[property], property);
+    }
+    const shader = () => ({ uniforms: {}, vertexShader: '#include <common>\n#include <worldpos_vertex>',
+      fragmentShader: '#include <common>\n#include <opaque_fragment>' });
+    const facade = shader();
+    const interior = shader();
+    materials.glass.onBeforeCompile(facade);
+    materials.interiorGlass.onBeforeCompile(interior);
+    for (const sampler of ['windowSouthImage', 'windowEastImage', 'windowBedroomImage']) {
+      assert.ok(facade.uniforms[sampler], sampler);
+      assert.equal(interior.uniforms[sampler], undefined, sampler);
+    }
+  } finally {
+    reflections.dispose();
+    shell.dispose();
+  }
+});
+
+test('tea suspension collars meet the diagonal rods at the main ceiling', () => {
+  const { collarTop, anchor, soffit, points } = RESIDENCE_TEA_CEILING_SUSPENSION;
+  const lower = collarTop - .008;
+  const upper = anchor + .004;
+  const t = (soffit - lower) / (upper - lower);
+  furniture.group.updateMatrixWorld(true);
+  for (const support of points) {
+    const east = support.east + (support.braceEast - support.east) * t;
+    const north = support.north + (support.braceNorth - support.north) * t;
+    const ray = new Raycaster(new Vector3(east, soffit - .03, -north), new Vector3(0, 1, 0), 0, .05);
+    const hits = ray.intersectObject(furniture.group, true);
+    assert.ok(hits.some(hit => hit.object.material === materials.metal && Math.abs(hit.point.y - (soffit - .006)) < 1e-5),
+      `No diagonal collar at ${support.id}`);
+  }
+});
+
+test('reflection capture waits for main-camera shadow textures and retries unchanged poses', () => {
+  const scene = new Scene();
+  const sunlight = new DirectionalLight();
+  sunlight.castShadow = true;
+  sunlight.shadow.autoUpdate = false;
+  sunlight.shadow.needsUpdate = false;
+  scene.add(sunlight);
+  const hidden = new Group();
+  hidden.visible = false;
+  const hiddenLight = new DirectionalLight();
+  hiddenLight.castShadow = true;
+  hidden.add(hiddenLight);
+  scene.add(hidden);
+  const otherLayer = new DirectionalLight();
+  otherLayer.castShadow = true;
+  otherLayer.layers.set(3);
+  scene.add(otherLayer);
+  const shell = createResidenceShell(materials);
+  const reflections = createResidenceReflections(scene, new Group(), shell.group, furniture.group, materials);
+  reflections.setQuality('high');
+  const camera = new PerspectiveCamera(60, 1, .05, 500);
+  camera.position.set(5.5, 1.65, -2);
+  const renderer = {
+    domElement: new EventTarget(),
+    getContext() { return { isContextLost() { return false; } }; },
+    xr: { isPresenting: false },
+    shadowMap: { enabled: true, autoUpdate: false, needsUpdate: false },
+    getDrawingBufferSize() { throw new Error('capture reached'); },
+  };
+  try {
+    reflections.prepareRender(renderer, camera);
+    assert.equal(sunlight.shadow.needsUpdate, true, 'The main pass must allocate the missing shadow');
+    assert.equal(renderer.shadowMap.needsUpdate, true);
+    assert.equal(renderer.shadowMap.autoUpdate, false, 'The guard must preserve the update policy');
+    assert.equal(hiddenLight.shadow.needsUpdate, false);
+    assert.equal(otherLayer.shadow.needsUpdate, false);
+    sunlight.shadow.map = { dispose() {} };
+    assert.throws(() => reflections.prepareRender(renderer, camera), { message: 'capture reached' });
+    sunlight.shadow.map = null;
+    renderer.shadowMap.needsUpdate = false;
+    reflections.setQuality('light');
+    reflections.prepareRender(renderer, camera);
+    assert.equal(renderer.shadowMap.needsUpdate, true, 'A resized map must be prepared again');
+    reflections.setQuality('high');
+    renderer.shadowMap.enabled = false;
+    assert.throws(() => reflections.prepareRender(renderer, camera), { message: 'capture reached' },
+      'Disabled shadows must not cause an endless capture wait');
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.needsUpdate = false;
+    renderer.xr.isPresenting = true;
+    reflections.prepareRender(renderer, camera);
+    assert.equal(renderer.shadowMap.needsUpdate, false, 'XR keeps its reflection-off branch');
+  } finally {
+    reflections.dispose();
+    shell.dispose();
+  }
+});
+
 test('the living-room television has twice the 65-inch screen width and height', () => {
   const { screen } = furniture.theater;
   screen.geometry.computeBoundingBox();
@@ -332,6 +456,29 @@ test('a connected route links the lobby, dwelling rooms and kitchen with furnitu
     assert.ok(connected(e, n), `${room} inaccessible near E${e}, N${n}`);
   }
   assert.equal(connected(21.94, 12.94), false);
+});
+
+test('the east bedrooms are separate rooms with their own hall entrances', () => {
+  const nav = navigation(true);
+  for (const east of [19.35, 20.5, 22.2]) {
+    assert.equal(blocked(nav, east, 9.95), true, `The bedroom partition is open at E${east}`);
+  }
+  assertClearRoute(nav, [[17.6, 10.8], [18.38, 10.8], [18.38, 9.95], [18.38, 8.9], [20, 8.9]]);
+  assertClearRoute(nav, [[17.6, 10.8], [18.11, 10.8], [18.11, 11.6], [18.11, 13], [19.55, 13]]);
+
+  const shell = createResidenceShell(materials);
+  shell.group.updateMatrixWorld(true);
+  for (const height of [.45, 1.65, 2.7]) {
+    const ray = new Raycaster(new Vector3(20.5, height, -9.1), new Vector3(0, 0, -1), 0, 1.7);
+    const hit = ray.intersectObject(shell.group, true)[0];
+    assert.ok(hit, `No visible separation at eye height ${height}`);
+    assert.ok(Math.abs(hit.point.z + 9.88) < 1e-5, `The wall mesh and navigation disagree at ${height}`);
+  }
+  const eastWindowWall = RESIDENCE_WALLS.find(wall => wall.axis === 'n' && wall.fixed === 22.8 && wall.from === 0);
+  assert.ok(eastWindowWall);
+  assert.ok(eastWindowWall.openings.every(opening => opening.to < 9.88 || opening.from > 10.02),
+    'The partition terminates on the solid facade band instead of a glass pane');
+  shell.dispose();
 });
 
 test('tea room and study retain a continuous entry and their own interior layout', () => {
@@ -553,5 +700,85 @@ test('facade glazing, guards, wall corners and service shafts are solid at every
     for (const foot of [0, 1.18, 3.12]) {
       assert.equal(blocked(nav, e, n, foot), true, `unblocked E${e}, N${n}, height ${foot}`);
     }
+  }
+});
+
+
+test('balcony navigation follows rendered deck triangles and preserves the flush threshold', () => {
+  const nav = navigation(true);
+  const shell = createResidenceShell(materials);
+  shell.group.updateMatrixWorld(true);
+  try {
+    const ray = new Raycaster();
+    let samples = 0;
+    for (const east of [20.701, 20.8, 21.1, 21.5, 22, 22.4, 22.55]) {
+      for (const north of [11.9, 12.4, 13.5, 14.5, 15.2]) {
+        ray.set(new Vector3(east, .2, -north), new Vector3(0, -1, 0));
+        const hit = ray.intersectObject(shell.group, true).find(value => value.object.material === materials.deck);
+        assert.ok(hit, `missing deck triangle at E${east}, N${north}`);
+        assert.ok(Math.abs(nav.groundHeight(east, -north) - hit.point.y) < 1e-6);
+        samples += 1;
+      }
+    }
+    assert.equal(samples, 35);
+    assert.equal(nav.groundHeight(20.7, -13.5), 0);
+    assert.ok(Math.abs(nav.groundHeight(20.7001, -13.5)) < 1e-6);
+    for (const [east, north] of [[20.69, 13.5], [20, 3], [5.5, 2], [14, 13.5]]) {
+      assert.equal(nav.groundHeight(east, -north), 0);
+    }
+    assertClearRoute(nav, [[19.85, 13.55], [20.4, 13.55], [20.8, 13.55], [21.15, 13.55]]);
+  } finally { shell.dispose(); }
+});
+
+
+test('the occupied tower storey stays open while its neighbors restore the exterior band', () => {
+  assert.equal(RESIDENCE_TOWER_NEIGHBORS.length, 5);
+  assert.equal(Math.min(...RESIDENCE_TOWER_NEIGHBORS.map(volume => volume.bottom)), RESIDENCE_TOWER_STOREY.bottom);
+  assert.equal(Math.max(...RESIDENCE_TOWER_NEIGHBORS.map(volume => volume.top)), RESIDENCE_TOWER_STOREY.top);
+  for (const { rect: [west, south, east, north] } of RESIDENCE_TOWER_NEIGHBORS) {
+    for (const room of RESIDENCE_ROOMS) for (const rect of room.rectangles) {
+      assert.ok(Math.min(east, rect[2]) <= Math.max(west, rect[0])
+        || Math.min(north, rect[3]) <= Math.max(south, rect[1]), `${room.id} is cut out of the neighboring mass`);
+    }
+  }
+  const facades = [];
+  shapeDistrictBuildings(facades, [], [], [], [], [], []);
+  const neighbors = facades.slice(-RESIDENCE_TOWER_NEIGHBORS.length);
+  assert.equal(neighbors.length, 5);
+  for (const [index, box] of neighbors.entries()) {
+    const { rect: [west, south, east, north], bottom, top } = RESIDENCE_TOWER_NEIGHBORS[index];
+    assert.ok(Math.abs(box.x - (west + east) / 2) < 1e-10);
+    assert.ok(Math.abs(box.z + (south + north) / 2) < 1e-10);
+    assert.ok(Math.abs(box.y - box.h / 2 - bottom) < 1e-10);
+    assert.ok(Math.abs(box.y + box.h / 2 - top) < 1e-10);
+    assert.equal(box.color, 0x869a9c);
+    assert.equal(box.kind, 2);
+  }
+  assert.ok(neighbors[0].z + neighbors[0].d / 2 < 0, 'front recess avoids the Shell jamb cap plane');
+});
+
+
+test('neighbor infill preserves the actual recessed elevator door center gaps', () => {
+  const shell = createResidenceShell(materials);
+  const group = new Group();
+  try {
+    shell.group.updateMatrixWorld(true);
+    for (const { rect: [west, south, east, north], bottom, top } of RESIDENCE_TOWER_NEIGHBORS) {
+      const mesh = new Mesh(new BoxGeometry(east - west, top - bottom, north - south), materials.wall);
+      mesh.position.set((west + east) / 2, (bottom + top) / 2, -(south + north) / 2);
+      group.add(mesh);
+    }
+    group.updateMatrixWorld(true);
+    for (const east of [1.70, 4.15, 6.60]) {
+      const ray = new Raycaster(new Vector3(east, 1.2, -17), new Vector3(0, 0, -1), 0, 2);
+      const shellHit = ray.intersectObject(shell.group, true).find(hit => !hit.object.material.transparent);
+      const neighborHit = ray.intersectObject(group, true)[0];
+      assert.ok(shellHit, 'the existing dark rear plate remains present');
+      assert.ok(neighborHit && neighborHit.distance > shellHit.distance + .10,
+        'the infill stays behind the finite hall wall and its elevator recess');
+    }
+  } finally {
+    shell.dispose();
+    for (const child of group.children) child.geometry.dispose();
   }
 });

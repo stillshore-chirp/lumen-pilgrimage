@@ -131,7 +131,44 @@ function observePeers() {
 function observeAudio() {
   const NativeContext = window.AudioContext;
   const connect = AudioNode.prototype.connect;
+  const disconnect = AudioNode.prototype.disconnect;
   const contexts = [];
+  function edges(node) { return node?.context.probe.edges.get(node) ?? []; }
+  function reachable(root, stop) {
+    const visited = new Set();
+    const queue = root ? [root] : [];
+    while (queue.length) {
+      const node = queue.shift();
+      if (visited.has(node) || node === stop) continue;
+      visited.add(node);
+      queue.push(...edges(node).map(edge => edge.node));
+    }
+    return [...visited];
+  }
+  function inspect(entry) {
+    const source = entry.sources.at(-1);
+    const outgoing = edges(source).map(edge => edge.node);
+    const stereo = outgoing.find(node => node instanceof GainNode && node.channelCount === 2
+      && node.channelCountMode === 'explicit');
+    const master = edges(stereo)[0]?.node;
+    const single = outgoing.find(node => node instanceof PannerNode
+      || node instanceof GainNode && node.channelCount === 1 && node.channelCountMode === 'explicit');
+    const surround = outgoing.find(node => node instanceof GainNode && node.channelCount === 6
+      && node.channelInterpretation === 'speakers' && edges(node)[0]?.node instanceof ChannelSplitterNode);
+    const singleNodes = reachable(single, master);
+    const surroundNodes = reachable(surround, master);
+    const modeLevel = nodes => nodes.find(node => node instanceof GainNode && edges(node).some(edge => edge.node === master));
+    const splitter = edges(surround)[0]?.node;
+    const channels = Array.from({ length: 6 }, (_, channel) => {
+      const input = edges(splitter).find(edge => edge.output === channel)?.node;
+      return reachable(input, master).filter(node => node instanceof PannerNode);
+    });
+    return { stereo, master, spatial: modeLevel(singleNodes), surround: modeLevel(surroundNodes),
+      singlePanners: singleNodes.filter(node => node instanceof PannerNode), channels,
+      active: reachable(source) };
+  }
+  const pannerPose = ({ positionX, positionY, positionZ, panningModel }) =>
+    [positionX.value, positionY.value, positionZ.value, panningModel];
   window.monitorSound = {
     listener() {
       const listener = contexts.find(({ context, hasStream }) => !hasStream && context.state === 'running')?.context.listener;
@@ -139,10 +176,11 @@ function observeAudio() {
         listener.forwardX.value, listener.forwardY.value, listener.forwardZ.value];
     },
     placement() {
-      const entry = contexts.find(({ hasStream, panners }) => hasStream && panners.length);
+      const entry = contexts.find(({ hasStream }) => hasStream);
       if (!entry) return null;
       const listener = entry.context.listener;
-      const [source] = entry.panners;
+      const [source] = inspect(entry).singlePanners;
+      if (!source) return null;
       return {
         eye: [listener.positionX.value, listener.positionY.value, listener.positionZ.value],
         source: [source.positionX.value, source.positionY.value, source.positionZ.value],
@@ -152,7 +190,9 @@ function observeAudio() {
     heldResumeInUserGesture: false,
     rejectedResumeInUserGesture: false,
     read() {
-      return contexts.map(({ context, analyser, panners, gains, hasStream }) => {
+      return contexts.map(entry => {
+        const { context, analyser, hasStream } = entry;
+        const routing = inspect(entry);
         const data = new Float32Array(analyser.fftSize);
         analyser.getFloatTimeDomainData(data);
         return {
@@ -161,11 +201,19 @@ function observeAudio() {
           state: context.state,
           time: context.currentTime,
           peak: Math.max(...data.map(Math.abs)),
-          stereo: gains.get('stereo')?.gain.value,
-          spatial: gains.get('spatial')?.gain.value,
-          surround: gains.get('surround')?.gain.value,
-          panners: panners.map(({ positionX, positionY, positionZ, panningModel }) =>
-            [positionX.value, positionY.value, positionZ.value, panningModel]),
+          rms: Math.sqrt(data.reduce((sum, sample) => sum + sample * sample, 0) / data.length),
+          stereo: routing.stereo?.gain.value,
+          spatial: routing.spatial?.gain.value ?? 0,
+          surround: routing.surround?.gain.value ?? 0,
+          master: routing.master?.gain.value,
+          panners: [...routing.singlePanners, ...routing.channels.flat()].map(pannerPose),
+          surroundChannels: routing.channels.map(nodes => nodes.map(pannerPose)),
+          nodeCount: routing.active.length,
+          trackedNodeCount: entry.edges.size,
+          convolvers: routing.active.filter(node => node instanceof ConvolverNode).length,
+          filters: routing.active.filter(node => node instanceof BiquadFilterNode)
+            .map(node => ({ type: node.type, hz: node.frequency.value, q: node.Q.value })),
+          delays: routing.active.filter(node => node instanceof DelayNode).map(node => node.delayTime.value),
         };
       });
     },
@@ -174,7 +222,7 @@ function observeAudio() {
     constructor(...args) {
       super(...args);
       this.probe = {
-        context: this, analyser: this.createAnalyser(), gains: new Map(), panners: [], hasStream: false, streamSources: 0,
+        context: this, analyser: this.createAnalyser(), edges: new Map(), sources: [], hasStream: false, streamSources: 0,
       };
       contexts.push(this.probe);
     }
@@ -202,24 +250,40 @@ function observeAudio() {
     createMediaStreamSource(stream) {
       this.probe.hasStream = stream.getAudioTracks().length > 0;
       this.probe.streamSources++;
-      return super.createMediaStreamSource(stream);
-    }
-    createPanner() {
-      const panner = super.createPanner();
-      this.probe.panners.push(panner);
-      return panner;
+      const source = super.createMediaStreamSource(stream);
+      this.probe.sources.push(source);
+      return source;
     }
   };
   AudioNode.prototype.connect = function (destination, ...args) {
     if (destination === this.context.destination) connect.call(this, this.context.probe.analyser);
-    if (destination instanceof GainNode) {
-      const { gains, panners, hasStream } = this.context.probe;
-      if (this instanceof MediaStreamAudioSourceNode && destination.channelCount === 2) gains.set('stereo', destination);
-      if (this instanceof PannerNode && hasStream) {
-        gains.set(this === panners[0] ? 'spatial' : 'surround', destination);
+    const result = connect.call(this, destination, ...args);
+    if (destination instanceof AudioNode && this.context.probe) {
+      const map = this.context.probe.edges;
+      const connections = map.get(this) ?? [];
+      const output = args[0] ?? 0;
+      const input = args[1] ?? 0;
+      if (!connections.some(edge => edge.node === destination && edge.output === output && edge.input === input)) {
+        connections.push({ node: destination, output, input });
+        map.set(this, connections);
       }
     }
-    return connect.call(this, destination, ...args);
+    return result;
+  };
+  AudioNode.prototype.disconnect = function (...args) {
+    const result = disconnect.call(this, ...args);
+    const map = this.context.probe?.edges;
+    if (!map) return result;
+    const [destination, output, input] = args;
+    const remaining = (map.get(this) ?? []).filter(edge => {
+      if (!args.length) return false;
+      if (typeof destination === 'number') return edge.output !== destination;
+      return edge.node !== destination || output !== undefined && edge.output !== output
+        || input !== undefined && edge.input !== input;
+    });
+    if (remaining.length) map.set(this, remaining);
+    else map.delete(this);
+    return result;
   };
 }
 
@@ -800,8 +864,10 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
       const audio = window.monitorSound.read().find(context => context.hasStream);
       return audio?.surround > .98 && audio.stereo < .02 && audio.spatial < .02 && audio.peak > .001;
     });
-    const speakers = await viewer.evaluate(() =>
-      window.monitorSound.read().find(context => context.hasStream).panners.slice(1));
+    const channels = await viewer.evaluate(() =>
+      window.monitorSound.read().find(context => context.hasStream).surroundChannels);
+    assert.ok(channels.every(channel => channel.length >= 1), 'each speaker channel reaches a spatial renderer');
+    const speakers = channels.map(channel => channel[0]);
     assert.equal(speakers.length, 6);
     assert.ok(speakers.every(source => source[3] === 'HRTF'));
     assert.ok(speakers.slice(0, 4).every(source => source[2] < -6));

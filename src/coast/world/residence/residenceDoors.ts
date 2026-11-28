@@ -11,13 +11,15 @@ export const RESIDENCE_WALKER_RADIUS = .24;
 
 type Position = { readonly x: number; readonly z: number };
 
-type LeafPose = {
+export type ResidenceDoorLeafPose = {
   readonly east: number;
   readonly north: number;
   readonly angle: number;
   readonly width: number;
   readonly halfDepth: number;
 };
+
+type LeafPose = ResidenceDoorLeafPose;
 
 type DoorState = {
   readonly doorway: ResidenceDoorway;
@@ -26,7 +28,7 @@ type DoorState = {
   pose: LeafPose;
 };
 
-function leafPose({ wall, opening }: ResidenceDoorway, amount: number): LeafPose {
+export function residenceDoorLeafPose({ wall, opening }: ResidenceDoorway, amount: number): ResidenceDoorLeafPose {
   const alongEast = wall.axis === 'e';
   const alongAngle = alongEast ? 0 : Math.PI / 2;
   const span = opening.to - opening.from;
@@ -110,7 +112,7 @@ export function createResidenceDoors(
 ) {
   const doors = new Map<string, DoorState>();
   for (const doorway of RESIDENCE_DOORWAYS) {
-    const pose = leafPose(doorway, 1);
+    const pose = residenceDoorLeafPose(doorway, 1);
     doors.set(doorway.id, { doorway, amount: 1, target: 1, pose });
     positionLeaf?.(doorway, pose);
   }
@@ -147,7 +149,7 @@ export function createResidenceDoors(
       for (const door of doors.values()) {
         const amount = door.target === 1 ? Math.min(1, door.amount + step) : Math.max(0, door.amount - step);
         if (door.amount === amount) continue;
-        const pose = leafPose(door.doorway, amount);
+        const pose = residenceDoorLeafPose(door.doorway, amount);
         if (sweepBlocks(door.doorway, door.pose, pose, position)) continue;
         door.amount = amount;
         door.pose = pose;

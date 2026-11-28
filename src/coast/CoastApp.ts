@@ -12,6 +12,7 @@ import { CoastControls, type CoastMovement, type CoastNavigation } from './Coast
 import { DesktopGrab, type DesktopGrabTarget } from './DesktopGrab';
 import { createDesktopGrabOcclusion } from './desktopGrabOcclusion';
 import type { MonitorTheater } from '../monitor/monitorObject';
+import type { WorldMonitorPlaybackFactory } from '../monitor/monitorAudio';
 import type { MonitorView, MonitorViewBinding } from '../monitor/monitorView';
 import type { CoastBirdCue } from './coastBirdCue';
 import { EXPLORATION_WORLDS, findDestination, type ExplorationWorldId } from './coastDestinations';
@@ -47,6 +48,7 @@ const movementLabels: Record<CoastMovement, string> = {
 interface ExplorationWorld extends WorldLightingControl {
   readonly scene: Scene;
   readonly theater?: MonitorTheater;
+  readonly monitorAudio?: WorldMonitorPlaybackFactory;
   readonly grabTargets?: readonly DesktopGrabTarget[];
   setQuality(quality: CoastQuality): void;
   setTimeOfDay(time: CoastTimeOfDay): void;
@@ -772,9 +774,18 @@ export class CoastApp {
     let loaded: ExplorationScene | undefined;
     let next: CoastApp;
     let targetHistoryIndex: number;
+    let finishAudioTransition: (() => void) | undefined;
     try {
       loaded = await loadExplorationScene(worldId);
       if (request !== this.travelRequest || this.disposed) {
+        loaded.audio.dispose();
+        loaded.world.dispose();
+        return;
+      }
+      finishAudioTransition = this.monitor ? await this.monitor.prepareWorldChange(this.events.signal,
+        loaded.world.monitorAudio ?? null, loaded.world.theater ?? null) : undefined;
+      if (request !== this.travelRequest || this.disposed) {
+        finishAudioTransition?.();
         loaded.audio.dispose();
         loaded.world.dispose();
         return;
@@ -784,6 +795,7 @@ export class CoastApp {
       // Keep the document and its local File handles alive on both legs of the trip.
       next.hasRetainedCinemaScreening = this.shouldKeepCinemaFiles;
     } catch {
+      finishAudioTransition?.();
       loaded?.audio.dispose();
       loaded?.world.dispose();
       if (request === this.travelRequest && !this.disposed) {
@@ -796,8 +808,10 @@ export class CoastApp {
       }
       return;
     }
-    if (historyIndex === undefined) history.pushState({ coastWorldIndex: targetHistoryIndex }, '', url);
-    next.start(this);
+    try {
+      if (historyIndex === undefined) history.pushState({ coastWorldIndex: targetHistoryIndex }, '', url);
+      next.start(this);
+    } finally { finishAudioTransition?.(); }
   }
 
   private showTravelStatus(message: string, loading = false): void {
@@ -845,6 +859,7 @@ export class CoastApp {
     actions.append(entry);
     const binding: MonitorViewBinding = {
       entry, toggle, scene: this.world.scene, camera: this.camera,
+      createSpatialAudio: this.world.monitorAudio, audioQuality: () => this.quality,
       releaseInput: () => this.controls.releaseInput(),
       releaseDesktopGrab: target => this.desktopGrab.release(target),
     };

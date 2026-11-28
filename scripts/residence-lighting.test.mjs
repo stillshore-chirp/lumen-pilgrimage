@@ -256,3 +256,10 @@ test('the tea lantern and the living-room floor lamp can be switched at their fi
     assert.equal(shades[index], 1);
   }
 });
+
+test('interior glazing retains the facade transmission adjustment across day and night', () => {
+  for (const time of ['day', 'night', 'day']) {
+    lighting.setTimeOfDay(time);
+    assert.equal(materials.interiorGlass.opacity, materials.glass.opacity, time);
+  }
+});
