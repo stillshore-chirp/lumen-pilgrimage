@@ -167,6 +167,34 @@ function observeAudio() {
       singlePanners: singleNodes.filter(node => node instanceof PannerNode), channels,
       active: reachable(source) };
   }
+  function contributionRoutes(entry, routing) {
+    // A provider keeps fixed path slots, including silent and retired panners.
+    // Preserve their enumeration separately; position checks use connected dry
+    // routes whose own gain and branch mode gain can currently contribute.
+    const incoming = new Map();
+    let truncated = entry.edges.size > 1024;
+    for (const [node, links] of [...entry.edges].slice(0, 1024)) {
+      if (links.length > 16) truncated = true;
+      for (const edge of links.slice(0, 16)) {
+        const inputs = incoming.get(edge.node) ?? [];
+        inputs.push(node);
+        incoming.set(edge.node, inputs);
+      }
+    }
+    const describe = (panners, level) => {
+      if (panners.length > 32) truncated = true;
+      return panners.slice(0, 32).map(panner => {
+        const inputs = incoming.get(panner) ?? [];
+        const dryGain = Math.max(0, ...inputs.map(node => node instanceof GainNode ? Math.abs(node.gain.value) : 1));
+        const modeGain = Math.abs(level?.gain.value ?? 0);
+        return { pose: pannerPose(panner), dryGain, modeGain,
+          contributing: inputs.length > 0 && dryGain > 1e-6 && modeGain > 1e-6 };
+      });
+    };
+    const single = describe(routing.singlePanners, routing.spatial);
+    const channels = routing.channels.map(panners => describe(panners, routing.surround));
+    return { single, channels, truncated };
+  }
   const pannerPose = ({ positionX, positionY, positionZ, panningModel }) =>
     [positionX.value, positionY.value, positionZ.value, panningModel];
   window.monitorSound = {
@@ -193,6 +221,7 @@ function observeAudio() {
       return contexts.map(entry => {
         const { context, analyser, hasStream } = entry;
         const routing = inspect(entry);
+        const routes = contributionRoutes(entry, routing);
         const data = new Float32Array(analyser.fftSize);
         analyser.getFloatTimeDomainData(data);
         return {
@@ -208,6 +237,9 @@ function observeAudio() {
           master: routing.master?.gain.value,
           panners: [...routing.singlePanners, ...routing.channels.flat()].map(pannerPose),
           surroundChannels: routing.channels.map(nodes => nodes.map(pannerPose)),
+          spatialRoutes: routes.single,
+          surroundRouteChannels: routes.channels,
+          routesTruncated: routes.truncated,
           nodeCount: routing.active.length,
           trackedNodeCount: entry.edges.size,
           convolvers: routing.active.filter(node => node instanceof ConvolverNode).length,
@@ -853,10 +885,14 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
     await audioToggle.click();
     await mode.selectOption('television');
     await viewer.waitForFunction(() => {
-      const audio = window.monitorSound.read().find(context => context.hasStream);
-      const source = audio?.panners[0];
-      return audio?.spatial > .98 && audio.peak > .001
-        && Math.abs(source[0] - 19.99) < .02 && Math.abs(source[2] + 6.49) < .02 && source[3] === 'HRTF';
+      const contexts = window.monitorSound.read().filter(context => context.hasStream);
+      const audio = contexts[0];
+      const video = document.querySelector('[data-monitor-video]');
+      return contexts.length === 1 && audio.streamSources === 1 && audio.state === 'running'
+        && video.srcObject === window.originalMonitorStream && audio.master > 0
+        && audio.spatial > .98 && audio.peak > .001 && !audio.routesTruncated
+        && audio.spatialRoutes.some(({ pose: source, contributing }) => contributing
+          && Math.abs(source[0] - 19.99) < .02 && Math.abs(source[2] + 6.49) < .02 && source[3] === 'HRTF');
     });
 
     await mode.selectOption('surround');
@@ -864,14 +900,17 @@ test('residence and cinema transfer one live WebRTC stream to a floating monitor
       const audio = window.monitorSound.read().find(context => context.hasStream);
       return audio?.surround > .98 && audio.stereo < .02 && audio.spatial < .02 && audio.peak > .001;
     });
-    const channels = await viewer.evaluate(() =>
-      window.monitorSound.read().find(context => context.hasStream).surroundChannels);
-    assert.ok(channels.every(channel => channel.length >= 1), 'each speaker channel reaches a spatial renderer');
-    const speakers = channels.map(channel => channel[0]);
+    const routes = await viewer.evaluate(() => {
+      const audio = window.monitorSound.read().find(context => context.hasStream);
+      return { channels: audio.surroundRouteChannels, truncated: audio.routesTruncated };
+    });
+    assert.equal(routes.truncated, false);
+    const speakers = routes.channels.map(channel => channel.filter(route => route.contributing).map(route => route.pose));
     assert.equal(speakers.length, 6);
-    assert.ok(speakers.every(source => source[3] === 'HRTF'));
-    assert.ok(speakers.slice(0, 4).every(source => source[2] < -6));
-    assert.ok(speakers.slice(4).every(source => source[2] > -2));
+    assert.ok(speakers.every(channel => channel.length >= 1), 'each speaker channel has a contributing spatial route');
+    assert.ok(speakers.every(channel => channel.every(source => source[3] === 'HRTF')));
+    assert.ok(speakers.slice(0, 4).every(channel => channel.some(source => source[2] < -6)));
+    assert.ok(speakers.slice(4).every(channel => channel.some(source => source[2] > -2)));
 
     await button(viewer, '仮想モニター').click();
     await assertWorldLightingKeepsPlayback(viewer);

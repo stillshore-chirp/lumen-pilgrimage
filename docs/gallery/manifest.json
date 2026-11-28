@@ -1,23 +1,21 @@
 {
-  "schemaVersion": 1,
-  "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+  "schemaVersion": 2,
   "purpose": "Visitor gallery; desktop high-quality rendering, not VR/audio/performance evidence.",
   "conversion": {
     "tool": "ImageMagick",
-    "version": "7.0.10-57 Q16 x86_64",
+    "version": "7.0.10-57",
     "webpQuality": 88,
     "webpMethod": 6,
     "metadata": "stripped",
     "crop": false,
-    "colorOrExposureCorrection": false
+    "colorOrExposureCorrection": false,
+    "thumbnailSize": {
+      "width": 640,
+      "height": 360
+    },
+    "updatedImagesThreadLimit": 1
   },
-  "totals": {
-    "scenes": 36,
-    "uiScreens": 6,
-    "thumbnails": 6,
-    "publishedImages": 48,
-    "bytes": 7834458
-  },
+  "revisionPolicy": "Mixed capture versions. frames[].sourceRevision is the actual capture tree; publicComponents identify published component commits and must not replace the capture revision.",
   "frames": [
     {
       "id": "coast-inlet-day",
@@ -291,8 +289,8 @@
       "world": "overlook",
       "place": "main-deck",
       "time": "day",
-      "capturedAt": "2026-11-27T10:52:53.603Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:07:51.534Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -325,9 +323,52 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=overlook&place=main-deck&time=day"
+      "route": "/?world=overlook&place=main-deck&time=day",
+      "publicComponents": {
+        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/OverlookWorld-BCeWzAKq.js",
+            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          }
+        ],
+        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+      }
     },
     {
       "id": "overlook-main-night",
@@ -335,8 +376,8 @@
       "world": "overlook",
       "place": "main-deck",
       "time": "night",
-      "capturedAt": "2026-11-27T10:52:56.880Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:10:47.558Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -369,9 +410,52 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=overlook&place=main-deck&time=night"
+      "route": "/?world=overlook&place=main-deck&time=night",
+      "publicComponents": {
+        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/OverlookWorld-BCeWzAKq.js",
+            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          }
+        ],
+        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+      }
     },
     {
       "id": "overlook-east-day",
@@ -379,8 +463,8 @@
       "world": "overlook",
       "place": "east-terrace",
       "time": "day",
-      "capturedAt": "2026-11-27T10:53:00.217Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:10:51.302Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -413,9 +497,52 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=overlook&place=east-terrace&time=day"
+      "route": "/?world=overlook&place=east-terrace&time=day",
+      "publicComponents": {
+        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/OverlookWorld-BCeWzAKq.js",
+            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          }
+        ],
+        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+      }
     },
     {
       "id": "overlook-upper-night",
@@ -423,8 +550,8 @@
       "world": "overlook",
       "place": "upper-deck",
       "time": "night",
-      "capturedAt": "2026-11-27T10:53:03.485Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:07:55.161Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -457,9 +584,52 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=overlook&place=upper-deck&time=night"
+      "route": "/?world=overlook&place=upper-deck&time=night",
+      "publicComponents": {
+        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/OverlookWorld-BCeWzAKq.js",
+            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          }
+        ],
+        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+      }
     },
     {
       "id": "overlook-pavilion-day",
@@ -467,8 +637,8 @@
       "world": "overlook",
       "place": "main-deck",
       "time": "day",
-      "capturedAt": "2026-11-27T10:56:24.230Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:07:58.918Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -505,7 +675,49 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=overlook&place=main-deck&time=day"
+      "route": "/?world=overlook&place=main-deck&time=day",
+      "publicComponents": {
+        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/OverlookWorld-BCeWzAKq.js",
+            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          }
+        ],
+        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+      }
     },
     {
       "id": "residence-window-day",
@@ -513,8 +725,8 @@
       "world": "residence",
       "place": "living-window",
       "time": "day",
-      "capturedAt": "2026-11-27T10:53:08.436Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:03.183Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -547,9 +759,56 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=residence&place=living-window&time=day"
+      "route": "/?world=residence&place=living-window&time=day",
+      "publicComponents": {
+        "world": "6cd8cd372a378c2dcc12c1ad232553cee2127d08",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/ResidenceWorld-BVMv7VOl.js",
+            "sha256": "3e3b92b274ae1104bf25065e079dc004264c7e9486347e0030f38eb323c6ec13"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "1e948d1dc3f545656d443bda4f60e3044d164a5fe2a6943e609f1c70fbf16caf"
+      }
     },
     {
       "id": "residence-window-night",
@@ -557,8 +816,8 @@
       "world": "residence",
       "place": "living-window",
       "time": "night",
-      "capturedAt": "2026-11-27T10:53:12.814Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:10:56.112Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -591,9 +850,56 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=residence&place=living-window&time=night"
+      "route": "/?world=residence&place=living-window&time=night",
+      "publicComponents": {
+        "world": "6cd8cd372a378c2dcc12c1ad232553cee2127d08",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/ResidenceWorld-BVMv7VOl.js",
+            "sha256": "3e3b92b274ae1104bf25065e079dc004264c7e9486347e0030f38eb323c6ec13"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "1e948d1dc3f545656d443bda4f60e3044d164a5fe2a6943e609f1c70fbf16caf"
+      }
     },
     {
       "id": "residence-living-day",
@@ -601,8 +907,8 @@
       "world": "residence",
       "place": "living-window",
       "time": "day",
-      "capturedAt": "2026-11-27T10:56:28.884Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:01.061Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -639,7 +945,53 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=residence&place=living-window&time=day"
+      "route": "/?world=residence&place=living-window&time=day",
+      "publicComponents": {
+        "world": "6cd8cd372a378c2dcc12c1ad232553cee2127d08",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/ResidenceWorld-BVMv7VOl.js",
+            "sha256": "3e3b92b274ae1104bf25065e079dc004264c7e9486347e0030f38eb323c6ec13"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "1e948d1dc3f545656d443bda4f60e3044d164a5fe2a6943e609f1c70fbf16caf"
+      }
     },
     {
       "id": "residence-tea-day",
@@ -647,8 +999,8 @@
       "world": "residence",
       "place": "tea-room",
       "time": "day",
-      "capturedAt": "2026-11-27T10:53:21.400Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:07.412Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -681,9 +1033,56 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=residence&place=tea-room&time=day"
+      "route": "/?world=residence&place=tea-room&time=day",
+      "publicComponents": {
+        "world": "6cd8cd372a378c2dcc12c1ad232553cee2127d08",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/ResidenceWorld-BVMv7VOl.js",
+            "sha256": "3e3b92b274ae1104bf25065e079dc004264c7e9486347e0030f38eb323c6ec13"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "1e948d1dc3f545656d443bda4f60e3044d164a5fe2a6943e609f1c70fbf16caf"
+      }
     },
     {
       "id": "residence-study-day",
@@ -691,8 +1090,8 @@
       "world": "residence",
       "place": "study",
       "time": "day",
-      "capturedAt": "2026-11-27T10:53:25.860Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:12.116Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -725,9 +1124,56 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=residence&place=study&time=day"
+      "route": "/?world=residence&place=study&time=day",
+      "publicComponents": {
+        "world": "6cd8cd372a378c2dcc12c1ad232553cee2127d08",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/ResidenceWorld-BVMv7VOl.js",
+            "sha256": "3e3b92b274ae1104bf25065e079dc004264c7e9486347e0030f38eb323c6ec13"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "1e948d1dc3f545656d443bda4f60e3044d164a5fe2a6943e609f1c70fbf16caf"
+      }
     },
     {
       "id": "residence-bedroom-night",
@@ -735,8 +1181,8 @@
       "world": "residence",
       "place": "primary-bedroom",
       "time": "night",
-      "capturedAt": "2026-11-27T10:53:29.932Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:05.320Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -769,9 +1215,56 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=residence&place=primary-bedroom&time=night"
+      "route": "/?world=residence&place=primary-bedroom&time=night",
+      "publicComponents": {
+        "world": "6cd8cd372a378c2dcc12c1ad232553cee2127d08",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/ResidenceWorld-BVMv7VOl.js",
+            "sha256": "3e3b92b274ae1104bf25065e079dc004264c7e9486347e0030f38eb323c6ec13"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "1e948d1dc3f545656d443bda4f60e3044d164a5fe2a6943e609f1c70fbf16caf"
+      }
     },
     {
       "id": "residence-theater-night",
@@ -779,8 +1272,8 @@
       "world": "residence",
       "place": "living-theater",
       "time": "night",
-      "capturedAt": "2026-11-27T10:53:34.090Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:10.603Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -813,9 +1306,56 @@
         "dpr": 1
       },
       "settleMs": 1500,
+      "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=residence&place=living-theater&time=night"
+      "route": "/?world=residence&place=living-theater&time=night",
+      "publicComponents": {
+        "world": "6cd8cd372a378c2dcc12c1ad232553cee2127d08",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/overlookModel-dY5d9gM1.js",
+            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+          },
+          {
+            "path": "/assets/overlookTraffic-BAnRb8R_.js",
+            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/ResidenceWorld-BVMv7VOl.js",
+            "sha256": "3e3b92b274ae1104bf25065e079dc004264c7e9486347e0030f38eb323c6ec13"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "1e948d1dc3f545656d443bda4f60e3044d164a5fe2a6943e609f1c70fbf16caf"
+      }
     },
     {
       "id": "cinema-center-arrival",
@@ -823,8 +1363,8 @@
       "world": "cinema",
       "place": "center",
       "time": "day",
-      "capturedAt": "2026-11-27T10:56:39.218Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:22.476Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -860,7 +1400,45 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=center&time=day"
+      "route": "/?world=cinema&place=center&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-center-screening",
@@ -868,8 +1446,8 @@
       "world": "cinema",
       "place": "center",
       "time": "day",
-      "capturedAt": "2026-11-27T10:56:49.473Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:20.949Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -906,7 +1484,45 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=center&time=day"
+      "route": "/?world=cinema&place=center&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-center-preview",
@@ -914,8 +1530,8 @@
       "world": "cinema",
       "place": "center",
       "time": "day",
-      "capturedAt": "2026-11-27T10:58:07.103Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:33.030Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -950,10 +1566,48 @@
         "dpr": 1
       },
       "settleMs": 9000,
-      "samplePlaybackSeconds": 9.4305,
+      "samplePlaybackSeconds": 9.410899999856948,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=center&time=day"
+      "route": "/?world=cinema&place=center&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-front-turnback",
@@ -961,8 +1615,8 @@
       "world": "cinema",
       "place": "front",
       "time": "day",
-      "capturedAt": "2026-11-27T10:58:17.508Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:31.347Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -999,7 +1653,45 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=front&time=day"
+      "route": "/?world=cinema&place=front&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-rear-arrival",
@@ -1007,8 +1699,8 @@
       "world": "cinema",
       "place": "rear",
       "time": "day",
-      "capturedAt": "2026-11-27T10:58:27.738Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:41.589Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -1044,7 +1736,45 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=rear&time=day"
+      "route": "/?world=cinema&place=rear&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-rear-service",
@@ -1052,8 +1782,8 @@
       "world": "cinema",
       "place": "rear",
       "time": "day",
-      "capturedAt": "2026-11-27T11:03:54.581Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:43.388Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -1088,41 +1818,47 @@
       },
       "settleMs": 9000,
       "samplePlaybackSeconds": null,
-      "trackedSourceAndPublicClean": true,
-      "servedBuild": {
-        "htmlSha256": "d09d80c8459e987e09a7b95e5f49947ce10e0de65ea3356c18302f5c11592f24",
-        "scripts": [
-          {
-            "path": "/assets/CinemaWorld-My6uAQQf.js",
-            "sha256": "95981d97e22c2a0bd86fe1eada303db9281eb540206bd07ea72160f5ddf63890"
-          },
-          {
-            "path": "/assets/CoastApp-DVv6nXRr.js",
-            "sha256": "c733ba27148e19d64b7d518ca6683213b69725b118df898e0a16e11890d81f03"
-          },
-          {
-            "path": "/assets/explorationRoute-DaU8zqTe.js",
-            "sha256": "11dc65e7dba385b1fdba85c0318944cc26b1d72b4aa962422f190997b4be313b"
-          },
-          {
-            "path": "/assets/index-jUkHjY4W.js",
-            "sha256": "0277e7cd72260c351015db6b244faee07b58db8d8c16c58740a106e75a9149b4"
-          },
-          {
-            "path": "/assets/residenceAudioSamples-CuBS2ylN.js",
-            "sha256": "7d1d5f7ac17cec2267f899a90e2cebc9006f6d690dec3671006d4c81147f1228"
-          },
-          {
-            "path": "/assets/RoundedBoxGeometry-D_zhoNfk.js",
-            "sha256": "83634a9ce5b286f4cffe67b5979b839dc13247e026058b4a35ab28d2c7c8c267"
-          }
-        ],
-        "sourceRevisionBinding": "not automatically verified; build dist from the recorded clean source before recapture",
-        "sha256": "2ecff21114e7dc9f22859a6c4b1ef72e00068520f892833732afbacff53de64c"
-      },
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=rear&time=day"
+      "route": "/?world=cinema&place=rear&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "atrium-concourse-day",
@@ -1745,9 +2481,9 @@
       "file": "images/overlook-main-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 201058,
-      "sha256": "4327023a2ce7f418d57c5cbc9d4a22a1ea8d1ddd47f098f8cb2a69437cd3d14b",
-      "sourcePngSha256": "769c2197abbdae5efae1be482d06366df986352118945add410bfc4f8a1ed7dd",
+      "bytes": 201204,
+      "sha256": "e613ceabc4221ad921c79e20be3253bbd23ed9f24bbec1e297ebdcbcc9a2d58c",
+      "sourcePngSha256": "51c992ae7cf779a8cb8a47860c76f5cd730d43d31baf368f544567b758d2e512",
       "shotId": "overlook-main-day",
       "ui": false,
       "thumbnail": false
@@ -1756,9 +2492,9 @@
       "file": "images/overlook-main-day-ui.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 207008,
-      "sha256": "ea46ec5c06aa774336f18cce17d536bd15ce88d183996b9d64ea8bba73336f24",
-      "sourcePngSha256": "ce83cdab4e99c4919e63a12bb522b89d40579af2f7a04b9c090bdf14b73d70f3",
+      "bytes": 207026,
+      "sha256": "38fd3ed171f6ce94c5f7c0cf1edbdc2cc236eb02175ab82e9bc5430c4ec1acd0",
+      "sourcePngSha256": "1c787631d2337b988c3d1a8026d7db3305202df5797c1b1c0afa96e7064546ca",
       "shotId": "overlook-main-day",
       "ui": true,
       "thumbnail": false
@@ -1767,9 +2503,9 @@
       "file": "images/overlook-main-night.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 201120,
-      "sha256": "ad548bcdcd0f8ba75e3628bf7dca5053ef8b372c9fde0b4fd04e257ce929a1e6",
-      "sourcePngSha256": "6918682520418250b3e0b78f888f923774a3995d1b6d15167feadc399818d636",
+      "bytes": 197582,
+      "sha256": "2e5a71e4f49f5bc2b25642296cf2a62b182a11ac1c4ba1dec3f3b4453dbd8292",
+      "sourcePngSha256": "e00b5a6aed4de0dd49c49b6223c1e3821a26608dbd162f5cb3907f625b50ed16",
       "shotId": "overlook-main-night",
       "ui": false,
       "thumbnail": false
@@ -1778,9 +2514,9 @@
       "file": "images/overlook-east-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 188320,
-      "sha256": "41704cf026b3d9581cd47e6f7827e3c93966b4827f5ee7809cdb46680c5c3f34",
-      "sourcePngSha256": "c4169284ee2ef35d3ff31074899ced66a7975fe9fa24be946f2076ddd590a726",
+      "bytes": 189970,
+      "sha256": "e5f0646f52492e243e25eed01d694723f5d97dcd10ca30cc74933c225b5610b8",
+      "sourcePngSha256": "bc7160dd614804665f4ba0d8a5ed9145b0c471b0003b31268139d07555b5b9fd",
       "shotId": "overlook-east-day",
       "ui": false,
       "thumbnail": false
@@ -1789,9 +2525,9 @@
       "file": "images/overlook-upper-night.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 220540,
-      "sha256": "68981ba988d1f7dc704c3288a5a6588959a32c091d142ec8e443056cc80d07aa",
-      "sourcePngSha256": "be7d0bf5ad62aabdc8b477e0723f7dca999a7b77a08d8c4009230f09f89a858e",
+      "bytes": 208822,
+      "sha256": "2d448e922e6085c2d7129443e7a7c8a62613e2eaefd3cf19214f49e4f94429d7",
+      "sourcePngSha256": "fddd14e9bbc86fd88053aec032fa5f5eb5f57c730a8682c09812bdf6e3ad525b",
       "shotId": "overlook-upper-night",
       "ui": false,
       "thumbnail": false
@@ -1800,9 +2536,9 @@
       "file": "images/overlook-pavilion-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 218898,
-      "sha256": "dd4f097b977337735ea5b584c5f172bfb6cd7de9161ae3b76102012623eecd3b",
-      "sourcePngSha256": "ded49abe41876529903ce7147c56e589adab72017164abc9db73ce46dc75fae4",
+      "bytes": 213518,
+      "sha256": "45808fac7ce6b98262dcae213ef5fa07debd9842f008933b3094691b516805a6",
+      "sourcePngSha256": "6d666da38937afc7925aef2942b821d0dac16eb56ea41b6364edfd0d608d0c3b",
       "shotId": "overlook-pavilion-day",
       "ui": false,
       "thumbnail": false
@@ -1811,9 +2547,9 @@
       "file": "images/residence-window-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 276800,
-      "sha256": "5dbf95ae62512b8a619fcf74b0eb217e628fee37fe3f77becb08aaf566a591b5",
-      "sourcePngSha256": "b963d2cd5a07de634f365f24314550a5e78dcb6f3976055ebcb8d19ef7347d28",
+      "bytes": 275252,
+      "sha256": "72677339b0fddc9d6e2df7e32397adefd63f53f9264027c264b6899fd1b2f1c7",
+      "sourcePngSha256": "ab92e64268f1897d61c121768398200a7c9d76f6f83cac71f4c3cf401e326ca6",
       "shotId": "residence-window-day",
       "ui": false,
       "thumbnail": false
@@ -1822,9 +2558,9 @@
       "file": "images/residence-window-night.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 261568,
-      "sha256": "f586507a01cf67debc438d400c24c0c710299325d19897451f3788c09a57a6b5",
-      "sourcePngSha256": "83cbb36e9f1c15f3be504b5f6f6bc6f7fed0bbe153e026722c68b9173077d94f",
+      "bytes": 263102,
+      "sha256": "f657068e7945f66905dada2df65a30ea837e659682a2ef03b8f38041de8c17d7",
+      "sourcePngSha256": "9a4699403bbce3527a0efcaf0551f14302582f37f2b6cc0d6ab95320c84be2ee",
       "shotId": "residence-window-night",
       "ui": false,
       "thumbnail": false
@@ -1833,9 +2569,9 @@
       "file": "images/residence-window-night-ui.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 270560,
-      "sha256": "e11298d0f3120dbe861eae305114336b6a328d3416e8826220315f6aa17a653d",
-      "sourcePngSha256": "799656597360660a643eb7ae0bffb433a891b63d95ec83872611c6c20d337f32",
+      "bytes": 271974,
+      "sha256": "2d795a653be8d74ead3da9cacedb7610c2d31bbd0f8587317fd4cbc2b3b60483",
+      "sourcePngSha256": "892a2f20a0d8bd002430352e90e91dcb0f75e4253417236ade7249dd2501ba8f",
       "shotId": "residence-window-night",
       "ui": true,
       "thumbnail": false
@@ -1844,9 +2580,9 @@
       "file": "images/residence-living-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 100546,
-      "sha256": "8d7f2e76b739d24b5296a04406110f1a198d1cde97a21e313aec23497777622e",
-      "sourcePngSha256": "11c31d0b07b9fae3254e68ece341ea25af7c6a308194319bc140fac63ddd6e57",
+      "bytes": 97470,
+      "sha256": "ce48046963d4eaa8b6d532c67bcd6f904ce3b2cb057a1bbfad245986a2e23e74",
+      "sourcePngSha256": "08a6695eddaaf305928888cd4e720b196a45eb52d8baa0124b2613eeed67919b",
       "shotId": "residence-living-day",
       "ui": false,
       "thumbnail": false
@@ -1855,9 +2591,9 @@
       "file": "images/residence-tea-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 104054,
-      "sha256": "a4001c605e4b70dc426a07979a3f987801b242236fb1b7e780bb9f0bb60c798f",
-      "sourcePngSha256": "efb52418b5e3b9c81403b4d47eca48cd493fce8663d70fa5588af46668334183",
+      "bytes": 104010,
+      "sha256": "202a03d3bd629a965b622ee6626fa3d24e02b635e595f7bac428fda88a4c2513",
+      "sourcePngSha256": "d07cebf0b14e214463ed76fb32ba9b23b5811ce05813e033631193aa37feebec",
       "shotId": "residence-tea-day",
       "ui": false,
       "thumbnail": false
@@ -1866,9 +2602,9 @@
       "file": "images/residence-study-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 169576,
-      "sha256": "66c2dfe443938b833b7b3f012be56f0e0f69c63d9d4359b4969d87fdbf198cc0",
-      "sourcePngSha256": "113e5f5317da307623b789dd1fa67baf6c30a5a78773b14b326d0901be574fac",
+      "bytes": 166708,
+      "sha256": "f454f37a4579e9d91332c6b61a3485ec3b7795f34d8af96ca375c239041a9a96",
+      "sourcePngSha256": "236a01a931a28bb6c543bc42aa8ab19660d1d9c35397b147c852f5ae1ee9f8b9",
       "shotId": "residence-study-day",
       "ui": false,
       "thumbnail": false
@@ -1877,9 +2613,9 @@
       "file": "images/residence-bedroom-night.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 216890,
-      "sha256": "2a44bc5cae4babca4c28d447128cde3da5e6e70591d2c21977eda3062a7ad1bf",
-      "sourcePngSha256": "261e0268623dd1b2d700dbefe029d687ffa08bbf68445189038910cb9e9a901c",
+      "bytes": 218336,
+      "sha256": "27e10d8058db38e34a5b7aa95e5a05ddc5a4b376388ff45158ac06e481ae3034",
+      "sourcePngSha256": "002de328671d7db607b29135e171c563d057ea5e29eabaf91df0154933a711a4",
       "shotId": "residence-bedroom-night",
       "ui": false,
       "thumbnail": false
@@ -1888,9 +2624,9 @@
       "file": "images/residence-theater-night.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 82918,
-      "sha256": "4d1b66b7acfc513402f827ac8127645800aded79c96fe0b8adc5a993598bd308",
-      "sourcePngSha256": "60adbf4340d5f1875505d80028d1216105a331b23bb82213cb91ff0b7fd1f124",
+      "bytes": 85860,
+      "sha256": "54222b3c0bd3bbc1a39f7423bd1e3bb762d82a8a8b4091ec5e4792e579978fb5",
+      "sourcePngSha256": "0ba760994980067313182b9d30c930a73bc1b83c4b7f8d72d880b445e7ca91c5",
       "shotId": "residence-theater-night",
       "ui": false,
       "thumbnail": false
@@ -1899,9 +2635,9 @@
       "file": "images/cinema-center-arrival.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 45856,
-      "sha256": "36bd0b842442b757cf5237f3050ea223e465071f004ad9cf4947bd3886426295",
-      "sourcePngSha256": "c0584e7e81de6493b68495bcf5b254120876cef0d9a6fbfc5ba6145e3f85ee9b",
+      "bytes": 45292,
+      "sha256": "df935fe9a4b2f76c4f1c5bab7c51d1360b54e4ba5b976cd720e21f05174e34c6",
+      "sourcePngSha256": "4193b6a6234b9aae8ad4806bed4c275167edf077facc8357bd7f33bebfb75b3e",
       "shotId": "cinema-center-arrival",
       "ui": false,
       "thumbnail": false
@@ -1910,9 +2646,9 @@
       "file": "images/cinema-center-arrival-ui.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 71338,
-      "sha256": "cc69abcd8714b4438964354d08c3a915f2a16e1d4d350ac0fe9dac178418791e",
-      "sourcePngSha256": "92a6fe32a59065939159d0ef55a8a6c72374074a55ce7d4d45adb5921fd712f8",
+      "bytes": 70986,
+      "sha256": "fc587955406f772f44075034fa72e57dcb95ac058bb0af9abe58091c6165ecd3",
+      "sourcePngSha256": "7ee6b14f8b80c18f75eb522a4554825ea8cc4c85a69f02fb1d99b8e39921d7f0",
       "shotId": "cinema-center-arrival",
       "ui": true,
       "thumbnail": false
@@ -1932,9 +2668,9 @@
       "file": "images/cinema-center-preview.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 16322,
-      "sha256": "a1dea17e49f25c8980fede2be04ebe89d99e3ce4bfd8e6cf07b6c071d507a01b",
-      "sourcePngSha256": "b204f080a12f0d3e1603f3ab06b94bedf127e3fb621c87d2b18edecc99be8410",
+      "bytes": 12520,
+      "sha256": "55b5233ba49d64894f00bfebd41cc83f9a9f7d989e41a8e919dbfc9a1a1cb499",
+      "sourcePngSha256": "d3d0a72744520d70012bf8860ed173676875c1f64a8524413fa65eaf31f85df5",
       "shotId": "cinema-center-preview",
       "ui": false,
       "thumbnail": false
@@ -1943,9 +2679,9 @@
       "file": "images/cinema-front-turnback.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 45450,
-      "sha256": "3df7bcf4449a25c92b6b660cd57ec13ed9552746063cda6cc8f67410eba0f7b2",
-      "sourcePngSha256": "79d83432ee7354dca6845cc6f567242fffab2fd3001687d552808fb232bc9473",
+      "bytes": 42160,
+      "sha256": "fbaf45a83903c310d0c6cc96f756e3d78a3af9db7e609ce75a7d1205d102adb9",
+      "sourcePngSha256": "7d78566dd026fdb82c432d3f7056007dc130e0547f63a55000854a733b532c70",
       "shotId": "cinema-front-turnback",
       "ui": false,
       "thumbnail": false
@@ -1954,9 +2690,9 @@
       "file": "images/cinema-rear-arrival.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 49896,
-      "sha256": "70640a62f490a84b5bae4a4cb9ad525c3d6783712e2856534e0a27d8037c444d",
-      "sourcePngSha256": "2ee9941aacca4a2dc1f629ef17b9e73cb814c890c3b94a3efe9bd279ec5c27bb",
+      "bytes": 50176,
+      "sha256": "4d52ee86c046651e18fa55db06262a6c5c185b8cc3058fea2bd1407c72bcd39e",
+      "sourcePngSha256": "7c5775316e86e5e3b16daed947333a8abf1c811699b963a37170857bac67b4bb",
       "shotId": "cinema-rear-arrival",
       "ui": false,
       "thumbnail": false
@@ -1965,9 +2701,9 @@
       "file": "images/cinema-rear-service.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 51242,
-      "sha256": "8e44f870069c3ab60b35eb5bfcab4b1600568e6fd48c78a983563b01e788e03e",
-      "sourcePngSha256": "1f8c7807147d3321575e14ab7e1ecc3790d7ba05be16feddc3f724df4f13d69d",
+      "bytes": 51856,
+      "sha256": "884565ee111292fe1ea05f56ae9efeaf5c461a72a2a7d9e7992a7ca1f7310d0e",
+      "sourcePngSha256": "4e8427c9c81e12cda5f8b2252264a896e887a50735247a25ebd4d4df467685b8",
       "shotId": "cinema-rear-service",
       "ui": false,
       "thumbnail": false
@@ -2141,9 +2877,9 @@
       "file": "images/overlook-main-night-thumb.webp",
       "width": 640,
       "height": 360,
-      "bytes": 29180,
-      "sha256": "65e142530ed333166568a19aead7ceaa2a340d8c167eb95a656479b4c2dfb1d1",
-      "sourcePngSha256": "6918682520418250b3e0b78f888f923774a3995d1b6d15167feadc399818d636",
+      "bytes": 28038,
+      "sha256": "bdcfe97abe3ccfa8a81037b058135d621fb69e55afa2282ea54c23c0c899fe6a",
+      "sourcePngSha256": "e00b5a6aed4de0dd49c49b6223c1e3821a26608dbd162f5cb3907f625b50ed16",
       "shotId": "overlook-main-night",
       "ui": false,
       "thumbnail": true
@@ -2152,9 +2888,9 @@
       "file": "images/residence-living-day-thumb.webp",
       "width": 640,
       "height": 360,
-      "bytes": 19580,
-      "sha256": "d7fc016b4755f907dfbf92b7915cad36a8769c537ab75834454bf34a2e16d3b9",
-      "sourcePngSha256": "11c31d0b07b9fae3254e68ece341ea25af7c6a308194319bc140fac63ddd6e57",
+      "bytes": 19276,
+      "sha256": "6acaf5a32a2a92dcb410a784628431f6e05263a8c1962ed790f362bd93f379b4",
+      "sourcePngSha256": "08a6695eddaaf305928888cd4e720b196a45eb52d8baa0124b2613eeed67919b",
       "shotId": "residence-living-day",
       "ui": false,
       "thumbnail": true
@@ -2163,9 +2899,9 @@
       "file": "images/cinema-rear-service-thumb.webp",
       "width": 640,
       "height": 360,
-      "bytes": 11304,
-      "sha256": "9bea8e37d5d7e68414d5bdfba69ce5409625f44f89085b704fcb0c968bf77bd0",
-      "sourcePngSha256": "1f8c7807147d3321575e14ab7e1ecc3790d7ba05be16feddc3f724df4f13d69d",
+      "bytes": 11638,
+      "sha256": "090878fa257058a286ca0f6066a9de8f1f611203ebc6cc1b690a87b36e97ca49",
+      "sourcePngSha256": "4e8427c9c81e12cda5f8b2252264a896e887a50735247a25ebd4d4df467685b8",
       "shotId": "cinema-rear-service",
       "ui": false,
       "thumbnail": true
@@ -2192,5 +2928,42 @@
       "ui": false,
       "thumbnail": true
     }
-  ]
+  ],
+  "totals": {
+    "scenes": 36,
+    "uiScreens": 6,
+    "thumbnails": 6,
+    "publishedImages": 48,
+    "bytes": 7807210
+  },
+  "captureSources": {
+    "8d24d11d37f5e6fa37afad308b8d5621761bc7df": {
+      "role": "Original gallery capture retained for unchanged worlds",
+      "worlds": [
+        "atrium",
+        "coast",
+        "lake"
+      ]
+    },
+    "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1": {
+      "role": "Clean validation integration merge; distinct from the published component revisions",
+      "worlds": [
+        "cinema",
+        "overlook",
+        "residence"
+      ],
+      "publicComponentRevisions": {
+        "overlook": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "residence": "6cd8cd372a378c2dcc12c1ad232553cee2127d08",
+        "cinema": "cd79fdea5cda19827465f394557a6bf94063be66"
+      },
+      "sharedControlsRevision": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+      "buildEquivalence": {
+        "files": 103,
+        "differingFiles": 0,
+        "compiledInventorySha256": "d1dbf449c5605f7c9d16071f7df8bcdf7d1df43d77ea8c7de856a0e9646b291f",
+        "basis": "Captured served HTML/scripts and complete clean integration build match the validated native build; OverlookWorld source wrapping is compiled-equivalent"
+      }
+    }
+  }
 }
