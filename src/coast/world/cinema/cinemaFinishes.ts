@@ -35,7 +35,7 @@ function finishTexture(sample: (x: number, y: number, grain: number) => number):
   for (let y = 0; y < TEXTURE_SIZE; y += 1) {
     for (let x = 0; x < TEXTURE_SIZE; x += 1) {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-      const shade = sample(x, y, seed / 0x100000000);
+      const shade = Math.max(0, Math.min(255, sample(x, y, seed / 0x100000000)));
       const i = (y * TEXTURE_SIZE + x) * 4;
       pixels.set([shade, shade, shade, 255], i);
     }

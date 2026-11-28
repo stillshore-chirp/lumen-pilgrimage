@@ -344,6 +344,34 @@ test('speaker grille coverage has physical pitch, independent linear height and 
   }
 });
 
+test('generated upholstery shades stay inside their intended byte range instead of wrapping to black', () => {
+  const finish = cinemaFinishes();
+  const map = finish.seatFabric.map;
+  try {
+    assert.strictEqual(map, finish.drape.map);
+    let minimum = 255;
+    let maximum = 0;
+    for (let index = 0; index < map.image.data.length; index += 4) {
+      const value = map.image.data[index];
+      minimum = Math.min(minimum, value);
+      maximum = Math.max(maximum, value);
+      assert.equal(map.image.data[index + 3], 255);
+    }
+    // The generator's darker yarn is 143+32, its mottle is at least -11,
+    // and its grain is nonnegative. Bright values may saturate, not wrap.
+    assert.ok(minimum >= 164);
+    assert.equal(maximum, 255);
+  } finally {
+    const textures = new Set();
+    for (const material of Object.values(finish)) if (material instanceof MeshStandardMaterial) {
+      if (material.map) textures.add(material.map);
+      material.dispose();
+    }
+    for (const texture of textures) texture.dispose();
+    finish.box.dispose();
+  }
+});
+
 test('dimensioned grille UVs and alpha output retain the production lighting hook at both qualities', () => {
   const group = new Group();
   const finish = createCinemaSpeakerEquipment(group);
