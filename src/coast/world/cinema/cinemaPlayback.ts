@@ -56,16 +56,35 @@ interface ListeningGraph {
 }
 
 function filterChain(context: BaseAudioContext, bands: readonly number[]): BiquadFilterNode[] {
-  return cinemaBandShelves(bands, bands.map(() => 0)).map(({ frequency }) => {
-    const filter = context.createBiquadFilter();
-    filter.type = 'highshelf';
-    filter.frequency.value = frequency;
-    return filter;
-  });
+  const filters: BiquadFilterNode[] = [];
+  try {
+    for (const { frequency } of cinemaBandShelves(bands, bands.map(() => 0))) {
+      const filter = context.createBiquadFilter();
+      filters.push(filter);
+      filter.type = 'highshelf';
+      filter.frequency.value = frequency;
+    }
+    return filters;
+  } catch {
+    filters.forEach(filter => filter.disconnect());
+    throw new Error('Cinema spectrum unavailable');
+  }
 }
 
 function appendFilters(input: AudioNode, filters: BiquadFilterNode[]): AudioNode {
-  return filters.reduce<AudioNode>((source, filter) => source.connect(filter), input);
+  const edges: { source: AudioNode; target: AudioNode }[] = [];
+  let source = input;
+  try {
+    for (const filter of filters) {
+      source.connect(filter);
+      edges.push({ source, target: filter });
+      source = filter;
+    }
+    return source;
+  } catch {
+    for (let index = edges.length - 1; index >= 0; index--) edges[index].source.disconnect(edges[index].target);
+    throw new Error('Cinema spectrum connection unavailable');
+  }
 }
 
 function spectralLoss(filters: BiquadFilterNode[], db: readonly number[], time: number, snap: boolean): void {
@@ -86,12 +105,24 @@ function positionPan(panner: PannerNode, point: Vector3, time: number, snap = tr
 
 function audioVoice(context: BaseAudioContext, input: AudioNode, output: AudioNode, quality: CinemaQuality): SceneVoice {
   const gain = context.createGain();
-  const pan = context.createPanner();
-  pan.panningModel = quality === 'high' ? 'HRTF' : 'equalpower';
-  pan.rolloffFactor = 0;
-  gain.gain.value = 0;
-  input.connect(gain).connect(pan).connect(output);
-  return { gain, pan, dispose: () => { input.disconnect(gain); gain.disconnect(); pan.disconnect(); } };
+  let pan: PannerNode | undefined;
+  let connected = false;
+  try {
+    const panner = context.createPanner();
+    pan = panner;
+    panner.panningModel = quality === 'high' ? 'HRTF' : 'equalpower';
+    panner.rolloffFactor = 0;
+    gain.gain.value = 0;
+    input.connect(gain);
+    connected = true;
+    gain.connect(panner).connect(output);
+    return { gain, pan: panner, dispose: () => { input.disconnect(gain); gain.disconnect(); panner.disconnect(); } };
+  } catch {
+    if (connected) input.disconnect(gain);
+    gain.disconnect();
+    pan?.disconnect();
+    throw new Error('Cinema spatial voice unavailable');
+  }
 }
 
 function peakStage(context: BaseAudioContext): WaveShaperNode {
@@ -185,47 +216,70 @@ function createListeningPlayback(context: BaseAudioContext, output: AudioNode,
   function newGraph(mode: CinemaQuality, audible: boolean): ListeningGraph {
     const gain = context.createGain();
     gain.gain.value = Number(audible);
+    const graph: ListeningGraph = { quality: mode, gain, dry: [], reflections: new Map(), releaseAt: Infinity };
     // HRTF convolution has a small renderer delay. Align the lightweight
     // branch for crossfades while keeping synchronized media inside its budget.
-    const alignment = mode === 'light' ? context.createDelay(0.02) : undefined;
-    if (alignment) {
-      alignment.delayTime.value = hrtfAlignment;
-      gain.connect(alignment).connect(peak);
-    } else gain.connect(peak);
-    const dry = feeds.map(feed => {
-      const spectrum = filterChain(context, CINEMA_BANDS);
-      const ending = appendFilters(feed.signal, spectrum);
-      const voice = audioVoice(context, ending, gain, mode);
-      positionPan(voice.pan, feed.speaker.position, context.currentTime);
-      return {
-        ...voice, feed, spectrum,
-        dispose: () => {
-          voice.dispose();
-          feed.signal.disconnect(spectrum[0]);
+    try {
+      graph.alignment = mode === 'light' ? context.createDelay(0.02) : undefined;
+      if (graph.alignment) {
+        graph.alignment.delayTime.value = hrtfAlignment;
+        gain.connect(graph.alignment).connect(peak);
+      } else gain.connect(peak);
+      for (const feed of feeds) {
+        const spectrum = filterChain(context, CINEMA_BANDS);
+        let connected = false;
+        let voice: SceneVoice | undefined;
+        try {
+          const ending = appendFilters(feed.signal, spectrum);
+          connected = true;
+          voice = audioVoice(context, ending, gain, mode);
+          positionPan(voice.pan, feed.speaker.position, context.currentTime);
+          const completed = voice;
+          graph.dry.push({ ...completed, feed, spectrum, dispose: () => {
+            completed.dispose();
+            feed.signal.disconnect(spectrum[0]);
+            spectrum.forEach(filter => filter.disconnect());
+          } });
+        } catch {
+          voice?.dispose();
+          if (connected) feed.signal.disconnect(spectrum[0]);
           spectrum.forEach(filter => filter.disconnect());
-        },
-      };
-    });
-    const graph: ListeningGraph = { quality: mode, gain, alignment, dry, reflections: new Map(), releaseAt: Infinity };
-    active.set(mode, graph);
-    return graph;
+          throw new Error('Cinema direct graph unavailable');
+        }
+      }
+      active.set(mode, graph);
+      return graph;
+    } catch {
+      destroyGraph(graph);
+      throw new Error('Cinema listening graph unavailable');
+    }
   }
 
   function makeReflection(graph: ListeningGraph, candidate: ReflectionCandidate): ReflectionVoice {
     const delay = context.createDelay(0.1);
-    const spectrum = filterChain(context, CINEMA_BANDS);
-    const end = appendFilters(delay, spectrum);
-    const voice = audioVoice(context, end, graph.gain, graph.quality);
-    candidate.feed.signal.connect(delay);
-    return {
-      ...voice, delay, spectrum, releaseAt: Infinity,
-      dispose: () => {
-        voice.dispose();
+    let spectrum: BiquadFilterNode[] = [];
+    let voice: SceneVoice | undefined;
+    let connected = false;
+    try {
+      spectrum = filterChain(context, CINEMA_BANDS);
+      const end = appendFilters(delay, spectrum);
+      voice = audioVoice(context, end, graph.gain, graph.quality);
+      candidate.feed.signal.connect(delay);
+      connected = true;
+      const completed = voice;
+      return { ...completed, delay, spectrum, releaseAt: Infinity, dispose: () => {
+        completed.dispose();
         candidate.feed.signal.disconnect(delay);
         delay.disconnect();
         spectrum.forEach(filter => filter.disconnect());
-      },
-    };
+      } };
+    } catch {
+      if (connected) candidate.feed.signal.disconnect(delay);
+      voice?.dispose();
+      delay.disconnect();
+      spectrum.forEach(filter => filter.disconnect());
+      throw new Error('Cinema reflected graph unavailable');
+    }
   }
 
   function destroyGraph(graph: ListeningGraph): void {

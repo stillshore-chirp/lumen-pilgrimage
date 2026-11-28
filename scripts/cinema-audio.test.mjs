@@ -18,7 +18,7 @@ const { cinemaSourceBandLoss, cinemaSeatingClearance, cinemaPathCrossesScreen, c
   cinemaBandShelves, cinemaScreenCrossings, CINEMA_SURFACE_GAINS } = await import('../src/coast/world/cinema/cinemaPropagation.ts');
 const { CINEMA_RENDER_SPEAKERS } = await import('../src/coast/world/cinema/cinemaSpeakers.ts');
 const { cinemaPropagationImpulse } = await import('../src/coast/world/cinema/cinemaPropagationFilter.ts');
-const { cinemaSharedFeedPlan } = await import('../src/coast/world/cinema/cinemaSharedRouting.ts');
+const { cinemaSharedFeedPlan, createCinemaSharedRouting } = await import('../src/coast/world/cinema/cinemaSharedRouting.ts');
 const { createCinemaPlayback } = await import('../src/coast/world/cinema/cinemaPlayback.ts');
 hook.deregister();
 
@@ -34,19 +34,31 @@ test('shared playback releases listening children before their routing parent', 
     connections = new Set();
     gain = new Param(); frequency = new Param(); Q = new Param(); delayTime = new Param();
     positionX = new Param(); positionY = new Param(); positionZ = new Param();
-    connect(target) { this.connections.add(target); return target; }
+    connect(target) {
+      if (++connectionCalls === failConnectionAt) throw new Error('Injected connection failure');
+      this.connections.add(target); return target;
+    }
     disconnect(target) {
       if (!target) { this.connections.clear(); return; }
       if (!this.connections.delete(target)) throw new DOMException('No connection to target', 'InvalidAccessError');
     }
   }
   const nodes = [];
+  let pannerCalls = 0;
+  let failAt = 0;
+  let connectionCalls = 0;
+  let failConnectionAt = 0;
+  let filterCalls = 0;
+  let failFilterAt = 0;
   const node = () => { const value = new Node(); nodes.push(value); return value; };
   const context = {
     sampleRate: 8_000, currentTime: 0,
     listener: Object.fromEntries(['position', 'forward', 'up'].flatMap(name => ['X', 'Y', 'Z'].map(axis => [name + axis, new Param()]))),
-    createGain: node, createChannelSplitter: node, createBiquadFilter: node,
-    createDelay: node, createWaveShaper: node, createPanner: node, createConvolver: node,
+    createGain: node, createChannelSplitter: node,
+    createBiquadFilter() { if (++filterCalls === failFilterAt) throw new Error('Injected filter failure'); return node(); },
+    createDelay: node, createWaveShaper: node,
+    createPanner() { if (++pannerCalls === failAt) throw new Error('Injected voice failure'); return node(); },
+    createConvolver: node,
     createBuffer(channels, length) {
       const data = Array.from({ length: channels }, () => new Float32Array(length));
       return { numberOfChannels: channels, getChannelData: channel => data[channel] };
@@ -65,6 +77,49 @@ test('shared playback releases listening children before their routing parent', 
   assert.doesNotThrow(() => playback.dispose());
   assert.deepEqual([...source.connections], [unrelated]);
   assert.ok(nodes.slice(ownedStart).every(value => value.connections.size === 0));
+  for (const target of [1, 30, 58, 60]) {
+    failAt = target; pannerCalls = 0;
+    const start = nodes.length;
+    const partial = createCinemaPlayback(context, source, output, 6);
+    assert.throws(() => partial.update(camera));
+    assert.doesNotThrow(() => partial.dispose());
+    assert.ok(nodes.slice(start).every(value => value.connections.size === 0), `partial voice ${target}`);
+    assert.deepEqual([...source.connections], [unrelated]);
+  }
+  failAt = 0;
+  for (const target of [4, 10]) {
+    failConnectionAt = 0;
+    const start = nodes.length;
+    const partial = createCinemaPlayback(context, source, output, 6);
+    connectionCalls = 0; failConnectionAt = target;
+    assert.throws(() => partial.update(camera));
+    assert.doesNotThrow(() => partial.dispose());
+    assert.ok(nodes.slice(start).every(value => value.connections.size === 0), `partial connection ${target}`);
+    assert.deepEqual([...source.connections], [unrelated]);
+  }
+  failConnectionAt = 0;
+  const filterStart = nodes.length;
+  const partialFilter = createCinemaPlayback(context, source, output, 6);
+  filterCalls = 0; failFilterAt = 3;
+  assert.throws(() => partialFilter.update(camera));
+  assert.doesNotThrow(() => partialFilter.dispose());
+  assert.ok(nodes.slice(filterStart).every(value => value.connections.size === 0));
+  failFilterAt = 0;
+  const survivingStart = nodes.length;
+  const surviving = createCinemaPlayback(context, source, output, 6);
+  surviving.update(camera);
+  const previousEdges = nodes.slice(survivingStart).reduce((sum, value) => sum + value.connections.size, 0);
+  const previousInputs = [...source.connections];
+  pannerCalls = 0; failAt = 30;
+  assert.throws(() => surviving.setQuality('high'));
+  assert.equal(nodes.slice(survivingStart).reduce((sum, value) => sum + value.connections.size, 0), previousEdges,
+    'a failed replacement keeps the previously active listening graph');
+  assert.deepEqual([...source.connections], previousInputs);
+  context.currentTime = .1;
+  assert.doesNotThrow(() => surviving.update(camera));
+  assert.doesNotThrow(() => surviving.dispose());
+  assert.ok(nodes.slice(survivingStart).every(value => value.connections.size === 0));
+  assert.deepEqual([...source.connections], [unrelated]);
 });
 
 test('shared mono/stereo drives the common 57 equipment outputs with bounded differentiated feeds', () => {
@@ -117,6 +172,22 @@ test('known standard 5.1 keeps all six independent inputs including LFE on the c
   assert.equal(roomInputs.length, 7);
   assert.ok(roomInputs.filter(feed => feed.speaker.kind !== 'screen').every(feed =>
     Math.abs(feed.coefficients.reduce((sum, value) => sum + Math.abs(value), 0) * feed.roomScale - .08) < 1e-12));
+  const node = () => ({ connections: [], gain: { value: 0 }, frequency: { value: 0 }, Q: { value: 0 }, delayTime: { value: 0 },
+    connect(target, output = 0) { this.connections.push({ target, output }); return target; },
+    disconnect() { this.connections = []; } });
+  const context = { createGain: node, createBiquadFilter: node, createDelay: node,
+    createChannelSplitter(channels) { return Object.assign(node(), { numberOfOutputs: channels }); } };
+  const input = node();
+  const routing = createCinemaSharedRouting(context, input, 6);
+  const layout = input.connections[0].target;
+  assert.deepEqual([layout.channelCount, layout.channelCountMode, layout.channelInterpretation], [6, 'explicit', 'discrete']);
+  const splitter = layout.connections[0].target;
+  assert.equal(splitter.numberOfOutputs, 6);
+  const lfeGains = splitter.connections.filter(edge => edge.output === 3).map(edge => edge.target);
+  assert.equal(lfeGains.length, 4);
+  assert.ok(lfeGains.every(gain => gain.gain.value === .05));
+  routing.dispose();
+  assert.equal(input.connections.length, 0);
 });
 
 const [centerSeat, frontSeat, rearSeat, wheelchairSeat] = CINEMA_DESTINATIONS;
@@ -290,7 +361,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
         c50: await Promise.all([500, 1000, 2000].map(band => clarity(impulse, band, onset))),
       });
     }
-    const [left, right, unknown, aligned, inverted, surround, facing, turned, silent, bypass, switching] = await Promise.all([
+    const [left, right, unknown, aligned, inverted, surround, facing, turned, silent, bypass, switching, lfe] = await Promise.all([
       response('light', seats[1], [0.4, 0]), response('light', seats[1], [0, 0.4]),
       response('light', seats[1], [0.4, 0], 0, { channelCount: 0 }),
       response('high', seats[2], [0.25, 0.25]), response('high', seats[2], [0.25, -0.25]),
@@ -298,6 +369,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
       response('high', seats[1], [0.25]), response('high', seats[1], [0.25], Math.PI / 2),
       response('light', seats[1], [0, 0]), response('light', seats[1], [0.4, 0], 0, { disposed: true }),
       response('light', seats[2], [0.3], 0, { transition: true }),
+      response('high', seats[1], [0, 0, 0, .4, 0, 0]),
     ]);
     const balance = buffer => {
       const [l, r] = [0, 1].map(ch => buffer.getChannelData(ch).slice(first, first + rate * 0.012)
@@ -311,6 +383,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
       surround: balance(surround),
       monoAfterDispose: bypass.getChannelData(0)[first], bypassRight: bypass.getChannelData(1)[first],
       silentEnergy: energy(silent, 0, silent.length),
+      lfeEnergy: energy(lfe, 0, lfe.length),
       wetRatio: energy(inverted, first + rate * 0.08, rate) / energy(aligned, first + rate * 0.08, rate),
       switchingEnergy: [0.20, 0.24, 0.28, 0.38].map(time => energy(switching, Math.round(rate * time), Math.round(rate * (time + 0.02)))),
     };
@@ -336,6 +409,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
   assert.ok(Math.abs(metrics.turned - metrics.c) > 3);
   assert.ok(metrics.wetRatio > 0.35 && metrics.wetRatio < 2.5);
   assert.equal(metrics.silentEnergy, 0);
+  assert.ok(metrics.lfeEnergy > 1e-10, 'known-5.1 LFE survives the shared renderer');
   assert.ok(Math.abs(metrics.monoAfterDispose - 0.4) < 1e-6);
   assert.equal(metrics.bypassRight, 0);
   assert.ok(Math.min(...metrics.switchingEnergy) / Math.max(...metrics.switchingEnergy) > 0.25);
