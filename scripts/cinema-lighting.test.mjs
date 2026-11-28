@@ -729,3 +729,50 @@ test('cinema screen substrate closes its back and edges inside the existing fram
   assert.deepEqual([geometryDisposals, materialDisposals, hiddenDisposals, instanceDisposals], [1,1,1,1]);
   assert.equal(auditorium.group.children.length, 0);
 });
+
+
+test('floor grain preserves pile-scale contrast without coherent sinusoidal texture bands', () => {
+  const finish = cinemaFinishes();
+  try {
+    const map = finish.carpet.map;
+    assert.strictEqual(map, finish.aisle.map);
+    assert.deepEqual([map.image.width, map.image.height], [128,128]);
+    assert.deepEqual(map.repeat.toArray(), [1,1]);
+    assert.equal(map.anisotropy, 4);
+    const bytes = map.image.data, values = [];
+    for (let i = 0; i < bytes.length; i += 4) {
+      assert.equal(bytes[i], bytes[i+1]);
+      assert.equal(bytes[i], bytes[i+2]);
+      assert.equal(bytes[i+3], 255);
+      values.push(bytes[i]);
+    }
+    assert.equal(Math.min(...values), 188);
+    assert.equal(Math.max(...values), 207);
+    const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+    assert.ok(mean > 197 && mean < 199);
+    // Regression frequencies of the former 73.5/147 mm mottling and 18.4/36.8 mm tuft waves.
+    for (const [kx,ky] of [[4,2],[4,-2],[16,40],[16,56]]) {
+      let real = 0, imaginary = 0;
+      for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
+        const value = values[y*128+x] - mean, phase = 2*Math.PI*(kx*x+ky*y)/128;
+        real += value*Math.cos(phase); imaginary += value*Math.sin(phase);
+      }
+      assert.ok(2*Math.hypot(real,imaginary)/values.length < .5, `coherent floor band ${kx}/${ky}`);
+    }
+    finish.setHighDetail(true);
+    assert.strictEqual(finish.carpet.bumpMap, map);
+    assert.strictEqual(finish.aisle.bumpMap, map);
+    assert.deepEqual([finish.carpet.bumpScale, finish.aisle.bumpScale], [.018,.020]);
+    assert.deepEqual([finish.carpet.roughness, finish.aisle.roughness], [.98,.98]);
+  } finally {
+    const textures = new Set();
+    for (const value of Object.values(finish)) {
+      if (value instanceof MeshStandardMaterial) {
+        if (value.map) textures.add(value.map);
+        if (value.bumpMap) textures.add(value.bumpMap);
+        value.dispose();
+      } else if (value instanceof BoxGeometry) value.dispose();
+    }
+    for (const texture of textures) texture.dispose();
+  }
+});

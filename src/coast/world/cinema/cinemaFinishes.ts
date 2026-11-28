@@ -69,11 +69,8 @@ export function cinemaFinishes() {
   seatWeave.repeat.set(1, 1);
   seatWeave.needsUpdate = true;
 
-  const carpetGrain = finishTexture((x, y, grain) => {
-    const tuft = Math.sin((x + y * 3) * Math.PI / 4) * Math.cos(y * Math.PI / 8);
-    const mottling = Math.sin(x * Math.PI / 16) * Math.sin(y * Math.PI / 32);
-    return 174 + tuft * 20 + mottling * 13 + grain * 48;
-  });
+  // Keep fine seeded pile variation without coherent sinusoidal bands at grazing views.
+  const carpetGrain = finishTexture((_x, _y, grain) => 188 + 20 * grain);
 
   const pattern = CINEMA_ACOUSTIC_PATTERN;
   const cellPixels = pattern.textureSize / pattern.cells;

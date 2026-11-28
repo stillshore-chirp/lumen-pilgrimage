@@ -21,6 +21,12 @@ C13の静止模擬XRでは、body `z=0.65 m`を保ったまま実両眼が`z=−
 
 C14では1.2mmの閉薄膜を追加したが、後方席の白投影に細かな黒斑が生じた。0.5mmの正面gapと描画順−1だけでは、異なる三角形・instance変換の深度誤差を排除できない。前側capの重複描画を除く候補は[幕の裏面と縁](cinema-sound-design.md#幕の裏面と縁)のとおり。実factoryの正面・背面・四辺ray、四周の体積接触、可視30/非表示6 indexのgroup、受光shader、専用geometry/非表示材/既存共有材の一度の解放をCPUで照合する。C15の同じ実眼からの裏面、前後・斜めの縁、後方の白/部分白・High/Light・微動、通常正面上映と状態復帰の直接像は候補段階では未実施。C13の成功した音声・移動などは入力閉包が同じ範囲だけ再利用する。
 
+## 床の色柄と凹凸の切り分け
+
+C14の元R01-standing-frontと同じcamera・service・High・1920×1080/DPR1で、床2材のbumpMapだけを同じrender task内で無効化・復帰した。colorMap・UV・roughness・bumpScaleは不変、復帰PNGは全pixel同一だった。可視段床ROIの501600pixelではon/off差が最大RGB1、RMS差0.002704で、幅広い帯は残った。bump無効を製品の解決とはせず、規則的な色柄を主因候補として分離した。
+
+候補は[床の表面](cinema-sound-design.md#床の表面)の床専用grain。実factoryの他画像・形・支持・材参照・texture数、旧波の周波数成分と実byte範囲を比較する。C15同pose・近接・遠方・短い微動・High/Lightの直接像は候補段階では未実施。静止像からHMDの無ちらつきを保証しない。
+
 ## Native offlineと環境音の観測
 
 C12固定版の標準音響targetでは、5代表席×2品質を含む21 response＋30 clarityの51 native OfflineAudioContextが全てclosedとなり、既存63 assert式とgesture・4mix・足音・preview切断・disposeの検査を保持して142.149秒で完了した。製品source333・dist103と元testの開始前後hashは一致した。これは全596位置の網羅やrealtime全graphの期限証明ではない。
