@@ -12,6 +12,13 @@ const PATH_UPDATE_SECONDS = 0.05;
 const CROSSFADE_SECONDS = 0.15;
 const EARLY_SHARE = 0.60;
 const SPECTRAL_GLIDE = 0.035;
+// Match the coherent shared programme to the native HRTF reference by reducing
+// the lightweight dry/early branch. The shared late IR is not part of this trim.
+const LIGHT_QUALITY_LEVEL = cinemaDecibels(-3.5);
+
+function qualityLevel(quality: CinemaQuality): number {
+  return quality === 'light' ? LIGHT_QUALITY_LEVEL : 1;
+}
 
 interface Feed {
   speaker: CinemaSpeaker;
@@ -215,7 +222,7 @@ function createListeningPlayback(context: BaseAudioContext, output: AudioNode,
 
   function newGraph(mode: CinemaQuality, audible: boolean): ListeningGraph {
     const gain = context.createGain();
-    gain.gain.value = Number(audible);
+    gain.gain.value = Number(audible) * qualityLevel(mode);
     const graph: ListeningGraph = { quality: mode, gain, dry: [], reflections: new Map(), releaseAt: Infinity };
     // HRTF convolution has a small renderer delay. Align the lightweight
     // branch for crossfades while keeping synchronized media inside its budget.
@@ -385,7 +392,8 @@ function createListeningPlayback(context: BaseAudioContext, output: AudioNode,
         crossfade = { from, to, start: now };
         for (const graph of active.values()) {
           const wave = graph.quality === 'high' ? Math.sin : Math.cos;
-          const curve = Float32Array.from({ length: 33 }, (_, i) => wave(Math.PI * 0.5 * (from + (to - from) * i / 32)));
+          const curve = Float32Array.from({ length: 33 }, (_, i) =>
+            qualityLevel(graph.quality) * wave(Math.PI * 0.5 * (from + (to - from) * i / 32)));
           graph.gain.gain.cancelScheduledValues(0);
           graph.gain.gain.setValueCurveAtTime(curve, now, CROSSFADE_SECONDS);
         }

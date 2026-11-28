@@ -28,7 +28,7 @@ test('shared playback releases listening children before their routing parent', 
     cancelScheduledValues() {}
     setValueAtTime(value) { this.value = value; }
     setTargetAtTime(value) { this.value = value; }
-    setValueCurveAtTime(values) { this.value = values.at(-1); }
+    setValueCurveAtTime(values) { this.lastCurve = [...values]; this.value = values.at(-1); }
   }
   class Node {
     connections = new Set();
@@ -70,9 +70,22 @@ test('shared playback releases listening children before their routing parent', 
   const playback = createCinemaPlayback(context, source, output, 6);
   const camera = new PerspectiveCamera(); camera.position.set(0, 5, 35.85);
   playback.update(camera);
+  const lightMix = [...nodes.find(node => node.panningModel === 'equalpower').connections][0].gain;
+  const initialLightLevel = lightMix.value;
+  assert.ok(initialLightLevel > 0 && initialLightLevel < 1, 'light mode uses an attenuated reference level');
   context.currentTime = .03;
   playback.setQuality('high');
   playback.update(camera);
+  const highMix = [...nodes.find(node => node.panningModel === 'HRTF').connections][0].gain;
+  assert.equal(highMix.value, 1, 'high quality retains unity reference gain');
+  context.currentTime = .06;
+  playback.setQuality('light');
+  playback.update(camera);
+  assert.equal(lightMix.value, Math.fround(initialLightLevel),
+    'an interrupted crossfade restores the calibrated endpoint at Float32 curve precision');
+  assert.equal(highMix.value, 0);
+  assert.ok(lightMix.lastCurve.every(value => value >= 0 && value <= initialLightLevel + 1e-7),
+    'the crossfade must not bypass the lightweight attenuation');
   assert.doesNotThrow(() => playback.dispose());
   assert.doesNotThrow(() => playback.dispose());
   assert.deepEqual([...source.connections], [unrelated]);
@@ -361,6 +374,13 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
         c50: await Promise.all([500, 1000, 2000].map(band => clarity(impulse, band, onset))),
       });
     }
+    // These stereo markers and this pose are held out from the five mono calibration seats.
+    const qualityHoldoutStats = [];
+    for (const quality of ['light', 'high']) for (const [name, input] of [['L', [.25, 0]], ['R', [0, .25]]]) {
+      const impulse = await response(quality, [0, 5, 35.85], input);
+      qualityHoldoutStats.push({ quality, name,
+        direct: 10 * Math.log10(energy(impulse, first, first + .012 * rate)) });
+    }
     const [left, right, unknown, aligned, inverted, surround, facing, turned, silent, bypass, switching, lfe] = await Promise.all([
       response('light', seats[1], [0.4, 0]), response('light', seats[1], [0, 0.4]),
       response('light', seats[1], [0.4, 0], 0, { channelCount: 0 }),
@@ -377,7 +397,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
       return 10 * Math.log10(l / r);
     };
     return {
-      responseStats,
+      responseStats, qualityHoldoutStats,
       timing: { evaluationMs: performance.now() - evaluationStarted, importMs, responseTimings, clarityTimings },
       l: balance(left), r: balance(right), unknown: balance(unknown), c: balance(facing), turned: balance(turned),
       surround: balance(surround),
@@ -402,6 +422,11 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
   for (let i = 0; i < seats.length; i += 1) {
     assert.ok(Math.abs(metrics.responseStats[i].direct - metrics.responseStats[i + seats.length].direct) <= 2,
       `quality level at seat ${i}: ${metrics.responseStats[i].direct} vs ${metrics.responseStats[i + seats.length].direct}`);
+  }
+  for (const name of ['L', 'R']) {
+    const pair = metrics.qualityHoldoutStats.filter(record => record.name === name);
+    assert.ok(Math.abs(pair[0].direct - pair[1].direct) <= 2,
+      `held-out quality level for ${name}: ${pair[0].direct} vs ${pair[1].direct}`);
   }
   assert.ok(metrics.l > 2 && metrics.r < -2);
   assert.ok(Math.abs(metrics.l - metrics.unknown) < 0.01);
