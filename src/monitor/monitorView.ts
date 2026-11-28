@@ -3,6 +3,7 @@ import { MonitorAudio, type MonitorAudioMode, type WorldMonitorPlaybackFactory }
 import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
 import { MonitorObject, type MonitorTheater } from './monitorObject';
 import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
+import { describeMonitorVideo, measureMonitorVideo } from './monitorVideoMetrics';
 import { MonitorXR } from './monitorXR';
 import type { CoastXR } from '../coast/CoastXR';
 import type { DesktopGrabTarget } from '../coast/DesktopGrab';
@@ -38,6 +39,9 @@ export class MonitorView {
   private readonly unsubscribeXR: () => void;
   private xrSession: XRSession | null = null;
   private readonly receiver: MonitorReceiver;
+  private measurement: AbortController | undefined;
+  private readonly measureVideo: HTMLButtonElement;
+  private readonly videoStatistics: HTMLElement;
   private readonly events = new AbortController();
   private readonly pointer = new Vector2();
   private readonly panel = document.createElement('section');
@@ -122,6 +126,8 @@ export class MonitorView {
         <output data-monitor-verification hidden></output>
         <p data-monitor-status role="status"></p>
         <button type="button" data-monitor-retry-video hidden>映像を再生</button>
+        <button type="button" data-monitor-measure-video disabled>映像の滑らかさを計測</button>
+        <p data-monitor-video-statistics role="status"></p>
       </div>
       <div class="monitor-view-section" role="group" aria-label="モニター音声">
         <div class="coast-row">
@@ -160,6 +166,8 @@ export class MonitorView {
     this.verification = query('verification');
     this.status = query('status');
     this.retryVideo = query('retry-video');
+    this.measureVideo = query('measure-video');
+    this.videoStatistics = query('video-statistics');
     this.audioButton = query('sound');
     this.audioMode = query('sound-mode');
     this.audioStatus = query('audio-status');
@@ -346,6 +354,7 @@ export class MonitorView {
   release(): void {
     this.releaseDesktopGrab();
     this.finishDrag();
+    this.measurement?.abort();
     this.receiver.disconnect();
     this.audio.stop();
     this.theater?.cinema?.project(null);
@@ -473,11 +482,17 @@ export class MonitorView {
     const active = this.hasActiveConnection;
     this.code.disabled = active;
     this.code.required = !active;
+    this.measureVideo.disabled = !!this.measurement || state.phase !== 'connected';
     this.connectButton.textContent = active ? '切断' : '接続';
     this.verification.hidden = !state.verification;
     this.verification.textContent = state.verification ?? '';
     this.verification.setAttribute('aria-label', '配信元と照合する確認番号');
     if (state.phase === 'ended' || state.phase === 'failed') {
+      this.measurement?.abort();
+      this.measurement = undefined;
+      this.measureVideo.disabled = true;
+      this.measureVideo.textContent = '映像の滑らかさを計測';
+      this.videoStatistics.textContent = '';
       this.audioPlayback = 'off';
       this.audioStart = null;
       this.audio.stop();
@@ -546,9 +561,30 @@ export class MonitorView {
     if (this.audioButton.disabled !== disabled) this.audioButton.disabled = disabled;
   }
 
+  private async measureVideoFrames(): Promise<void> {
+    if (this.measurement || this.state.phase !== 'connected') return;
+    const attempt = new AbortController();
+    this.measurement = attempt;
+    this.measureVideo.disabled = true;
+    this.measureVideo.textContent = '3秒間計測しています…';
+    this.videoStatistics.textContent = 'この画面を手前に置き、動きのある映像でお待ちください。';
+    try {
+      const result = await measureMonitorVideo(() => this.receiver.videoStats(), attempt.signal, this.video);
+      if (!attempt.signal.aborted) this.videoStatistics.textContent = describeMonitorVideo(result);
+    } catch {
+      if (!attempt.signal.aborted) this.videoStatistics.textContent = '映像を計測できませんでした。接続とブラウザーの対応を確認してください。';
+    } finally {
+      if (this.measurement !== attempt) return;
+      this.measurement = undefined;
+      this.measureVideo.textContent = '映像の滑らかさを計測';
+      this.measureVideo.disabled = !!this.measurement || this.state.phase !== 'connected';
+    }
+  }
+
   private bindPanel(volume: HTMLInputElement): void {
     const { signal } = this.events;
     const listen = { signal };
+    this.measureVideo.addEventListener('click', () => void this.measureVideoFrames(), listen);
     this.displayTarget.addEventListener('change', () => this.updateDisplayTarget(true), listen);
     this.visibilityButton.addEventListener('click', () => this.setScreenVisible(!this.screen.isVisible), listen);
     this.editButton.addEventListener('click', () => this.setEditing(!this.editing), listen);

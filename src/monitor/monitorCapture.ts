@@ -1,3 +1,5 @@
+// @ts-expect-error The Node test runner needs the explicit extension for native TypeScript loading.
+import { MONITOR_TARGET_FRAME_RATE } from './monitorVideoMetrics.ts';
 import type { MonitorOutput, MonitorSharedAudio } from './monitorSession';
 
 interface CaptureAudioConstraints extends MediaTrackConstraints {
@@ -93,7 +95,7 @@ export class MonitorCapture {
       suppressLocalAudioPlayback: output === 'viewer',
     };
     const options: CaptureOptions = {
-      video: true,
+      video: { frameRate: { ideal: MONITOR_TARGET_FRAME_RATE, max: MONITOR_TARGET_FRAME_RATE } },
       audio: this.supportsSuppressingTabPlayback ? audioConstraints : true,
       selfBrowserSurface: 'exclude',
       surfaceSwitching: 'exclude',
@@ -108,6 +110,9 @@ export class MonitorCapture {
     if (!stream.getVideoTracks().some(track => track.readyState === 'live')) {
       stopTracks(stream);
       throw new DOMException('', 'NotReadableError');
+    }
+    for (const track of stream.getVideoTracks()) {
+      if ('contentHint' in track) track.contentHint = 'motion';
     }
     this.stream = stream;
     return stream;

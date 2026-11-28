@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright';
@@ -70,10 +70,10 @@ function installSyntheticCapture() {
         context.fillStyle = '#ff00d8';
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.fillStyle = '#00e68c';
-        context.fillRect((frame++ * 8) % canvas.width, 12, 18, 22);
+        context.fillRect((fixture.frameRate ? performance.now() * 0.12 : frame++ * 8) % canvas.width, 12, 18, 22);
       };
       draw();
-      const stream = canvas.captureStream(15);
+      const stream = canvas.captureStream(fixture.frameRate ?? 15);
       const videoTrack = stream.getVideoTracks()[0];
       if (mode === 'tab-audio-video') {
         const settings = videoTrack.getSettings();
@@ -82,7 +82,7 @@ function installSyntheticCapture() {
       const timer = setInterval(() => {
         if (videoTrack.readyState === 'ended') clearInterval(timer);
         else draw();
-      }, 55);
+      }, fixture.frameRate ? 1000 / fixture.frameRate : 55);
       fixture.streams.push(stream);
       fixture.options = options;
 
@@ -494,7 +494,7 @@ test('separate tabs pair with approval, render native WebRTC media and control a
       const { activeGesture, options } = window.captureFixture;
       return { activeGesture, video: options.video, requestedAudio: Boolean(options.audio) };
     });
-    assert.deepEqual(captureRequest, { activeGesture: true, video: true, requestedAudio: true });
+    assert.deepEqual(captureRequest, { activeGesture: true, video: { frameRate: { ideal: 60, max: 60 } }, requestedAudio: true });
     await button(sender, '接続を許可').click();
     await waitForVideo(viewer, 1);
     assert.deepEqual(await viewer.evaluate(() =>
@@ -2345,4 +2345,91 @@ test('PCVR reconnection retains residence shader preparation, retry, and session
   } finally {
     await page.close();
   }
+});
+
+// A single observation window covers acquisition, transport, decoding and video composition.
+// Only numeric video counters are returned; network addresses, SDP and track labels stay in the browser.
+async function measurePipelinePage(page, durationMs) {
+  return page.evaluate(async ({ durationMs, videoSelector }) => {
+    const peer = window.monitorPeers[0];
+    const video = document.querySelector(videoSelector);
+    const names = ['frames', 'framesEncoded', 'framesSent', 'framesReceived', 'framesDecoded'];
+    const read = async () => {
+      const result = [];
+      (await peer.getStats()).forEach(row => {
+        if (row.kind !== 'video' || !['media-source', 'outbound-rtp', 'inbound-rtp'].includes(row.type)) return;
+        const count = { id: row.id, type: row.type, timestamp: row.timestamp };
+        for (const name of names) if (Number.isFinite(row[name])) count[name] = row[name];
+        result.push(count);
+      });
+      return result;
+    };
+    const before = await read();
+    const started = performance.now();
+    let first;
+    let last;
+    let callback;
+    const frame = (_now, metadata) => {
+      first ??= metadata.presentedFrames;
+      last = metadata.presentedFrames;
+      callback = video.requestVideoFrameCallback(frame);
+    };
+    if (video) callback = video.requestVideoFrameCallback(frame);
+    await new Promise(resolve => setTimeout(resolve, durationMs));
+    const elapsedMs = performance.now() - started;
+    if (callback !== undefined) video.cancelVideoFrameCallback(callback);
+    const after = await read();
+    const result = { elapsedMs, visibility: document.visibilityState };
+    for (const end of after) {
+      const start = before.find(row => row.id === end.id && row.type === end.type);
+      if (!start || end.timestamp <= start.timestamp) continue;
+      for (const name of names) {
+        if (Number.isFinite(start[name]) && Number.isFinite(end[name]) && end[name] >= start[name]) {
+          result[name] = (end[name] - start[name]) * 1000 / (end.timestamp - start.timestamp);
+        }
+      }
+    }
+    if (video) result.presentedFps = (first === undefined ? 0 : last - first + 1) * 1000 / elapsedMs;
+    return result;
+  }, { durationMs, videoSelector });
+}
+
+test('15 30 and 60fps inputs are measured separately across the native video pipeline', { timeout: 120_000 }, async t => {
+  const results = [];
+  for (const inputFps of [15, 30, 60]) {
+    const sender = await newPage();
+    const viewer = await newPage();
+    try {
+      await sender.addInitScript(installSyntheticCapture);
+      await sender.addInitScript(observePeers);
+      await viewer.addInitScript(observePeers);
+      await sender.goto(new URL('?monitor=sender', url).href);
+      await viewer.goto(url.href);
+      await sender.evaluate(fps => { window.captureFixture.frameRate = fps; }, inputFps);
+      await button(viewer, '仮想モニター').click();
+      await button(viewer, 'モニターを表示').click();
+      await requestPairing(sender, viewer);
+      await button(sender, '接続を許可').click();
+      await waitForVideo(viewer, 1);
+      // Allow the encoder's initial ramp and ICE setup to settle before using cumulative counters.
+      await viewer.waitForFunction(selector => document.querySelector(selector).currentTime > 2, videoSelector);
+      const [sent, received] = await Promise.all([measurePipelinePage(sender, 4_000), measurePipelinePage(viewer, 4_000)]);
+      const result = { inputFps, resolution: [320, 180], durationMs: 4000, sent, received };
+      results.push(result);
+      t.diagnostic(JSON.stringify(result));
+      assert.ok(sent.frames > inputFps * .65 && sent.frames <= inputFps * 1.2, 'source rate must identify the supplied input');
+      assert.ok(sent.framesSent > 0 && received.framesReceived > 0 && received.framesDecoded > 0);
+      assert.ok(received.presentedFps > 0 && received.presentedFps <= received.framesDecoded * 1.3);
+      assert.ok((await screenPixels(viewer)).count > 2_000, 'the actual scene contains the received video texture');
+      assert.equal(await sender.evaluate(() => window.monitorPeers[0].getSenders().find(sender => sender.track.kind === 'video').getParameters().encodings[0].maxFramerate), 60);
+      assert.equal(await sender.evaluate(() => window.captureFixture.streams[0].getVideoTracks()[0].contentHint), 'motion');
+    } finally {
+      await sender.context().close();
+      await viewer.context().close();
+    }
+  }
+  if (screenshotDirectory) await writeFile(join(screenshotDirectory, 'monitor-frame-rates.json'), `${JSON.stringify({ browser: browser.version(), results }, null, 2)}\n`);
+  const high = results.find(row => row.inputFps === 60);
+  const low = results.find(row => row.inputFps === 15);
+  assert.ok(high.sent.framesSent > low.sent.framesSent * 2, 'the transport must preserve a materially higher rate for the 60fps source');
 });

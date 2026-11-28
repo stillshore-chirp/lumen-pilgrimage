@@ -1,3 +1,4 @@
+import { describeMonitorVideo, measureMonitorVideo } from './monitorVideoMetrics';
 import { captureErrorMessage, MonitorCapture } from './monitorCapture';
 import { MonitorSender, type MonitorConnectionState, type MonitorOutput } from './monitorSession';
 import './monitorSender.css';
@@ -28,6 +29,9 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
           <button type="button" data-share-button>画面共有を開始</button>
           <button type="button" data-restart-button hidden>共有対象を選び直す</button>
         </div>
+        <p>映像は動きの滑らかさを優先し、最大60fpsを要求します。</p>
+        <button type="button" data-monitor-measure-video disabled>映像の滑らかさを計測</button>
+        <p data-monitor-video-statistics role="status"></p>
         <section data-pairing hidden>
           <h2>ペアリングコード</h2>
           <code data-monitor-pair-code></code>
@@ -62,6 +66,10 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
   const approve = view.querySelector<HTMLButtonElement>('[data-approve]')!;
   const reject = view.querySelector<HTMLButtonElement>('[data-reject]')!;
 
+  const measure = view.querySelector<HTMLButtonElement>('[data-monitor-measure-video]')!;
+  const statistics = view.querySelector<HTMLElement>('[data-monitor-video-statistics]')!;
+  let measurement: AbortController | undefined;
+
   const capture = new MonitorCapture(navigator.mediaDevices);
   const events = new AbortController();
   const unsupported = !window.isSecureContext
@@ -83,6 +91,9 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
       if (events.signal.aborted) return;
       if (next.phase !== 'approval') deciding = false;
       if (next.phase === 'ended' || next.phase === 'failed') {
+        measurement?.abort();
+        measurement = undefined;
+        statistics.textContent = '';
         generation += 1;
         capture.stop();
         choosing = false;
@@ -122,6 +133,8 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     }
     audioHelp.hidden = !explanation;
     if (audioHelp.textContent !== explanation) audioHelp.textContent = explanation;
+    measure.disabled = !!measurement || state?.phase !== 'connected';
+    measure.textContent = measurement ? '3秒間計測しています…' : '映像の滑らかさを計測';
     pairCode.textContent = state?.phase === 'waiting' ? state.code ?? '' : '';
     pairing.hidden = !pairCode.textContent;
     const restoreFocus = approval.contains(document.activeElement);
@@ -133,6 +146,9 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
 
   function release() {
     generation += 1;
+    measurement?.abort();
+    measurement = undefined;
+    statistics.textContent = '';
     capture.stop();
     choosing = false;
     deciding = false;
@@ -217,6 +233,22 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
   approve.addEventListener('click', () => { decide(true); }, listeners);
   reject.addEventListener('click', () => { decide(false); }, listeners);
   output.addEventListener('change', changeAudio, listeners);
+  measure.addEventListener('click', async () => {
+    if (measurement || state?.phase !== 'connected') return;
+    const attempt = new AbortController();
+    measurement = attempt;
+    statistics.textContent = 'この画面を手前に置き、動きのある映像でお待ちください。';
+    render();
+    try {
+      const result = await measureMonitorVideo(() => sender.videoStats(), attempt.signal);
+      if (!attempt.signal.aborted) statistics.textContent = describeMonitorVideo(result);
+    } catch {
+      if (!attempt.signal.aborted) statistics.textContent = '映像を計測できませんでした。接続とブラウザーの対応を確認してください。';
+    } finally {
+      if (measurement === attempt) measurement = undefined;
+      if (!events.signal.aborted) render();
+    }
+  }, listeners);
   window.addEventListener('pagehide', stop, listeners);
   render();
   return dispose;

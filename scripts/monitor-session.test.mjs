@@ -176,6 +176,8 @@ test('sender waits for one approval and gathers LAN candidates before sharing', 
     ['video', 'sendonly'], ['audio', 'sendonly'],
   ]);
 
+  assert.deepEqual(peers[0].transceivers[0].options.sendEncodings, [{ maxFramerate: 60 }]);
+  assert.equal(peers[0].transceivers[1].options.sendEncodings, undefined);
   peers[0].finishIce();
   await until(() => calls.some(({ action }) => action === 'offer'), 'offer was not sent');
   const offer = calls.find(({ action }) => action === 'offer');
@@ -485,4 +487,79 @@ test('a receiver requires expiration information before accepting approved media
   await until(() => states.at(-1).phase === 'failed', 'receiver did not reject an approval without expiration');
   assert.match(states.at(-1).detail, /有効期限/);
   assert.deepEqual(peers, []);
+});
+
+// Video diagnostics preserve the meaning and availability of each measured stage.
+const { monitorVideoSnapshot, monitorVideoRates, measureMonitorVideo } = await import('../src/monitor/monitorVideoMetrics.ts');
+
+test('video diagnostics measure each counter interval and preserve missing or reset metrics', () => {
+  const report = rows => new Map(rows.map(row => [row.id, row]));
+  const source = (frames, timestamp = 1000) => ({ id: 'source', type: 'media-source', kind: 'video', frames, timestamp, width: 640, height: 360, trackIdentifier: 'private-label' });
+  const send = (framesSent, timestamp = 1000) => ({ id: 'send', type: 'outbound-rtp', kind: 'video', framesSent, framesEncoded: framesSent, timestamp, qualityLimitationReason: 'cpu', address: 'private-address' });
+  const first = monitorVideoSnapshot(report([source(60), send(60)]));
+  const second = monitorVideoSnapshot(report([source(240, 4000), send(210, 4000)]));
+  const rates = monitorVideoRates(first, second);
+  assert.equal(rates.captureFps, 60);
+  assert.equal(rates.sentFps, 50);
+  assert.equal(rates.encodedFps, 50);
+  assert.equal(rates.durationMs, 3000);
+  assert.equal(rates.qualityLimitation, 'cpu');
+  assert.equal(rates.decodedFps, undefined);
+  assert.equal(JSON.stringify(second).includes('private'), false);
+  assert.equal(monitorVideoRates(first, monitorVideoSnapshot(report([source(1, 4000)]))).captureFps, undefined);
+  assert.equal(monitorVideoRates(first, monitorVideoSnapshot(report([{ ...source(240, 4000), id: 'new-source' }]))).captureFps, undefined);
+  assert.equal(monitorVideoRates(first, monitorVideoSnapshot(report([source(60, 4000)]))).captureFps, 0);
+});
+
+test('video measurement cancels promptly and never converts absent counters into zero fps', async () => {
+  const abort = new AbortController();
+  const read = async () => ({ counters: [] });
+  const pending = measureMonitorVideo(read, abort.signal, undefined, 10_000);
+  await new Promise(resolve => setImmediate(resolve));
+  abort.abort();
+  await assert.rejects(pending, { name: 'AbortError' });
+  const result = await measureMonitorVideo(read, new AbortController().signal, undefined, 1);
+  assert.equal(result.sentFps, undefined);
+  assert.equal(result.presentedFps, undefined);
+});
+
+test('presentation measurements include frozen time and distinguish zero, one and missing callbacks', async () => {
+  async function observe(frames) {
+    let callback;
+    let handle = 0;
+    const video = {
+      srcObject: {},
+      requestVideoFrameCallback(next) { callback = next; return ++handle; },
+      cancelVideoFrameCallback() { callback = undefined; },
+    };
+    const measured = measureMonitorVideo(async () => ({ counters: [] }), new AbortController().signal, video, 40);
+    await new Promise(resolve => setImmediate(resolve));
+    for (const presentedFrames of frames) callback?.(performance.now(), { presentedFrames, presentationTime: presentedFrames });
+    const result = await measured;
+    assert.ok(result.presentationDurationMs >= 35);
+    return result;
+  }
+  const none = await observe([]);
+  assert.equal(none.presentedFps, 0);
+  assert.equal(none.presentationFrames, 0);
+  const one = await observe([1]);
+  assert.equal(one.presentationFrames, 1);
+  assert.ok(one.presentedFps > 0 && one.presentedFps < 30);
+  const burst = await observe([10, 11]);
+  assert.equal(burst.presentationFrames, 2);
+  assert.ok(burst.presentedFps > 0 && burst.presentedFps < 60, 'frozen time must lower the reported rate');
+});
+
+test('a backgrounded video measurement is rejected instead of reporting throttling as source fps', async t => {
+  const document = new EventTarget();
+  document.visibilityState = 'visible';
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: document });
+  t.after(() => previous ? Object.defineProperty(globalThis, 'document', previous) : delete globalThis.document);
+  const pending = measureMonitorVideo(async () => ({ counters: [] }), new AbortController().signal, undefined, 5);
+  await new Promise(resolve => setImmediate(resolve));
+  document.visibilityState = 'hidden';
+  document.dispatchEvent(new Event('visibilitychange'));
+  document.visibilityState = 'visible';
+  await assert.rejects(pending, /visible page/);
 });

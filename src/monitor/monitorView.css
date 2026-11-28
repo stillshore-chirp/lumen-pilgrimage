@@ -118,3 +118,11 @@
     max-block-size: min(66dvh, 42rem);
   }
 }
+
+.monitor-view-panel [data-monitor-measure-video] {
+  margin-top: 8px;
+}
+
+.monitor-view-panel [data-monitor-video-statistics] {
+  font-variant-numeric: tabular-nums;
+}

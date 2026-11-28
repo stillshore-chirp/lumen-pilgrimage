@@ -99,6 +99,16 @@ POST /api/virtual-monitor/join
 
 接続中または配信元の承認待ちに別ワールドへ移動すると、移動先を読み込んでからシーンと操作パネルを交換します。同じビデオ要素、WebRTC 接続、受信メディア、音声コンテキストを使い、同じ文書内の履歴を戻る・進むときも引き継ぎます。シーンの切り替え時は、元のテレビや映画館スクリーンから映像を外し、到着先で浮遊表示に切り替えます。音量、モニター音声のオン・オフ、ステレオまたは浮遊モニターの空間音響の選択を保持し、住戸と映画館の専用音響からはステレオに切り替えます。移動先の読み込みに失敗したときは元のワールドで視聴を続けられます。[移動処理](../src/coast/CoastApp.ts) · [パネルと映像面の引き継ぎ](../src/monitor/monitorView.ts)
 
+## 映像の滑らかさと計測
+
+画面取得は `frameRate: { ideal: 60, max: 60 }` を要求し、映像トラックの `contentHint` を対応時に `motion`、送信用 encoding の `maxFramerate` を60にします。動きを優先するため、帯域や処理負荷が不足する場合はブラウザーが解像度・画質を下げることがあります。固定ビットレート、フレーム補間、SDPの書き換えは行いません。
+
+60fpsは目標であり、取得元が15/30fps、OS・ブラウザー・encoder・通信・描画に制約がある場合に60fpsへ変換するものではありません。[Screen Capture 5.4・5.4.1](https://www.w3.org/TR/screen-capture/#constrainable-properties) は取得元と制約による間引きを定義し、追加フレームの生成を認めていません。[Content Hints 3.2・4.3](https://www.w3.org/TR/mst-content-hint/#video-content-hints) の `motion` はフレームレート保持を優先する助言です。[WebRTCのencoding設定](https://www.w3.org/TR/webrtc/#dom-rtcrtpencodingparameters-maxframerate) の値も上限であり、到達保証ではありません。
+
+接続中の「映像の滑らかさを計測」は、前面のページで3秒間、`getStats()` の累積カウンター差と各統計の時刻差から fps を求めます。配信側は取得元 `media-source.frames`・encoder `framesEncoded`・送信 `framesSent`、視聴側は受信 `framesReceived`・デコード `framesDecoded` を分けます。視聴側の「映像フレーム更新」は `requestVideoFrameCallback` の `presentedFrames` の差（先頭観測の1枚を含む）を、更新が止まった時間も含む全観測区間の単調時計の経過時間で割ります。初回callbackまでの待ちや主スレッドの処理遅延により、実際のcompositor更新より少なく観測される場合があります。これは video の compositor 提出であり、Three.js の描画回数、HMDの走査や実画面のフレームレートではありません。景観側は同じ VideoTexture を描画ループで更新し、別の30fps制限を加えていません。
+
+カウンター欠測、統計IDの変更、リセットは0fpsへ置き換えず「未取得」とします。背景化した区間は結果を採用せず再計測を案内します。診断は利用者の操作時だけ行い、SDP、ICEアドレス、トラック名を診断結果へ出しません。原典は [WebRTC Statistics 8.5・8.8・8.13](https://www.w3.org/TR/webrtc-stats/) と [Video Frame Callback 2.2](https://wicg.github.io/video-rvfc/#video-frame-callback-metadata) です。[計測実装](../src/monitor/monitorVideoMetrics.ts)・[検証手順](verification.md#仮想モニターの実機確認)を参照してください。
+
 ## 画面と音声
 
 配信側は `getDisplayMedia()` に映像と音声を要求します。共有ダイアログが音声トラックを返さないときは映像のみで動作します。音声の出力先は次のとおりです。
