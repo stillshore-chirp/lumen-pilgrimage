@@ -8,6 +8,7 @@ import { createResidenceCurtains } from './residenceCurtains';
 import { createResidenceFurniture } from './residenceFurniture';
 import { createResidenceLighting } from './residenceLighting';
 import { createResidenceMaterials } from './residenceMaterials';
+import { createResidenceMonitorPlaybackFactory } from './residenceMonitorAudio';
 import { createResidenceNavigation } from './residenceNavigation';
 import { RESIDENCE_BALCONY_DOOR, RESIDENCE_DOORWAYS } from './residencePlan';
 import { createResidenceReflections } from './residenceReflections';
@@ -98,6 +99,9 @@ export async function loadResidenceScene(): Promise<ExplorationScene> {
     },
     world: {
       scene,
+      monitorAudio: createResidenceMonitorPlaybackFactory({
+        doorOpenness: shell.doors.opennessFor, balconyDoor: () => door,
+      }),
       theater: furniture.theater,
       get artificialLightingMode() { return lighting.artificialLightingMode; },
       setArtificialLightingMode: lighting.setArtificialLightingMode,

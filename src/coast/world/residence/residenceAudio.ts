@@ -17,10 +17,12 @@ import {
 } from './residenceAudioSamples';
 import type { ResidenceOpening } from './residencePlan';
 import { residenceDoorFraction, residenceOpeningPoint } from './residencePortalAcoustics';
+import { createResidencePropagationDelay } from './residencePropagationDelay';
 
 type Point = Readonly<CoastPoint>;
 type Receiver = ReturnType<typeof residenceReceiver>;
-type TrafficVoice = { filter: BiquadFilterNode; gain: GainNode; wetGain: GainNode; panner: PannerNode };
+type TrafficVoice = { filter: BiquadFilterNode; gain: GainNode; wetGain: GainNode; panner: PannerNode;
+  propagation: ReturnType<typeof createResidencePropagationDelay> };
 type FootVoice = { panner: PannerNode; gain: GainNode; busy: boolean };
 type DoorMotion = {
   openness: number; direction: number; voice?: TrafficVoice; source?: AudioBufferSourceNode;
@@ -46,6 +48,7 @@ type Graph = {
   breeze: GainNode;
   breezeSample: AudioBuffer;
   slider: GainNode;
+  sliderVoice: TrafficVoice;
   sliderSamples: AudioBuffer[];
   doorSamples: AudioBuffer[][];
   feet: FootVoice[];
@@ -77,6 +80,7 @@ function spatialVoice(context: AudioContext, dry: AudioNode, wet: AudioNode): Tr
   filter.type = 'lowpass';
   filter.Q.value = -3;
   filter.frequency.value = 260;
+  const propagation = createResidencePropagationDelay(context, filter);
   const gain = context.createGain();
   gain.gain.value = 0;
   const wetGain = context.createGain();
@@ -86,12 +90,13 @@ function spatialVoice(context: AudioContext, dry: AudioNode, wet: AudioNode): Tr
   panner.rolloffFactor = 0;
   filter.connect(gain).connect(panner).connect(dry);
   filter.connect(wetGain).connect(wet);
-  return { filter, gain, wetGain, panner };
+  return { filter, gain, wetGain, panner, propagation };
 }
 
 function updateArrival(voice: TrafficVoice, receiver: Receiver, source: Point, line: boolean,
   gain: number, now: number, ceiling = Infinity): void {
   const arrival = residenceTrafficPath(receiver, source, line);
+  voice.propagation.update(arrival.delay, now);
   voice.gain.gain.setTargetAtTime(arrival.gain * gain, now, 0.11);
   voice.wetGain.gain.setTargetAtTime(arrival.diffuseGain * gain, now, 0.11);
   voice.filter.frequency.setTargetAtTime(Math.min(ceiling, arrival.cutoff), now, 0.12);
@@ -208,6 +213,15 @@ export class ResidenceAudio {
     this.nextUpdate = now + LISTENER_PERIOD;
     graph.appliances?.update(position, this.appliancePath);
     const receiver = residenceReceiver(position, opening, this.options.doorOpenness);
+    // The slider mechanism radiates from the interior side of its fixed track.
+    const sliderPath = residenceSoundPath(position, { ...BALCONY_DOOR, x: BALCONY_DOOR.x - .15, y: .28 },
+      (wall, gap) => gap.kind === 'balcony-door' ? opening : this.options.doorOpenness?.(wall, gap) ?? 1);
+    const sliderReference = .8 * Math.max(1, sliderPath.delay * 343) / Math.max(.8, sliderPath.delay * 343);
+    graph.sliderVoice.gain.gain.setTargetAtTime(sliderPath.gain * sliderReference, now, .025);
+    graph.sliderVoice.wetGain.gain.setTargetAtTime(sliderPath.diffuseGain * sliderReference, now, .035);
+    graph.sliderVoice.filter.frequency.setTargetAtTime(sliderPath.cutoff, now, .04);
+    graph.sliderVoice.propagation.update(sliderPath.delay, now);
+    pointAt(graph.sliderVoice.panner, sliderPath.arrival, now, .035);
     for (const [index, { road, position: emitter, voice }] of graph.traffic.entries()) {
       const flow = 0.92 + 0.08 * Math.sin(now * (0.17 + 0.014 * index) + 3 * index);
       updateArrival(voice, receiver, emitter, true, road.activity[this.time] * flow * Math.SQRT1_2, now);
@@ -288,7 +302,7 @@ export class ResidenceAudio {
     const reflected = trafficVoice();
     const reflectionDelay = context.createDelay(0.16);
     reflectionDelay.delayTime.value = 0.015;
-    reflectionDelay.connect(reflected.filter);
+    reflectionDelay.connect(reflected.propagation.input);
     const vehicles = Array.from({ length: 2 }, () => ({ voice: trafficVoice() }));
     const vehicleSamples = [createVehicleSample(context, 711), createVehicleSample(context, 198)];
     const breeze = context.createGain();
@@ -301,12 +315,8 @@ export class ResidenceAudio {
     const breezeSample = createBreeze(context);
     const slider = context.createGain();
     slider.gain.value = 0.24;
-    const sliderPoint = context.createPanner();
-    sliderPoint.panningModel = 'HRTF';
-    sliderPoint.refDistance = 0.8;
-    pointAt(sliderPoint, { ...BALCONY_DOOR, y: 0.28 }, now);
-    slider.connect(sliderPoint).connect(roomBuses.doors.dry);
-    sliderPoint.connect(roomBuses.doors.wet);
+    const sliderVoice = spatialVoice(context, roomBuses.doors.dry, roomBuses.doors.wet);
+    slider.connect(sliderVoice.propagation.input);
     const sliderSamples = [createSlider(context, false), createSlider(context, true)];
     const doorSamples = this.options.doorOpenness ? [false, true].map(sliding =>
       [false, true].map(closing => createInteriorDoorSound(context, sliding, closing))) : [];
@@ -321,7 +331,7 @@ export class ResidenceAudio {
       return { panner, gain, busy: false };
     });
     for (const [index, { voice }] of traffic.entries()) {
-      const source = this.play(context, buffer, voice.filter, now, 1, OFFSET_SECONDS[index] % buffer.duration, true);
+      const source = this.play(context, buffer, voice.propagation.input, now, 1, OFFSET_SECONDS[index] % buffer.duration, true);
       if (index === traffic.length - 1) source.connect(reflectionDelay);
     }
     this.nextUpdate = 0;
@@ -331,7 +341,7 @@ export class ResidenceAudio {
       ? createResidenceApplianceAudio(context, roomBuses.appliances.dry, roomBuses.appliances.wet,
         this.options.appliances, microwaveCompletion) : undefined;
     return { master, outputNodes, roomBuses, windBus, roomLevels, traffic, reflected, reflectionDelay, vehicles,
-      vehicleSamples, breeze, breezeSample, slider, sliderSamples, doorSamples, feet, appliances };
+      vehicleSamples, breeze, breezeSample, slider, sliderVoice, sliderSamples, doorSamples, feet, appliances };
   }
 
   private passGap(initial: boolean): number {
@@ -359,7 +369,7 @@ export class ResidenceAudio {
       available.pass = { from: reverse ? to : from, to: reverse ? from : to, start: now, duration,
         level: heavy ? 0.50 : 0.40 };
       this.nextPass = now + this.passGap(false);
-      this.play(context, buffer, available.voice.filter, now, buffer.duration / duration);
+      this.play(context, buffer, available.voice.propagation.input, now, buffer.duration / duration);
     }
     for (const vehicle of graph.vehicles) {
       const { pass, voice } = vehicle;
@@ -428,13 +438,14 @@ export class ResidenceAudio {
         const sample = graph.doorSamples[Number(sliding)][Number(direction < 0)];
         const offset = (direction > 0 ? before : 1 - before) * sample.duration;
         const active = motion;
-        const source = this.play(context, sample, motion.voice.filter, now, 1, offset, false,
+        const source = this.play(context, sample, motion.voice.propagation.input, now, 1, offset, false,
           () => { if (active.source === source) active.source = undefined; });
         motion.source = source;
       }
       if (!motion.source || !motion.voice || motion.direction === 0) continue;
       const path = residenceSoundPath(listener, point, (pathWall, gap) =>
         gap.kind === 'balcony-door' ? this.options.balconyDoor() : doorOpenness(pathWall, gap));
+      motion.voice.propagation.update(path.delay, now);
       motion.voice.gain.gain.setTargetAtTime(path.gain * 0.24, now, 0.020);
       motion.voice.wetGain.gain.setTargetAtTime(path.diffuseGain * 0.18, now, 0.030);
       motion.voice.filter.frequency.setTargetAtTime(path.cutoff, now, 0.040);
@@ -507,7 +518,13 @@ export class ResidenceAudio {
     }
     this.sources.clear();
     this.footfalls.clear();
+    for (const motion of this.doorMotions.values()) motion.voice?.propagation.dispose();
     this.doorMotions.clear();
+    if (this.graph) {
+      for (const item of [...this.graph.traffic, ...this.graph.vehicles]) item.voice.propagation.dispose();
+      this.graph.reflected.propagation.dispose();
+      this.graph.sliderVoice.propagation.dispose();
+    }
     this.graph?.appliances?.dispose();
     this.graph?.master.disconnect();
     this.graph?.outputNodes.forEach(node => node.disconnect());
