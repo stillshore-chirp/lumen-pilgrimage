@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { after, before, test } from 'node:test';
-import { Group, Raycaster, Vector3 } from 'three';
+import { Box3, Group, Raycaster, Vector3 } from 'three';
 
 const source = new URL('../src/', import.meta.url).href;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const internal = context.parentURL?.startsWith(source)
-      && specifier.startsWith('.') && !/\.(?:ts|js)$/.test(specifier);
+      && specifier.startsWith('.') && !/\.(?:ts|js|json)$/.test(specifier);
     return nextResolve(internal ? `${specifier}.ts` : specifier, context);
   },
 });
@@ -177,7 +177,10 @@ test('glass clear panes stop at the actual opaque frame faces instead of overlap
     const origin = shop ? [position.x > 0 ? 10.9 : -10.9, position.y, position.z]
       : [position.x, position.y, 2.2];
     const direction = shop ? [position.x > 0 ? 1 : -1, 0, 0] : [0, 0, 1];
-    assert.equal(cast(glass, origin, direction, 1.2).length, 0,
+    // Open entrance leaves park behind fixed glazing. Check physical overlap,
+    // rather than rejecting a second pane farther along the same viewing ray.
+    const frameBounds = new Box3().setFromObject(frame);
+    assert.equal(cast(glass, origin, direction, 1.2).filter(hit => frameBounds.containsPoint(hit.point)).length, 0,
       `${frame.name}: transparent pane does not cross the metal's actual projected face`);
     assert.ok(cast([frame], origin, direction, 1.2).length > 0, 'the audit ray actually crosses its opaque frame');
     audited++;

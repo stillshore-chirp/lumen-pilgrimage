@@ -308,11 +308,40 @@ test('rug contact is softer and less bright than polished stone and stair treads
   const createFootfall = surface => createAtriumFootfall(context, surface, 81).getChannelData(0);
   const stone = createFootfall('stone');
   const rug = createFootfall('rug');
-  for (const samples of [stone, rug, createFootfall('stair'), createFootfall('gallery')]) {
+  for (const samples of [stone, rug, createFootfall('stair'), createFootfall('gallery'), createFootfall('wood')]) {
     assert.equal(samples[0], 0);
     assert.equal(samples.at(-1), 0);
     assert.ok(energy(samples) > 0);
   }
   assert.ok(energy(rug) < energy(stone) * 0.2);
   assert.ok(relativeDerivativeEnergy(rug) < relativeDerivativeEnergy(stone) * 0.4);
+});
+
+
+test('the expanded cafe joins the same short room response as the other enclosed sales floors', () => {
+  const cafe = ATRIUM_TENANTS.find(bay => bay.id === 'R2');
+  const woodStore = ATRIUM_TENANTS.find(bay => bay.id === 'L1');
+  const roomResponse = atriumLocalTailMix(tenantSoundPoint(woodStore, 2.05, 1.65, 3));
+  assert.ok(roomResponse > .9, 'an enclosed low room uses the existing short response');
+  assert.equal(atriumLocalTailMix(tenantSoundPoint(cafe, 6.4, 1.65, cafe.depth - .7)), roomResponse,
+    'deep cafe footsteps/service/air use the room response, independently of monitor playback');
+  for (const [label, listener] of [
+    ['above the cafe ceiling', tenantSoundPoint(cafe, 6.4, cafe.ceiling + .5, cafe.depth - .7)],
+    ['outside the cafe side', tenantSoundPoint(cafe, -.3, 1.65, cafe.depth - .7)],
+  ]) {
+    // Outside the new room branch, retain the existing gallery response. Its
+    // height-dependent reference lies below the actual concourse gallery.
+    const galleryBaseline = atriumLocalTailMix({ x: ATRIUM_BOUNDS.maxX - .8, y: listener.y, z: listener.z });
+    assert.notEqual(galleryBaseline, roomResponse, `${label}: the reference distinguishes the existing and new room classes`);
+    assert.equal(atriumLocalTailMix(listener), galleryBaseline, `${label}: the new cafe room branch does not apply`);
+  }
+});
+
+test('ground sales-floor footsteps follow the existing timber and stone finishes', () => {
+  for (const id of ['L1', 'L5', 'R1', 'R2', 'R3']) {
+    const bay = ATRIUM_TENANTS.find(bay => bay.id === id);
+    const [u, d] = bay.route.at(-1);
+    const p = tenantWorldPoint(bay, u, d);
+    assert.equal(atriumSurfaceAt(p.x, p.z, 0), id === 'L1' || id === 'L5' ? 'wood' : 'stone', `${id} floor finish`);
+  }
 });

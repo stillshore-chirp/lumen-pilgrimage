@@ -3,6 +3,7 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { PerspectiveCamera, Vector3 } from 'three';
 import './atrium-cafe-cases.mjs';
+import './atrium-tenant-walking-cases.mjs';
 
 const atriumUrl = new URL('../src/coast/world/atrium/', import.meta.url).href;
 const controlsUrl = new URL('../src/coast/CoastControls.ts', import.meta.url).href;
@@ -25,6 +26,8 @@ const {
 } = await import('../src/coast/world/atrium/atriumLayout.ts');
 const { atriumNavigation } = await import('../src/coast/world/atrium/atriumNavigation.ts');
 const { ATRIUM_TENANT_ISLANDS } = await import('../src/coast/world/atrium/atriumTenantPlan.ts');
+const { ATRIUM_FRONT_TENANTS } = await import('../src/coast/world/atrium/atriumFrontPlan.ts');
+const { ATRIUM_TENANT_BODY_CLEARANCE } = await import('../src/coast/world/atrium/atriumTenantWalking.ts');
 const { atriumCafeWorldPoint, atriumCafeLocalPoint } = await import('../src/coast/world/atrium/atriumCafePlan.ts');
 const { CoastControls } = await import(controlsUrl);
 hooks.deregister();
@@ -198,20 +201,27 @@ test('the upper connector supports its dedicated rise while ground remains on th
   assert.ok(Math.abs(atriumNavigation.supportAt(middle.x, middle.z, middleFloor + 0.04) - middleFloor) < 1e-6);
 });
 
-test('walkable storefront frontage stays within the atrium width near eleven metres', () => {
+test('fixed storefront panes stop the body at their physical clearance while retaining close approach', () => {
   const browser = createBrowser();
   const camera = new PerspectiveCamera();
   const controls = createControls(browser, camera);
   try {
-    for (const [yaw, limit] of [[-Math.PI / 2, ATRIUM_BOUNDS.maxX], [Math.PI / 2, ATRIUM_BOUNDS.minX]]) {
+    const dt = .05;
+    const maximumStep = atriumNavigation.walkSpeed * dt;
+    for (const store of ATRIUM_FRONT_TENANTS) {
+      const yaw = store.side > 0 ? -Math.PI / 2 : Math.PI / 2;
       controls.relocate({ x: 0, z: -10, yaw, pitch: 0 });
       browser.window.dispatch('keydown', { target: browser.canvas, code: 'KeyW' });
-      for (let frame = 0; frame < 140; frame += 1) controls.update(0.05);
+      for (let frame = 0; frame < 140; frame += 1) controls.update(dt);
       browser.window.dispatch('keyup', { code: 'KeyW' });
-      // East movement now stops at the closed storefront geometry, while the
-      // larger global bound additionally contains the walkable R2 cafe.
-      assert.ok(Math.abs(camera.position.x - (limit > 0 ? limit - 0.35 : limit + 0.35)) < .02,
-        `walkable edge is at x=${camera.position.x}`);
+      // FrontShell places the closed pane's concourse face at faceX. The new
+      // outer bounds include stores; physical clearance now stops this motion.
+      const distanceToPane = store.side * (store.faceX - camera.position.x);
+      assert.ok(distanceToPane >= ATRIUM_TENANT_BODY_CLEARANCE - 1e-6,
+        `${store.id} body cannot penetrate the actual fixed pane`);
+      assert.ok(distanceToPane <= ATRIUM_TENANT_BODY_CLEARANCE + maximumStep + 1e-6,
+        `${store.id} fixed-pane approach stops within one ordinary movement step of the physical clearance`);
+      assert.ok(Math.abs(camera.position.y - 1.65) < 1e-6, 'the same approach retains its supported ground floor');
     }
   } finally {
     controls.dispose();

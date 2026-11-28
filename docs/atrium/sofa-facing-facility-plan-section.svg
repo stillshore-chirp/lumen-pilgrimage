@@ -5,7 +5,7 @@
 <style>text{font-family:"Hiragino Kaku Gothic ProN","Noto Sans CJK JP",sans-serif;fill:#283432;font-size:17px} .small{font-size:14px} .title{font-size:30px;font-weight:700}.head{font-size:22px;font-weight:700}.dim{stroke:#58706c;stroke-width:1;fill:none;marker-start:url(#a);marker-end:url(#a)}.wall{fill:#bcb6aa;stroke:#625d53;stroke-width:1.5}.glass{stroke:#2c8e9a;stroke-width:4;fill:none}.floor{fill:#e9e2d5;stroke:#8f887a;stroke-width:1.5}.sight{stroke:#b35240;stroke-width:2;stroke-dasharray:9 6;fill:none;marker-end:url(#a)}</style>
 <rect width="1900" height="1590" fill="#faf9f5" />
 <text x="45.0" y="48.0" class="title" text-anchor="start">ソファ正面施設｜光庭とコモンズ</text>
-<text x="45.0" y="80.0" class="" text-anchor="start">設計改訂図・RF1〜RF3反映 2026-11-27　｜　単位m　｜　原画にない +Z 側は独自設計</text>
+<text x="45.0" y="80.0" class="" text-anchor="start">設計改訂図・店舗の実入口反映 2026-11-28　｜　単位m　｜　原画にない +Z 側は独自設計</text>
 <text x="45.0" y="109.0" class="small" text-anchor="start">建築・内装担当の自作図。実装・法令適合・構造計算・植栽育成の確認図ではない。</text>
 <text x="52.0" y="155.0" class="head" text-anchor="start">1｜地上階平面</text>
 <text x="52.0" y="182.0" class="small" text-anchor="start">+Z ↑ / +X →</text>
@@ -21,10 +21,20 @@
 <rect x="541.60" y="432.40" width="36.00" height="498.60" class="" fill="url(#h)" />
 <rect x="86.56" y="412.96" width="96.48" height="218.88" class="wall" />
 <rect x="89.80" y="416.20" width="90.00" height="212.40" class="" fill="#e1d2b7" />
-<line x1="179.80" y1="628.60" x2="179.80" y2="416.20" class="glass" />
+<rect x="177.30" y="464.53" width="5.00" height="29.34" fill="#e9e2d5" />
+<line x1="179.80" y1="628.60" x2="179.80" y2="493.87" class="glass" />
+<line x1="179.80" y1="464.53" x2="179.80" y2="416.20" class="glass" />
+<line x1="179.80" y1="464.53" x2="168.10" y2="464.53" class="glass" />
+<line x1="179.80" y1="493.87" x2="168.10" y2="493.87" class="glass" />
+<line x1="205" y1="479.20" x2="100" y2="479.20" stroke="#416d4c" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#a)" />
 <rect x="586.96" y="412.96" width="103.68" height="218.88" class="wall" />
 <rect x="590.20" y="416.20" width="97.20" height="212.40" class="" fill="#dedad0" />
-<line x1="590.20" y1="628.60" x2="590.20" y2="416.20" class="glass" />
+<rect x="587.70" y="561.73" width="5.00" height="29.34" fill="#e9e2d5" />
+<line x1="590.20" y1="628.60" x2="590.20" y2="591.07" class="glass" />
+<line x1="590.20" y1="561.73" x2="590.20" y2="416.20" class="glass" />
+<line x1="590.20" y1="561.73" x2="604.60" y2="561.73" class="glass" />
+<line x1="590.20" y1="591.07" x2="604.60" y2="591.07" class="glass" />
+<line x1="565" y1="576.40" x2="675" y2="576.40" stroke="#416d4c" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#a)" />
 <rect x="143.80" y="553.00" width="14.40" height="57.60" class="wall" />
 <rect x="137.50" y="513.40" width="11.70" height="27.00" class="wall" />
 <rect x="96.10" y="513.40" width="7.20" height="100.80" class="wall" />
@@ -54,11 +64,11 @@
 <line x1="294.1" y1="387.76" x2="294.1" y2="206.14" class="dim" />
 <text x="291" y="297" class="small" text-anchor="middle" transform="rotate(-90 291 297)">10.09</text>
 <text x="52.0" y="1100.0" class="small" text-anchor="start">主床/上階前通路/展示室前側：1.80以上。</text>
-<text x="52.0" y="1125.0" class="small" text-anchor="start">閉鎖展示室を追加。歩行範囲は保存。</text>
+<text x="52.0" y="1125.0" class="small" text-anchor="start">固定展示室を維持。W・E入口の実内法1.63 m。</text>
 <text x="52.0" y="1150.0" class="small" text-anchor="start">S主判定1F〜3F / 4Fは上階・近接から。</text>
 <text x="52.0" y="1190.0" class="head" text-anchor="start">凡例</text>
 <line x1="52.00" y1="1218.00" x2="105.00" y2="1218.00" class="glass" />
-<text x="120.0" y="1224.0" class="small" text-anchor="start">固定ガラス・閉じた建具</text>
+<text x="120.0" y="1224.0" class="small" text-anchor="start">固定ガラス・入口の戻り面</text>
 <line x1="52.00" y1="1250.00" x2="105.00" y2="1250.00" class="sight" />
 <text x="120.0" y="1256.0" class="small" text-anchor="start">着座主視線 +Z</text>
 <rect x="52.00" y="1272.00" width="55.00" height="22.00" class="" fill="url(#h)" />
