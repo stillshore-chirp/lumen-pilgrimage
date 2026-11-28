@@ -200,6 +200,7 @@ PY
 | --- | --- |
 | [映画館の平面図](cinema/cinema-floor-plan.pdf) | 客席、スクリーン、出入口、主要寸法を示す7ページの設計資料。 |
 | [映画館の光・音の設計](cinema/cinema-light-sound-design.pdf) | 投影光、室内反射、座席位置ごとの音響を扱う9ページの設計資料。 |
+| [映画館の還気口と断面](cinema/cinema-ventilation.md) | 原稿未追跡の既存PDFを再作図せず、コファーの開口、内面、壁貫通、ダクトと支持の現行仕様を補います。共通ランタイム定義から `node scripts/draw-cinema-ventilation.mjs` でSVGを再生成します。 |
 | [70階住戸の設計仕様](residence/residence-70f-design.md) と [図面](residence/residence-70f-drawings.pdf) | 現行住戸の設計正本。図面は平面、眺望断面、街区、茶室と書斎の詳細を収めた4ページです。 |
 | [50階住戸の設計案](residence/residence-50f-design.md) と [図面](residence/residence-50f-drawings.pdf) | 過去の設計記録です。現在の住戸実装の正本ではありません。 |
 

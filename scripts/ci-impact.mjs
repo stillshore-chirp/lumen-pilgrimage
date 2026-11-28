@@ -14,7 +14,7 @@ const tests = {
   coast: ['coast-controls', 'coast-terrain', 'coast-acoustics', 'exploration-route'],
   monitor: ['monitor-signaling', 'monitor-session', 'monitor-capture', 'monitor-pose', 'monitor-xr', 'monitor-audio'],
   residence: ['residence-navigation', 'residence-audio', 'residence-street', 'residence-lighting', 'residence-appliances'],
-  cinema: ['cinema-navigation', 'cinema-lighting', 'cinema-audio', 'cinema-source', 'cinema-routing', 'cinema-reflections-geometry', 'cinema-room-audio'],
+  cinema: ['cinema-navigation', 'cinema-ventilation', 'cinema-lighting', 'cinema-audio', 'cinema-source', 'cinema-routing', 'cinema-reflections-geometry', 'cinema-room-audio'],
   atrium: ['atrium-navigation', 'atrium-audio', 'atrium-facility'],
   lake: ['lake-navigation', 'lake-audio', 'lake-geometry', 'lake-fish', 'lake-vegetation'],
   koto: ['koto-analysis', 'koto-physical', 'koto-sample', 'koto-playback', 'koto-transport', 'koto-score', 'koto-production', 'koto-recorded-modal-study', 'koto-recording-performance-study', 'koto-excitation-color', 'koto-recorded-sustain-study'],

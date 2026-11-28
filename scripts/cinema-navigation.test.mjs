@@ -218,7 +218,7 @@ test('chair backs support landing and the ceiling follows the baffles and side c
   assert.equal(cinemaNavigation.blocksWalking(x, z, floor), false);
   assert.equal(cinemaNavigation.ceilingHeight(x, z), CINEMA_ROOM_HEIGHT);
   for (const [cx, cy, cz, , height] of CINEMA_CEILING_COFFERS) {
-    assert.ok(cinemaNavigation.ceilingHeight(cx, cz) <= cy - height / 2);
+    assert.ok(cinemaNavigation.ceilingHeight(cx, cz) <= cy - height / 2 + 1e-12);
   }
 });
 

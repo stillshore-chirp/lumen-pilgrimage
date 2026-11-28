@@ -4,12 +4,13 @@ import { CINEMA_COVE_LENS_X, CINEMA_COVE_LENS_Y, CINEMA_EXIT_LAMPS, CINEMA_WALL_
 import { createCinemaExits } from './cinemaFixtures';
 import { createCinemaFloor } from './cinemaFloor';
 import {
-  CINEMA_BOUNDS, CINEMA_CEILING_BAFFLES, CINEMA_CEILING_COFFERS, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH,
+  CINEMA_BOUNDS, CINEMA_CEILING_BAFFLES, CINEMA_DOOR_HEIGHT, CINEMA_DOOR_WIDTH,
   CINEMA_EXITS, CINEMA_PROJECTION_Y,
   CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, cinemaGroundHeight,
 } from './cinemaLayout';
 import { createCinemaSeats } from './cinemaSeats';
 import { createCinemaSpeakerEquipment } from './cinemaSpeakerEquipment';
+import { CINEMA_RETURN_COFFER_BOXES, CINEMA_VENTILATION_PARTS, cinemaVentilationWallBoxes } from './cinemaVentilation';
 
 type CinemaQuality = 'light' | 'high';
 
@@ -120,7 +121,7 @@ function addWalls(group: Group, finish: CinemaFinishes): void {
     furring.push([x, bottom + 0.043, 53.65, 2.77, 0.087, 0.24]);
   }
 
-  cinemaBoxes(group, 'Isolated auditorium envelope and ceiling', finish.box, finish.shell, shell);
+  cinemaBoxes(group, 'Isolated auditorium envelope and ceiling', finish.box, finish.shell, cinemaVentilationWallBoxes(shell));
   cinemaBoxes(group, 'Raked dark lower wall lining', finish.box, finish.bulkhead, lining);
   cinemaBoxes(group, 'Perforated acoustic panels', finish.box, finish.acoustic, panels);
   cinemaBoxes(group, 'Vertical sound scattering ribs', finish.box, finish.ribs, ribs);
@@ -198,7 +199,11 @@ function addOverhead(group: Group, finish: CinemaFinishes): void {
   }
 
   cinemaBoxes(group, 'Four ceiling smoke baffles', finish.box, finish.protection, CINEMA_CEILING_BAFFLES);
-  cinemaBoxes(group, 'Ceiling coffers and cove returns', finish.box, finish.bulkhead, CINEMA_CEILING_COFFERS);
+  cinemaBoxes(group, 'Ceiling coffers and cove returns', finish.box, finish.bulkhead, CINEMA_RETURN_COFFER_BOXES);
+  for (const kind of ['frame', 'liner', 'duct', 'support'] as const) {
+    cinemaBoxes(group, 'Cinema return ventilation ' + kind, finish.box, kind === 'liner' ? finish.matte : finish.darkSteel,
+      CINEMA_VENTILATION_PARTS.filter(part => part.kind === kind).map(part => part.box));
+  }
   cinemaBoxes(group, 'Light housings', finish.box, finish.darkSteel, housings);
   for (const [name, color, locations] of [
     ['cove', 0xe4b678, cove], ['service', 0xe1e0d6, service], ['emergency', 0xeeeee5, emergency],
