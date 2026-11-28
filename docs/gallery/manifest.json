@@ -289,8 +289,8 @@
       "world": "overlook",
       "place": "main-deck",
       "time": "day",
-      "capturedAt": "2026-11-28T04:07:51.534Z",
-      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
+      "capturedAt": "2026-11-28T05:27:07.521Z",
+      "sourceRevision": "655b411173d3c37a2d37325bc1c1a75da67dfddf",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -328,46 +328,46 @@
       "resourceFailures": [],
       "route": "/?world=overlook&place=main-deck&time=day",
       "publicComponents": {
-        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "world": "84754b130b7e9ce24c682951febc2669657e5700",
         "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
       },
       "servedBuild": {
-        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "htmlSha256": "99bf681770980edbe35d1e471fdc4d80ce02842bcec29223f90237b25bc625bb",
         "scripts": [
           {
-            "path": "/assets/CoastApp-pMLT8BZi.js",
-            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+            "path": "/assets/CoastApp-PiTIqBYO.js",
+            "sha256": "9da178b9e8431664aaaf0d0c08c91161b38a43090ee3876aaddf53f3ebe11eba"
           },
           {
             "path": "/assets/explorationRoute-DBpBFcxj.js",
             "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
           },
           {
-            "path": "/assets/main-CizR2zru.js",
-            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+            "path": "/assets/main-B1JiGrTU.js",
+            "sha256": "8c9ba0d2573993ed6681eb9139e00735def0d075fc52897dc7d6cdab746a87ed"
           },
           {
             "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
             "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
           },
           {
-            "path": "/assets/overlookModel-dY5d9gM1.js",
-            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+            "path": "/assets/overlookModel-DTZH0qlt.js",
+            "sha256": "b2f0d5259997df94f403bb0a4fa1e9b17f737316fca558a6ae03f8e6584e6f27"
           },
           {
-            "path": "/assets/overlookTraffic-BAnRb8R_.js",
-            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+            "path": "/assets/overlookTraffic-DJQEGlc3.js",
+            "sha256": "c09818b45ac40a1476156894d02cce5c94328ba5b82ba6f5f124612ac31dcf35"
           },
           {
-            "path": "/assets/OverlookWorld-BCeWzAKq.js",
-            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+            "path": "/assets/OverlookWorld-DOsPhZL7.js",
+            "sha256": "2f1623e4e87bdd544b439b16be8663eb25fc41e325a2ae6a23d723671183173f"
           },
           {
-            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
-            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+            "path": "/assets/residenceAudioSamples-BfD3h8mD.js",
+            "sha256": "260366e03b2ff84de1f6481524872d43f5266087a85ebdb1d2eed8564ab7a077"
           }
         ],
-        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+        "sha256": "08b89c21ef57790c186e14d76c99ee332524248f72659a4a8aca1f4e6397d897"
       }
     },
     {
@@ -376,8 +376,8 @@
       "world": "overlook",
       "place": "main-deck",
       "time": "night",
-      "capturedAt": "2026-11-28T04:10:47.558Z",
-      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
+      "capturedAt": "2026-11-28T05:27:11.196Z",
+      "sourceRevision": "655b411173d3c37a2d37325bc1c1a75da67dfddf",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -415,46 +415,46 @@
       "resourceFailures": [],
       "route": "/?world=overlook&place=main-deck&time=night",
       "publicComponents": {
-        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "world": "84754b130b7e9ce24c682951febc2669657e5700",
         "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
       },
       "servedBuild": {
-        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "htmlSha256": "99bf681770980edbe35d1e471fdc4d80ce02842bcec29223f90237b25bc625bb",
         "scripts": [
           {
-            "path": "/assets/CoastApp-pMLT8BZi.js",
-            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+            "path": "/assets/CoastApp-PiTIqBYO.js",
+            "sha256": "9da178b9e8431664aaaf0d0c08c91161b38a43090ee3876aaddf53f3ebe11eba"
           },
           {
             "path": "/assets/explorationRoute-DBpBFcxj.js",
             "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
           },
           {
-            "path": "/assets/main-CizR2zru.js",
-            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+            "path": "/assets/main-B1JiGrTU.js",
+            "sha256": "8c9ba0d2573993ed6681eb9139e00735def0d075fc52897dc7d6cdab746a87ed"
           },
           {
             "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
             "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
           },
           {
-            "path": "/assets/overlookModel-dY5d9gM1.js",
-            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+            "path": "/assets/overlookModel-DTZH0qlt.js",
+            "sha256": "b2f0d5259997df94f403bb0a4fa1e9b17f737316fca558a6ae03f8e6584e6f27"
           },
           {
-            "path": "/assets/overlookTraffic-BAnRb8R_.js",
-            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+            "path": "/assets/overlookTraffic-DJQEGlc3.js",
+            "sha256": "c09818b45ac40a1476156894d02cce5c94328ba5b82ba6f5f124612ac31dcf35"
           },
           {
-            "path": "/assets/OverlookWorld-BCeWzAKq.js",
-            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+            "path": "/assets/OverlookWorld-DOsPhZL7.js",
+            "sha256": "2f1623e4e87bdd544b439b16be8663eb25fc41e325a2ae6a23d723671183173f"
           },
           {
-            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
-            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+            "path": "/assets/residenceAudioSamples-BfD3h8mD.js",
+            "sha256": "260366e03b2ff84de1f6481524872d43f5266087a85ebdb1d2eed8564ab7a077"
           }
         ],
-        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+        "sha256": "08b89c21ef57790c186e14d76c99ee332524248f72659a4a8aca1f4e6397d897"
       }
     },
     {
@@ -463,8 +463,8 @@
       "world": "overlook",
       "place": "east-terrace",
       "time": "day",
-      "capturedAt": "2026-11-28T04:10:51.302Z",
-      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
+      "capturedAt": "2026-11-28T05:27:14.768Z",
+      "sourceRevision": "655b411173d3c37a2d37325bc1c1a75da67dfddf",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -502,46 +502,46 @@
       "resourceFailures": [],
       "route": "/?world=overlook&place=east-terrace&time=day",
       "publicComponents": {
-        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "world": "84754b130b7e9ce24c682951febc2669657e5700",
         "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
       },
       "servedBuild": {
-        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "htmlSha256": "99bf681770980edbe35d1e471fdc4d80ce02842bcec29223f90237b25bc625bb",
         "scripts": [
           {
-            "path": "/assets/CoastApp-pMLT8BZi.js",
-            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+            "path": "/assets/CoastApp-PiTIqBYO.js",
+            "sha256": "9da178b9e8431664aaaf0d0c08c91161b38a43090ee3876aaddf53f3ebe11eba"
           },
           {
             "path": "/assets/explorationRoute-DBpBFcxj.js",
             "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
           },
           {
-            "path": "/assets/main-CizR2zru.js",
-            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+            "path": "/assets/main-B1JiGrTU.js",
+            "sha256": "8c9ba0d2573993ed6681eb9139e00735def0d075fc52897dc7d6cdab746a87ed"
           },
           {
             "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
             "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
           },
           {
-            "path": "/assets/overlookModel-dY5d9gM1.js",
-            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+            "path": "/assets/overlookModel-DTZH0qlt.js",
+            "sha256": "b2f0d5259997df94f403bb0a4fa1e9b17f737316fca558a6ae03f8e6584e6f27"
           },
           {
-            "path": "/assets/overlookTraffic-BAnRb8R_.js",
-            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+            "path": "/assets/overlookTraffic-DJQEGlc3.js",
+            "sha256": "c09818b45ac40a1476156894d02cce5c94328ba5b82ba6f5f124612ac31dcf35"
           },
           {
-            "path": "/assets/OverlookWorld-BCeWzAKq.js",
-            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+            "path": "/assets/OverlookWorld-DOsPhZL7.js",
+            "sha256": "2f1623e4e87bdd544b439b16be8663eb25fc41e325a2ae6a23d723671183173f"
           },
           {
-            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
-            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+            "path": "/assets/residenceAudioSamples-BfD3h8mD.js",
+            "sha256": "260366e03b2ff84de1f6481524872d43f5266087a85ebdb1d2eed8564ab7a077"
           }
         ],
-        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+        "sha256": "08b89c21ef57790c186e14d76c99ee332524248f72659a4a8aca1f4e6397d897"
       }
     },
     {
@@ -550,8 +550,8 @@
       "world": "overlook",
       "place": "upper-deck",
       "time": "night",
-      "capturedAt": "2026-11-28T04:07:55.161Z",
-      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
+      "capturedAt": "2026-11-28T05:27:18.253Z",
+      "sourceRevision": "655b411173d3c37a2d37325bc1c1a75da67dfddf",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -589,46 +589,46 @@
       "resourceFailures": [],
       "route": "/?world=overlook&place=upper-deck&time=night",
       "publicComponents": {
-        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "world": "84754b130b7e9ce24c682951febc2669657e5700",
         "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
       },
       "servedBuild": {
-        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "htmlSha256": "99bf681770980edbe35d1e471fdc4d80ce02842bcec29223f90237b25bc625bb",
         "scripts": [
           {
-            "path": "/assets/CoastApp-pMLT8BZi.js",
-            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+            "path": "/assets/CoastApp-PiTIqBYO.js",
+            "sha256": "9da178b9e8431664aaaf0d0c08c91161b38a43090ee3876aaddf53f3ebe11eba"
           },
           {
             "path": "/assets/explorationRoute-DBpBFcxj.js",
             "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
           },
           {
-            "path": "/assets/main-CizR2zru.js",
-            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+            "path": "/assets/main-B1JiGrTU.js",
+            "sha256": "8c9ba0d2573993ed6681eb9139e00735def0d075fc52897dc7d6cdab746a87ed"
           },
           {
             "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
             "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
           },
           {
-            "path": "/assets/overlookModel-dY5d9gM1.js",
-            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+            "path": "/assets/overlookModel-DTZH0qlt.js",
+            "sha256": "b2f0d5259997df94f403bb0a4fa1e9b17f737316fca558a6ae03f8e6584e6f27"
           },
           {
-            "path": "/assets/overlookTraffic-BAnRb8R_.js",
-            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+            "path": "/assets/overlookTraffic-DJQEGlc3.js",
+            "sha256": "c09818b45ac40a1476156894d02cce5c94328ba5b82ba6f5f124612ac31dcf35"
           },
           {
-            "path": "/assets/OverlookWorld-BCeWzAKq.js",
-            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+            "path": "/assets/OverlookWorld-DOsPhZL7.js",
+            "sha256": "2f1623e4e87bdd544b439b16be8663eb25fc41e325a2ae6a23d723671183173f"
           },
           {
-            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
-            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+            "path": "/assets/residenceAudioSamples-BfD3h8mD.js",
+            "sha256": "260366e03b2ff84de1f6481524872d43f5266087a85ebdb1d2eed8564ab7a077"
           }
         ],
-        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+        "sha256": "08b89c21ef57790c186e14d76c99ee332524248f72659a4a8aca1f4e6397d897"
       }
     },
     {
@@ -637,8 +637,8 @@
       "world": "overlook",
       "place": "main-deck",
       "time": "day",
-      "capturedAt": "2026-11-28T04:07:58.918Z",
-      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
+      "capturedAt": "2026-11-28T05:27:21.929Z",
+      "sourceRevision": "655b411173d3c37a2d37325bc1c1a75da67dfddf",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -677,46 +677,46 @@
       "resourceFailures": [],
       "route": "/?world=overlook&place=main-deck&time=day",
       "publicComponents": {
-        "world": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+        "world": "84754b130b7e9ce24c682951febc2669657e5700",
         "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
       },
       "servedBuild": {
-        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "htmlSha256": "99bf681770980edbe35d1e471fdc4d80ce02842bcec29223f90237b25bc625bb",
         "scripts": [
           {
-            "path": "/assets/CoastApp-pMLT8BZi.js",
-            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+            "path": "/assets/CoastApp-PiTIqBYO.js",
+            "sha256": "9da178b9e8431664aaaf0d0c08c91161b38a43090ee3876aaddf53f3ebe11eba"
           },
           {
             "path": "/assets/explorationRoute-DBpBFcxj.js",
             "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
           },
           {
-            "path": "/assets/main-CizR2zru.js",
-            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+            "path": "/assets/main-B1JiGrTU.js",
+            "sha256": "8c9ba0d2573993ed6681eb9139e00735def0d075fc52897dc7d6cdab746a87ed"
           },
           {
             "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
             "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
           },
           {
-            "path": "/assets/overlookModel-dY5d9gM1.js",
-            "sha256": "3a66c8a6d3da58125aec8845a9166db634517a3fc72c7f57e12581285c3103f7"
+            "path": "/assets/overlookModel-DTZH0qlt.js",
+            "sha256": "b2f0d5259997df94f403bb0a4fa1e9b17f737316fca558a6ae03f8e6584e6f27"
           },
           {
-            "path": "/assets/overlookTraffic-BAnRb8R_.js",
-            "sha256": "089a350c1483ebc7b727e12ff55c1d095a878626f068aca4a12f30fe6c7ec6ca"
+            "path": "/assets/overlookTraffic-DJQEGlc3.js",
+            "sha256": "c09818b45ac40a1476156894d02cce5c94328ba5b82ba6f5f124612ac31dcf35"
           },
           {
-            "path": "/assets/OverlookWorld-BCeWzAKq.js",
-            "sha256": "1547e4a0330ac9346a9103d9e4e11de7fc7fcd4d57d667ee2165831fffa7c577"
+            "path": "/assets/OverlookWorld-DOsPhZL7.js",
+            "sha256": "2f1623e4e87bdd544b439b16be8663eb25fc41e325a2ae6a23d723671183173f"
           },
           {
-            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
-            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+            "path": "/assets/residenceAudioSamples-BfD3h8mD.js",
+            "sha256": "260366e03b2ff84de1f6481524872d43f5266087a85ebdb1d2eed8564ab7a077"
           }
         ],
-        "sha256": "d0e00be29d5cac5eb68164e514a244b40dd2dbfd8acd84acbaab8dcc25ebefc5"
+        "sha256": "08b89c21ef57790c186e14d76c99ee332524248f72659a4a8aca1f4e6397d897"
       }
     },
     {
@@ -2481,9 +2481,9 @@
       "file": "images/overlook-main-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 201204,
-      "sha256": "e613ceabc4221ad921c79e20be3253bbd23ed9f24bbec1e297ebdcbcc9a2d58c",
-      "sourcePngSha256": "51c992ae7cf779a8cb8a47860c76f5cd730d43d31baf368f544567b758d2e512",
+      "bytes": 199290,
+      "sha256": "0161e972ecca3152ecffbcffc48f10006c94bc9037ee745334d3626d6d39d7ae",
+      "sourcePngSha256": "f47667353e3539767506cbaba8e7b39f291b4efc6a9aaae5870689de02edadea",
       "shotId": "overlook-main-day",
       "ui": false,
       "thumbnail": false
@@ -2492,9 +2492,9 @@
       "file": "images/overlook-main-day-ui.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 207026,
-      "sha256": "38fd3ed171f6ce94c5f7c0cf1edbdc2cc236eb02175ab82e9bc5430c4ec1acd0",
-      "sourcePngSha256": "1c787631d2337b988c3d1a8026d7db3305202df5797c1b1c0afa96e7064546ca",
+      "bytes": 205492,
+      "sha256": "99d3a0fb1f401e76f81efaf6c92f96370728c64e5316a714f885f69bfcf0c0f5",
+      "sourcePngSha256": "bef1cb06b33e0347f5ce0b3d70badd2d726cf48234c2186919ba579132d81504",
       "shotId": "overlook-main-day",
       "ui": true,
       "thumbnail": false
@@ -2503,9 +2503,9 @@
       "file": "images/overlook-main-night.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 197582,
-      "sha256": "2e5a71e4f49f5bc2b25642296cf2a62b182a11ac1c4ba1dec3f3b4453dbd8292",
-      "sourcePngSha256": "e00b5a6aed4de0dd49c49b6223c1e3821a26608dbd162f5cb3907f625b50ed16",
+      "bytes": 198020,
+      "sha256": "3a33583dc5a8699d7872392cf1d90bc2ad7c73e9903841e421d2f31d7583b1b5",
+      "sourcePngSha256": "45a819f659a966e9f2ced7dc70aa4934799c14a7250367f0a3c271426ddef8fe",
       "shotId": "overlook-main-night",
       "ui": false,
       "thumbnail": false
@@ -2514,9 +2514,9 @@
       "file": "images/overlook-east-day.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 189970,
-      "sha256": "e5f0646f52492e243e25eed01d694723f5d97dcd10ca30cc74933c225b5610b8",
-      "sourcePngSha256": "bc7160dd614804665f4ba0d8a5ed9145b0c471b0003b31268139d07555b5b9fd",
+      "bytes": 188392,
+      "sha256": "e38c2e8a1b7721d59f7f690faaf35c326897e394fb7b80ba08ef50379424a90b",
+      "sourcePngSha256": "e2d936e9b59f7471ea2116ec656bda25ffe4fa15c2fed26e189724cd9c17915a",
       "shotId": "overlook-east-day",
       "ui": false,
       "thumbnail": false
@@ -2525,9 +2525,9 @@
       "file": "images/overlook-upper-night.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 208822,
-      "sha256": "2d448e922e6085c2d7129443e7a7c8a62613e2eaefd3cf19214f49e4f94429d7",
-      "sourcePngSha256": "fddd14e9bbc86fd88053aec032fa5f5eb5f57c730a8682c09812bdf6e3ad525b",
+      "bytes": 209264,
+      "sha256": "09ba23269dcae11073962114ac3de0d7f42745601dd7a61388a6ac4c27690b10",
+      "sourcePngSha256": "9858844593606548c367bf0ac40f1851a365b5965bc685392c396627b71675be",
       "shotId": "overlook-upper-night",
       "ui": false,
       "thumbnail": false
@@ -2877,9 +2877,9 @@
       "file": "images/overlook-main-night-thumb.webp",
       "width": 640,
       "height": 360,
-      "bytes": 28038,
-      "sha256": "bdcfe97abe3ccfa8a81037b058135d621fb69e55afa2282ea54c23c0c899fe6a",
-      "sourcePngSha256": "e00b5a6aed4de0dd49c49b6223c1e3821a26608dbd162f5cb3907f625b50ed16",
+      "bytes": 28478,
+      "sha256": "60f5b44fb4ac368ba0ae177e5e95f31e790868a7ff949a62d4451e70a9344d5d",
+      "sourcePngSha256": "45a819f659a966e9f2ced7dc70aa4934799c14a7250367f0a3c271426ddef8fe",
       "shotId": "overlook-main-night",
       "ui": false,
       "thumbnail": true
@@ -2934,7 +2934,7 @@
     "uiScreens": 6,
     "thumbnails": 6,
     "publishedImages": 48,
-    "bytes": 7807210
+    "bytes": 7803504
   },
   "captureSources": {
     "8d24d11d37f5e6fa37afad308b8d5621761bc7df": {
@@ -2949,7 +2949,6 @@
       "role": "Clean validation integration merge; distinct from the published component revisions",
       "worlds": [
         "cinema",
-        "overlook",
         "residence"
       ],
       "publicComponentRevisions": {
@@ -2963,6 +2962,22 @@
         "differingFiles": 0,
         "compiledInventorySha256": "d1dbf449c5605f7c9d16071f7df8bcdf7d1df43d77ea8c7de856a0e9646b291f",
         "basis": "Captured served HTML/scripts and complete clean integration build match the validated native build; OverlookWorld source wrapping is compiled-equivalent"
+      }
+    },
+    "655b411173d3c37a2d37325bc1c1a75da67dfddf": {
+      "role": "Clean validation integration with revised Overlook road structural envelope",
+      "worlds": [
+        "overlook"
+      ],
+      "publicComponentRevisions": {
+        "overlook": "84754b130b7e9ce24c682951febc2669657e5700"
+      },
+      "sharedControlsRevision": "5ae0c29d47be9a5dd039a175298f639cb36772c1",
+      "buildEquivalence": {
+        "files": 103,
+        "differingFiles": 0,
+        "compiledInventorySha256": "a0ebb8462a4fca5d1bfe29165edcbe22da88f03c3a565a72c79192ac11049d7b",
+        "basis": "Complete captured clean integration build matches the frozen validated build; all served capture HTML/scripts are bound to that build"
       }
     }
   }
