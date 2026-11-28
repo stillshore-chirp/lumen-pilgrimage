@@ -107,6 +107,8 @@ UV の模様は、画面に対して正面なら比較的安定するが、床�
 
 異方性フィルタは、斜めに伸びたテクスチャで一方向にだけ細長くなったサンプル領域を扱うために使う。異方性フィルタは、元のテクセル密度とミップマップが保持する情報を斜めから安定して読む補助になる。Lumen の現行コードでは、海岸の読み込みテクスチャに異方性 8、住戸の生成・読込素材に 4〜8 が設定されている。数字を増やすだけで、低いテクセル密度や壊れたUVは救えない。
 
+Three.js 0.184.0の生成`DataTexture`は`minFilter=NearestFilter`・`generateMipmaps=false`が既定なので、通常の画像Textureと同じ縮小補間を仮定せず、実インスタンスのsamplerを確認する。[DataTextureの同版source](https://github.com/mrdoob/three.js/blob/r184/src/textures/DataTexture.js)と[WebGLTexturesの同版source](https://github.com/mrdoob/three.js/blob/r184/src/renderers/webgl/WebGLTextures.js)では、mipmap系の縮小filterでなければ異方性設定の適用前に戻るため、異方性の数値だけを設定しても細かい生成模様の縮小時の干渉は解消しない。
+
 ### 同じ入力で色柄と凹凸を分ける
 
 帯が見えたとき、色の周期、bumpの法線応答、浅角でのsamplingを一度に変えると原因が分からなくなる。元のcamera・raster・光と色mapを固定し、bumpMapだけを外して復帰する。映画館の床では可視ROI約50万pixelの差が最大RGB1でも幅広い帯が残り、法線だけでは説明できなかった。規則的な正弦項を除いた後は平均byteをほぼ保って同poseの帯が低減した。tile自体の反復、近接の細粒、有限の微動、HMD未確認を別々に残す。
