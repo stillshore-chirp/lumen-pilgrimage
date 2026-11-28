@@ -347,6 +347,10 @@ npm run test:coast:browser
 
 映画館はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:cinema:browser` で確認します。`--no-shell` で導入した Chromium を使う場合は、`COAST_CHROME_CHANNEL=chromium npm run test:cinema:browser` を実行してください。音響試験はチャンネル未指定時に Chromium のヘッドレスシェルを使います。
 
+音響のnative offlineだけを再現する場合は、`CINEMA_AUDIO_BROWSER=1 node --test --test-name-pattern 'Chromium OfflineAudioContext' scripts/cinema-audio.test.mjs` を使います。標準targetは5代表席×2品質を含む21 responseと30帯域clarity、各1秒の51 OfflineAudioContextを描画し、その後に環境音のgesture・4mix・足音・解放を検査します。全体予算は有限180秒です。初期化・描画・後続操作の各stageとcontextの終端を保存し、offline全体の所要時間をrealtime Workletの処理期限とは区別します。
+
+環境音のゲイン検査では、観測器とgraph/contextの準備を有限予算で先に行い、元の4秒・誤差0.002の全条件を50ms timerで観測します。試験用の連続入力を実3バスへ加え、実バスとtrim/limiter前masterのnative振幅も確認します。getterの条件成立後、analyserの1窓＋2render quantumがaudio clock上で進んでから読み、窓の開始・取得時刻を残します。probeは実足音のBufferSource計数から分けてstop・disconnectします。フレーム性能の検査をtimerへ置き換える手順ではありません。
+
 ローカル上映の回帰試験には、H.264をデコードできるChromeと、`libx264` を使えるFFmpegが必要です。WindowsのPowerShellでは `$env:COAST_CHROME_CHANNEL = "chrome"` を設定してから `npm run test:cinema:browser` を実行します。[上映のブラウザー試験](../scripts/cinema-screening.browser.test.mjs) は、生成した7.1.4素材と位置付き音源の組を利用者と同じファイル選択から開き、映像フレームとテスト信号の出力、シーク、非常点検中の停止と復帰、模擬WebXRでの再生継続を確かめます。
 
 座位の初期位置から移動し、客席の段床と着地点、ジャンプと座席背面を越える飛行、飛行中の天井の停止、非常口の閉じた境界、ファストトラベルでの入り江往復、照明と試映の制御を確認します。ChromeのOfflineAudioContextで直接音・残響の波形、席間と品質間の音量差を測ります。`CINEMA_SCREENSHOTS` にディレクトリを指定すると中段中央・後方側席・車いす席からの画面と、上映時・清掃時の場内を撮影します。

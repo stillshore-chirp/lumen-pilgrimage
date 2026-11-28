@@ -275,4 +275,10 @@ HRIRを短くするときは、左右それぞれの到達時刻、耳間の時�
 
 音響グラフを改修するときは、ノードの作成順ではなく、入力から出力までの接続と制御ゲインから経路を同定する。切替用に音量0の旧経路を残す構成では、最初に作ったPannerの位置が現在の到来方向とは限らない。途中へGainやDelayを加えただけでも、音源に直結したFilterだけを探す観測器は実際の伝達を見落とす。入力・経路・出力の所有と役割を追い、旧経路の一覧も残して、停止・切替・解放の検査を隠さない。
 
+制御側のgetter、音声処理中の評価値、出力波形も分ける。[Web AudioのAudioParam計算](https://www.w3.org/TR/webaudio/#computation-of-value)はrender quantumごとにcurrent valueを更新する。[BlinkのAudioParamHandler::Value](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/webaudio/audio_param_handler.cc)では、control側のgetterとaudio threadのtimeline評価が分かれる。終了した音源の枝で古いgetter値が残っても、それだけで音漏れとは判定できない。無音時にもパラメーターを処理する入口があるため、無音なら必ず更新が止まるとも一般化しない。参照sourceと実行browserのrevisionが未照合なら、その限界を残す。
+
+制御ゲインを測るfixtureでは、既知の連続入力を実バスのaudio inputへ与え、getterとバス直後の振幅を併測できる。AudioParamへ信号を加えて目標値を作らず、masterはtrimやlimiterの前を測るなど、非線形処理との境界を明示する。観測用音源が実イベントの計数を汚さない構成にし、最後にstop・disconnectする。制御命令が登録されたことを、出力の成功へ置き換えない。
+
+解析窓の時刻範囲も必要である。getterが収束条件へ入った直後の8192sampleには、まだ収束前の音が含まれ得る。実際に読む窓全体が条件成立後になるまでaudio clockで待ち、render/readback境界の余裕と有限の待機予算を記録する。画面のframe数や固定wall sleepを音声窓の代わりにしない。観測器の準備時間、ゲイン収束時間、出力窓の確保時間を分けることで、音響の不合格と観測器の時間切れを区別できる。
+
 接続と非ゼロの制御ゲインは、音が通り得る条件を示す。入力自体が無音なら発音の証拠にはならず、複数チャンネルの割当確認と各チャンネルの実PCM測定も異なる。位置とモードの接続を出力の波形・帯域・時間へ結び付け、特定の実装ノードや係数の存在だけで聴取現象を判定しない。
