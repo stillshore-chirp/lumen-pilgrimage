@@ -9,7 +9,14 @@ export type MonitorVideoSnapshot = {
   height?: number;
   qualityLimitation?: 'none' | 'cpu' | 'bandwidth' | 'other';
 };
-export type MonitorSurfaceFrames = { renderedFrames: number; videoFrames: number; uploadFrames: number; timestamp: number; surface: 'floating' | 'television' };
+export type MonitorSurfaceFrames = {
+  renderedFrames: number;
+  videoFrames?: number;
+  uploadFrames: number;
+  timestamp: number;
+  surface: 'floating' | 'television';
+  freshness: 'video-frame-callback' | 'unavailable';
+};
 export type MonitorVideoMeasurement = {
   durationMs: number;
   captureFps?: number;
@@ -24,6 +31,8 @@ export type MonitorVideoMeasurement = {
   renderedFps?: number;
   suppliedFps?: number;
   uploadFps?: number;
+  surfaceDurationMs?: number;
+  surfaceFreshness?: MonitorSurfaceFrames['freshness'];
   playbackPresentedFps?: number;
   playbackDroppedFps?: number;
   playbackQualityScope?: 'visible-dom' | 'unavailable-hidden-dom';
@@ -99,18 +108,35 @@ export async function measureMonitorVideo(
   if (!before) throw new Error('Monitor video is unavailable');
   abort.throwIfAborted();
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', visibilityChanged);
-  const surfaceBefore = surface?.();
+  const sampleSurface = () => {
+    const sample = surface?.();
+    return sample ? { ...sample } : undefined;
+  };
+  const sampleQuality = () => {
+    const sample = video?.getVideoPlaybackQuality?.();
+    return sample ? { totalVideoFrames: sample.totalVideoFrames, droppedVideoFrames: sample.droppedVideoFrames } : undefined;
+  };
+  const surfaceBefore = sampleSurface();
   let callback: number | undefined;
   let first: number | undefined;
   let last: number | undefined;
   const presentationStarted = performance.now();
-  const qualityBefore = video?.getVideoPlaybackQuality?.();
+  const qualityBefore = sampleQuality();
+  const presentationSupported = typeof video?.requestVideoFrameCallback === 'function';
+  let observing = true;
+  const closeObservation = () => {
+    if (!observing) return;
+    observing = false;
+    if (callback !== undefined) video?.cancelVideoFrameCallback(callback);
+    callback = undefined;
+  };
   const observe: VideoFrameRequestCallback = (_now, metadata) => {
+    if (!observing) return;
     last = metadata.presentedFrames;
     first ??= last;
     callback = video!.requestVideoFrameCallback(observe);
   };
-  if (video && typeof video.requestVideoFrameCallback === 'function') callback = video.requestVideoFrameCallback(observe);
+  if (presentationSupported) callback = video!.requestVideoFrameCallback(observe);
   try {
     await new Promise<void>((resolve, reject) => {
       const stop = () => { clearTimeout(timer); reject(abort.reason); };
@@ -119,17 +145,21 @@ export async function measureMonitorVideo(
     });
     abort.throwIfAborted();
     const presentationDurationMs = performance.now() - presentationStarted;
-    const surfaceAfter = surface?.();
-    const qualityAfter = video?.getVideoPlaybackQuality?.();
+    closeObservation();
+    const presentationFrames = first !== undefined && last !== undefined ? Math.max(0, last - first + 1) : 0;
+    const surfaceAfter = sampleSurface();
+    const qualityAfter = sampleQuality();
+    // The following stats read has its own RTCStats timestamps and may finish later.
+    // Callback and surface samples are already closed and cannot grow while it waits.
     const after = await read();
     abort.throwIfAborted();
     if (!after || video && video.srcObject !== source) throw new Error('Monitor video changed during measurement');
     if (backgrounded) throw new Error('Monitor measurement requires a visible page');
     const result = monitorVideoRates(before, after);
-    if (video && typeof video.requestVideoFrameCallback === 'function' && presentationDurationMs > 0) {
+    if (presentationSupported && presentationDurationMs > 0) {
       // Count the entire observation window, including freezes after the last callback.
       // The first callback contributes one frame. Delayed initial callbacks can undercount composition.
-      result.presentationFrames = first !== undefined && last !== undefined ? Math.max(0, last - first + 1) : 0;
+      result.presentationFrames = presentationFrames;
       result.presentationDurationMs = presentationDurationMs;
       result.presentedFps = result.presentationFrames * 1000 / presentationDurationMs;
     }
@@ -143,15 +173,21 @@ export async function measureMonitorVideo(
     if (video?.hidden) result.playbackQualityScope = 'unavailable-hidden-dom';
     if (surfaceBefore && surfaceAfter && surfaceBefore.surface === surfaceAfter.surface && surfaceAfter.timestamp > surfaceBefore.timestamp) {
       result.surface = surfaceAfter.surface;
-      const seconds = (surfaceAfter.timestamp - surfaceBefore.timestamp) / 1000;
+      result.surfaceFreshness = surfaceAfter.freshness;
+      result.surfaceDurationMs = surfaceAfter.timestamp - surfaceBefore.timestamp;
+      const seconds = result.surfaceDurationMs / 1000;
       if (surfaceAfter.renderedFrames >= surfaceBefore.renderedFrames) result.renderedFps = (surfaceAfter.renderedFrames - surfaceBefore.renderedFrames) / seconds;
       if (surfaceAfter.uploadFrames >= surfaceBefore.uploadFrames) result.uploadFps = (surfaceAfter.uploadFrames - surfaceBefore.uploadFrames) / seconds;
-      if (surfaceAfter.videoFrames >= surfaceBefore.videoFrames) result.suppliedFps = (surfaceAfter.videoFrames - surfaceBefore.videoFrames) / seconds;
+      if (surfaceBefore.freshness === 'video-frame-callback' && surfaceAfter.freshness === 'video-frame-callback'
+        && surfaceBefore.videoFrames !== undefined && surfaceAfter.videoFrames !== undefined
+        && surfaceAfter.videoFrames >= surfaceBefore.videoFrames) {
+        result.suppliedFps = (surfaceAfter.videoFrames - surfaceBefore.videoFrames) / seconds;
+      }
     }
     return result;
   } finally {
     if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', visibilityChanged);
-    if (callback !== undefined) video?.cancelVideoFrameCallback(callback);
+    closeObservation();
   }
 }
 
@@ -163,7 +199,9 @@ export function describeMonitorVideo(measured: MonitorVideoMeasurement, role: 's
     : `受信 ${number(measured.receivedFps)}・デコード ${number(measured.decodedFps)}・映像フレーム更新 ${number(measured.presentedFps)}`;
   const label = measured.surface === 'floating' ? '浮遊面' : measured.surface === 'television' ? 'テレビ面' : '対象面';
   const surface = !sender ? ` 景観描画 ${number(measured.renderedFps)}・景観への映像供給 ${number(measured.suppliedFps)}（${label}）。` : '';
+  const freshness = !sender && measured.surfaceFreshness === 'unavailable'
+    ? ' 新しい映像フレームを識別できないため、映像供給は未取得です。' : '';
   const limitation = measured.qualityLimitation === 'cpu' ? ' 送信側の処理負荷による制限があります。'
     : measured.qualityLimitation === 'bandwidth' ? ' 通信帯域による制限があります。' : '';
-  return `${stages}。${surface}${limitation} 60fpsは目標値です。取得元・通信・処理負荷・表示環境により変わります。`;
+  return `${stages}。${surface}${freshness}${limitation} 60fpsは目標値です。取得元・通信・処理負荷・表示環境により変わります。`;
 }

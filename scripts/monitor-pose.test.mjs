@@ -3,6 +3,7 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { ArrayCamera, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Raycaster, Scene, Vector2, Vector3 } from 'three';
 import { MonitorObject, MONITOR_MIN_SCALE, MONITOR_MAX_SCALE } from '../src/monitor/monitorObject.ts';
+import { measureMonitorVideo, describeMonitorVideo } from '../src/monitor/monitorVideoMetrics.ts';
 
 const desktopUrl = new URL('../src/monitor/monitorDesktop.ts', import.meta.url).href;
 const hooks = registerHooks({
@@ -21,9 +22,10 @@ function createMonitor(t) {
     clearRect() {}, fillRect() {},
     fillText(text) { statusText.push(text); }
   };
-  Object.defineProperty(globalThis, 'document', {
-    configurable: true, value: { createElement: () => ({ getContext: () => context }) }
-  });
+  const document = new EventTarget();
+  document.visibilityState = 'visible';
+  document.createElement = () => ({ getContext: () => context });
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: document });
   const scene = new Scene();
   const monitor = new MonitorObject();
   scene.add(monitor.group);
@@ -248,6 +250,7 @@ test('video supply diagnostics count actual surface draws and distinct texture u
   monitor.setVideo({
     srcObject: { getVideoTracks: () => [track] }, paused: false, ended: false,
     readyState: 2, HAVE_CURRENT_DATA: 2, videoWidth: 320, videoHeight: 180,
+    requestVideoFrameCallback() { return 1; }, cancelVideoFrameCallback() {},
   });
   const screen = monitor.group.children[0];
   let renderTarget = null;
@@ -303,7 +306,8 @@ test('texture dirty flags and repeated draws are not counted as fresh upload sub
   const renderer = { getRenderTarget: () => null };
   monitor.setVisible(true);
   monitor.setVideo({ srcObject: { getVideoTracks: () => [{ readyState: 'live', enabled: true, muted: false }] },
-    paused: false, ended: false, readyState: 2, HAVE_CURRENT_DATA: 2, videoWidth: 320, videoHeight: 180 });
+    paused: false, ended: false, readyState: 2, HAVE_CURRENT_DATA: 2, videoWidth: 320, videoHeight: 180,
+    requestVideoFrameCallback() { return 1; }, cancelVideoFrameCallback() {} });
   const surface = monitor.group.children[0];
   const texture = surface.material.map;
   monitor.beginPresentationFrame(camera);
@@ -323,4 +327,46 @@ test('texture dirty flags and repeated draws are not counted as fresh upload sub
   surface.onAfterRender(renderer, scene, camera);
   assert.equal(monitor.surfaceFrames().uploadFrames, 2);
   assert.equal(monitor.surfaceFrames().videoFrames, 2, 'coalesced versions produce one latest upload and fresh draw');
+});
+
+
+test('actual Three fallback keeps static-video draws and uploads measurable but fresh supply unavailable', async t => {
+  const { monitor, scene } = createMonitor(t);
+  const savedPerformance = Object.getOwnPropertyDescriptor(globalThis, 'performance');
+  let now = 0;
+  Object.defineProperty(globalThis, 'performance', { configurable: true, value: { now: () => now } });
+  t.after(() => Object.defineProperty(globalThis, 'performance', savedPerformance));
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const video = { srcObject: { getVideoTracks: () => [{ readyState: 'live', enabled: true, muted: false }] },
+    paused: false, ended: false, readyState: 2, HAVE_CURRENT_DATA: 2, videoWidth: 320, videoHeight: 180, currentTime: 1 };
+  monitor.setVisible(true);
+  monitor.setVideo(video);
+  const surface = monitor.group.children[0];
+  const texture = surface.material.map;
+  const firstVersion = texture.version;
+  const camera = makeCamera();
+  const renderer = { getRenderTarget: () => null };
+  const pending = measureMonitorVideo(async () => ({ counters: [] }), new AbortController().signal, video, 1000, () => monitor.surfaceFrames());
+  await new Promise(resolve => setImmediate(resolve));
+  for (let tick = 1; tick <= 60; ++tick) {
+    now = tick * 1000 / 60;
+    monitor.beginPresentationFrame(camera);
+    texture.update(); // Actual Three0.184 fallback, invoked by WebGLTextures before upload.
+    texture.onUpdate(texture);
+    surface.onAfterRender(renderer, scene, camera);
+  }
+  t.mock.timers.tick(1000);
+  const result = await pending;
+  assert.equal(video.currentTime, 1);
+  assert.equal(texture.version, firstVersion + 60);
+  assert.equal(result.suppliedFps, undefined, 'repeated uploads without frame callbacks are not fresh frames');
+  assert.equal(result.renderedFps, 60);
+  assert.equal(result.uploadFps, 60);
+  assert.equal(result.surfaceDurationMs, 1000);
+  assert.equal(result.surfaceFreshness, 'unavailable');
+  assert.equal(monitor.surfaceFrames().videoFrames, undefined);
+  assert.equal(result.suppliedFps, undefined);
+  assert.equal(result.presentedFps, undefined);
+  assert.equal(Object.hasOwn(result, 'suppliedFps'), false, 'missing freshness is not zero or repeated upload fps');
+  assert.match(describeMonitorVideo(result, 'viewer'), /景観への映像供給 未取得.*新しい映像フレームを識別できない/);
 });

@@ -49,6 +49,7 @@ export class MonitorObject {
   private renderedVersion = -1;
   private uploadedVersion = -1;
   private uploadSubmissions = 0;
+  private frameFreshnessAvailable = false;
 
   constructor() {
     this.group.name = 'virtual-monitor';
@@ -72,7 +73,7 @@ export class MonitorObject {
         ++this.renderedFrames;
         this.countedPresentationFrame = this.presentationFrame;
       }
-      if (this.uploadedVersion === texture.version
+      if (this.frameFreshnessAvailable && this.uploadedVersion === texture.version
         && (this.renderedTexture !== texture || this.renderedVersion !== texture.version)) {
         ++this.suppliedVideoFrames;
         this.renderedTexture = texture;
@@ -107,7 +108,14 @@ export class MonitorObject {
   surfaceFrames(): MonitorSurfaceFrames | null {
     // Cinema projection uses a different shader surface and is not observed by this mesh.
     if (!this.isVisible || !this.screen.material.visible || !this.videoTexture) return null;
-    return { renderedFrames: this.renderedFrames, videoFrames: this.suppliedVideoFrames, uploadFrames: this.uploadSubmissions, timestamp: performance.now(), surface: this.isFloating ? 'floating' : 'television' };
+    return {
+      renderedFrames: this.renderedFrames,
+      uploadFrames: this.uploadSubmissions,
+      timestamp: performance.now(),
+      surface: this.isFloating ? 'floating' : 'television',
+      freshness: this.frameFreshnessAvailable ? 'video-frame-callback' : 'unavailable',
+      ...(this.frameFreshnessAvailable ? { videoFrames: this.suppliedVideoFrames } : {}),
+    };
   }
 
   setTarget(target: MonitorSurface | null, projectInTarget = false): void {
@@ -193,6 +201,7 @@ export class MonitorObject {
     this.videoSource = source;
     this.videoWidth = videoWidth;
     this.videoHeight = videoHeight;
+    this.frameFreshnessAvailable = typeof video.requestVideoFrameCallback === 'function';
     this.videoTexture = new THREE.VideoTexture(video);
     this.videoTexture.onUpdate = texture => {
       if (this.videoTexture !== texture) return;
@@ -250,6 +259,7 @@ export class MonitorObject {
     if (!this.videoTexture) return;
     this.videoTexture.dispose();
     this.videoTexture = null;
+    this.frameFreshnessAvailable = false;
     this.renderedTexture = null;
     this.renderedVersion = -1;
     this.uploadedVersion = -1;
