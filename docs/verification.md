@@ -111,6 +111,8 @@ Three.jsでは[WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html)
 
 設計入力と生成順は [道路と地形の設計](overlook/road-terrain-design.md) を正本とします。`node --test scripts/coast-terrain.test.mjs` で元16路のXZ/横断frame、縦断の小さい持上げ、実chordの勾配、近側の地中曲線、実地面の切断と合成sampler、実headwallの開孔、背面の土断面と車両matrixの有限性を確認します。幅とshared XYZ、車両包絡、slabの閉鎖は共通planと生成geometryを別途照合します。独立した全数検査では、lining外三角形と掘削前地表の交差polygon全体で土被りを調べ、橋脚の全footprintと実地盤・slabを照合します。頂点だけのsampleや公称中心の重なりを全域の最小離隔へ読み替えません。
 
+道路の支持volumeと描画面の所有も分けて確認します。閉鎖slab全三角形のedge閉鎖、実asphaltとの上面一致、下面と両端面の保持、内部上面・側面の非描画、道路あたり一つの可視groupと資源解放をterrain testで調べます。遠方の通常像に破片や筋が出た場合は、実camera/projectionと深度bufferの精度を記録し、同一状態の一時表示切替で原因を分離します。診断の非表示像を採用品質とせず、修正後は正常な全外殻を描いて昼夜・斜め・下面・端面・隣接物の遮蔽を比較します。
+
 実画面では主床の同cameraの昼夜・左右・背面と、高さ450 mの全周を比較します。旧切断の比較点はcamera(33,450付近,−22.5) mの東向き見下ろしです。坑口は実ID、入口・上/下・側面、車/灯火の通過を対応付け、手前地形に遮られた像と口内の確認を分けます。遠方13端は通常画角の実投影・遮蔽・原寸可読性で分類し、必要な端だけ追加観察します。外部XZや通常到達しないYを使う診断は、合法経路の実証と別記します。移動範囲や霞を変えて可視境界を隠すことは受け入れません。
 
 道路音では源長の分割総和、左右孔のarrival、manualの内外距離、Panner rolloff=0、元8路の再生率/offset、非有限metadataのgraph生成前拒否をCPUで確認します。実PCMは同じ音源buffer・開始位相・seed・mix・cameraで旧8声と新22声を各30秒、正規化なしのlossless LRへ収録します。mono/LRの20–125 Hzと125 Hz–4 kHzの帯域RMS、1秒envelope、peak、声間相関を比較し、源powerと耳元の合算を同一視しません。固定yawと左右90°は区間を分け、聴感では定位の飛び、反復・位相のうなり、音量・高域の不自然な変化を調べます。

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 930" role="img" aria-labelledby="title description">
-<title id="title">展望台の道路局所平面と実断面</title><desc id="description">O5道路planの実中心線を同縮尺で示す平面。右はroad 1の左右孔、路面、閉鎖slabの実profileと支持の模式図。地下継続と可視終端の検証範囲を区別する。</desc>
+<title id="title">展望台の道路局所平面と実断面</title><desc id="description">O5道路planの実中心線を同縮尺で示す平面。右はroad 1の左右孔、路面、閉鎖slabの実profileと支持の模式図。slab上縁はasphaltと一致し、閉鎖volumeの上面と側面は内部の非描画面。地下継続と可視終端の検証範囲を区別する。</desc>
 <defs><clipPath id="plan"><rect x="55" y="145" width="675" height="650"/></clipPath></defs>
 <style>text{font-family:"Hiragino Kaku Gothic ProN","Noto Sans CJK JP",sans-serif;fill:#203344;font-size:17px}.small{font-size:14px}.title{font-size:27px;font-weight:700}.section{font-size:20px;font-weight:700}.muted{fill:#526a7b}.panel{fill:#f4f7f8;stroke:#c9d6dc}.grid{stroke:#d8e2e6;stroke-width:1}.road{fill:none;stroke-linejoin:round;stroke-linecap:round}.note{font-size:15px}</style>
 <rect width="1440" height="930" fill="#fff"/><text x="45" y="48" class="title">展望台：道路と地盤の共通座標</text>
@@ -94,14 +94,14 @@
 <path d="M842.600,439.830 L1058.053,435.896 L1058.053,384.500 L1057.132,377.469 L1054.383,370.559 L1049.853,363.887 L1043.621,357.568 L1035.792,351.710 L1026.501,346.413 L1015.906,341.767 L1004.190,337.853 L991.552,334.737 L978.208,332.472 L964.388,331.098 L950.327,330.637 L936.265,331.098 L922.445,332.472 L909.101,334.737 L896.463,337.853 L884.747,341.767 L874.152,346.413 L864.861,351.710 L857.033,357.568 L850.800,363.887 L846.271,370.559 L843.522,377.469 L842.600,384.500 Z" fill="#fff" stroke="#425463" stroke-width="1"/>
 <path d="M1103.867,443.830 L1335.480,448.059 L1335.480,383.973 L1334.359,375.420 L1330.910,366.752 L1325.470,358.739 L1318.294,351.463 L1309.577,344.940 L1299.481,339.183 L1288.162,334.220 L1275.788,330.086 L1262.544,326.821 L1248.632,324.459 L1234.267,323.031 L1219.673,322.552 L1205.080,323.031 L1190.715,324.459 L1176.803,326.821 L1163.559,330.086 L1151.185,334.220 L1139.866,339.183 L1129.770,344.940 L1121.053,351.463 L1113.876,358.739 L1108.436,366.752 L1104.988,375.420 L1103.867,383.973 Z" fill="#718491" stroke="#425463" stroke-width="1"/>
 <path d="M1111.947,435.896 L1327.400,439.830 L1327.400,384.500 L1326.478,377.469 L1323.729,370.559 L1319.200,363.887 L1312.967,357.568 L1305.139,351.710 L1295.848,346.413 L1285.253,341.767 L1273.537,337.853 L1260.899,334.737 L1247.555,332.472 L1233.735,331.098 L1219.673,330.637 L1205.612,331.098 L1191.792,332.472 L1178.448,334.737 L1165.810,337.853 L1154.094,341.767 L1143.499,346.413 L1134.208,351.710 L1126.379,357.568 L1120.147,363.887 L1115.617,370.559 L1112.868,377.469 L1111.947,384.500 Z" fill="#fff" stroke="#425463" stroke-width="1"/>
-<path d="M852.700,439.444 L1085.000,435.202 L1317.300,439.444 L1317.300,470.552 L852.700,470.552 Z" fill="#a1aab0" stroke="#425463" stroke-width="1"/>
+<path d="M852.700,439.242 L1085.000,435.000 L1317.300,439.242 L1317.300,470.552 L852.700,470.552 Z" fill="#a1aab0" stroke="#425463" stroke-width="1"/>
 <path d="M852.7,439.242 L1085.0,435.0 L1317.3,439.242" fill="none" stroke="#253b4a" stroke-width="2"/>
 <circle cx="950.327" cy="425.339" r="4" fill="#d85e42"/>
 <circle cx="1219.673" cy="425.339" r="4" fill="#d85e42"/>
 <text x="790" y="162" class="small">中央路面 Y=206.261 m / 半幅23 m</text>
 <text x="790" y="185" class="small">lining厚0.8 m / floorは路面から40 mm下</text>
 <text x="790" y="207" class="small" style="fill:#b14e38">● 音の代表点：各孔の路面+1.2 m</text>
-<text x="800" y="495" class="small">slab下面 = 中央路面−3.52 m　/　孔中央webはsolid</text>
+<text x="800" y="495" class="small">外殻: asphalt上面 / fascia側面 / slab下面(−3.52 m)・端面</text>
 <rect x="770" y="540" width="630" height="275" rx="12" class="panel"/>
 <text x="792" y="573" class="section">支持と可視性の確認</text>
 <text x="795" y="605" class="note">道路設計datum ≠ 橋脚を支える実地盤</text>
