@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { Vector3 } from 'three';
+import { PerspectiveCamera, Vector3 } from 'three';
 
 const src = new URL('../src/', import.meta.url).href;
 const hook = registerHooks({
@@ -18,7 +18,106 @@ const { cinemaSourceBandLoss, cinemaSeatingClearance, cinemaPathCrossesScreen, c
   cinemaBandShelves, cinemaScreenCrossings, CINEMA_SURFACE_GAINS } = await import('../src/coast/world/cinema/cinemaPropagation.ts');
 const { CINEMA_RENDER_SPEAKERS } = await import('../src/coast/world/cinema/cinemaSpeakers.ts');
 const { cinemaPropagationImpulse } = await import('../src/coast/world/cinema/cinemaPropagationFilter.ts');
+const { cinemaSharedFeedPlan } = await import('../src/coast/world/cinema/cinemaSharedRouting.ts');
+const { createCinemaPlayback } = await import('../src/coast/world/cinema/cinemaPlayback.ts');
 hook.deregister();
+
+test('shared playback releases listening children before their routing parent', () => {
+  class Param {
+    value = 0;
+    cancelScheduledValues() {}
+    setValueAtTime(value) { this.value = value; }
+    setTargetAtTime(value) { this.value = value; }
+    setValueCurveAtTime(values) { this.value = values.at(-1); }
+  }
+  class Node {
+    connections = new Set();
+    gain = new Param(); frequency = new Param(); Q = new Param(); delayTime = new Param();
+    positionX = new Param(); positionY = new Param(); positionZ = new Param();
+    connect(target) { this.connections.add(target); return target; }
+    disconnect(target) {
+      if (!target) { this.connections.clear(); return; }
+      if (!this.connections.delete(target)) throw new DOMException('No connection to target', 'InvalidAccessError');
+    }
+  }
+  const nodes = [];
+  const node = () => { const value = new Node(); nodes.push(value); return value; };
+  const context = {
+    sampleRate: 8_000, currentTime: 0,
+    listener: Object.fromEntries(['position', 'forward', 'up'].flatMap(name => ['X', 'Y', 'Z'].map(axis => [name + axis, new Param()]))),
+    createGain: node, createChannelSplitter: node, createBiquadFilter: node,
+    createDelay: node, createWaveShaper: node, createPanner: node, createConvolver: node,
+    createBuffer(channels, length) {
+      const data = Array.from({ length: channels }, () => new Float32Array(length));
+      return { numberOfChannels: channels, getChannelData: channel => data[channel] };
+    },
+  };
+  const source = node(), output = node(), unrelated = node();
+  source.connect(unrelated);
+  const ownedStart = nodes.length;
+  const playback = createCinemaPlayback(context, source, output, 6);
+  const camera = new PerspectiveCamera(); camera.position.set(0, 5, 35.85);
+  playback.update(camera);
+  context.currentTime = .03;
+  playback.setQuality('high');
+  playback.update(camera);
+  assert.doesNotThrow(() => playback.dispose());
+  assert.doesNotThrow(() => playback.dispose());
+  assert.deepEqual([...source.connections], [unrelated]);
+  assert.ok(nodes.slice(ownedStart).every(value => value.connections.size === 0));
+});
+
+test('shared mono/stereo drives the common 57 equipment outputs with bounded differentiated feeds', () => {
+  for (const mono of [false, true]) {
+    const plan = cinemaSharedFeedPlan(mono ? 1 : 2);
+    assert.equal(plan.length, 57);
+    assert.deepEqual(plan.map(feed => feed.speaker.id), CINEMA_RENDER_SPEAKERS.map(speaker => speaker.id));
+    assert.ok(plan.every(feed => feed.coefficients.every(Number.isFinite)
+      && feed.coefficients.some(coefficient => coefficient !== 0)));
+    const sum = feeds => feeds.reduce((total, feed) =>
+      total + feed.coefficients.reduce((value, coefficient) => value + Math.abs(coefficient), 0), 0);
+    assert.ok(Math.abs(sum(plan.filter(feed => feed.speaker.kind === 'screen')) - .66) < 1e-12);
+    assert.ok(Math.abs(sum(plan.filter(feed => feed.diffuse)) - .10) < 1e-12);
+    assert.ok(Math.abs(sum(plan.filter(feed => feed.bass)) - .05) < 1e-12);
+    const surround = plan.filter(feed => feed.diffuse);
+    assert.ok(new Set(surround.map(feed => feed.delaySeconds)).size >= 40);
+    assert.ok(new Set(surround.map(feed => feed.phaseFrequency)).size >= 40);
+    assert.ok(surround.every(feed => feed.delaySeconds >= .018 && feed.delaySeconds < .041));
+    assert.ok(surround.every(feed => feed.coefficients[0] * feed.coefficients[1] < 0));
+    assert.ok(surround.every(feed => feed.coefficients[0] + feed.coefficients[1] > 0),
+      'mono retains a lower-level diffuse floor instead of disappearing');
+    if (mono) {
+      const front = plan.filter(feed => feed.speaker.kind === 'screen');
+      assert.ok(front[2].coefficients[0] > front[0].coefficients[0] * 4);
+    }
+  }
+});
+
+test('known standard 5.1 keeps all six independent inputs including LFE on the common equipment', () => {
+  const plan = cinemaSharedFeedPlan(6);
+  assert.equal(plan.length, 57);
+  assert.ok(plan.every(feed => feed.coefficients.length === 6));
+  const destinations = channel => plan.filter(feed => feed.coefficients[channel] !== 0);
+  assert.deepEqual(destinations(0).map(feed => feed.speaker.id), ['screen-L', 'screen-LC']);
+  assert.deepEqual(destinations(1).map(feed => feed.speaker.id), ['screen-RC', 'screen-R']);
+  assert.deepEqual(destinations(2).map(feed => feed.speaker.id), ['screen-C']);
+  assert.equal(destinations(3).length, 4);
+  assert.ok(destinations(3).every(feed => feed.bass));
+  assert.ok(plan.filter(feed => !feed.bass).every(feed => feed.coefficients[3] === 0));
+  assert.ok(destinations(4).every(feed => feed.speaker.position[0] < 0 && !feed.bass));
+  assert.ok(destinations(5).every(feed => feed.speaker.position[0] > 0 && !feed.bass));
+  assert.equal(destinations(4).length, 24);
+  assert.equal(destinations(5).length, 24);
+  for (const [channel, expected] of [[0, .2], [1, .2], [2, .2], [3, .2], [4, .1], [5, .1]]) {
+    const sum = plan.reduce((sum, feed) => sum + Math.abs(feed.coefficients[channel]), 0);
+    assert.ok(Math.abs(sum - expected) < 1e-12);
+  }
+  assert.ok(Math.abs(plan.reduce((sum, feed) => sum + feed.coefficients.reduce((sum, value) => sum + Math.abs(value), 0), 0) - 1) < 1e-12);
+  const roomInputs = plan.filter(feed => feed.roomScale > 0);
+  assert.equal(roomInputs.length, 7);
+  assert.ok(roomInputs.filter(feed => feed.speaker.kind !== 'screen').every(feed =>
+    Math.abs(feed.coefficients.reduce((sum, value) => sum + Math.abs(value), 0) * feed.roomScale - .08) < 1e-12));
+});
 
 const [centerSeat, frontSeat, rearSeat, wheelchairSeat] = CINEMA_DESTINATIONS;
 const seats = [frontSeat, centerSeat, rearSeat, { ...wheelchairSeat, x: 12.715, z: CINEMA_ROWS[14].z }, wheelchairSeat]

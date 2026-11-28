@@ -1,11 +1,12 @@
 import { cinemaBandShelves } from './cinemaPropagation';
 import { Quaternion, Vector3, type Camera } from 'three';
 import {
-  CINEMA_BANDS, CINEMA_REFLECTION_LIMIT, CINEMA_SCREEN_BANDS, CINEMA_SPEAKERS, CINEMA_WOVEN_FABRIC,
+  CINEMA_BANDS, CINEMA_REFLECTION_LIMIT, CINEMA_SCREEN_BANDS, CINEMA_WOVEN_FABRIC,
   cinemaDecibels, cinemaReflections, cinemaReflectionTaper, cinemaSeatDrr, cinemaSeatTrim, cinemaSpeakerLoss,
   createCinemaTail, type CinemaQuality, type CinemaReflection, type CinemaSpeaker,
 } from './cinemaAcoustics';
 import { CINEMA_ROWS } from './cinemaLayout';
+import { createCinemaSharedRouting } from './cinemaSharedRouting';
 
 const PATH_UPDATE_SECONDS = 0.05;
 const CROSSFADE_SECONDS = 0.15;
@@ -14,6 +15,9 @@ const SPECTRAL_GLIDE = 0.035;
 
 interface Feed {
   speaker: CinemaSpeaker;
+  id: string;
+  routingGain: number;
+  roomScale: number;
   signal: AudioNode;
   tail: GainNode | null;
 }
@@ -109,26 +113,32 @@ function peakStage(context: BaseAudioContext): WaveShaperNode {
 function pickReflections(feeds: Feed[], position: Vector3, limit: number): ReflectionCandidate[] {
   const candidates = feeds.flatMap(feed => cinemaReflections(feed.speaker, position).flatMap(path => {
     const strength = path.amplitude[2] * cinemaReflectionTaper(path.delay);
-    return strength > 0.0001 ? [{ feed, path, strength, id: `${feed.speaker.id}:${path.surface}` }] : [];
+    return strength > 0.0001 ? [{ feed, path, strength, id: `${feed.id}:${path.surface}` }] : [];
   }));
-  return candidates.sort((a, b) => b.strength - a.strength).slice(0, limit);
+  return candidates.sort((a, b) => b.strength * b.feed.routingGain - a.strength * a.feed.routingGain).slice(0, limit);
 }
 
 /** The monitor owns the context, input, output and the user gesture used to start playback. */
 export function createCinemaPlayback(context: BaseAudioContext, input: AudioNode, output: AudioNode, channelCount: number) {
-  const speakers = channelCount === 1 ? [CINEMA_SPEAKERS[2]] : channelCount === 6
-    ? CINEMA_SPEAKERS : CINEMA_SPEAKERS.slice(0, 2);
-  const layout = context.createGain();
-  layout.channelCount = speakers.length;
-  layout.channelCountMode = 'explicit';
-  layout.channelInterpretation = channelCount === 6 ? 'discrete' : 'speakers';
-  const splitter = context.createChannelSplitter(speakers.length);
+  const routing = createCinemaSharedRouting(context, input, channelCount);
+  const owned: AudioNode[] = [];
+  try {
+    return createListeningPlayback(context, output, routing, owned);
+  } catch {
+    routing.dispose();
+    owned.forEach(node => node.disconnect());
+    throw new Error('Cinema shared playback unavailable');
+  }
+}
+
+function createListeningPlayback(context: BaseAudioContext, output: AudioNode,
+  routing: ReturnType<typeof createCinemaSharedRouting>, owned: AudioNode[]) {
   const peak = peakStage(context);
   const hrtfAlignment = Math.round(0.00585 * context.sampleRate) / context.sampleRate;
   const diffuseAlignment = context.createDelay(0.02);
   diffuseAlignment.delayTime.value = hrtfAlignment;
   const feeds: Feed[] = [];
-  const owned: AudioNode[] = [layout, splitter, peak, diffuseAlignment];
+  owned.push(peak, diffuseAlignment);
   const active = new Map<CinemaQuality, ListeningGraph>();
   const position = new Vector3(0.39, CINEMA_ROWS[8].y + 1.15, CINEMA_ROWS[8].z);
   const previous = new Vector3();
@@ -141,13 +151,15 @@ export function createCinemaPlayback(context: BaseAudioContext, input: AudioNode
   let hasPose = false;
   let crossfade = { from: 0, to: 0, start: 0 };
 
-  input.connect(layout).connect(splitter);
   peak.connect(output);
   diffuseAlignment.connect(peak);
-  speakers.forEach((speaker, channel) => {
-    const source = context.createGain();
-    splitter.connect(source, channel);
-    owned.push(source);
+  routing.feeds.forEach(({ speaker: equipment, signal: source, coefficients, roomScale }, channel) => {
+    const isSub = equipment.kind === 'screenSub' || equipment.kind === 'surroundSub';
+    const speaker: CinemaSpeaker = {
+      id: isSub ? 'LFE' : equipment.kind === 'screen' ? 'C' : equipment.position[0] < 0 ? 'SL' : 'SR',
+      position: new Vector3(...equipment.position), aim: new Vector3(...equipment.aim),
+      screen: equipment.kind === 'screen',
+    };
     let signal: AudioNode = source;
     let tail: GainNode | null = null;
     if (speaker.screen) {
@@ -156,15 +168,7 @@ export function createCinemaPlayback(context: BaseAudioContext, input: AudioNode
       signal = appendFilters(source, filters);
       owned.push(...filters);
     }
-    if (speaker.id === 'LFE') {
-      const filter = context.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 120;
-      filter.Q.value = Math.SQRT1_2;
-      signal.connect(filter);
-      signal = filter;
-      owned.push(filter);
-    } else {
+    if (roomScale > 0) {
       const convolution = context.createConvolver();
       convolution.normalize = false;
       // Each source has its own stereo IR. Inverted L/R still excite the room.
@@ -174,7 +178,8 @@ export function createCinemaPlayback(context: BaseAudioContext, input: AudioNode
       signal.connect(tail).connect(convolution).connect(diffuseAlignment);
       owned.push(convolution, tail);
     }
-    feeds.push({ speaker, signal, tail });
+    feeds.push({ speaker, id: equipment.id, roomScale,
+      routingGain: coefficients.reduce((sum, value) => sum + Math.abs(value), 0), signal, tail });
   });
 
   function newGraph(mode: CinemaQuality, audible: boolean): ListeningGraph {
@@ -254,16 +259,21 @@ export function createCinemaPlayback(context: BaseAudioContext, input: AudioNode
     const selected = pickReflections(feeds, position, CINEMA_REFLECTION_LIMIT[quality]);
     for (const feed of feeds) {
       const hasEarly = selected.some(candidate => candidate.feed === feed);
-      if (feed.tail) adjust(feed.tail.gain, reflectionGain * Math.sqrt(hasEarly ? 1 - EARLY_SHARE : 1),
+      if (feed.tail) adjust(feed.tail.gain, feed.roomScale * reflectionGain * Math.sqrt(hasEarly ? 1 - EARLY_SHARE : 1),
         now, SPECTRAL_GLIDE, snap);
     }
     for (const graph of active.values()) {
       for (const voice of graph.dry) {
         const speaker = voice.feed.speaker;
-        const db = cinemaSpeakerLoss(speaker, position, speaker.position.distanceTo(position));
+        const distance = Math.max(1, speaker.position.distanceTo(position));
+        const db = cinemaSpeakerLoss(speaker, position, distance);
         spectralLoss(voice.spectrum, db, now, snap);
         const speechTrim = (db[2] + db[3] + db[4]) / 3;
-        adjust(voice.gain.gain, dryGain * cinemaDecibels(db[0] - speechTrim), now, SPECTRAL_GLIDE, snap);
+        // Retain the shared front programme's seat-coverage calibration. Local
+        // diffusion/bass cabinets use their own distance and broadband aim loss.
+        const distanceGain = speaker.screen ? 1 : Math.min(1.6, 22 / distance);
+        adjust(voice.gain.gain, dryGain * distanceGain
+          * cinemaDecibels(db[0] - (speaker.screen ? speechTrim : 0)), now, SPECTRAL_GLIDE, snap);
       }
       const limit = CINEMA_REFLECTION_LIMIT[graph.quality];
       const candidates = graph.quality === quality ? selected : pickReflections(feeds, position, limit);
@@ -350,8 +360,10 @@ export function createCinemaPlayback(context: BaseAudioContext, input: AudioNode
     dispose(): void {
       if (disposed) return;
       disposed = true;
-      input.disconnect(layout);
+      // Listening children own edges from routing feeds. Retire them before
+      // disconnecting their common parent nodes.
       active.forEach(destroyGraph);
+      routing.dispose();
       owned.forEach(node => node.disconnect());
     },
   };
