@@ -103,3 +103,48 @@ test('all room representatives retain a bounded valid open route and caches', ()
   model.dispose();
   assert.deepEqual(model.cacheSizes, { topology: 0, leafStates: 0 });
 });
+
+
+test('the concave primary room keeps a finite route around its joined exterior corner', () => {
+  const model = createResidenceAcousticPathModel();
+  const materials = createResidenceMaterials();
+  const shell = createResidenceShell(materials);
+  try {
+    shell.group.updateMatrixWorld(true);
+    const source = point(22, 10.5);
+    const listener = point(18, 14);
+    const doors = acousticDoorSnapshot(() => 1);
+    const result = model.solve(source, listener, doors);
+    const direct = result.paths.find(path => path.kind === 'direct-or-wall');
+    const route = result.paths.find(path => path.kind === 'room-detour');
+    assert.ok(direct && direct.lowGain < .001 && direct.ids.includes('wall:7') && direct.ids.includes('wall:8'));
+    assert.ok(route && route.ids.some(id => id.startsWith('wall:7:') || id.startsWith('joint:7:8:')));
+    assert.ok(route.length > Math.hypot(source.x - listener.x, source.z - listener.z));
+    assert.equal(route.delay, route.length / 343);
+    assert.ok(route.lowGain > .1 && route.lowGain < .95 / Math.hypot(source.x - listener.x, source.z - listener.z));
+    assert.ok(route.arrival.x < 20.7 && route.arrival.z > -11.48);
+    for (let index = 1; index < route.points.length; index += 1) {
+      const a = new Vector3().copy(route.points[index - 1]);
+      const b = new Vector3().copy(route.points[index]);
+      const ray = new Raycaster(a, b.clone().sub(a).normalize(), .0001, a.distanceTo(b) - .0001);
+      assert.equal(ray.intersectObject(shell.group, true).length, 0, 'every detour segment clears actual rendered shell geometry');
+    }
+    const reverse = model.solve(listener, source, doors).paths.find(path => path.kind === 'room-detour');
+    assert.ok(reverse && Math.abs(reverse.length - route.length) < 1e-9);
+    const nearWindow = model.solve(point(22, 11.4), point(20.5, 14), doors).paths.find(path => path.kind === 'room-detour');
+    assert.ok(nearWindow && nearWindow.ids.some(id => id.startsWith('joint:7:8:')),
+      'the joined wall thickness is also cleared when both endpoints approach the inner corner faces');
+    for (let index = 1; index < nearWindow.points.length; index += 1) {
+      const a = new Vector3().copy(nearWindow.points[index - 1]);
+      const b = new Vector3().copy(nearWindow.points[index]);
+      assert.equal(new Raycaster(a, b.clone().sub(a).normalize(), .0001, a.distanceTo(b) - .0001)
+        .intersectObject(shell.group, true).length, 0);
+    }
+    const nearReverse = model.solve(point(20.5, 14), point(22, 11.4), doors).paths.find(path => path.kind === 'room-detour');
+    assert.ok(nearReverse && Math.abs(nearReverse.length - nearWindow.length) < 1e-9);
+    const before = model.solve(point(20, 10.5), listener, doors);
+    assert.equal(before.paths.length, 1, 'unobstructed source uses its existing direct route');
+    const near = model.solve(point(7.29, 2), point(8.2, 2), acousticDoorSnapshot(() => 0));
+    assert.ok(near.paths.find(path => path.kind === 'direct-or-wall').lowGain < .1);
+  } finally { model.dispose(); shell.dispose(); materials.dispose(); }
+});

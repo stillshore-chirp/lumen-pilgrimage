@@ -14,10 +14,10 @@ type Power = [number, number, number];
 type Leaf = { id: string; pose: ResidenceDoorLeafPose; bottom: number; top: number; kind: Portal['kind'];
   clear: { from: number; to: number }; openFraction: number };
 type Crossing = { kind: 'opaque' | 'leaf' | ResidenceOpening['kind']; opening?: ResidenceOpening; leafId?: string; id?: string };
-type Visibility = { visible: boolean; blocking?: ResidenceWall; blockingLeaf?: Leaf };
+type Visibility = { visible: boolean; blocking?: ResidenceWall; blockingLeaf?: Leaf; blockingWindow?: ResidenceWall };
 
 export interface ResidenceAcousticPath {
-  readonly kind: 'direct-or-wall' | 'open-chain' | 'panel-or-mixed-chain' | 'leaf-detour' | 'external-chain';
+  readonly kind: 'direct-or-wall' | 'open-chain' | 'panel-or-mixed-chain' | 'leaf-detour' | 'room-detour' | 'external-chain';
   readonly ids: readonly string[];
   readonly points: readonly Point[];
   readonly length: number;
@@ -54,6 +54,28 @@ function bands(portal: Portal, a: number): Power {
 }
 
 const wallPrisms = acousticWalls.map((wall, index) => ({ wall, box: wallPrism(wall), id: `wall:${index}` }));
+
+// A joined pair can hide each individual wall end inside the other prism.
+// Use the exterior corners of their joined bounds as visibility candidates;
+// every segment still has to clear all actual finite walls and moving leaves.
+const wallJointCorners = new Map<ResidenceWall, readonly Omit<Point, 'y'>[]>();
+for (const [index, first] of wallPrisms.entries()) {
+  const corners: Omit<Point, 'y'>[] = [];
+  for (const [otherIndex, second] of wallPrisms.entries()) {
+    if (first.wall.axis === second.wall.axis) continue;
+    if ([0, 2].some(axis => first.box[axis][1] < second.box[axis][0]
+      || second.box[axis][1] < first.box[axis][0])) continue;
+    const minX = Math.min(first.box[0][0], second.box[0][0]) - .001;
+    const maxX = Math.max(first.box[0][1], second.box[0][1]) + .001;
+    const minZ = Math.min(first.box[2][0], second.box[2][0]) - .001;
+    const maxZ = Math.max(first.box[2][1], second.box[2][1]) + .001;
+    for (const [xIndex, x] of [minX, maxX].entries()) for (const [zIndex, z] of [minZ, maxZ].entries()) {
+      corners.push({ x, z, feature: `joint:${Math.min(index, otherIndex)}:${Math.max(index, otherIndex)}:${xIndex}:${zIndex}` });
+    }
+  }
+  wallJointCorners.set(first.wall, corners);
+}
+
 
 export function residenceAcousticPathResponse(points: readonly Point[], power: Power,
   kind: ResidenceAcousticPath['kind'], ids: readonly string[]): ResidenceAcousticPath {
@@ -162,7 +184,7 @@ export function createResidenceAcousticPathModel() {
         continue;
       }
       if (!transmit) {
-        if (opening.kind === 'window') return { visible: false, crossed, energy };
+        if (opening.kind === 'window') return { visible: false, crossed, energy, blockingWindow: wall };
         continue;
       }
       const portal = acousticPortals.find(candidate => candidate.wall === wall && candidate.opening === opening);
@@ -282,13 +304,14 @@ export function createResidenceAcousticPathModel() {
     return [...expanded, listener];
   }
 
-  function finitePolyline(points: readonly Point[], state: AcousticDoorState, ignoredLeaves: ReadonlySet<string>) {
+  function finitePolyline(points: readonly Point[], state: AcousticDoorState, ignoredLeaves: ReadonlySet<string>,
+    includeWallJoints = false) {
     const result = [points[0]];
     for (const b of points.slice(1)) {
       const a = result.at(-1)!;
       const blocked = geometrySegment(a, b, state, ignoredLeaves);
       if (blocked.visible) { result.push(b); continue; }
-      const wall = blocked.blocking;
+      const wall = blocked.blocking ?? (includeWallJoints ? blocked.blockingWindow : undefined);
       const leaf = blocked.blockingLeaf;
       if (!wall && !leaf) return;
       const margin = .001;
@@ -299,6 +322,9 @@ export function createResidenceAcousticPathModel() {
           around.push(wall.axis === 'e' ? { x: along, y: (a.y + b.y) / 2, z: -across, feature }
             : { x: across, y: (a.y + b.y) / 2, z: -along, feature });
         }
+      }
+      if (wall && includeWallJoints) {
+        around.push(...(wallJointCorners.get(wall) ?? []).map(point => ({ ...point, y: (a.y + b.y) / 2 })));
       }
       if (leaf) {
         const pose = leaf.pose;
@@ -342,11 +368,12 @@ export function createResidenceAcousticPathModel() {
       const paths: ResidenceAcousticPath[] = [{ ...response([source, listener], direct.energy, 'direct-or-wall', []),
         ids: direct.crossed.flatMap(crossing => crossing.id ? [crossing.id] : []) }];
       const opaque = direct.crossed.some(crossing => crossing.kind === 'opaque');
+      const fixedBoundary = opaque || direct.crossed.some(crossing => crossing.kind === 'window');
       const secondaryLeaves = direct.crossed.filter(crossing => crossing.kind === 'leaf');
-      if (start === end && secondaryLeaves.length && !opaque) {
-        const points = finitePolyline([source, listener], state, new Set());
+      if (start === end && (fixedBoundary || secondaryLeaves.length)) {
+        const points = finitePolyline([source, listener], state, new Set(), fixedBoundary);
         if (points) {
-          const detour = response(points, openPower, 'leaf-detour', []);
+          const detour = response(points, openPower, fixedBoundary ? 'room-detour' : 'leaf-detour', []);
           paths.push({ ...detour, ids: [...secondaryLeaves.map(crossing => `leaf:${crossing.leafId}`), ...detour.ids] });
         }
       }
