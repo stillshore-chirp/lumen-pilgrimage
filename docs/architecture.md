@@ -47,6 +47,8 @@ flowchart LR
 
 [CPU寿命回帰](../scripts/coast-texture-lifetime.test.mjs) はcompile前後、独立した2world、借用画像とuniform clone、終了の反復を確認する。実GPUの滞留は同一documentでワールドを有限回往復し、warm後のrenderer画像数とWebGLの生成・削除差を併記して確認する。CPUのdisposeイベントだけでGPU数の安定を認定しない。[TextureとSourceの説明](learning/modeling-materials.md#textureと画像sourceの寿命を分ける)
 
+Appと音量UIの [イベント購読解除](../src/coast/CoastSoundControls.ts) に使うprivate AbortControllerは、終了理由へ `null` を明示する。これらのsignalの利用者はDOM listener、遅延完了時の `aborted` 判定とモニターの短い音量移行の中止であり、終了時に新しい例外stackを保持する必要がない。fetch、認証や他のキャンセル理由・音声開始エラーは変更しない。[入力の回帰](../scripts/coast-controls.test.mjs) と [共有音の回帰](../scripts/monitor-audio.test.mjs) は購読解除、反復終了、遅れた音声開始の完了・失敗と、中止時のミュート/配信寿命を確認する。
+
 ## 仮想モニターの設計
 
 ここでは主要な実装接続を示します。遷移・権限・接続期限・対応ブラウザーの詳細は [仮想モニター仕様](monitor.md) を正本として参照してください。

@@ -1032,7 +1032,8 @@ export class CoastApp {
 
   private disposeWorld(): void {
     this.disposed = true;
-    this.events.abort();
+    // UI teardown needs no exception stack that could retain the replacement App.
+    this.events.abort(null);
     this.unsubscribeXR?.();
     this.renderer.xr.removeEventListener('sessionend', this.onXRSessionEnd);
     this.audioControls.dispose();

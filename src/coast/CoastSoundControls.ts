@@ -253,7 +253,8 @@ export function bindCoastSoundControls(
     },
     sync,
     dispose() {
-      listeners.abort();
+      // This private signal only removes UI listeners and guards late completions.
+      listeners.abort(null);
       stopRestoreRetry();
     },
   };
