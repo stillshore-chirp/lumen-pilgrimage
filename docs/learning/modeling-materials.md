@@ -166,6 +166,14 @@ p ≈ f s / z
 
 張地と垂幕は同じ不変の画像Sourceを参照し、textureのUV変換を別に持つ。張地のrepeatはbaked UV用に1、垂幕は既存の3.75×4.25である。画像を共有することと、異なる形状のUV尺度を共有することを区別し、textureを破棄するときは各参照の所有を追う。
 
+### Textureと画像Sourceの寿命を分ける
+
+画像の共有、Textureの共有、GPU割当の共有は同じではない。Three.js r184の [Texture.copy](https://github.com/mrdoob/three.js/blob/r184/src/textures/Texture.js) はSourceを共有し、[UniformsUtils.cloneUniforms](https://github.com/mrdoob/three.js/blob/r184/src/renderers/shaders/UniformsUtils.js) はTexture自体をcloneする。uniformをcloneしたReflectorでは、元のTextureとcloneの両方に所有者が必要になる。UVやsampler設定を分けたTextureを、画像が同じという理由だけで一つの寿命と扱わない。
+
+同版の [WebGLTextures](https://github.com/mrdoob/three.js/blob/r184/src/renderers/webgl/WebGLTextures.js) はSourceとsampler等のcache keyごとにGPU画像を数え、各Textureのdisposeで使用数を減らし、最後の参照を解放する。materialのdisposeはこのTextureのdisposeの代わりにはならない。標準materialのhookがclosureから画像を渡す場合、sceneや通常のmaterialプロパティを巡る回収器には見えないこともある。生成側が所有する画像、借りた画像、別の利用者へ返した画像を分けて終了経路へ接続する。
+
+確認には実Textureの生成・disposeイベントと、compile前後・複数factory・反復終了の反例を使う。GPUの確認ではrendererの数とWebGL生成/削除差を測り、GCや統計のリセットで単調増加を隠さない。画像Sourceの共有だけからGPU割当の同一性を推定せず、使用中の版とcache keyを確認する。実装上の所有者と回収順は [アーキテクチャ](../architecture.md#gpu画像の所有とワールド終了)を参照する。
+
 ## GGX、Fresnel、metal-roughness の意味
 
 PBRのパラメータは、微小面の向きの分布、遮蔽、入射角による反射率を表す。glTF の金属・誘電体モデルは、正の値、相反性、エネルギー保存を満たすBRDFを基本原則としている。[glTF 2.0 仕様 Appendix B](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) には、GGX と Schlick の式が実装可能な形で掲載されている。

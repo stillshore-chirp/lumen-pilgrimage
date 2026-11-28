@@ -11,7 +11,7 @@ const codeExtension = /\.(?:[cm]?js|tsx?)$/;
 const testExtension = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const worlds = ['coast', 'monitor', 'residence', 'cinema', 'atrium', 'lake', 'koto'];
 const tests = {
-  coast: ['coast-controls', 'coast-terrain', 'coast-acoustics', 'exploration-route'],
+  coast: ['coast-controls', 'coast-texture-lifetime', 'coast-terrain', 'coast-acoustics', 'exploration-route'],
   monitor: ['monitor-signaling', 'monitor-session', 'monitor-capture', 'monitor-pose', 'monitor-xr', 'monitor-audio'],
   residence: ['residence-navigation', 'residence-audio', 'residence-street', 'residence-lighting', 'residence-appliances',
     'residence-acoustic-paths', 'residence-monitor-audio', 'residence-screen-occlusion'],

@@ -39,6 +39,14 @@ flowchart LR
 - [CoastXR](../src/coast/CoastXR.ts) は、ワールドを交換しても同じ没入型セッションとXR rigを維持する。ワールド側の到着姿勢と支持面へXRの床と向きを合わせ、ヘッドセットから得た視点を景観更新と音響に渡す。デスクトップの画角は保存設定を使い、没入型の両眼投影はヘッドセットに従う。 [XRセッション](../src/xr/ImmersiveSession.ts) · [ワールドの操作契約](worlds.md#フレームと入力)
 - [CoastSoundControls](../src/coast/CoastSoundControls.ts) が環境音、歩行音、全体と種類別の音量を各ワールドの音響へ渡します。全体音量は [MonitorView](../src/monitor/monitorView.ts) にも渡し、接続した共有音に反映します。 [音の設定の保存形式](worlds.md#設定の保存)
 
+## GPU画像の所有とワールド終了
+
+`CoastApp.disposeWorld` はワールド固有の終了処理を先に呼び、その後で [disposeSceneDrawables](../src/coast/disposeSceneDrawables.ts) がscene内の材・画像・形状を回収する。通常のmaterialプロパティとShaderMaterialのuniformから参照する画像は後者が扱い、`onBeforeCompile` のclosureだけにあるsamplerは生成側が明示して解放する。
+
+海岸では [地形factory](../src/coast/world/coastSurface.ts) がlitter・mud・reliefの3画像、[植生factory](../src/coast/world/coastVegetation.ts) がbarkの色・高さ2画像を所有する。`disposeTextures` は繰返し呼出しで再解放しない。地形へ渡すstone・sandと、外へ返すmossRockは子factoryの解放対象へ入れない。元のsand Textureは [CoastWorld](../src/coast/CoastWorld.ts) が所有し、水面Reflectorのuniform cloneはscene回収側が扱う。この2つは画像Sourceを共有しても別のTextureである。
+
+[CPU寿命回帰](../scripts/coast-texture-lifetime.test.mjs) はcompile前後、独立した2world、借用画像とuniform clone、終了の反復を確認する。実GPUの滞留は同一documentでワールドを有限回往復し、warm後のrenderer画像数とWebGLの生成・削除差を併記して確認する。CPUのdisposeイベントだけでGPU数の安定を認定しない。[TextureとSourceの説明](learning/modeling-materials.md#textureと画像sourceの寿命を分ける)
+
 ## 仮想モニターの設計
 
 ここでは主要な実装接続を示します。遷移・権限・接続期限・対応ブラウザーの詳細は [仮想モニター仕様](monitor.md) を正本として参照してください。
