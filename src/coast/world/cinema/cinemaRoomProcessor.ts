@@ -1,3 +1,6 @@
+import { CINEMA_CONVOLUTION_PROCESSOR_SOURCE } from './cinemaConvolution';
+import { CINEMA_ROUTING_PACKET_PROCESSOR_SOURCE } from './cinemaRoutingPacket';
+
 /**
  * Source for the cinema room AudioWorklet.
  *
@@ -6,6 +9,8 @@
  * not allocate, sort, or wait for the main thread.
  */
 export const CINEMA_ROOM_PROCESSOR_SOURCE = String.raw`
+${CINEMA_CONVOLUTION_PROCESSOR_SOURCE}
+${CINEMA_ROUTING_PACKET_PROCESSOR_SOURCE}
 const SAMPLE_RATE = 48000;
 const RING_LENGTH = 32768;
 const RING_MASK = RING_LENGTH - 1;
@@ -15,13 +20,13 @@ const SPATIAL_STRIDE = 7;
 const STATUS_INTERVAL = 1024;
 const HRTF_DIRECTION_COUNT = 60;
 const HRTF_TAP_COUNT = 144;
-// Keep the onset of each measured response. The independent room network
-// supplies the late energy.
-const HRTF_DIRECT_TAPS = 48;
-const HRTF_REFLECTION_TAPS = 24;
+// Preserve the complete measured head response. The independent room network
+// models the room tail; it cannot replace omitted HRIR taps.
+const HRTF_DIRECT_TAPS = 144;
+const HRTF_REFLECTION_TAPS = 144;
 const HRTF_SAMPLE_SCALE = 1 / 32768;
 const MAX_REFLECTION_PATHS = 48;
-const HRTF_REFLECTION_LIMIT = 24;
+const HRTF_REFLECTION_LIMIT = 48;
 const SPATIAL_SETTLE_SAMPLES = 4096;
 const EARLY_DELAYS = [317, 541, 809, 1151, 1613, 2203];
 const EARLY_WEIGHTS = [0.18, 0.15, 0.12, 0.09, 0.065, 0.04];
@@ -65,6 +70,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     this.lowpass = new Float32Array(this.speakerCount);
     this.lfeState = 0;
     this.speakerValues = new Float32Array(this.speakerCount);
+    this.objectScales = new Float64Array(this.inputCount);
     this.renderedLeft = 0;
     this.renderedRight = 0;
     this.spatial = new Float32Array(this.speakerCount * SPATIAL_STRIDE);
@@ -95,23 +101,42 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     this.seekGeneration = 0;
     this.haveClock = false;
     this.playing = false;
+    this.disposed = false;
     this.blockConsumed = false;
     this.underruns = 0;
     this.wasUnderrun = false;
     this.writeIndex = 0;
+    this.writeTotal = 0;
+    this.bankResyncSent = false;
+    this.convolver = new CinemaPartitionedConvolver(this.speakerCount);
     this.renderedSinceStatus = 0;
     this.lastConsumedContextTime = 0;
     this.lastBlockFrames = 0;
+    this.mixRangeError = false;
     this.port.onmessage = event => this.receive(event.data || {});
   }
 
   receive(data) {
+    if (this.disposed) return;
     switch (data.type) {
       case 'enqueue':
         this.receiveEnqueue(data);
         break;
       case 'pose':
         this.receiveSpatial(data.spatial, data.reflections);
+        break;
+      case 'filters':
+        this.convolver.setPacket(data.packet);
+        break;
+      case 'bank-state':
+        if (this.convolver.setBankState(data)) this.bankResyncSent = false;
+        else if (!this.bankResyncSent) {
+          this.bankResyncSent = true;
+          this.port.postMessage({ type: 'bank-resync', expectedStateId: this.convolver.latestBankStateId });
+        }
+        break;
+      case 'filter-gains':
+        this.convolver.setGains(data.kernelId, data.gains);
         break;
       case 'hrtf':
         this.receiveHrtf(data.buffer);
@@ -120,7 +145,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         this.receiveSeek(Number(data.sample), data.generation);
         break;
       case 'playing':
-        this.playing = Boolean(data.active);
+        this.playing = Boolean(data.active) && !this.mixRangeError;
         if (!this.playing) {
           this.blockConsumed = false;
           this.wasUnderrun = false;
@@ -128,9 +153,15 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         this.postStatus(true);
         break;
       case 'dispose':
+        this.disposed = true;
         this.queue = [];
         this.queueHead = 0;
         this.resetDsp();
+        this.convolver.latestBankState = null;
+        this.convolver.latestBankStateId = 0;
+        this.convolver.current = null;
+        this.convolver.previous = null;
+        this.convolver.pending = null;
         this.playing = false;
         this.postStatus(true);
         break;
@@ -140,25 +171,54 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
   }
 
   receiveEnqueue(data) {
+    if (this.mixRangeError) return;
     const channels = (data.channels || []).map(asFloat32Array);
     const start = Math.trunc(Number(data.startSample));
     const frames = channels.length === 0 ? 0 : channels[0].length;
     if (frames <= 0) return;
-    const routeSegments = data.routingSegments || [{
-      offset: 0,
-      length: frames,
-      start: data.routing,
-      end: data.routing,
-    }];
-    const segments = routeSegments.map(segment => this.makeRouteSegment(
-      asFloat32Array(segment.start), asFloat32Array(segment.end || segment.start),
-      Math.max(1, Math.min(frames, Number(segment.length) || frames)),
-    ));
+    let packed = null, segments = [];
+    if (data.packedRouting !== undefined) {
+      if (channels.length === this.inputCount && channels.every(channel => channel.length === frames)
+        && Number.isSafeInteger(start) && Number.isSafeInteger(start + frames)
+        && data.routingSegments === undefined && data.objectInputStart === undefined && data.routing === undefined) {
+        packed = decodeCinemaRoutingPacket(data.packedRouting, this.speakerCount, this.inputCount, frames);
+      }
+      if (!packed) {
+        this.port.postMessage({ type: 'error', message: 'Invalid cinema packed routing' });
+        return;
+      }
+    } else {
+      const routeSegments = data.routingSegments || [{
+        offset: 0,
+        length: frames,
+        start: data.routing,
+        end: data.routing,
+      }];
+      const hasObjectDb = data.objectInputStart !== undefined
+        || routeSegments.some(segment => segment.objectGainDbStart !== undefined || segment.objectGainDbEnd !== undefined);
+      const objectStart = hasObjectDb ? data.objectInputStart : -1;
+      const objectCount = hasObjectDb ? this.inputCount - objectStart : 0;
+      if (hasObjectDb && (!Number.isInteger(objectStart) || objectStart < 0 || objectStart > this.inputCount || objectCount > 32
+        || routeSegments.some(segment => !(segment.objectGainDbStart instanceof Float64Array)
+          || !(segment.objectGainDbEnd instanceof Float64Array)
+          || segment.objectGainDbStart.length !== objectCount || segment.objectGainDbEnd.length !== objectCount
+          || segment.objectGainDbStart.some(value => !Number.isFinite(value))
+          || segment.objectGainDbEnd.some(value => !Number.isFinite(value))))) {
+        this.port.postMessage({ type: 'error', message: 'Invalid cinema object gain envelope' });
+        return;
+      }
+      segments = routeSegments.map(segment => this.makeRouteSegment(
+        asFloat32Array(segment.start), asFloat32Array(segment.end || segment.start),
+        Math.max(1, Math.min(frames, Number(segment.length) || frames)), objectStart,
+        segment.objectGainDbStart, segment.objectGainDbEnd,
+      ));
+    }
     const activeSpeakers = new Uint8Array(this.speakerCount);
     let fullRangeActive = false;
-    for (const segment of segments) {
+    for (let segmentIndex = 0; segmentIndex < (packed ? packed.segmentCount : segments.length); segmentIndex++) {
+      const segment = packed || segments[segmentIndex], base = packed ? segmentIndex * (this.speakerCount + 1) : 0;
       for (let speaker = 0; speaker < this.speakerCount; speaker += 1) {
-        if (segment.offsets[speaker] < segment.offsets[speaker + 1]) {
+        if (segment.offsets[base + speaker] < segment.offsets[base + speaker + 1]) {
           activeSpeakers[speaker] = 1;
           if ((this.kinds[speaker] || 0) === 0) fullRangeActive = true;
         }
@@ -174,7 +234,10 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       end: start + frames,
       channels,
       segments,
+      packed,
       activeSpeakers,
+      segmentHead: 0,
+      segmentStart: 0,
     };
     if (!this.haveClock) {
       this.playhead = start;
@@ -188,7 +251,10 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     }
   }
 
-  makeRouteSegment(start, end, length) {
+  makeRouteSegment(start, end, length, objectInputStart = -1, objectGainDbStart, objectGainDbEnd) {
+    const objectCount = objectInputStart >= 0 ? this.inputCount - objectInputStart : 0;
+    const normStart = new Float64Array(objectCount), normEnd = new Float64Array(objectCount);
+    const normDot = new Float64Array(objectCount);
     const offsets = new Uint32Array(this.speakerCount + 1);
     const indices = [];
     const startValues = [];
@@ -202,9 +268,27 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
           indices.push(channel);
           startValues.push(startValue);
           endValues.push(endValue);
+          if (objectInputStart >= 0 && channel >= objectInputStart) {
+            const object = channel - objectInputStart;
+            normStart[object] += startValue * startValue;
+            normEnd[object] += endValue * endValue;
+            normDot[object] += startValue * endValue;
+          }
         }
       }
       offsets[speaker + 1] = indices.length;
+    }
+    const constantAmplitude = new Float64Array(objectCount).fill(-1);
+    const inverseNorm = new Float64Array(objectCount).fill(-1);
+    for (let object = 0; object < objectCount; object++) {
+      if (objectGainDbStart[object] === objectGainDbEnd[object]) {
+        const amplitude = 10 ** (objectGainDbStart[object] / 20);
+        constantAmplitude[object] = Number.isFinite(amplitude) ? amplitude : 0;
+      }
+      if (!(normStart[object] > 0 && normEnd[object] > 0)) inverseNorm[object] = 1;
+      else if (normStart[object] === normEnd[object] && normStart[object] === normDot[object]) {
+        inverseNorm[object] = 1 / Math.sqrt(normStart[object]);
+      }
     }
     return {
       length,
@@ -212,6 +296,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       indices: Uint16Array.from(indices),
       startValues: Float32Array.from(startValues),
       endValues: Float32Array.from(endValues),
+      objectInputStart, objectGainDbStart, objectGainDbEnd, normStart, normEnd, normDot, constantAmplitude, inverseNorm,
     };
   }
 
@@ -258,6 +343,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     this.queue = [];
     this.queueHead = 0;
     this.wasUnderrun = false;
+    this.mixRangeError = false;
     this.lastConsumedContextTime = typeof currentTime === 'number' ? currentTime : 0;
     this.resetDsp();
     this.postStatus(true);
@@ -265,8 +351,11 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
 
   resetDsp() {
     this.writeIndex = 0;
+    this.writeTotal = 0;
+    this.convolver.reset();
     this.lowpass.fill(0);
     this.speakerValues.fill(0);
+    this.objectScales.fill(0);
     this.bandState.fill(0);
     this.lateIndex.fill(0);
     this.lateDamp.fill(0);
@@ -282,6 +371,16 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       this.spatial[i] += (this.targetSpatial[i] - this.spatial[i]) * 0.002;
     }
     if (--this.spatialRemaining === 0) this.spatial.set(this.targetSpatial);
+  }
+
+  smoothSpatialQuantum(frames) {
+    if (this.spatialRemaining === 0) return;
+    const amount = 1 - Math.pow(.998, frames);
+    for (let i = 0; i < this.spatial.length; i++) {
+      this.spatial[i] += (this.targetSpatial[i] - this.spatial[i]) * amount;
+    }
+    this.spatialRemaining = Math.max(0, this.spatialRemaining - frames);
+    if (this.spatialRemaining === 0) this.spatial.set(this.targetSpatial);
   }
 
   updateKernels(frames) {
@@ -317,38 +416,89 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
   }
 
   sampleFromChunk(chunk) {
-    if (!chunk) return;
+    if (!chunk || this.mixRangeError) return;
     const offset = this.playhead - chunk.start;
     if (offset < 0 || offset >= chunk.end - chunk.start) return;
-    let segmentIndex = 0;
-    let segmentOffset = offset;
-    while (segmentIndex + 1 < chunk.segments.length
-      && segmentOffset >= chunk.segments[segmentIndex].length) {
-      segmentOffset -= chunk.segments[segmentIndex].length;
-      segmentIndex += 1;
+    let segmentIndex = chunk.segmentHead || 0, segmentStart = chunk.segmentStart || 0;
+    if (offset < segmentStart) { segmentIndex = 0; segmentStart = 0; }
+    const packed = chunk.packed, segmentCount = packed ? packed.segmentCount : chunk.segments.length;
+    while (segmentIndex + 1 < segmentCount && offset - segmentStart >= (packed ? packed.lengths[segmentIndex] : chunk.segments[segmentIndex].length)) {
+      segmentStart += packed ? packed.lengths[segmentIndex] : chunk.segments[segmentIndex].length; segmentIndex++;
     }
-    const segment = chunk.segments[segmentIndex];
-    const fraction = segment.length > 1
-      ? Math.min(1, segmentOffset / (segment.length - 1))
-      : 0;
+    chunk.segmentHead = segmentIndex; chunk.segmentStart = segmentStart;
+    const segment = packed || chunk.segments[segmentIndex], segmentOffset = offset - segmentStart;
+    const length = packed ? packed.lengths[segmentIndex] : segment.length;
+    const objectCount = segment.objectInputStart >= 0 ? this.inputCount - segment.objectInputStart : 0;
+    const objectBase = packed ? segmentIndex * objectCount : 0, speakerBase = packed ? segmentIndex * (this.speakerCount + 1) : 0;
+    const fraction = length > 1 ? Math.min(1, segmentOffset / (length - 1)) : 0;
+    if (segment.objectInputStart >= 0) {
+      const oneMinus = 1 - fraction;
+      for (let object = 0; object < objectCount; object++) {
+        const at = objectBase + object;
+        const first = segment.normStart[at], last = segment.normEnd[at];
+        let scale = 0;
+        if (first > 0 || last > 0) {
+          // Active shapes are normalized; a zero endpoint retains its continuous activation fade.
+          let inverse = segment.inverseNorm[at];
+          if (inverse < 0) {
+            const energy = oneMinus * oneMinus * first + 2 * oneMinus * fraction * segment.normDot[at] + fraction * fraction * last;
+            inverse = energy > 0 ? 1 / Math.sqrt(energy) : 0;
+          }
+          let amplitude = segment.constantAmplitude[at];
+          if (amplitude < 0) {
+            const startDb = segment.objectGainDbStart[at], endDb = segment.objectGainDbEnd[at];
+            const difference = endDb - startDb;
+            const db = Number.isFinite(difference) ? startDb + difference * fraction : startDb * oneMinus + endDb * fraction;
+            amplitude = 10 ** (db / 20);
+          }
+          if (Number.isFinite(amplitude)) scale = amplitude * inverse;
+        }
+        this.objectScales[segment.objectInputStart + object] = Number.isFinite(scale) ? scale : 0;
+      }
+    }
     let lfeSample = 0;
     const lfeChannel = chunk.channels[this.lfeIndex];
     if (lfeChannel && offset < lfeChannel.length) lfeSample = lfeChannel[offset];
     this.lfeState += (lfeSample - this.lfeState) * LFE_LOW_PASS_ALPHA;
     for (let speaker = 0; speaker < this.speakerCount; speaker += 1) {
       let sum = 0;
-      const begin = segment.offsets[speaker];
-      const end = segment.offsets[speaker + 1];
+      const begin = segment.offsets[speakerBase + speaker];
+      const end = segment.offsets[speakerBase + speaker + 1];
       for (let route = begin; route < end; route += 1) {
         const channelIndex = segment.indices[route];
         const channel = chunk.channels[channelIndex];
-        const coefficient = segment.startValues[route]
+        let coefficient = segment.startValues[route]
           + (segment.endValues[route] - segment.startValues[route]) * fraction;
+        if (segment.objectInputStart >= 0 && channelIndex >= segment.objectInputStart) {
+          // Match the finite Float32 routing-coefficient boundary; overflow silences only this route.
+          coefficient = Math.fround(coefficient * this.objectScales[channelIndex]);
+          if (!Number.isFinite(coefficient)) coefficient = 0;
+        }
         if (channelIndex === this.lfeIndex) sum += this.lfeState * coefficient;
         else if (channel && offset < channel.length) sum += channel[offset] * coefficient;
       }
-      this.speakerValues[speaker] = sum;
+      // Assignment already rounds to Float32; inspect that same value before
+      // it can overflow persistent low-pass/FFT/ring state.
+      const stored = Math.fround(sum);
+      if (!Number.isFinite(stored)) {
+        this.failMixRange();
+        return;
+      }
+      this.speakerValues[speaker] = stored;
     }
+  }
+
+  failMixRange() {
+    if (this.mixRangeError) return;
+    this.mixRangeError = true;
+    this.playing = false;
+    this.blockConsumed = false;
+    this.queue = [];
+    this.queueHead = 0;
+    this.wasUnderrun = false;
+    this.resetDsp();
+    this.port.postMessage({ type: 'error', message: 'Cinema mixed signal exceeds the Float32 range' });
+    this.postStatus(true);
   }
 
   convolveHrtf(ring, write, delay, kernels, offset, taps) {
@@ -371,33 +521,41 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     this.hrtfRight = right;
   }
 
-  renderSample(chunk) {
+  writeSpeakerRings() {
     let roomLow = 0;
     for (let speaker = 0; speaker < this.speakerCount; speaker += 1) {
       const kind = this.kinds[speaker] || 0;
       if (kind === 0) {
         const state = this.lowpass[speaker]
           + (this.speakerValues[speaker] - this.lowpass[speaker]) * BASS_SEND_ALPHA;
-        this.lowpass[speaker] = state;
+        const stored = Math.fround(state);
+        if (!Number.isFinite(stored)) { this.failMixRange(); return; }
+        this.lowpass[speaker] = stored;
         roomLow += state;
       }
     }
+    for (let speaker = 0; speaker < this.speakerCount; speaker++) {
+      const kind = this.kinds[speaker] || 0;
+      let value = this.speakerValues[speaker];
+      if (kind === 1) value += roomLow * 0.16;
+      else if (kind === 2) value += roomLow * 0.20;
+      const stored = Math.fround(value);
+      if (!Number.isFinite(stored)) { this.failMixRange(); return; }
+      this.speakerRings[speaker][this.writeIndex] = stored;
+    }
+  }
+
+  renderSample(chunk) {
+    this.writeSpeakerRings();
+    if (this.mixRangeError) return;
     let reflection = 0;
     let directLeft = 0;
     let directRight = 0;
     const write = this.writeIndex;
     for (let speaker = 0; speaker < this.speakerCount; speaker += 1) {
-      const kind = this.kinds[speaker] || 0;
-      let value = this.speakerValues[speaker];
-      // LFE reaches the two sub groups through createCinemaRouting. The
-      // additional send here is deliberately only the low-passed full-range
-      // bed, avoiding a second LFE gain while retaining bass management.
-      if (kind === 1) value += roomLow * 0.16;
-      else if (kind === 2) value += roomLow * 0.20;
       const base = speaker * SPATIAL_STRIDE;
       const spatial = this.spatial;
       const ring = this.speakerRings[speaker];
-      ring[write] = value;
       if (!chunk.activeSpeakers[speaker]) continue;
       if (this.hrtf) {
         const delay = Math.min(spatial[base], spatial[base + 1]);
@@ -436,6 +594,11 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
       reflection += (pathLeft + pathRight) * 0.5;
     }
 
+    this.renderRoom(reflection, directLeft, directRight);
+  }
+
+  renderRoom(reflection, directLeft, directRight) {
+    const write = this.writeIndex;
     let early = 0;
     for (let band = 0; band < BAND_CUTOFFS.length; band += 1) {
       const state = this.bandState[band] + (reflection - this.bandState[band]) * BAND_ALPHAS[band];
@@ -479,6 +642,43 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     this.renderedRight = directRight + early * 0.52 + lateRight * 0.12;
   }
 
+  availableFrames(limit) {
+    let sample = this.playhead;
+    const end = sample + limit;
+    let index = this.queueHead;
+    while (index < this.queue.length && sample < end) {
+      const chunk = this.queue[index];
+      if (sample < chunk.start) break;
+      if (sample < chunk.end) sample = Math.min(end, chunk.end);
+      index++;
+    }
+    return sample - this.playhead;
+  }
+
+  renderQuantum(left, right, offset, count) {
+    const first = this.writeIndex;
+    this.smoothSpatialQuantum(count);
+    for (let frame = 0; frame < count; frame++) {
+      const chunk = this.currentChunk();
+      this.sampleFromChunk(chunk);
+      if (this.mixRangeError) return;
+      this.writeSpeakerRings();
+      if (this.mixRangeError) return;
+      this.playhead++;
+      this.writeTotal++;
+      this.writeIndex = (this.writeIndex + 1) & RING_MASK;
+    }
+    const end = this.writeIndex;
+    const rendered = this.convolver.render(this.speakerRings, end, this.writeTotal, count);
+    for (let frame = 0; frame < count; frame++) {
+      this.writeIndex = (first + frame) & RING_MASK;
+      this.renderRoom(rendered[2][frame], rendered[0][frame], rendered[1][frame]);
+      left[offset + frame] = Math.max(-1, Math.min(1, this.renderedLeft * .78));
+      if (right !== left) right[offset + frame] = Math.max(-1, Math.min(1, this.renderedRight * .78));
+    }
+    this.writeIndex = end;
+  }
+
   postStatus(force) {
     if (!force && this.renderedSinceStatus < STATUS_INTERVAL) return;
     this.renderedSinceStatus = 0;
@@ -499,6 +699,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     const right = output[1] || output[0];
     left.fill(0);
     if (right !== left) right.fill(0);
+    if (this.disposed) return false;
     this.blockConsumed = false;
     if (!this.playing) {
       this.lastBlockFrames = left.length;
@@ -508,12 +709,30 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
     }
     let sawGap = false;
     let consumedFrames = 0;
-    if (this.hrtf) this.updateKernels(left.length);
+    if (this.hrtf && !this.convolver.current) this.updateKernels(left.length);
     for (let frame = 0; frame < left.length; frame += 1) {
+      const count = this.hrtf && this.convolver.current
+        ? this.availableFrames(Math.min(CONV_HOP, left.length - frame)) : 0;
+      if (count > 0) {
+        this.renderQuantum(left, right, frame, count);
+        if (this.mixRangeError) {
+          left.fill(0); if (right !== left) right.fill(0);
+          return true;
+        }
+        this.blockConsumed = true;
+        consumedFrames += count;
+        frame += count - 1;
+        continue;
+      }
+      // The no-HRIR fallback and genuine queue gaps retain the original clock contract.
       this.smoothSpatial();
       const chunk = this.currentChunk();
       if (chunk) {
         this.sampleFromChunk(chunk);
+        if (this.mixRangeError) {
+          left.fill(0); if (right !== left) right.fill(0);
+          return true;
+        }
         this.blockConsumed = true;
       } else {
         this.speakerValues.fill(0);
@@ -524,10 +743,15 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         continue;
       }
       this.renderSample(chunk);
+      if (this.mixRangeError) {
+        left.fill(0); if (right !== left) right.fill(0);
+        return true;
+      }
       left[frame] = Math.max(-1, Math.min(1, this.renderedLeft * 0.78));
       if (right !== left) right[frame] = Math.max(-1, Math.min(1, this.renderedRight * 0.78));
       this.playhead += 1;
       this.writeIndex = (this.writeIndex + 1) & RING_MASK;
+      this.writeTotal += 1;
       consumedFrames += 1;
     }
     if (sawGap && !this.wasUnderrun) this.underruns += 1;

@@ -1,3 +1,4 @@
+import { cinemaBandShelves } from './cinemaPropagation';
 import { Quaternion, Vector3, type Camera } from 'three';
 import {
   CINEMA_BANDS, CINEMA_REFLECTION_LIMIT, CINEMA_SCREEN_BANDS, CINEMA_SPEAKERS, CINEMA_WOVEN_FABRIC,
@@ -51,10 +52,10 @@ interface ListeningGraph {
 }
 
 function filterChain(context: BaseAudioContext, bands: readonly number[]): BiquadFilterNode[] {
-  return bands.slice(1).map((frequency, index) => {
+  return cinemaBandShelves(bands, bands.map(() => 0)).map(({ frequency }) => {
     const filter = context.createBiquadFilter();
     filter.type = 'highshelf';
-    filter.frequency.value = Math.sqrt(frequency * bands[index]);
+    filter.frequency.value = frequency;
     return filter;
   });
 }

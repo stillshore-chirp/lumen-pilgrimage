@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1100" viewBox="0 0 1500 1100"><title>Cinema return-air opening and wall takeoff sections</title><desc>Generated from the same coffer shells, ventilation solids and wall subtraction as rendering and navigation. The audio source lies at the opening; the external elbow ends at a service-network interface.</desc><defs><clipPath id="xy"><rect x="85" y="178" width="1310" height="306"/></clipPath><clipPath id="xz"><rect x="85" y="626" width="740" height="410"/></clipPath></defs><g font-family="Arial, sans-serif"><rect x="0" y="0" width="1500" height="1100" fill="#f4f5ef" />
+<text x="55" y="48" font-size="27" fill="#233e45">LUMEN PILGRIMAGE / CINEMA RETURN-AIR OPENINGS</text>
+<text x="55" y="78" font-size="18" fill="#233e45">Runtime geometry sections. Positions in metres; nominal dimensions in millimetres.</text>
+<text x="55" y="108" font-size="16" fill="#233e45">Independent virtual installation; airflow, plant capacity and structural certification are not simulated.</text>
+<text x="85" y="156" font-size="21" fill="#233e45">X/Y SECTION AT z = 19 m  /  VERTICAL SCALE EXAGGERATED</text>
+<line x1="90" y1="432.8" x2="1380" y2="432.8" stroke="#d7dfd8" />
+<text x="20" y="437.79999999999893" font-size="15" fill="#233e45">21.62</text>
+<line x1="90" y1="412.15" x2="1380" y2="412.15" stroke="#d7dfd8" />
+<text x="20" y="417.14999999999884" font-size="15" fill="#233e45">21.655</text>
+<line x1="90" y1="241.05" x2="1380" y2="241.05" stroke="#d7dfd8" />
+<text x="20" y="246.04999999999933" font-size="15" fill="#233e45">21.945</text>
+<line x1="90" y1="208.6" x2="1380" y2="208.6" stroke="#d7dfd8" />
+<text x="20" y="213.5999999999995" font-size="15" fill="#233e45">22</text>
+<g clip-path="url(#xy)">
+<rect x="-875.775" y="229.25" width="3.26" height="194.7" fill="#72858d" />
+<rect x="1114.455" y="391.5" width="3.26" height="32.45" fill="#72858d" />
+<rect x="1114.455" y="229.25" width="3.26" height="32.45" fill="#72858d" />
+<rect x="-872.515" y="412.15" width="993.485" height="11.8" fill="#72858d" />
+<rect x="450.23" y="412.15" width="664.225" height="11.8" fill="#72858d" />
+<rect x="-872.515" y="229.25" width="1986.97" height="11.8" fill="#72858d" />
+<rect x="888.7" y="1783.9" width="345.56" height="141.6" fill="#72858d" />
+<rect x="1134.83" y="2031.7" width="101.06" height="165.2" fill="#72858d" />
+<rect x="116.08" y="418.05" width="4.89" height="17.7" fill="#be8a43" />
+<rect x="120.97" y="376.75" width="1.63" height="47.2" fill="#324950" />
+<rect x="450.23" y="418.05" width="4.89" height="17.7" fill="#be8a43" />
+<rect x="448.6" y="376.75" width="1.63" height="47.2" fill="#324950" />
+<rect x="1336.95" y="255.8" width="1.63" height="141.6" fill="#6b9aa4" />
+<rect x="1112.825" y="391.5" width="199.675" height="5.9" fill="#6b9aa4" />
+<rect x="1335.32" y="391.5" width="1.63" height="5.9" fill="#6b9aa4" />
+<rect x="1312.5" y="391.5" width="22.82" height="5.9" fill="#6b9aa4" />
+<rect x="1312.5" y="391.5" width="22.82" height="0" fill="#6b9aa4" />
+<rect x="1112.825" y="255.8" width="199.675" height="5.9" fill="#6b9aa4" />
+<rect x="1335.32" y="255.8" width="1.63" height="5.9" fill="#6b9aa4" />
+<rect x="1312.5" y="255.8" width="22.82" height="5.9" fill="#6b9aa4" />
+<rect x="1312.5" y="261.7" width="22.82" height="0" fill="#6b9aa4" />
+<rect x="1263.6" y="397.4" width="45.64" height="12791.2" fill="#ced4cf" />
+<rect x="1263.6" y="208.6" width="45.64" height="47.2" fill="#ced4cf" />
+</g>
+<rect x="1096.525" y="208.6" width="9.78" height="20.65" fill="none" stroke="#a3997d" stroke-width="2" stroke-dasharray="4 3"/>
+<rect x="1147.055" y="208.6" width="4.89" height="47.2" fill="none" stroke="#a3997d" stroke-width="2" stroke-dasharray="4 3"/>
+<rect x="1147.055" y="208.6" width="4.89" height="47.2" fill="none" stroke="#a3997d" stroke-width="2" stroke-dasharray="4 3"/>
+<rect x="1277.455" y="208.6" width="4.89" height="47.2" fill="none" stroke="#a3997d" stroke-width="2" stroke-dasharray="4 3"/>
+<rect x="1277.455" y="208.6" width="4.89" height="47.2" fill="none" stroke="#a3997d" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="90" y1="208.6" x2="1380" y2="208.6" stroke="#233e45" stroke-width="3"/>
+<text x="1130" y="196.5999999999995" font-size="17" fill="#233e45">ROOF y = 22</text>
+<circle cx="285.5999999999999" cy="432.79999999999893" r="5" fill="#b64936"/>
+<line x1="285.6" y1="432.8" x2="335" y2="514" stroke="#b64936" stroke-width="2"/>
+<text x="90" y="542" font-size="18" fill="#93412e">Shared visible mouth / audio source: (14, 21.620, 19)</text>
+<text x="590" y="300" font-size="18" fill="#233e45">Hollow coffer: 20 mm skins</text>
+<text x="590" y="327" font-size="17" fill="#233e45">Clear interior y = 21.655 ... 21.945</text>
+<text x="590" y="355" font-size="16" fill="#233e45">Dashed roof posts: projected from adjacent Z</text>
+<text x="940" y="453" font-size="16" fill="#233e45">Duct outer y = 21.680 ... 21.920</text>
+<text x="85" y="599" font-size="21" fill="#233e45">X/Z PLAN AT y = 21.8 m  /  EQUAL AXIS SCALES</text>
+<g clip-path="url(#xz)">
+<rect x="-5201" y="5698.4" width="5381.2" height="4954.4" fill="#72858d" />
+<rect x="-5201" y="682.4" width="8.8" height="4954.4" fill="#72858d" />
+<rect x="171.4" y="990.4" width="8.8" height="4646.4" fill="#72858d" />
+<rect x="171.4" y="682.4" width="8.8" height="246.4" fill="#72858d" />
+<rect x="-5192.2" y="5628" width="5363.6" height="8.8" fill="#72858d" />
+<rect x="-5192.2" y="682.4" width="5363.6" height="8.8" fill="#72858d" />
+<rect x="-5201" y="-4333.6" width="5381.2" height="4954.4" fill="#72858d" />
+<rect x="-5201" y="-9349.6" width="5381.2" height="4954.4" fill="#72858d" />
+<rect x="-5201" y="-14365.6" width="8.8" height="4954.4" fill="#72858d" />
+<rect x="171.4" y="-9569.6" width="8.8" height="158.4" fill="#72858d" />
+<rect x="171.4" y="-14365.6" width="8.8" height="4734.4" fill="#72858d" />
+<rect x="-5192.2" y="-9420" width="5363.6" height="8.8" fill="#72858d" />
+<rect x="-5192.2" y="-14365.6" width="5363.6" height="8.8" fill="#72858d" />
+<rect x="772" y="924.4" width="4.4" height="70.4" fill="#6b9aa4" />
+<rect x="167" y="990.4" width="605" height="4.4" fill="#6b9aa4" />
+<rect x="167" y="924.4" width="539" height="4.4" fill="#6b9aa4" />
+<rect x="767.6" y="924.4" width="4.4" height="4.4" fill="#6b9aa4" />
+<rect x="701.6" y="695.6" width="4.4" height="228.8" fill="#6b9aa4" />
+<rect x="767.6" y="695.6" width="4.4" height="228.8" fill="#6b9aa4" />
+<rect x="772" y="-9635.6" width="4.4" height="70.4" fill="#6b9aa4" />
+<rect x="167" y="-9569.6" width="605" height="4.4" fill="#6b9aa4" />
+<rect x="167" y="-9635.6" width="539" height="4.4" fill="#6b9aa4" />
+<rect x="767.6" y="-9635.6" width="4.4" height="4.4" fill="#6b9aa4" />
+<rect x="701.6" y="-9864.4" width="4.4" height="228.8" fill="#6b9aa4" />
+<rect x="767.6" y="-9864.4" width="4.4" height="228.8" fill="#6b9aa4" />
+<rect x="574" y="994.8" width="123.2" height="9688.8" fill="#ced4cf" />
+<rect x="574" y="-9565.2" width="123.2" height="10489.6" fill="#ced4cf" />
+<rect x="574" y="-14396.4" width="123.2" height="4760.8" fill="#ced4cf" />
+</g>
+<polyline points="200,959.6 736.8,959.6 736.8,695.6" fill="none" stroke="#b64936" stroke-width="3" stroke-dasharray="8 6"/>
+<text x="155" y="1055" font-size="16" fill="#233e45">Coffer takeoff</text>
+<text x="575" y="1055" font-size="16" fill="#233e45">Side wall / real cut</text>
+<line x1="736.8" y1="695.6" x2="842" y2="694" stroke="#b64936" stroke-width="2"/>
+<text x="870" y="679" font-size="20" fill="#233e45">Service-network interface</text>
+<text x="870" y="708" font-size="18" fill="#233e45">(20.37, 21.8, 19.60)</text>
+<text x="870" y="737" font-size="18" fill="#233e45">Clear section 140 x 220 mm</text>
+<text x="870" y="776" font-size="18" fill="#233e45">The elbow turns outside the wall.</text>
+<text x="870" y="804" font-size="17" fill="#233e45">Its end closes the straight outdoor sightline.</text>
+<text x="870" y="843" font-size="18" fill="#233e45">Four outlets: x = -14 / +14; z = 19 / 43</text>
+<text x="870" y="871" font-size="18" fill="#233e45">Shared source height: 21.620 m</text>
+<text x="870" y="911" font-size="17" fill="#233e45">Mouth 2000 x 180; shell cut 2020 x 200</text>
+<text x="870" y="939" font-size="17" fill="#233e45">Frame 2080 x 260; liner depth 80</text>
+<text x="870" y="981" font-size="17" fill="#233e45">Legend:</text>
+<rect x="870" y="997" width="17" height="17" fill="#72858d" />
+<text x="895" y="1011" font-size="16" fill="#233e45">coffer</text>
+<rect x="1040" y="997" width="17" height="17" fill="#be8a43" />
+<text x="1065" y="1011" font-size="16" fill="#233e45">frame</text>
+<rect x="1210" y="997" width="17" height="17" fill="#324950" />
+<text x="1235" y="1011" font-size="16" fill="#233e45">liner</text>
+<rect x="870" y="1028" width="17" height="17" fill="#6b9aa4" />
+<text x="895" y="1042" font-size="16" fill="#233e45">duct</text>
+<rect x="1040" y="1028" width="17" height="17" fill="#a3997d" />
+<text x="1065" y="1042" font-size="16" fill="#233e45">support</text>
+<rect x="1210" y="1028" width="17" height="17" fill="#ced4cf" />
+<text x="1235" y="1042" font-size="16" fill="#233e45">wall</text></g></svg>
