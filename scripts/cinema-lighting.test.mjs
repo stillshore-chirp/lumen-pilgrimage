@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import {
   BoxGeometry, Camera, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  PlaneGeometry, Scene, ShaderLib, Texture, UniformsUtils, Vector3,
+  Box3, LessEqualDepth, PlaneGeometry, Raycaster, Scene, ShaderLib, Texture, UniformsUtils, Vector3,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
@@ -26,6 +26,8 @@ const {
   bakeCinemaLightTransport, cinemaLightQuality, cinemaPictureOpening, cinemaProjectionFalloff, cinemaScreenLevels,
   CINEMA_LIGHT_BOUNCE, CINEMA_LIGHT_CROWN, CINEMA_ROOM_RETURN,
 } = await import('../src/coast/world/cinema/cinemaLightTransport.ts');
+const { CINEMA_SCREEN } = await import('../src/coast/world/cinema/cinemaLayout.ts');
+const { CINEMA_SCREEN_SUBSTRATE, cinemaScreenSubstrateBox } = await import('../src/coast/world/cinema/cinemaScreenSurface.ts');
 hooks.deregister();
 
 function probe(transport, quality, page, column, row) {
@@ -611,4 +613,94 @@ test('seat-specific transforms preserve the drape and floor consumers and wall h
     for (const geometry of geometries) geometry.dispose();
     for (const texture of textures) texture.dispose();
   }
+});
+
+
+test('cinema screen substrate closes its back and edges inside the existing frame', () => {
+  const originalDocument = globalThis.document;
+  let auditorium;
+  try {
+    globalThis.document = { createElement() { return { getContext() {
+      return new Proxy({}, { get: () => () => undefined });
+    } }; } };
+    auditorium = createCinemaAuditorium();
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+  const scene = new Scene();
+  scene.add(auditorium.group);
+  const substrate = auditorium.group.getObjectByName('Opaque cinema screen substrate');
+  const frame = auditorium.group.getObjectByName('Low-reflection proscenium and screen frame');
+  const lighting = createCinemaLighting(scene, auditorium.group);
+  let geometryDisposals = 0, materialDisposals = 0, instanceDisposals = 0;
+  try {
+    assert.ok(substrate instanceof InstancedMesh && frame instanceof InstancedMesh);
+    assert.equal(substrate.count, 1);
+    const projection = scene.getObjectByName('Thirty-metre cinema projection screen');
+    assert.equal(projection.renderOrder, 0);
+    assert.equal(substrate.renderOrder, -1);
+    for (const material of [substrate.material, projection.material]) {
+      assert.equal(material.depthTest, true);
+      assert.equal(material.depthWrite, true);
+      assert.equal(material.depthFunc, LessEqualDepth);
+      assert.equal(material.polygonOffset, false);
+    }
+    assert.ok(substrate.material instanceof MeshStandardMaterial);
+    assert.equal(substrate.material.transparent, false);
+    assert.equal(substrate.material.opacity, 1);
+    assert.equal(substrate.material.emissive.getHex(), 0);
+    assert.equal(substrate.material.map, null);
+    assert.equal(substrate.material.roughness, .97);
+    assert.equal(substrate.material.color.getHex(), 0x101114);
+    const shader = { uniforms: {}, vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader };
+    substrate.material.onBeforeCompile(shader, {});
+    assert.ok(shader.fragmentShader.includes('cinemaIncident'));
+    assert.ok(!shader.fragmentShader.includes('cinemaSource'));
+    const [x, y, z, width, height, depth] = cinemaScreenSubstrateBox();
+    const box = new Box3(new Vector3(x-width/2, y-height/2, z-depth/2), new Vector3(x+width/2, y+height/2, z+depth/2));
+    assert.ok(Math.abs(box.max.z - (CINEMA_SCREEN.z - .0005)) < 1e-12);
+    assert.ok(Math.abs(box.min.z - (CINEMA_SCREEN.z - .0017)) < 1e-12);
+    assert.equal(depth, CINEMA_SCREEN_SUBSTRATE.thickness);
+    assert.ok(width * height * depth > 0);
+    // The actual frame instances retain their old dimensions and overlap the membrane by 1 mm.
+    const matrix = new Matrix4(), local = new Box3(new Vector3(-.5,-.5,-.5), new Vector3(.5,.5,.5));
+    const contacts = [];
+    for (let i = 0; i < frame.count; i++) {
+      frame.getMatrixAt(i, matrix);
+      const actual = local.clone().applyMatrix4(matrix);
+      if (actual.intersectsBox(box)) contacts.push(actual.intersect(box));
+    }
+    assert.equal(contacts.length, 4);
+    for (const contact of contacts) {
+      const size = contact.getSize(new Vector3());
+      assert.ok(size.x > 0 && size.y > 0 && size.z > .00119);
+      assert.ok(Math.abs(Math.min(size.x, size.y) - .001) < 2e-6);
+    }
+    scene.updateMatrixWorld(true);
+    const ray = (origin, direction, objects = [scene]) => new Raycaster(new Vector3(...origin), new Vector3(...direction)).intersectObjects(objects, true);
+    const front = ray([0, CINEMA_SCREEN.center, .65], [0,0,-1]);
+    assert.equal(front[0].object.name, 'Thirty-metre cinema projection screen');
+    assert.ok(Math.abs(front[0].point.z - CINEMA_SCREEN.z) < 1e-12);
+    for (const [u,v] of [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,1]]) {
+      const px = u * (CINEMA_SCREEN.width/2 - .0001), py = CINEMA_SCREEN.center + v * (CINEMA_SCREEN.height/2 - .0001);
+      const back = ray([px,py,-.35], [0,0,1]);
+      assert.strictEqual(back[0].object, substrate);
+      assert.ok(Math.abs(back[0].point.z - box.min.z) < 1e-8);
+    }
+    // All four thin edge faces exist even where the frame hides them from normal seats.
+    for (const [origin, direction] of [
+      [[box.min.x-.1,y,z],[1,0,0]], [[box.max.x+.1,y,z],[-1,0,0]],
+      [[0,box.min.y-.1,z],[0,1,0]], [[0,box.max.y+.1,z],[0,-1,0]],
+    ]) assert.strictEqual(ray(origin, direction, [substrate])[0].object, substrate);
+    substrate.geometry.addEventListener('dispose', () => geometryDisposals++);
+    substrate.material.addEventListener('dispose', () => materialDisposals++);
+    substrate.addEventListener('dispose', () => instanceDisposals++);
+  } finally {
+    lighting.dispose();
+    auditorium.dispose();
+    auditorium.dispose();
+  }
+  assert.deepEqual([geometryDisposals, materialDisposals, instanceDisposals], [1,1,1]);
+  assert.equal(auditorium.group.children.length, 0);
 });
