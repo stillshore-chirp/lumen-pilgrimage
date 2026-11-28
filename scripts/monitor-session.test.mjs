@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MonitorReceiver, MonitorSender } from '../src/monitor/monitorSession.ts';
+import { MonitorReceiver, MonitorSender, monitorVideoBitrate } from '../src/monitor/monitorSession.ts';
 
 class Track extends EventTarget {
   readyState = 'live';
@@ -10,6 +10,8 @@ class Track extends EventTarget {
     super();
     this.kind = kind;
   }
+
+  getSettings() { return { width: 320, height: 180, frameRate: 60 }; }
 
   stop() {
     this.readyState = 'ended';
@@ -176,6 +178,8 @@ test('sender waits for one approval and gathers LAN candidates before sharing', 
     ['video', 'sendonly'], ['audio', 'sendonly'],
   ]);
 
+  assert.deepEqual(peers[0].transceivers[0].options.sendEncodings, [{ maxFramerate: 60, maxBitrate: 2_000_000 }]);
+  assert.equal(peers[0].transceivers[1].options.sendEncodings, undefined);
   peers[0].finishIce();
   await until(() => calls.some(({ action }) => action === 'offer'), 'offer was not sent');
   const offer = calls.find(({ action }) => action === 'offer');
@@ -485,4 +489,287 @@ test('a receiver requires expiration information before accepting approved media
   await until(() => states.at(-1).phase === 'failed', 'receiver did not reject an approval without expiration');
   assert.match(states.at(-1).detail, /有効期限/);
   assert.deepEqual(peers, []);
+});
+
+// Local pairing authenticates the exact launched window before transferring a private port.
+const { MonitorLocalPairing, MonitorPairingSource } = await import('../src/monitor/monitorPairing.ts');
+const { monitorVideoSnapshot, monitorVideoRates, measureMonitorVideo, describeMonitorVideo } = await import('../src/monitor/monitorVideoMetrics.ts');
+
+function postEvent(host, { source, origin = host.location.origin, data, ports = [] }) {
+  host.dispatchEvent(Object.assign(new Event('message'), { source, origin, data, ports }));
+}
+
+function localHost() {
+  const host = new EventTarget();
+  host.location = { origin: 'https://monitor.example' };
+  host.opener = null;
+  return host;
+}
+
+test('local launch accepts one code only from the exact same-origin launched sender', async t => {
+  const host = localHost();
+  let child;
+  const transfers = [];
+  const opened = [];
+  host.open = (url, target) => {
+    opened.push({ url, target });
+    child = { postMessage: (data, origin, ports) => transfers.push({ data, origin, ports }) };
+    return child;
+  };
+  const codes = [];
+  const pairing = new MonitorLocalPairing(code => codes.push(code), host);
+  t.after(() => pairing.cancel());
+  const url = new URL('/?monitor=sender', host.location.origin);
+  assert.equal(pairing.open(url), true);
+  const ready = { type: 'lumen-monitor-sender-ready' };
+  postEvent(host, { source: {}, data: ready });
+  postEvent(host, { source: child, origin: 'https://other.example', data: ready });
+  assert.equal(transfers.length, 0);
+  postEvent(host, { source: child, data: ready });
+  assert.equal(transfers.length, 1);
+  assert.equal(transfers[0].origin, host.location.origin);
+  const port = transfers[0].ports[0];
+  t.after(() => port.close());
+  port.postMessage({ type: 'lumen-monitor-pairing-code', code: 'bad' });
+  port.postMessage({ type: 'lumen-monitor-pairing-code', code: 'AAAA-BBBB-CCCC' });
+  port.postMessage({ type: 'lumen-monitor-pairing-code', code: 'DDDD-EEEE-FFFF' });
+  await until(() => codes.length > 0, 'local code was not delivered');
+  assert.deepEqual(codes, ['AAAA-BBBB-CCCC']);
+  assert.deepEqual(opened, [{ url: url.href, target: '_blank' }]);
+  assert.equal(pairing.open(new URL('https://other.example/')), false);
+});
+
+test('cancelling a handoff prevents an old channel or window from enrolling a later attempt', async t => {
+  const host = localHost();
+  const children = [];
+  const ports = [];
+  host.open = () => {
+    const child = { postMessage: (_data, _origin, transfer) => ports.push(transfer[0]) };
+    children.push(child);
+    return child;
+  };
+  const codes = [];
+  const pairing = new MonitorLocalPairing(code => codes.push(code), host);
+  t.after(() => { pairing.cancel(); for (const port of ports) port.close(); });
+  const url = new URL('/?monitor=sender', host.location.origin);
+  pairing.open(url);
+  postEvent(host, { source: children[0], data: { type: 'lumen-monitor-sender-ready' } });
+  pairing.cancel();
+  pairing.open(url);
+  ports[0].postMessage({ type: 'lumen-monitor-pairing-code', code: 'AAAA-BBBB-CCCC' });
+  postEvent(host, { source: children[0], data: { type: 'lumen-monitor-sender-ready' } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ports.length, 1);
+  assert.deepEqual(codes, []);
+  host.open = () => null;
+  assert.equal(pairing.open(url), false);
+});
+
+test('sender detaches opener immediately and sends only a single code over its authenticated port', async t => {
+  const host = localHost();
+  const ready = [];
+  const opener = { postMessage: (data, origin) => ready.push({ data, origin }) };
+  host.opener = opener;
+  const source = new MonitorPairingSource(host);
+  t.after(() => source.dispose());
+  assert.equal(host.opener, null);
+  assert.deepEqual(ready, [{ data: { type: 'lumen-monitor-sender-ready' }, origin: host.location.origin }]);
+  const channel = new MessageChannel();
+  t.after(() => { channel.port1.close(); channel.port2.close(); });
+  const received = [];
+  channel.port1.onmessage = ({ data }) => received.push(data);
+  source.publish('AAAA-BBBB-CCCC');
+  postEvent(host, { source: {}, data: { type: 'lumen-monitor-pairing-port' }, ports: [channel.port2] });
+  postEvent(host, { source: opener, origin: 'https://other.example', data: { type: 'lumen-monitor-pairing-port' }, ports: [channel.port2] });
+  assert.deepEqual(received, []);
+  postEvent(host, { source: opener, data: { type: 'lumen-monitor-pairing-port' }, ports: [channel.port2] });
+  await until(() => received.length > 0, 'sender handoff missing');
+  source.publish('DDDD-EEEE-FFFF');
+  assert.deepEqual(received, [{ type: 'lumen-monitor-pairing-code', code: 'AAAA-BBBB-CCCC' }]);
+});
+
+test('video diagnostics measure each counter interval and preserve missing or reset metrics', () => {
+  const report = rows => new Map(rows.map(row => [row.id, row]));
+  const source = (frames, timestamp = 1000) => ({ id: 'source', type: 'media-source', kind: 'video', frames, timestamp, width: 640, height: 360, trackIdentifier: 'private-label' });
+  const send = (framesSent, timestamp = 1000) => ({ id: 'send', type: 'outbound-rtp', kind: 'video', framesSent, framesEncoded: framesSent, timestamp, qualityLimitationReason: 'cpu', address: 'private-address' });
+  const first = monitorVideoSnapshot(report([source(60), send(60)]));
+  const second = monitorVideoSnapshot(report([source(240, 4000), send(210, 4000)]));
+  const rates = monitorVideoRates(first, second);
+  assert.equal(rates.captureFps, 60);
+  assert.equal(rates.sentFps, 50);
+  assert.equal(rates.encodedFps, 50);
+  assert.equal(rates.durationMs, 3000);
+  assert.equal(rates.qualityLimitation, 'cpu');
+  assert.equal(rates.decodedFps, undefined);
+  assert.equal(JSON.stringify(second).includes('private'), false);
+  assert.equal(monitorVideoRates(first, monitorVideoSnapshot(report([source(1, 4000)]))).captureFps, undefined);
+  assert.equal(monitorVideoRates(first, monitorVideoSnapshot(report([{ ...source(240, 4000), id: 'new-source' }]))).captureFps, undefined);
+  assert.equal(monitorVideoRates(first, monitorVideoSnapshot(report([source(60, 4000)]))).captureFps, 0);
+});
+
+test('video measurement cancels promptly and never converts absent counters into zero fps', async () => {
+  const abort = new AbortController();
+  const read = async () => ({ counters: [] });
+  const pending = measureMonitorVideo(read, abort.signal, undefined, 10_000);
+  await new Promise(resolve => setImmediate(resolve));
+  abort.abort();
+  await assert.rejects(pending, { name: 'AbortError' });
+  const result = await measureMonitorVideo(read, new AbortController().signal, undefined, 1);
+  assert.equal(result.sentFps, undefined);
+  assert.equal(result.presentedFps, undefined);
+  assert.match(describeMonitorVideo(result, 'sender'), /取得 未取得.*送信 未取得/);
+  assert.match(describeMonitorVideo(result, 'viewer'), /受信 未取得.*デコード 未取得/);
+});
+
+test('presentation measurements include frozen time and distinguish zero, one and missing callbacks', async () => {
+  async function observe(frames) {
+    let callback;
+    let handle = 0;
+    const video = {
+      srcObject: {},
+      requestVideoFrameCallback(next) { callback = next; return ++handle; },
+      cancelVideoFrameCallback() { callback = undefined; },
+    };
+    const measured = measureMonitorVideo(async () => ({ counters: [] }), new AbortController().signal, video, 40);
+    await new Promise(resolve => setImmediate(resolve));
+    for (const presentedFrames of frames) callback?.(performance.now(), { presentedFrames, presentationTime: presentedFrames });
+    const result = await measured;
+    assert.ok(result.presentationDurationMs >= 35);
+    return result;
+  }
+  const none = await observe([]);
+  assert.equal(none.presentedFps, 0);
+  assert.equal(none.presentationFrames, 0);
+  const one = await observe([1]);
+  assert.equal(one.presentationFrames, 1);
+  assert.ok(one.presentedFps > 0 && one.presentedFps < 30);
+  const burst = await observe([10, 11]);
+  assert.equal(burst.presentationFrames, 2);
+  assert.ok(burst.presentedFps > 0 && burst.presentedFps < 60, 'frozen time must lower the reported rate');
+});
+
+test('a backgrounded video measurement is rejected instead of reporting throttling as source fps', async t => {
+  const document = new EventTarget();
+  document.visibilityState = 'visible';
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: document });
+  t.after(() => previous ? Object.defineProperty(globalThis, 'document', previous) : delete globalThis.document);
+  const pending = measureMonitorVideo(async () => ({ counters: [] }), new AbortController().signal, undefined, 5);
+  await new Promise(resolve => setImmediate(resolve));
+  document.visibilityState = 'hidden';
+  document.dispatchEvent(new Event('visibilitychange'));
+  document.visibilityState = 'visible';
+  await assert.rejects(pending, /visible page/);
+});
+
+test('handoff expiry removes the temporary window and port authority without extending server enrollment', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const host = localHost();
+  const transferred = [];
+  const child = { postMessage: (_data, _origin, ports) => transferred.push(ports[0]) };
+  host.open = () => child;
+  const codes = [];
+  const pairing = new MonitorLocalPairing(code => codes.push(code), host);
+  t.after(() => pairing.cancel());
+  pairing.open(new URL('/?monitor=sender', host.location.origin));
+  t.mock.timers.tick(120_000);
+  postEvent(host, { source: child, data: { type: 'lumen-monitor-sender-ready' } });
+  assert.deepEqual(transferred, []);
+  assert.deepEqual(codes, []);
+
+  const sourceHost = localHost();
+  const opener = { postMessage() {} };
+  sourceHost.opener = opener;
+  const source = new MonitorPairingSource(sourceHost);
+  t.after(() => source.dispose());
+  const channel = new MessageChannel();
+  t.after(() => { channel.port1.close(); channel.port2.close(); });
+  const received = [];
+  channel.port1.onmessage = ({ data }) => received.push(data);
+  postEvent(sourceHost, { source: opener, data: { type: 'lumen-monitor-pairing-port' }, ports: [channel.port2] });
+  t.mock.timers.tick(120_000);
+  source.publish('AAAA-BBBB-CCCC');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(received, []);
+});
+
+
+test('surface supply rates use the surface observation interval and keep the target explicit', async () => {
+  let reads = 0;
+  const surface = () => ++reads === 1
+    ? { renderedFrames: 60, videoFrames: 30, uploadFrames: 30, timestamp: 1000, surface: 'floating', freshness: 'video-frame-callback' }
+    : { renderedFrames: 120, videoFrames: 60, uploadFrames: 60, timestamp: 2000, surface: 'floating', freshness: 'video-frame-callback' };
+  const result = await measureMonitorVideo(async () => ({ counters: [] }), new AbortController().signal, undefined, 1, surface);
+  assert.equal(result.renderedFps, 60);
+  assert.equal(result.suppliedFps, 30);
+  assert.equal(result.surface, 'floating');
+  assert.match(describeMonitorVideo(result, 'viewer'), /景観描画 60.0fps.*景観への映像供給 30.0fps（浮遊面）/);
+});
+
+
+test('video upper budgets scale with source geometry and rate while remaining bounded', () => {
+  assert.equal(monitorVideoBitrate({ width: 1280, height: 720, frameRate: 60 }), 5_529_600);
+  assert.equal(monitorVideoBitrate({ width: 1280, height: 720, frameRate: 30 }), 2_764_800);
+  assert.equal(monitorVideoBitrate({ width: 1280, height: 720, frameRate: 15 }), 2_000_000);
+  assert.equal(monitorVideoBitrate({ width: 1920, height: 1080, frameRate: 60 }), 12_000_000);
+  assert.equal(monitorVideoBitrate({ width: 10000, height: 10000, frameRate: 240 }), 12_000_000);
+  assert.equal(monitorVideoBitrate({ width: NaN, height: -1, frameRate: 0 }), 5_529_600);
+});
+
+
+test('presentation and surface windows close before a delayed final stats read', async t => {
+  const savedPerformance = Object.getOwnPropertyDescriptor(globalThis, 'performance');
+  let now = 0;
+  Object.defineProperty(globalThis, 'performance', { configurable: true, value: { now: () => now } });
+  t.after(() => Object.defineProperty(globalThis, 'performance', savedPerformance));
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let callback;
+  let registrations = 0;
+  const cancelled = [];
+  const quality = { totalVideoFrames: 0, droppedVideoFrames: 0 };
+  const video = {
+    srcObject: {}, hidden: false,
+    requestVideoFrameCallback(next) { callback = next; return ++registrations; },
+    cancelVideoFrameCallback(handle) { cancelled.push(handle); },
+    getVideoPlaybackQuality: () => quality,
+  };
+  const surface = { renderedFrames: 0, videoFrames: 0, uploadFrames: 0, timestamp: 0,
+    surface: 'floating', freshness: 'video-frame-callback' };
+  let reads = 0;
+  let resolveFinal;
+  let cancelledAtFinalRead;
+  const read = async () => {
+    if (++reads === 1) return { counters: [{ id: 'incoming', type: 'inbound-rtp', timestamp: 0, framesDecoded: 0 }] };
+    cancelledAtFinalRead = [...cancelled];
+    now = 1500;
+    callback(1500, { presentedFrames: 31 }); // A queued callback can outlive cancellation.
+    Object.assign(surface, { renderedFrames: 180, videoFrames: 31, uploadFrames: 31, timestamp: now });
+    quality.totalVideoFrames = 31;
+    return new Promise(resolve => { resolveFinal = resolve; });
+  };
+  const pending = measureMonitorVideo(read, new AbortController().signal, video, 1000, () => surface);
+  await new Promise(resolve => setImmediate(resolve));
+  callback(100, { presentedFrames: 1 });
+  now = 1000;
+  Object.assign(surface, { renderedFrames: 60, videoFrames: 1, uploadFrames: 1, timestamp: now });
+  quality.totalVideoFrames = 1;
+  t.mock.timers.tick(1000);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads, 2);
+  assert.equal(registrations, 2, 'late queued callbacks cannot register more observation work');
+  now = 2000;
+  resolveFinal({ counters: [{ id: 'incoming', type: 'inbound-rtp', timestamp: now, framesDecoded: 120 }] });
+  const result = await pending;
+  assert.equal(result.presentationDurationMs, 1000);
+  assert.equal(result.presentationFrames, 1);
+  assert.equal(result.presentedFps, 1);
+  assert.deepEqual(cancelledAtFinalRead, [2], 'observation is cancelled before the asynchronous stats read');
+  assert.equal(result.surfaceDurationMs, 1000);
+  assert.equal(result.renderedFps, 60);
+  assert.equal(result.uploadFps, 1);
+  assert.equal(result.suppliedFps, 1);
+  assert.equal(result.playbackPresentedFps, 1);
+  assert.equal(result.durationMs, 2000, 'RTC counter intervals retain their own reported timestamps');
+  assert.equal(result.decodedFps, 60);
+  assert.deepEqual(cancelled, [2], 'finally cleanup is idempotent after observation has closed');
 });

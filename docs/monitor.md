@@ -99,6 +99,24 @@ POST /api/virtual-monitor/join
 
 接続中または配信元の承認待ちに別ワールドへ移動すると、移動先を読み込んでからシーンと操作パネルを交換します。同じビデオ要素、WebRTC 接続、受信メディア、音声コンテキストを使い、同じ文書内の履歴を戻る・進むときも引き継ぎます。シーンの切り替え時は、元のテレビや映画館スクリーンから映像を外し、到着先で浮遊表示に切り替えます。音量、モニター音声のオン・オフ、ヘッドホンのステレオまたは浮遊モニター左右からの再生の選択を保持し、設備専用の音響からは浮遊モニター左右からの再生へ切り替えます。移動先の読み込みに失敗したときは元のワールドで視聴を続けられます。[移動処理](../src/coast/CoastApp.ts) · [パネルと映像面の引き継ぎ](../src/monitor/monitorView.ts)
 
+## 同じ端末からの接続
+
+視聴パネルの「この端末から共有」は、同じオリジンの配信ページを利用者のクリックで開きます。配信側の画面選択後、発行された一回コードを元の視聴ページへ渡し、手入力を省きます。確認番号を照合して配信側で許可するまでは、従来どおり peer を作らず、メディアも送りません。別端末やポップアップ制限時は既存の手動コードを使えます。
+
+コードの受け渡しは、開いたウィンドウとの `origin`・`source`・メッセージ形式の照合後に転送した `MessagePort` を使います。配信ページは初期化時に `window.opener` を解除します。コードと役割トークンを URL、履歴、referrer、永続ストレージ、共有 broadcast channel へ保存しません。役割トークンは渡さず、シグナリング API が役割ごとに発行します。受け渡しは一回だけで、起動から2分、再試行、停止、ページ離脱、破棄時に終了します。配信ページの選択に2分以上かかった場合も、画面に表示された有効なコードを手入力できます。サーバー側のコード期限・一回利用・配信側承認・失効条件は変更しません。
+
+根拠は [HTML Standard 9.3.2–9.3.3 と 9.4](https://html.spec.whatwg.org/multipage/web-messaging.html#security-postmsg) の送信先オリジン、受信元・形式確認と channel messaging です。実装は[ローカル接続](../src/monitor/monitorPairing.ts)と両パネルにあります。
+
+## 映像の滑らかさと計測
+
+画面取得は `frameRate: { ideal: 60, max: 60 }` を要求し、映像トラックの `contentHint` を対応時に `motion`、送信用 encoding の `maxFramerate` を60にします。動きを優先するため、帯域や処理負荷が不足する場合はブラウザーが解像度・画質を下げることがあります。送信用の `maxBitrate` は開始時の入力画素数×入力fps（最大60）×0.1bit/pixel/frameを2〜12Mbpsに収めた工学的な上限とします（720p60で約5.53Mbps）。最低送信量を強制せず、ネットワーク・CPUに応じた適応を維持します。この予算は画質や到達fpsの保証値ではありません。固定ビットレート、フレーム補間、SDPの書き換えは行いません。
+
+60fpsは目標であり、取得元が15/30fps、OS・ブラウザー・encoder・通信・描画に制約がある場合に60fpsへ変換するものではありません。[Screen Capture 5.4・5.4.1](https://www.w3.org/TR/screen-capture/#constrainable-properties) は取得元と制約による間引きを定義し、追加フレームの生成を認めていません。[Content Hints 3.2・4.3](https://www.w3.org/TR/mst-content-hint/#video-content-hints) の `motion` はフレームレート保持を優先する助言です。[WebRTCのencoding設定](https://www.w3.org/TR/webrtc/#dom-rtcrtpencodingparameters-maxframerate) の値も上限であり、到達保証ではありません。
+
+接続中の「映像の滑らかさを計測」は、前面のページで3秒間、`getStats()` の累積カウンター差と各統計の時刻差から fps を求めます。配信側は取得元 `media-source.frames`・encoder `framesEncoded`・送信 `framesSent`、視聴側は受信 `framesReceived`・デコード `framesDecoded` を分けます。視聴側の「映像フレーム更新」は `requestVideoFrameCallback` の `presentedFrames` の差（先頭観測の1枚を含む）を、更新が止まった時間も含む全観測区間の単調時計の経過時間で割ります。観測窓の終了時にcallbackを取り消して分子を固定し、その後の最終統計取得の待機中は加算しません。表示面の開始・終了カウンターも取得時の値で固定します。RTC統計は各timestampの差、映像更新は `presentationDurationMs`、表示面は `surfaceDurationMs` を使うため、各層の期間を区別します。初回callbackまでの待ちや主スレッドの処理遅延により、実際のcompositor更新より少なく観測される場合があります。これは video の compositor 提出であり、Three.js の描画回数、HMDの走査や実画面のフレームレートではありません。「景観描画」は浮遊面・テレビ面を主カメラ（XRでは左右の目）で実際にdrawした回数、「景観への映像供給」はrVFC対応時に限り、`Texture.onUpdate` でupload APIへの提出を確認した新しいVideoTextureのversionを、そのdrawに使った回数として測ります。主表示先と異なるrender target、反射・影・副カメラを除き、同じ描画tickの複数passと左右の目は重複計上しません。映画館の専用投影shaderや非表示中はこの面の計測対象外として「未取得」にします。rVFC非対応ではThreeのfallbackが同じ映像を描画毎に再提出できるため、描画・uploadのfpsは保持し、新映像の供給fpsだけを「未取得」にします。未対応を0fpsや再提出のfpsへ置き換えません。version更新、upload API提出、main draw提出、compositor更新を分けます。raw診断の `uploadFps` は共有texture全体へのAPI提出であり、反射などを除いたmain描画のfpsとは別です。`onUpdate` もGPUでの転送完了や実画面の走査完了を保証しません。景観側は同じVideoTextureを更新し、別の30fps制限を加えていません。hiddenのvideoに対する `VideoPlaybackQuality` のDOM表示/dropカウンターは、3D映像面の表示数を表さないため補完には使いません。診断でもこの組み合わせは未対応として扱います。観測方法はThree.js 0.184.0の `VideoTexture`・`WebGLTextures`・`WebGLRenderer` 実装と、[onAfterRender](https://threejs.org/docs/pages/Object3D.html#onAfterRender)・[Texture.version](https://threejs.org/docs/pages/Texture.html#version) の契約を照合しています。
+
+カウンター欠測、統計IDの変更、リセットは0fpsへ置き換えず「未取得」とします。背景化した区間は結果を採用せず再計測を案内します。診断は利用者の操作時だけ行い、SDP、ICEアドレス、トラック名を診断結果へ出しません。原典は [WebRTC Statistics 8.5・8.8・8.13](https://www.w3.org/TR/webrtc-stats/) と [Video Frame Callback 2.2](https://wicg.github.io/video-rvfc/#video-frame-callback-metadata) です。[計測実装](../src/monitor/monitorVideoMetrics.ts)・[表示面のdraw観測](../src/monitor/monitorObject.ts)・[検証手順](verification.md#仮想モニターの実機確認)を参照してください。
+
 ## 画面と音声
 
 配信側は `getDisplayMedia()` に映像と音声を要求します。共有ダイアログが音声トラックを返さないときは映像のみで動作します。音声の出力先は次のとおりです。

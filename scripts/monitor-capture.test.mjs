@@ -6,6 +6,7 @@ function fixture({ surface = 'browser', suppression, audio = true, video = true 
   function track(settings) {
     return {
       readyState: 'live',
+      contentHint: '',
       getSettings: () => settings,
       stop() { this.readyState = 'ended'; },
     };
@@ -35,7 +36,7 @@ test('opens the native chooser immediately with audio requested and no default P
   });
   const started = capture.open('both');
   assert.deepEqual(requested, {
-    video: true,
+    video: { frameRate: { ideal: 60, max: 60 } },
     audio: { suppressLocalAudioPlayback: false },
     selfBrowserSurface: 'exclude',
     surfaceSwitching: 'exclude',
@@ -43,6 +44,7 @@ test('opens the native chooser immediately with audio requested and no default P
     windowAudio: 'window',
   });
   assert.equal(await started, stream);
+  assert.equal(stream.getVideoTracks()[0].contentHint, 'motion');
   assert.deepEqual(capture.selectAudio('both').audio, { available: true, output: 'both' });
   assert.deepEqual(capture.selectAudio('pc', 'both').audio, { available: true, output: 'pc' });
   capture.stop();

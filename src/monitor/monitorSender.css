@@ -157,3 +157,12 @@
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+.monitor-sender [data-monitor-measure-video] {
+  margin-top: 12px;
+}
+
+.monitor-sender [data-monitor-video-statistics] {
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}

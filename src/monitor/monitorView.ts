@@ -3,6 +3,8 @@ import { MonitorAudio, type MonitorAudioMode, type WorldMonitorOutput, type Worl
 import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
 import { MonitorObject, type MonitorTheater } from './monitorObject';
 import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
+import { MonitorLocalPairing } from './monitorPairing';
+import { describeMonitorVideo, measureMonitorVideo } from './monitorVideoMetrics';
 import { MonitorXR } from './monitorXR';
 import type { CoastXR } from '../coast/CoastXR';
 import type { DesktopGrabTarget } from '../coast/DesktopGrab';
@@ -39,6 +41,11 @@ export class MonitorView {
   private readonly unsubscribeXR: () => void;
   private xrSession: XRSession | null = null;
   private readonly receiver: MonitorReceiver;
+  private readonly localPairing: MonitorLocalPairing;
+  private measurement: AbortController | undefined;
+  private readonly measureVideo: HTMLButtonElement;
+  private readonly videoStatistics: HTMLElement;
+  private readonly localShare: HTMLButtonElement;
   private readonly events = new AbortController();
   private readonly pointer = new Vector2();
   private readonly panel = document.createElement('section');
@@ -111,6 +118,8 @@ export class MonitorView {
       </div>
       <button type="button" data-monitor-reset disabled>位置・サイズを戻す</button>
       <div class="monitor-view-section">
+        <button type="button" data-monitor-local-share>この端末から共有</button>
+        <p data-monitor-local-help>配信画面を開き、共有する画面を選びます。コードの入力は不要です。接続は配信側で許可してください。</p>
         <a data-monitor-sender-link target="_blank" rel="noopener">配信画面を開く</a>
         <form data-monitor-form>
           <label for="monitor-join-code">接続コード</label>
@@ -123,6 +132,8 @@ export class MonitorView {
         <output data-monitor-verification hidden></output>
         <p data-monitor-status role="status"></p>
         <button type="button" data-monitor-retry-video hidden>映像を再生</button>
+        <button type="button" data-monitor-measure-video disabled>映像の滑らかさを計測</button>
+        <p data-monitor-video-statistics role="status"></p>
       </div>
       <div class="monitor-view-section" role="group" aria-label="モニター音声">
         <div class="coast-row">
@@ -163,6 +174,9 @@ export class MonitorView {
     this.verification = query('verification');
     this.status = query('status');
     this.retryVideo = query('retry-video');
+    this.measureVideo = query('measure-video');
+    this.videoStatistics = query('video-statistics');
+    this.localShare = query('local-share');
     this.audioButton = query('sound');
     this.audioMode = query('sound-mode');
     this.audioStatus = query('audio-status');
@@ -194,6 +208,20 @@ export class MonitorView {
       onState: state => this.setConnectionState(state),
       onStream: stream => this.setStream(stream),
     });
+    this.localPairing = new MonitorLocalPairing(code => {
+      if (this.hasActiveConnection || this.events.signal.aborted) return;
+      this.code.value = '';
+      this.setScreenVisible(true);
+      void this.receiver.connect(code);
+    });
+    this.localShare.addEventListener('click', () => {
+      if (this.hasActiveConnection) return;
+      const opened = this.localPairing.open(sender);
+      query('local-help').textContent = opened
+        ? '配信画面で共有する画面を選び、確認番号を照合して接続を許可してください。2分以内に進まない場合は手動コードで接続できます。'
+        : '配信画面を開けませんでした。ブラウザーのポップアップ設定を確認するか、「配信画面を開く」から手動コードで接続してください。';
+    }, { signal: this.events.signal });
+    window.addEventListener('pagehide', () => this.localPairing.cancel(), { signal: this.events.signal });
     this.bindPanel(query('volume'));
     this.bindPointer();
     this.setConnectionState(this.state);
@@ -325,6 +353,7 @@ export class MonitorView {
   }
 
   update(viewer: PerspectiveCamera, frame?: XRFrame): void {
+    this.screen.beginPresentationFrame(this.renderer.xr.isPresenting ? this.renderer.xr.getCamera() : this.binding.camera, this.renderer.getRenderTarget());
     if (frame && this.pendingXRSummon) {
       this.pendingXRSummon = false;
       this.setScreenVisible(true, viewer);
@@ -352,6 +381,8 @@ export class MonitorView {
   release(): void {
     this.releaseDesktopGrab();
     this.finishDrag();
+    this.localPairing.cancel();
+    this.measurement?.abort();
     this.receiver.disconnect();
     this.audio.stop();
     this.theater?.cinema?.project(null);
@@ -486,11 +517,20 @@ export class MonitorView {
     const active = this.hasActiveConnection;
     this.code.disabled = active;
     this.code.required = !active;
+    this.localShare.disabled = active;
+    this.measureVideo.disabled = !!this.measurement || state.phase !== 'connected';
+    if (active) this.localPairing.cancel();
     this.connectButton.textContent = active ? '切断' : '接続';
     this.verification.hidden = !state.verification;
     this.verification.textContent = state.verification ?? '';
     this.verification.setAttribute('aria-label', '配信元と照合する確認番号');
     if (state.phase === 'ended' || state.phase === 'failed') {
+      this.measurement?.abort();
+      this.measurement = undefined;
+      this.measureVideo.disabled = true;
+      this.measureVideo.textContent = '映像の滑らかさを計測';
+      this.videoStatistics.textContent = '';
+      delete this.videoStatistics.dataset.monitorVideoMeasurement;
       this.audioPlayback = 'off';
       this.audioStart = null;
       this.audio.stop();
@@ -559,9 +599,34 @@ export class MonitorView {
     if (this.audioButton.disabled !== disabled) this.audioButton.disabled = disabled;
   }
 
+  private async measureVideoFrames(): Promise<void> {
+    if (this.measurement || this.state.phase !== 'connected') return;
+    const attempt = new AbortController();
+    this.measurement = attempt;
+    this.measureVideo.disabled = true;
+    this.measureVideo.textContent = '3秒間計測しています…';
+    delete this.videoStatistics.dataset.monitorVideoMeasurement;
+    this.videoStatistics.textContent = '映像面を視野内に保ち、この画面を手前に置いてお待ちください。';
+    try {
+      const result = await measureMonitorVideo(() => this.receiver.videoStats(), attempt.signal, this.video, 3_000, () => this.screen.surfaceFrames());
+      if (!attempt.signal.aborted) {
+        this.videoStatistics.dataset.monitorVideoMeasurement = JSON.stringify(result);
+        this.videoStatistics.textContent = describeMonitorVideo(result, 'viewer');
+      }
+    } catch {
+      if (!attempt.signal.aborted) this.videoStatistics.textContent = '映像を計測できませんでした。接続とブラウザーの対応を確認してください。';
+    } finally {
+      if (this.measurement !== attempt) return;
+      this.measurement = undefined;
+      this.measureVideo.textContent = '映像の滑らかさを計測';
+      this.measureVideo.disabled = !!this.measurement || this.state.phase !== 'connected';
+    }
+  }
+
   private bindPanel(volume: HTMLInputElement): void {
     const { signal } = this.events;
     const listen = { signal };
+    this.measureVideo.addEventListener('click', () => void this.measureVideoFrames(), listen);
     this.displayTarget.addEventListener('change', () => this.updateDisplayTarget(true), listen);
     this.visibilityButton.addEventListener('click', () => this.setScreenVisible(!this.screen.isVisible), listen);
     this.editButton.addEventListener('click', () => this.setEditing(!this.editing), listen);
@@ -579,6 +644,7 @@ export class MonitorView {
     }
     this.form.addEventListener('submit', event => {
       event.preventDefault();
+      this.localPairing.cancel();
       if (this.code.disabled) this.receiver.disconnect();
       else {
         this.setScreenVisible(true);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CinemaPlaybackFactory } from './monitorAudio';
+import type { MonitorSurfaceFrames } from './monitorVideoMetrics';
 
 export const MONITOR_MIN_SCALE = 0.25;
 export const MONITOR_MAX_SCALE = 5;
@@ -39,6 +40,17 @@ export class MonitorObject {
   private videoSource: HTMLVideoElement['srcObject'] | string = null;
   private videoWidth = 0;
   private videoHeight = 0;
+  private renderedFrames = 0;
+  private suppliedVideoFrames = 0;
+  private presentationFrame = 0;
+  private countedPresentationFrame = -1;
+  private presentationCameras = new Set<THREE.Camera>();
+  private presentationTarget: THREE.WebGLRenderTarget | null = null;
+  private renderedTexture: THREE.VideoTexture | null = null;
+  private renderedVersion = -1;
+  private uploadedVersion = -1;
+  private uploadSubmissions = 0;
+  private frameFreshnessAvailable = false;
 
   constructor() {
     this.group.name = 'virtual-monitor';
@@ -53,6 +65,22 @@ export class MonitorObject {
       new THREE.MeshBasicMaterial({ map: this.statusTexture, toneMapped: false, transparent: true, side: THREE.DoubleSide })
     );
     this.screen.name = 'monitor-surface';
+    this.screen.onAfterRender = (renderer, _scene, camera) => {
+      const texture = this.videoTexture;
+      if (!texture || this.screen.material.map !== texture || !this.presentationCameras.has(camera)
+        || renderer.getRenderTarget() !== this.presentationTarget) return;
+      // Reflections and auxiliary cameras are excluded; stereo eyes share one presentation tick.
+      if (this.countedPresentationFrame !== this.presentationFrame) {
+        ++this.renderedFrames;
+        this.countedPresentationFrame = this.presentationFrame;
+      }
+      if (this.frameFreshnessAvailable && this.uploadedVersion === texture.version
+        && (this.renderedTexture !== texture || this.renderedVersion !== texture.version)) {
+        ++this.suppliedVideoFrames;
+        this.renderedTexture = texture;
+        this.renderedVersion = texture.version;
+      }
+    };
     this.screen.scale.set(SCREEN_WIDTH, SCREEN_HEIGHT, 1);
     this.group.add(this.screen);
     this.audioEmitters.forEach((emitter, index) => {
@@ -73,6 +101,27 @@ export class MonitorObject {
 
   get projectedTexture(): THREE.VideoTexture | null {
     return this.videoTexture;
+  }
+
+  beginPresentationFrame(camera: THREE.Camera, target: THREE.WebGLRenderTarget | null = null): void {
+    ++this.presentationFrame;
+    this.presentationTarget = target;
+    this.presentationCameras.clear();
+    this.presentationCameras.add(camera);
+    if (camera instanceof THREE.ArrayCamera) for (const eye of camera.cameras) this.presentationCameras.add(eye);
+  }
+
+  surfaceFrames(): MonitorSurfaceFrames | null {
+    // Cinema projection uses a different shader surface and is not observed by this mesh.
+    if (!this.isVisible || !this.screen.material.visible || !this.videoTexture) return null;
+    return {
+      renderedFrames: this.renderedFrames,
+      uploadFrames: this.uploadSubmissions,
+      timestamp: performance.now(),
+      surface: this.isFloating ? 'floating' : 'television',
+      freshness: this.frameFreshnessAvailable ? 'video-frame-callback' : 'unavailable',
+      ...(this.frameFreshnessAvailable ? { videoFrames: this.suppliedVideoFrames } : {}),
+    };
   }
 
   setTarget(target: MonitorSurface | null, projectInTarget = false): void {
@@ -149,14 +198,22 @@ export class MonitorObject {
     const { videoWidth, videoHeight } = video;
     const source = video.srcObject ?? video.currentSrc;
     if (this.videoTexture && source === this.videoSource
-      && videoWidth === this.videoWidth && videoHeight === this.videoHeight) return;
+      && videoWidth === this.videoWidth && videoHeight === this.videoHeight) {
+      return;
+    }
 
     // WebGL video texture storage is allocated at the dimensions of its first frame.
     this.clearVideoTexture();
     this.videoSource = source;
     this.videoWidth = videoWidth;
     this.videoHeight = videoHeight;
+    this.frameFreshnessAvailable = typeof video.requestVideoFrameCallback === 'function';
     this.videoTexture = new THREE.VideoTexture(video);
+    this.videoTexture.onUpdate = texture => {
+      if (this.videoTexture !== texture) return;
+      this.uploadedVersion = texture.version;
+      ++this.uploadSubmissions;
+    };
     this.videoTexture.colorSpace = THREE.SRGBColorSpace;
     this.videoTexture.needsUpdate = true;
     this.resizeFrame();
@@ -175,6 +232,8 @@ export class MonitorObject {
     this.setVisible(false);
     this.setTarget(null);
     this.video = null;
+    this.presentationCameras.clear();
+    this.presentationTarget = null;
     this.statusTexture.dispose();
     this.screen.geometry.dispose();
     this.screen.material.dispose();
@@ -206,6 +265,10 @@ export class MonitorObject {
     if (!this.videoTexture) return;
     this.videoTexture.dispose();
     this.videoTexture = null;
+    this.frameFreshnessAvailable = false;
+    this.renderedTexture = null;
+    this.renderedVersion = -1;
+    this.uploadedVersion = -1;
     this.videoSource = null;
     this.resizeFrame();
     this.screen.material.map = this.statusTexture;
