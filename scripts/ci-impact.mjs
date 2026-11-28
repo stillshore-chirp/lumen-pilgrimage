@@ -77,6 +77,7 @@ const drawingInputs = new Set([
   'scripts/draw-cinema-speaker-mounts.mjs',
   'scripts/revise-residence-drawings.py',
   'docs/residence/source/residence-70f-revisions.json',
+  'scripts/draw-cinema-ventilation.mjs',
 ]);
 // Vite copies these notices from public/ into the build. The gates check packaging and
 // document links; they do not establish license compliance or regeneration equality.
