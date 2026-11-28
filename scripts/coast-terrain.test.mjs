@@ -28,7 +28,7 @@ const hooks = registerHooks({
   },
 });
 const { airCutoff, soundReach, terrainOcclusion, waterReflection } = await import(acousticsUrl);
-const { createOverlookSurface, gradeOverlookSurvey, gradeBeforeLocalWorks, loadOverlookSurvey, OVERLOOK_SURFACE_BOUNDS } = await import(overlookUrl);
+const { createOverlookSurface, gradeOverlookSurvey, gradeBeforeLocalWorks, gradeOverlookView, loadOverlookSurvey, OVERLOOK_SURFACE_BOUNDS } = await import(overlookUrl);
 const { createOverlookTraffic } = await import(trafficUrl);
 const { createOverlookCorridorPlan, createOverlookRoadDatum, corridorRole, sampleCorridorRoad } =
   await import('../src/coast/world/overlook/overlookCorridorPlan.ts');
@@ -49,7 +49,7 @@ async function fixture() {
     };
     let native;
     try { native = await loadOverlookSurvey(); } finally { globalThis.fetch = previousFetch; }
-    const height = (x, z) => gradeBeforeLocalWorks(x, z, native(x, z));
+    const height = (x, z) => gradeOverlookView(x, z, native(x, z));
     const surface = createOverlookSurface(height, { texture: new Texture(), bounds: new Vector4(-23000, -26000, 46000, 37000) }, { value: 0 });
     const required = (x, z) => { const y = surface.sampleHeight(x, z); assert.notEqual(y, undefined); return y; };
     const plan = createOverlookCorridorPlan(createOverlookRoadDatum(native), required, OVERLOOK_SURFACE_BOUNDS);
@@ -210,6 +210,47 @@ test('the overlook excavation closes locally and does not impose a basin-wide Z 
       }
     }
   }
+});
+
+test('foreground grading lowers the measured ridge while retaining the foundation, rear and outer basin', async () => {
+  const { native, surface } = await fixture();
+  for (const [x, z, minimumDrop] of [[0, -200, 40], [400, -200, 35], [-400, -200, 20]]) {
+    const original = gradeBeforeLocalWorks(x, z, native(x, z));
+    assert.ok(original - surface.sampleHeight(x, z) > minimumDrop, 'the actual Float32 surface opens the foreground');
+  }
+  for (const [x, z] of [[0, -24.45], [-34, 0], [34, 30], [-400, 0], [400, 200], [0, -650], [-650, -300], [650, -300]]) {
+    const surveyed = native(x, z);
+    assert.equal(gradeOverlookView(x, z, surveyed), gradeBeforeLocalWorks(x, z, surveyed));
+  }
+  const graded = (x, z) => gradeOverlookView(x, z, 350);
+  const derivative = (x, z, dx, dz) => (graded(x + dx * .001, z + dz * .001)
+    - graded(x - dx * .001, z - dz * .001)) / .002;
+  for (const run of [200, 580]) {
+    const x = 35.45 + run * .6, z = -24.45 - run * .8;
+    for (const [dx, dz] of [[1, 0], [0, 1]]) {
+      assert.ok(Math.abs(derivative(x - dx * .002, z - dz * .002, dx, dz)
+        - derivative(x + dx * .002, z + dz * .002, dx, dz)) < .01);
+    }
+  }
+});
+
+test('foreground grading retains soil over the curved road 4 outer lining at a terrain diagonal', async () => {
+  const { plan, surface } = await fixture();
+  const structures = createOverlookRoadStructures(plan);
+  const bore = structures.structures.find(item => item.roadId === 4).lining[0];
+  surface.group.updateMatrixWorld(true); structures.group.updateMatrixWorld(true);
+  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
+  try {
+    // The old 600 m grading return left only 0.655 m of soil here. Its centreline
+    // and first frame stayed covered, so this needs actual shell/ground faces.
+    for (const [dx, dz] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      ray.set(new Vector3(-422.5941798360663 + dx, 2000, -319.4058201639337 + dz), new Vector3(0, -1, 0));
+      const ground = ray.intersectObjects(surface.group.children, true)[0];
+      const shell = ray.intersectObject(bore, false)[0];
+      assert.ok(ground && shell, 'the ray meets the rendered soil and outer shell');
+      assert.ok(ground.point.y - shell.point.y >= 2, 'the actual shell keeps at least two metres of soil');
+    }
+  } finally { structures.dispose(); }
 });
 
 test('the overlook terrain tiles preserve every face, vertex and normal', () => {

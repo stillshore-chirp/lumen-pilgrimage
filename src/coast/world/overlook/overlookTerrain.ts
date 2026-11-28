@@ -81,6 +81,22 @@ export function gradeBeforeLocalWorks(x: number, z: number, surveyedHeight: numb
   return apron - depth * THREE.MathUtils.smootherstep(depth, 0, 0.5) * footprint * roundedEnd;
 }
 
+/** The overlook alone opens the foreground ridge into a continuous basin slope. */
+export function gradeOverlookView(x: number, z: number, surveyedHeight: number): number {
+  const ground = gradeBeforeLocalWorks(x, z, surveyedHeight);
+  const side = Math.max(Math.abs(x) - SIDE_FOOTING, 0);
+  const front = Math.max(FRONT_FOOTING - z, 0);
+  const run = Math.hypot(side, front);
+  const slope = DECK_LEVEL - 0.35 - 12.5 * (1 - Math.exp(-run * 0.36))
+    - 23 * (1 - Math.exp(-run * 0.026)) - 0.30 * run;
+  // Retain the existing foundation and rear hillside. Blend in both X/Z so the
+  // open view does not introduce a transverse DEM seam or a deleted ground tile.
+  const extent = 1 - THREE.MathUtils.smootherstep(run, 200, 580);
+  const forward = 1 - THREE.MathUtils.smootherstep(z, -100, FRONT_FOOTING);
+  const depth = Math.max(0, ground - slope);
+  return ground - depth * THREE.MathUtils.smootherstep(depth, 0, 0.5) * extent * forward;
+}
+
 // Existing callers retain the pre-road-earthwork compact surface explicitly.
 export const gradeOverlookSurvey = gradeBeforeLocalWorks;
 
