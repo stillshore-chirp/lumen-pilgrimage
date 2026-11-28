@@ -446,17 +446,17 @@ export function createOverlookCorridorPlan(roadDatum: HeightAt, ground: HeightAt
         const lateral = outerHalfWidth * (i / 16 - 1), x = portal.x + portal.nx * lateral, z = portal.z + portal.nz * lateral;
         return { lateral, height: Math.max(ground(x, z), ground(x + portal.nz * 1.6, z - portal.nx * 1.6)) - portal.y + 0.10 };
       }) });
-    let approachEnd = prefixLength;
-    if (portalStation >= 0) {
-      let i = Math.round(portalStation / original.step);
-      while (i + 1 < base.length) {
-        i += 1;
-        const p = base[i];
-        const maximum = Math.max(...[-1, 0, 1].map(f => ground(p.x + p.nx * halfWidth * f, p.z + p.nz * halfWidth * f)));
-        if (maximum <= p.y - 3.52) break;
-      }
-      approachEnd = prefixLength + base[i].station;
+    // A portal behind the original start can still lead into soil on that
+    // original alignment. Continue the same formation until the full road
+    // width clears the ground, rather than ending a rectangular cut at the join.
+    let approachIndex = Math.max(0, Math.round(portalStation / original.step));
+    while (approachIndex + 1 < base.length) {
+      const p = base[approachIndex];
+      const maximum = Math.max(...[-1, 0, 1].map(f => ground(p.x + p.nx * halfWidth * f, p.z + p.nz * halfWidth * f)));
+      if (maximum <= p.y - 3.52) break;
+      approachIndex += 1;
     }
+    const approachEnd = prefixLength + base[approachIndex].station;
     const approachFrames: CorridorFrame[] = [portal];
     for (let s = portal.station + 2.5; s < approachEnd; s += 2.5) approachFrames.push(sampleCorridorRoad(road, s));
     approachFrames.push(sampleCorridorRoad(road, approachEnd));

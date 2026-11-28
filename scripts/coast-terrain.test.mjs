@@ -28,7 +28,7 @@ const hooks = registerHooks({
   },
 });
 const { airCutoff, soundReach, terrainOcclusion, waterReflection } = await import(acousticsUrl);
-const { createOverlookSurface, gradeOverlookSurvey, gradeBeforeLocalWorks, loadOverlookSurvey, OVERLOOK_SURFACE_BOUNDS } = await import(overlookUrl);
+const { createOverlookSurface, gradeOverlookSurvey, gradeBeforeLocalWorks, gradeOverlookView, loadOverlookSurvey, OVERLOOK_SURFACE_BOUNDS } = await import(overlookUrl);
 const { createOverlookTraffic } = await import(trafficUrl);
 const { createOverlookCorridorPlan, createOverlookRoadDatum, corridorRole, sampleCorridorRoad } =
   await import('../src/coast/world/overlook/overlookCorridorPlan.ts');
@@ -36,12 +36,13 @@ const { createOverlookEarthworks } = await import('../src/coast/world/overlook/o
 const { createOverlookDeck } = await import('../src/coast/world/overlook/overlookDeck.ts');
 const { PAVILION_BODY, PAVILION_THRESHOLD, pavilionWing, pavilionEntrancePier } = await import('../src/coast/world/overlook/overlookPavilionPlan.ts');
 const { createOverlookRoadStructures } = await import('../src/coast/world/overlook/overlookRoadStructures.ts');
+const { createOverlookViewGrade } = await import('../src/coast/world/overlook/overlookViewTerrain.ts');
 const { createCoastLighting } = await import('../src/coast/world/coastLighting.ts');
 hooks.deregister();
 
-let corridorFixture;
-async function fixture() {
-  corridorFixture ??= (async () => {
+const corridorFixtures = new Map();
+async function fixture(covered = true) {
+  if (!corridorFixtures.has(covered)) corridorFixtures.set(covered, (async () => {
     const previousFetch = globalThis.fetch;
     globalThis.fetch = async path => {
       const data = await readFile(new URL(`../public/${path}`, import.meta.url));
@@ -49,16 +50,28 @@ async function fixture() {
     };
     let native;
     try { native = await loadOverlookSurvey(); } finally { globalThis.fetch = previousFetch; }
-    const height = (x, z) => gradeBeforeLocalWorks(x, z, native(x, z));
-    const surface = createOverlookSurface(height, { texture: new Texture(), bounds: new Vector4(-23000, -26000, 46000, 37000) }, { value: 0 });
+    const streets = { texture: new Texture(), bounds: new Vector4(-23000, -26000, 46000, 37000) };
+    const datum = createOverlookRoadDatum(native);
+    let height = (x, z) => gradeOverlookView(x, z, native(x, z));
+    if (covered) {
+      const referenceGround = createOverlookSurface((x, z) => gradeBeforeLocalWorks(x, z, native(x, z)), streets, { value: 0 });
+      try {
+        height = createOverlookViewGrade(native, createOverlookCorridorPlan(datum, referenceGround.sampleHeight, OVERLOOK_SURFACE_BOUNDS));
+      } finally { referenceGround.dispose(); }
+    }
+    const surface = createOverlookSurface(height, streets, { value: 0 });
     const required = (x, z) => { const y = surface.sampleHeight(x, z); assert.notEqual(y, undefined); return y; };
-    const plan = createOverlookCorridorPlan(createOverlookRoadDatum(native), required, OVERLOOK_SURFACE_BOUNDS);
+    const plan = createOverlookCorridorPlan(datum, required, OVERLOOK_SURFACE_BOUNDS);
     const earthworks = createOverlookEarthworks(surface.group, surface.sampleHeight, plan, surface.material);
-    return { plan, surface, earthworks, required, native };
-  })();
-  return corridorFixture;
+    return { plan, surface, earthworks, required, native, height, streets };
+  })());
+  return corridorFixtures.get(covered);
 }
-after(async () => { if (corridorFixture) { const f = await corridorFixture; f.earthworks.dispose(); f.surface.dispose(); } });
+after(async () => {
+  for (const result of corridorFixtures.values()) {
+    const f = await result; f.earthworks.dispose(); f.surface.dispose(); f.streets.texture.dispose();
+  }
+});
 
 test('the original horizontal alignment stays fixed while actual-chord grades receive only a small lift', async () => {
   const { plan } = await fixture();
@@ -122,6 +135,36 @@ test('the excavation query matches the actual formation triangles and leaves loc
   }
   assert.equal(earthworks.sampleHeight(NaN, 0), undefined);
   assert.equal(earthworks.sampleHeight(23000.01, 0), undefined);
+});
+
+test('a portal behind an original road start keeps the approach open until the original road clears soil', async () => {
+  const { plan, surface, earthworks } = await fixture(false);
+  surface.group.updateMatrixWorld(true); earthworks.group.updateMatrixWorld(true);
+  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
+  for (const id of [5, 6]) {
+    const road = plan.roads[id], approach = plan.approaches.find(item => item.roadId === id);
+    const end = approach.frames.at(-1);
+    assert.ok(approach.frames[0].station < road.originalOffset, 'the portal precedes the original alignment');
+    assert.ok(end.station > road.originalOffset + 20, 'formation does not stop at the buried original start');
+    const section = sampleCorridorRoad(road, road.originalOffset + 20);
+    assert.ok(surface.sampleHeight(section.x, section.z) > section.y, 'the original start leads into soil');
+    for (const across of [-.8, 0, .8]) {
+      const x = section.x + section.nx * road.plan.halfWidth * across;
+      const z = section.z + section.nz * road.plan.halfWidth * across;
+      assert.ok(earthworks.sampleHeight(x, z) < section.y - 3.50, 'the complete road stays above the continued formation');
+      ray.set(new Vector3(x, 2000, z), new Vector3(0, -1, 0));
+      const hit = ray.intersectObjects([...surface.group.children, ...earthworks.group.children], true)
+        .find(item => item.object.name !== 'Thick retaining walls tied to original survey triangles');
+      assert.ok(hit && Math.abs(hit.point.y - earthworks.sampleHeight(x, z)) < 1e-5,
+        'the continued formation is actual connected geometry');
+    }
+    for (let i = 0; i <= 32; i += 1) {
+      const across = i / 16 - 1;
+      assert.ok(surface.sampleHeight(end.x + end.nx * road.plan.halfWidth * across,
+        end.z + end.nz * road.plan.halfWidth * across) <= end.y - 3.52 + 1e-6,
+      'the approach ends where the road slab clears the measured ground across its full width');
+    }
+  }
 });
 
 test('covered traffic source length is split once between real open bores', async () => {
@@ -210,6 +253,80 @@ test('the overlook excavation closes locally and does not impose a basin-wide Z 
       }
     }
   }
+});
+
+test('foreground grading lowers the measured ridge while retaining the foundation, rear and outer basin', async () => {
+  const { native, surface } = await fixture();
+  for (const [x, z, minimumDrop] of [[0, -200, 40], [400, -200, 35], [-400, -200, 20]]) {
+    const original = gradeBeforeLocalWorks(x, z, native(x, z));
+    assert.ok(original - surface.sampleHeight(x, z) > minimumDrop, 'the actual Float32 surface opens the foreground');
+  }
+  for (const [x, z] of [[0, -24.45], [-34, 0], [34, 30], [-400, 0], [400, 200], [0, -650], [-650, -300], [650, -300]]) {
+    const surveyed = native(x, z);
+    assert.equal(gradeOverlookView(x, z, surveyed), gradeBeforeLocalWorks(x, z, surveyed));
+  }
+  const graded = (x, z) => gradeOverlookView(x, z, 350);
+  const derivative = (x, z, dx, dz) => (graded(x + dx * .001, z + dz * .001)
+    - graded(x - dx * .001, z - dz * .001)) / .002;
+  for (const run of [200, 580]) {
+    const x = 35.45 + run * .6, z = -24.45 - run * .8;
+    for (const [dx, dz] of [[1, 0], [0, 1]]) {
+      assert.ok(Math.abs(derivative(x - dx * .002, z - dz * .002, dx, dz)
+        - derivative(x + dx * .002, z + dz * .002, dx, dz)) < .01);
+    }
+  }
+});
+
+test('foreground grading retains soil over the curved road 4 outer lining at a terrain diagonal', async () => {
+  const { plan, surface } = await fixture();
+  const structures = createOverlookRoadStructures(plan);
+  const bore = structures.structures.find(item => item.roadId === 4).lining[0];
+  surface.group.updateMatrixWorld(true); structures.group.updateMatrixWorld(true);
+  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
+  try {
+    // The old 600 m grading return left only 0.655 m of soil here. Its centreline
+    // and first frame stayed covered, so this needs actual shell/ground faces.
+    for (const [dx, dz] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      ray.set(new Vector3(-422.5941798360663 + dx, 2000, -319.4058201639337 + dz), new Vector3(0, -1, 0));
+      const ground = ray.intersectObjects(surface.group.children, true)[0];
+      const shell = ray.intersectObject(bore, false)[0];
+      assert.ok(ground && shell, 'the ray meets the rendered soil and outer shell');
+      assert.ok(ground.point.y - shell.point.y >= 2, 'the actual shell keeps at least two metres of soil');
+    }
+  } finally { structures.dispose(); }
+});
+
+test('low soil cover closes foreground road gaps while staying below the original measured terrain', async () => {
+  const { plan, surface, native } = await fixture();
+  const structures = createOverlookRoadStructures(plan);
+  surface.group.updateMatrixWorld(true); structures.group.updateMatrixWorld(true);
+  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0));
+  try {
+    for (const id of [5, 6]) {
+      const road = plan.roads[id];
+      const section = sampleCorridorRoad(road, road.originalOffset + 20);
+      assert.equal(corridorRole(plan, id, section.station), 'tunnel');
+      const lining = structures.structures.find(item => item.roadId === id).lining;
+      for (const side of [-1, 1]) {
+        const x = section.x + section.nx * road.plan.halfWidth * .56 * side;
+        const z = section.z + section.nz * road.plan.halfWidth * .56 * side;
+        ray.set(new Vector3(x, 2000, z), new Vector3(0, -1, 0));
+        const ground = ray.intersectObjects(surface.group.children, true)[0];
+        const shell = ray.intersectObjects(lining, false)[0];
+        assert.ok(ground && shell && ground.point.y - shell.point.y >= 2,
+          'continuous actual soil covers both outer bores at the formerly exposed join');
+      }
+    }
+    const position = surface.group.children[0].geometry.getAttribute('position');
+    let lowered = 0;
+    for (let i = 0; i < position.count; i += 1) {
+      const x = position.getX(i), z = position.getZ(i), y = position.getY(i);
+      const original = gradeBeforeLocalWorks(x, z, native(x, z));
+      assert.ok(y <= original + .001, 'the cover never restores a higher ridge than the original terrain');
+      if (y < original - .01) lowered += 1;
+    }
+    assert.ok(lowered > 7000, 'the foreground remains lowered over the changed landscape');
+  } finally { structures.dispose(); }
 });
 
 test('the overlook terrain tiles preserve every face, vertex and normal', () => {
