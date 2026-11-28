@@ -9,6 +9,8 @@ export function createResidenceTheaterLights(screen: THREE.Mesh, onChange?: () =
   const screenHalfSize = { value: new THREE.Vector2(screenSize.x, screenSize.y).multiplyScalar(.5) };
 
   return {
+    location: { roomId: 'LD', markers: [[screenCenter.value.x - screenHalfSize.value.x, -screenCenter.value.z,
+      screenCenter.value.x + screenHalfSize.value.x, -screenCenter.value.z] as const] },
     enabled: () => enabled.value === 1,
     setEnabled(on: boolean) {
       const next = Number(on);

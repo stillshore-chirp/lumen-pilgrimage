@@ -1,4 +1,6 @@
 import './residenceControlPanel.css';
+import { createResidenceControlPlan } from './ResidenceControlPlan';
+import { RESIDENCE_ROOMS, type ResidenceControlLocation } from './world/residence/residencePlan';
 
 const categoryLabels = {
   lighting: '照明',
@@ -8,7 +10,7 @@ const categoryLabels = {
 
 type Category = keyof typeof categoryLabels;
 
-export type ResidenceControl = { readonly id: string; readonly label: string } & (
+export type ResidenceControl = { readonly id: string; readonly label: string; readonly location?: ResidenceControlLocation } & (
   | { readonly kind: 'toggle'; get(): boolean; set(value: boolean): void; disabled?(): boolean }
   | { readonly kind: 'button'; invoke(): void; disabled?(): boolean }
   | {
@@ -26,6 +28,7 @@ export interface ResidenceControlSection {
   readonly id: string;
   readonly title: string;
   readonly category: Category;
+  readonly location: ResidenceControlLocation;
   readonly controls: readonly ResidenceControl[];
 }
 
@@ -139,10 +142,38 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
   navigation.className = 'residence-control-actions';
   navigation.setAttribute('role', 'group');
   navigation.setAttribute('aria-label', '設備の種類');
+  const workspace = document.createElement('div');
+  workspace.className = 'residence-control-workspace';
   const list = document.createElement('section');
   list.id = 'residence-control-list';
   list.className = 'residence-control-lists';
-  directory.append(navigation, list);
+  const roomIds = [...new Set(sections.map(section => section.location.roomId))];
+  const plan = createResidenceControlPlan(roomIds, selectRoom);
+  const roomPicker = document.createElement('label');
+  roomPicker.className = 'residence-control-room-picker';
+  const roomLabel = document.createElement('span');
+  roomLabel.textContent = '部屋';
+  const roomSelect = document.createElement('select');
+  roomSelect.setAttribute('aria-label', '部屋');
+  roomSelect.add(new Option('すべての部屋', ''));
+  for (const room of RESIDENCE_ROOMS.filter(room => roomIds.includes(room.id))) {
+    roomSelect.add(new Option(room.label, room.id));
+  }
+  roomSelect.addEventListener('change', () => selectRoom(roomSelect.value));
+  roomPicker.append(roomLabel, roomSelect);
+  const planCard = document.createElement('div');
+  planCard.className = 'residence-control-plan-card';
+  const enlarge = button('図を拡大');
+  enlarge.addEventListener('click', () => showLargePlan(selectedRoom ? { roomId: selectedRoom, markers: [] } : undefined,
+    undefined, () => { showDirectory(); enlarge.focus(); }));
+  const planTools = document.createElement('div');
+  planTools.className = 'residence-control-plan-tools';
+  planTools.append(roomPicker, enlarge);
+  planCard.append(planTools, plan.element);
+  workspace.append(planCard, list);
+  directory.append(navigation, workspace);
+  let selectedRoom = '';
+  let selectedCategory: Category = 'lighting';
 
   const categories = (Object.keys(categoryLabels) as Category[]).flatMap(id => {
     const members = sections.filter(section => section.category === id);
@@ -156,17 +187,24 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
     viewport.className = 'residence-control-list-viewport';
     const choices = document.createElement('div');
     choices.className = 'coast-travel-destinations';
-    for (const section of members) {
+    const entries = members.map(section => {
       const choice = button(section.title);
+      choice.dataset.residenceChoice = section.id;
       choice.addEventListener('click', () => showDevice(section, choice));
       choices.append(choice);
-    }
-    viewport.append(choices);
+      return { section, choice };
+    });
+    const empty = document.createElement('p');
+    empty.className = 'residence-control-empty';
+    empty.textContent = 'この部屋に操作できる設備はありません。種類か部屋を切り替えてください。';
+    empty.hidden = true;
+    viewport.append(choices, empty);
     list.append(viewport);
-    return [{ id, label, toggle, viewport }];
+    return [{ id, label, toggle, viewport, entries, empty }];
   });
 
   function selectCategory(id: Category): void {
+    selectedCategory = id;
     for (const category of categories) {
       const selected = category.id === id;
       category.toggle.setAttribute('aria-pressed', String(selected));
@@ -174,13 +212,28 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
       if (selected) list.setAttribute('aria-label', category.label);
     }
   }
+  function selectRoom(id: string): void {
+    selectedRoom = id;
+    roomSelect.value = id;
+    for (const category of categories) {
+      for (const entry of category.entries) entry.choice.hidden = !!id && entry.section.location.roomId !== id;
+      category.empty.hidden = category.entries.some(entry => !entry.choice.hidden);
+      category.viewport.scrollTop = 0;
+    }
+    // A room selection always leads to an available category; deliberate category
+    // changes may instead show the explicit empty state for that room.
+    if (!sections.some(section => section.category === selectedCategory && (!id || section.location.roomId === id))) {
+      const first = sections.find(section => !id || section.location.roomId === id);
+      if (first) selectCategory(first.category);
+    }
+    plan.select(id ? { roomId: id, markers: [] } : undefined);
+    if (!body.contains(directory)) showDirectory();
+  }
   if (categories[0]) selectCategory(categories[0].id);
 
   let activeItems: ReturnType<typeof createControl>[] = [];
   function sync(): void {
-    if (dialog.open) {
-      for (const item of activeItems) item.sync();
-    }
+    if (dialog.open) for (const item of activeItems) item.sync();
   }
 
   function showView(title: string, view: HTMLElement, backAction?: { label: string; invoke: () => void }): void {
@@ -210,20 +263,63 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
     choice?.focus();
   }
 
+  function showLargePlan(location: ResidenceControlLocation | undefined, label: string | undefined, restore: () => void): void {
+    const view = document.createElement('div');
+    view.className = 'residence-control-plan-large';
+    const large = createResidenceControlPlan(roomIds, selectRoom);
+    large.select(location, label);
+    view.append(large.element);
+    showView('平面図', view, { label: '前の画面へ戻る', invoke: restore });
+  }
+
   function showDevice(section: ResidenceControlSection, choice?: HTMLButtonElement): void {
+    const view = document.createElement('div');
+    view.className = 'residence-control-device';
+    const devicePlan = createResidenceControlPlan(roomIds, selectRoom);
+    devicePlan.select(section.location, categoryLabels[section.category]);
     const items = document.createElement('div');
     items.className = 'residence-control-items';
     items.dataset.residenceSection = section.id;
+    items.dataset.residenceRoom = section.location.roomId;
+    const target = document.createElement('p');
+    target.className = 'residence-control-target';
+    let targetLocation = section.location;
+    let targetLabel = categoryLabels[section.category];
+    const roomLabel = RESIDENCE_ROOMS.find(room => room.id === section.location.roomId)!.label;
+    target.textContent = `${roomLabel} ／ ${targetLabel}`;
+    const enlargeDevice = button('図を拡大');
+    enlargeDevice.addEventListener('click', () => showLargePlan(targetLocation, targetLabel, () => {
+      showView(section.title, view, { label: '設備一覧へ戻る', invoke: () => showDirectory(choice) });
+      enlargeDevice.focus();
+    }));
     activeItems = section.controls.map(control => {
       const item = createControl(control, section.category, sync);
       item.element.dataset.residenceControl = control.id;
+      const locate = () => {
+        targetLocation = control.location ?? section.location;
+        targetLabel = control.label;
+        target.textContent = `${roomLabel} ／ ${targetLabel}`;
+        devicePlan.select(targetLocation, targetLabel);
+      };
+      item.element.addEventListener('focusin', locate);
+      item.element.addEventListener('pointerenter', locate);
       item.sync();
       items.append(item.element);
       return item;
     });
-    showView(section.title, items, choice && {
+    const operations = document.createElement('div');
+    operations.className = 'residence-control-operations';
+    const targetTools = document.createElement('div');
+    targetTools.className = 'residence-control-target-tools';
+    targetTools.append(target, enlargeDevice);
+    operations.append(targetTools, items);
+    view.append(devicePlan.element, operations);
+    showView(section.title, view, {
       label: '設備一覧へ戻る',
-      invoke: () => showDirectory(choice),
+      invoke: () => {
+        plan.select(selectedRoom ? { roomId: selectedRoom, markers: [] } : undefined);
+        showDirectory(choice);
+      },
     });
   }
 
@@ -239,6 +335,8 @@ export function createResidenceControlPanel(sections: readonly ResidenceControlS
   function open(sectionId: string, returnFocus: HTMLElement): void {
     const section = sections.find(item => item.id === sectionId);
     if (!section || dialog.open) return;
+    selectRoom(section.location.roomId);
+    selectCategory(section.category);
     showDevice(section);
     showModal(returnFocus);
   }

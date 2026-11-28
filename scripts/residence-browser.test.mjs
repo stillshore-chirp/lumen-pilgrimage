@@ -865,7 +865,12 @@ test('the residence remote directory keeps its bounds when changing equipment ca
     assert.ok(bounds);
     for (const box of categoryBounds) assert.deepEqual(box, bounds, `Layout moved at ${size.width}×${size.height}`);
     if (size !== shortViewport) {
-      assert.ok(Math.abs(Math.min(...listGaps)) < 1, 'The tallest list fills the shared space');
+      assert.ok(await listViewport(categoryNames[0]).evaluate(element => element.clientHeight > 0),
+        'The equipment list retains its own usable viewport beside the plan');
+      await tab('カーテン').click();
+      await directory.locator('[data-residence-plan] [role="button"]').last().focus();
+      await page.keyboard.press('Tab');
+      assert.ok(await choices('カーテン').getByRole('button').first().evaluate(element => element === document.activeElement));
     }
     assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= size.width);
     assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= size.height);
@@ -873,6 +878,12 @@ test('the residence remote directory keeps its bounds when changing equipment ca
     if (screenshots) t.diagnostic(`${size.width}×${size.height}: ${JSON.stringify(bounds)}`);
   }
 
+  await button(directory, '図を拡大').click();
+  const enlargedPlan = residenceDialog(page, '平面図');
+  assert.ok(await enlargedPlan.locator('[data-residence-plan]').isVisible());
+  await capture(page, 'residence-plan-expanded-320x300');
+  await button(enlargedPlan, '前の画面へ戻る').click();
+  assert.deepEqual(await directory.boundingBox(), bounds);
   await tab('カーテン').click();
   assert.ok(await listViewport('カーテン').evaluate(element => {
     element.scrollTop = element.scrollHeight;
@@ -909,10 +920,74 @@ test('the residence remote directory keeps its bounds when changing equipment ca
 
   await tab('カーテン').press('Space');
   await tab('家電・水栓').press('Tab');
+  assert.ok(await directory.getByLabel('部屋', { exact: true }).evaluate(element => element === document.activeElement));
+  await button(directory, '図を拡大').focus();
+  await page.keyboard.press('Tab');
   const firstCurtain = choices('カーテン').getByRole('button').first();
   assert.ok(await firstCurtain.evaluate(element => element === document.activeElement));
   await page.keyboard.press('Escape');
   await directory.waitFor({ state: 'hidden' });
+  assert.ok(await button(page, 'メニュー').evaluate(element => element === document.activeElement));
+  assert.deepEqual(errors, []);
+});
+
+test('the residence plan selects real rooms and keeps the individual device location visible', { timeout }, async t => {
+  const { page, errors } = await openResidence(t);
+  await button(page, 'メニュー').click();
+  await button(residenceDialog(page, 'メニュー'), '住戸の遠隔操作').click();
+  const directory = residenceDialog(page, '住戸の遠隔操作');
+  const room = directory.getByLabel('部屋', { exact: true });
+  const focusEnds = await directory.evaluate(element => {
+    const nodes = [...element.querySelectorAll('button, select, [tabindex="0"]')]
+      .filter(node => !node.closest('[inert]') && !node.disabled && node.getClientRects().length);
+    nodes[0].dataset.focusEnd = 'first';
+    nodes.at(-1).dataset.focusEnd = 'last';
+    return nodes.length;
+  });
+  assert.ok(focusEnds > 2);
+  await directory.locator('[data-focus-end="first"]').focus();
+  await page.keyboard.press('Shift+Tab');
+  assert.ok(await directory.locator('[data-focus-end="last"]').evaluate(element => element === document.activeElement));
+  await page.keyboard.press('Tab');
+  assert.ok(await directory.locator('[data-focus-end="first"]').evaluate(element => element === document.activeElement));
+  const kitchen = directory.locator('[data-residence-plan] [data-residence-room="K"]');
+  await kitchen.press('Space');
+  assert.equal(await room.inputValue(), 'K');
+  assert.equal(await kitchen.getAttribute('aria-current'), 'true');
+  assert.equal(await directory.locator('[data-residence-choice]:visible').count(), 1);
+  await button(directory, '家電・水栓').click();
+  assert.equal(await directory.locator('[data-residence-choice]:visible').count(), 2);
+  await button(directory, 'キッチンの水栓').press('Enter');
+  const device = residenceDialog(page, 'キッチンの水栓');
+  assert.equal(await device.locator('[data-residence-section]').getAttribute('data-residence-room'), 'K');
+  const marker = device.locator('.residence-plan-markers circle');
+  assert.equal(await marker.count(), 1);
+  const point = await marker.evaluate(element => ({ east: Number(element.dataset.planEast), north: Number(element.dataset.planNorth) }));
+  assert.ok(point.east >= 12.8 && point.east <= 17.35 && point.north >= 6.65 && point.north <= 9.95);
+  await button(device, '水栓').focus();
+  assert.match(await device.locator('.residence-plan-caption').textContent(), /キッチン.*水栓/);
+  await capture(page, 'residence-spatial-kitchen-tap');
+  await button(device, '設備一覧へ戻る').click();
+  assert.ok(await button(directory, 'キッチンの水栓').evaluate(element => element === document.activeElement));
+  await room.selectOption('');
+  await button(directory, '照明').click();
+  await button(directory, 'リビング・ダイニング').click();
+  const lights = residenceDialog(page, 'リビング・ダイニング');
+  await button(lights, 'ペンダント灯（西）').focus();
+  const pendant = lights.locator('.residence-plan-markers circle');
+  assert.equal(Number(await pendant.getAttribute('data-plan-east')), 15.36);
+  assert.equal(Number(await pendant.getAttribute('data-plan-north')), 4.72);
+  await capture(page, 'residence-spatial-pendant');
+  await page.setViewportSize({ width: 375, height: 710 });
+  await capture(page, 'residence-spatial-pendant-mobile');
+  await page.setViewportSize({ width: 320, height: 300 });
+  await button(lights, '図を拡大').click();
+  const expanded = residenceDialog(page, '平面図');
+  await capture(page, 'residence-spatial-pendant-expanded');
+  await button(expanded, '前の画面へ戻る').click();
+  assert.ok(await button(lights, '図を拡大').evaluate(element => element === document.activeElement));
+  assert.ok(await lights.evaluate(element => element.scrollWidth <= element.clientWidth));
+  await page.keyboard.press('Escape');
   assert.ok(await button(page, 'メニュー').evaluate(element => element === document.activeElement));
   assert.deepEqual(errors, []);
 });

@@ -10,6 +10,8 @@ const hooks = registerHooks({
     return nextResolve(internal ? `${specifier}.ts` : specifier, context);
   },
 });
+const { residencePlanRectPath } = await import('../src/coast/ResidenceControlPlan.ts');
+const { RESIDENCE_ROOMS } = await import('../src/coast/world/residence/residencePlan.ts');
 const { createResidenceMaterials } = await import('../src/coast/world/residence/residenceMaterials.ts');
 const { createResidenceFurniture } = await import('../src/coast/world/residence/residenceFurniture.ts');
 const { createResidenceLighting } = await import('../src/coast/world/residence/residenceLighting.ts');
@@ -262,4 +264,52 @@ test('interior glazing retains the facade transmission adjustment across day and
     lighting.setTimeOfDay(time);
     assert.equal(materials.interiorGlass.opacity, materials.glass.opacity, time);
   }
+});
+
+
+test('remote lighting positions share the exact fixture spans used for rendering', () => {
+  for (const section of lighting.sections) {
+    const room = section.location.roomId;
+    assert.equal(section.id, `lighting-${room}`);
+    assert.deepEqual(section.location.markers, roomSources[room].map(source => source.span));
+    for (const source of roomSources[room]) {
+      const control = section.controls.find(control => control.id === source.id);
+      assert.equal(control.location.roomId, room);
+      assert.deepEqual(control.location.markers, [source.span]);
+    }
+  }
+});
+
+test('remote curtain positions project the same rail mounts as the generated curtain panels', () => {
+  for (const section of curtains.sections) {
+    const group = curtains.group.getObjectByName(`Residence curtains ${section.location.roomId}`);
+    assert.ok(group);
+    assert.equal(section.location.markers.length, group.children.length);
+    for (const [index, frame] of group.children.entries()) {
+      const [west, south, east, north] = section.location.markers[index];
+      assert.ok(Math.abs((west + east) / 2 - frame.position.x) < 1e-9);
+      assert.ok(Math.abs((south + north) / 2 + frame.position.z) < 1e-9);
+      assert.ok(east > west || north > south);
+    }
+  }
+});
+
+
+test('the primary bedroom is one L-shaped selection boundary without an internal partition', () => {
+  const bedroom = RESIDENCE_ROOMS.find(room => room.id === '01');
+  const path = residencePlanRectPath(bedroom.rectangles);
+  assert.equal((path.match(/M/g) ?? []).length, 1, 'The connected room must have one perimeter');
+  const coordinates = [...path.matchAll(/[ML]([0-9.]+),([0-9.]+)/g)].map(match => [+match[1], +match[2]]);
+  let area = 0;
+  for (const [i, [x, y]] of coordinates.entries()) {
+    const [xx, yy] = coordinates[(i + 1) % coordinates.length];
+    area += x * yy - xx * y;
+    assert.ok(x === xx || y === yy, 'All plan edges must stay axis-aligned');
+  }
+  assert.ok(Math.abs(Math.abs(area) / 2 - (3.65 * 4 + 3.8 * 1.65)) < 1e-8);
+  const sharedEdge = coordinates.some(([x, y], i) => {
+    const [xx, yy] = coordinates[(i + 1) % coordinates.length];
+    return Math.abs(y - 6.1) < 1e-8 && Math.abs(yy - 6.1) < 1e-8 && Math.min(x, xx) >= 19 && Math.max(x, xx) <= 20.7;
+  });
+  assert.equal(sharedEdge, false, 'The two rectangles do not create a wall through the bedroom');
 });
