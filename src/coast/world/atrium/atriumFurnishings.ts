@@ -5,7 +5,6 @@ import { seededDetail } from '../overlook/overlookModel';
 import {
   ATRIUM_CAFE,
   ATRIUM_CAFE_CHAIRS,
-  ATRIUM_CAFE_COUNTER,
   ATRIUM_CAFE_PLANTERS,
   ATRIUM_CAFE_TABLES,
   ATRIUM_LOUNGE,
@@ -223,19 +222,6 @@ function roundedBox(
   return placeMesh(parent, new THREE.Mesh(geometry, material), name, position, rotation);
 }
 
-function box(
-  parent: THREE.Object3D,
-  name: string,
-  material: THREE.Material,
-  width: number,
-  height: number,
-  depth: number,
-  position: Point3,
-  rotation: Point3 = [0, 0, 0],
-): THREE.Mesh {
-  return placeMesh(parent, new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material),
-    name, position, rotation);
-}
 
 function cylinder(
   parent: THREE.Object3D,
@@ -636,35 +622,6 @@ function addSculpture(parent: THREE.Group, materials: AtriumFurnishMaterials): v
   }
 }
 
-function addCafeCounter(parent: THREE.Group, materials: AtriumFurnishMaterials): void {
-  const cafe = new THREE.Group();
-  cafe.name = 'Right-side cafe counter and service island';
-  parent.add(cafe);
-
-  const { x: counterX, z: counterZ, width, depth } = ATRIUM_CAFE_COUNTER;
-  roundedBox(cafe, 'Cafe lower cabinetry', materials.darkMetal, 2.82, .88, .58,
-    [counterX, .46, counterZ], .035);
-  roundedBox(cafe, 'Cafe warm porcelain counter', materials.porcelain, width, .13, depth,
-    [counterX, .96, counterZ + .03], .052);
-  box(cafe, 'Cafe brass service rail', materials.brass, 2.62, .034, .045,
-    [counterX, .80, counterZ + .37]);
-  box(cafe, 'Cafe under-counter warm reveal', materials.amber, 2.48, .025, .023,
-    [counterX, .73, counterZ + .313]);
-  for (const x of [-.52, .19, .90]) {
-    roundedBox(cafe, 'Cafe cabinet front', materials.sofaShadow, .57, .61, .025,
-      [x, .43, counterZ + .30], .018);
-    box(cafe, 'Cafe cabinet handle', materials.brass, .21, .014, .018,
-      [x, .51, counterZ + .322]);
-  }
-  // A pair of shallow vessels and a small machine ground the counter at human scale.
-  cylinder(cafe, 'Cafe porcelain canister', materials.porcelain, .14, .19,
-    [-.37, 1.12, counterZ + .04], 24);
-  cylinder(cafe, 'Cafe dark coffee machine', materials.darkMetal, .19, .28,
-    [.26, 1.16, counterZ + .05], 24);
-  box(cafe, 'Cafe coffee machine brass face', materials.brass, .20, .13, .012,
-    [.26, 1.17, counterZ + .245], [0, 0, 0]);
-}
-
 function addCafeTable(parent: THREE.Group, materials: AtriumFurnishMaterials,
   name: string, x: number, z: number, width: number, depth: number): void {
   const table = new THREE.Group();
@@ -853,7 +810,7 @@ function addCafe(parent: THREE.Group, materials: AtriumFurnishMaterials): void {
   cafe.name = 'Right-side cafe seating and planters';
   cafe.position.set(ATRIUM_CAFE.x, 0, ATRIUM_CAFE.z);
   parent.add(cafe);
-  addCafeCounter(cafe, materials);
+
 
   ATRIUM_CAFE_TABLES.forEach(({ x, z, width, depth }, index) =>
     addCafeTable(cafe, materials, `Cafe table ${index + 1}`, x, z, width, depth));

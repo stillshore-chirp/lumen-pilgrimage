@@ -4,6 +4,7 @@ import {
 } from 'three';
 import type { Material, MeshStandardMaterial, Texture } from 'three';
 import { createTenantArchitecture } from './atriumTenantArchitecture';
+import { addAtriumCafeLighting } from './atriumCafe';
 import { furnishEastTenant } from './atriumTenantEast';
 import { addTenantLighting, createTenantFinishes } from './atriumTenantLighting';
 import type { TenantLocalLight } from './atriumTenantLighting';
@@ -188,7 +189,7 @@ export async function buildAtriumRetail(root: Group, stoneMap: Texture | null) {
       case 'east': furnishEastTenant(context); break;
       case 'rear': furnishRearTenant(context); break;
     }
-    for (const entry of addTenantLighting(context)) {
+    for (const entry of bay.id === 'R2' ? addAtriumCafeLighting(context) : addTenantLighting(context)) {
       entry.light.name = `${entry.id} merchandise light`;
       context.group.add(entry.light);
       localLights.push(entry);
