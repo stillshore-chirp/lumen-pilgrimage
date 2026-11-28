@@ -1363,8 +1363,8 @@
       "world": "cinema",
       "place": "center",
       "time": "day",
-      "capturedAt": "2026-11-27T10:56:39.218Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:22.476Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -1400,7 +1400,45 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=center&time=day"
+      "route": "/?world=cinema&place=center&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-center-screening",
@@ -1408,8 +1446,8 @@
       "world": "cinema",
       "place": "center",
       "time": "day",
-      "capturedAt": "2026-11-27T10:56:49.473Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:20.949Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -1446,7 +1484,45 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=center&time=day"
+      "route": "/?world=cinema&place=center&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-center-preview",
@@ -1454,8 +1530,8 @@
       "world": "cinema",
       "place": "center",
       "time": "day",
-      "capturedAt": "2026-11-27T10:58:07.103Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:33.030Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -1490,10 +1566,48 @@
         "dpr": 1
       },
       "settleMs": 9000,
-      "samplePlaybackSeconds": 9.4305,
+      "samplePlaybackSeconds": 9.410899999856948,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=center&time=day"
+      "route": "/?world=cinema&place=center&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-front-turnback",
@@ -1501,8 +1615,8 @@
       "world": "cinema",
       "place": "front",
       "time": "day",
-      "capturedAt": "2026-11-27T10:58:17.508Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:31.347Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -1539,7 +1653,45 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=front&time=day"
+      "route": "/?world=cinema&place=front&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-rear-arrival",
@@ -1547,8 +1699,8 @@
       "world": "cinema",
       "place": "rear",
       "time": "day",
-      "capturedAt": "2026-11-27T10:58:27.738Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:11:41.589Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -1584,7 +1736,45 @@
       "samplePlaybackSeconds": null,
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=rear&time=day"
+      "route": "/?world=cinema&place=rear&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "cinema-rear-service",
@@ -1592,8 +1782,8 @@
       "world": "cinema",
       "place": "rear",
       "time": "day",
-      "capturedAt": "2026-11-27T11:03:54.581Z",
-      "sourceRevision": "8d24d11d37f5e6fa37afad308b8d5621761bc7df",
+      "capturedAt": "2026-11-28T04:08:43.388Z",
+      "sourceRevision": "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1",
       "browser": "159.0.8154.6",
       "viewport": {
         "width": 1920,
@@ -1628,41 +1818,47 @@
       },
       "settleMs": 9000,
       "samplePlaybackSeconds": null,
-      "trackedSourceAndPublicClean": true,
-      "servedBuild": {
-        "htmlSha256": "d09d80c8459e987e09a7b95e5f49947ce10e0de65ea3356c18302f5c11592f24",
-        "scripts": [
-          {
-            "path": "/assets/CinemaWorld-My6uAQQf.js",
-            "sha256": "95981d97e22c2a0bd86fe1eada303db9281eb540206bd07ea72160f5ddf63890"
-          },
-          {
-            "path": "/assets/CoastApp-DVv6nXRr.js",
-            "sha256": "c733ba27148e19d64b7d518ca6683213b69725b118df898e0a16e11890d81f03"
-          },
-          {
-            "path": "/assets/explorationRoute-DaU8zqTe.js",
-            "sha256": "11dc65e7dba385b1fdba85c0318944cc26b1d72b4aa962422f190997b4be313b"
-          },
-          {
-            "path": "/assets/index-jUkHjY4W.js",
-            "sha256": "0277e7cd72260c351015db6b244faee07b58db8d8c16c58740a106e75a9149b4"
-          },
-          {
-            "path": "/assets/residenceAudioSamples-CuBS2ylN.js",
-            "sha256": "7d1d5f7ac17cec2267f899a90e2cebc9006f6d690dec3671006d4c81147f1228"
-          },
-          {
-            "path": "/assets/RoundedBoxGeometry-D_zhoNfk.js",
-            "sha256": "83634a9ce5b286f4cffe67b5979b839dc13247e026058b4a35ab28d2c7c8c267"
-          }
-        ],
-        "sourceRevisionBinding": "not automatically verified; build dist from the recorded clean source before recapture",
-        "sha256": "2ecff21114e7dc9f22859a6c4b1ef72e00068520f892833732afbacff53de64c"
-      },
       "pageerrors": [],
       "resourceFailures": [],
-      "route": "/?world=cinema&place=rear&time=day"
+      "route": "/?world=cinema&place=rear&time=day",
+      "publicComponents": {
+        "world": "cd79fdea5cda19827465f394557a6bf94063be66",
+        "sharedControls": "5ae0c29d47be9a5dd039a175298f639cb36772c1"
+      },
+      "servedBuild": {
+        "htmlSha256": "03e5eab2cc096681a7be8a2aa45cec3cb2374e65ada4d908f28aea146fc8a911",
+        "scripts": [
+          {
+            "path": "/assets/CinemaWorld-DMy-jort.js",
+            "sha256": "e603cf30c6e60ac15c614c1e41def47d719c13491fafa81c25ec294417bdf2a3"
+          },
+          {
+            "path": "/assets/CoastApp-pMLT8BZi.js",
+            "sha256": "7495f1d55486f26317e69621cba970762aae2ae3ca677c4c0974aa41920f886f"
+          },
+          {
+            "path": "/assets/explorationRoute-DBpBFcxj.js",
+            "sha256": "4ac704c2f147a55f3a988cd2b77ef57ad002dbac21dc4a8fb4de2ec4d3c33825"
+          },
+          {
+            "path": "/assets/main-CizR2zru.js",
+            "sha256": "0b71da23d112f06b12d893aba0eb12744d5d384f3808052bf618c9f8aedd702d"
+          },
+          {
+            "path": "/assets/modulepreload-polyfill-B5Qt9EMX.js",
+            "sha256": "d2a32840421496e872ade591618d2fa5c33797605d1aec04301717e5a90757d0"
+          },
+          {
+            "path": "/assets/residenceAudioSamples-Ctu5QqV2.js",
+            "sha256": "1a10a2bad5118afb3a448264b42f4e145af6f2d0eac4e253dd71e5a4384fb3fb"
+          },
+          {
+            "path": "/assets/RoundedBoxGeometry-BJ8RCePJ.js",
+            "sha256": "f5972102889fa6f48d1f0594e40b4bb5da3c8e116b157074f76b4a853c552ef6"
+          }
+        ],
+        "sha256": "8079b0ee1361804889f26dd1393530d0aea6a98f19762fddf85568bbf7ecf15d"
+      }
     },
     {
       "id": "atrium-concourse-day",
@@ -2439,9 +2635,9 @@
       "file": "images/cinema-center-arrival.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 45856,
-      "sha256": "36bd0b842442b757cf5237f3050ea223e465071f004ad9cf4947bd3886426295",
-      "sourcePngSha256": "c0584e7e81de6493b68495bcf5b254120876cef0d9a6fbfc5ba6145e3f85ee9b",
+      "bytes": 45292,
+      "sha256": "df935fe9a4b2f76c4f1c5bab7c51d1360b54e4ba5b976cd720e21f05174e34c6",
+      "sourcePngSha256": "4193b6a6234b9aae8ad4806bed4c275167edf077facc8357bd7f33bebfb75b3e",
       "shotId": "cinema-center-arrival",
       "ui": false,
       "thumbnail": false
@@ -2450,9 +2646,9 @@
       "file": "images/cinema-center-arrival-ui.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 71338,
-      "sha256": "cc69abcd8714b4438964354d08c3a915f2a16e1d4d350ac0fe9dac178418791e",
-      "sourcePngSha256": "92a6fe32a59065939159d0ef55a8a6c72374074a55ce7d4d45adb5921fd712f8",
+      "bytes": 70986,
+      "sha256": "fc587955406f772f44075034fa72e57dcb95ac058bb0af9abe58091c6165ecd3",
+      "sourcePngSha256": "7ee6b14f8b80c18f75eb522a4554825ea8cc4c85a69f02fb1d99b8e39921d7f0",
       "shotId": "cinema-center-arrival",
       "ui": true,
       "thumbnail": false
@@ -2472,9 +2668,9 @@
       "file": "images/cinema-center-preview.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 16322,
-      "sha256": "a1dea17e49f25c8980fede2be04ebe89d99e3ce4bfd8e6cf07b6c071d507a01b",
-      "sourcePngSha256": "b204f080a12f0d3e1603f3ab06b94bedf127e3fb621c87d2b18edecc99be8410",
+      "bytes": 12520,
+      "sha256": "55b5233ba49d64894f00bfebd41cc83f9a9f7d989e41a8e919dbfc9a1a1cb499",
+      "sourcePngSha256": "d3d0a72744520d70012bf8860ed173676875c1f64a8524413fa65eaf31f85df5",
       "shotId": "cinema-center-preview",
       "ui": false,
       "thumbnail": false
@@ -2483,9 +2679,9 @@
       "file": "images/cinema-front-turnback.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 45450,
-      "sha256": "3df7bcf4449a25c92b6b660cd57ec13ed9552746063cda6cc8f67410eba0f7b2",
-      "sourcePngSha256": "79d83432ee7354dca6845cc6f567242fffab2fd3001687d552808fb232bc9473",
+      "bytes": 42160,
+      "sha256": "fbaf45a83903c310d0c6cc96f756e3d78a3af9db7e609ce75a7d1205d102adb9",
+      "sourcePngSha256": "7d78566dd026fdb82c432d3f7056007dc130e0547f63a55000854a733b532c70",
       "shotId": "cinema-front-turnback",
       "ui": false,
       "thumbnail": false
@@ -2494,9 +2690,9 @@
       "file": "images/cinema-rear-arrival.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 49896,
-      "sha256": "70640a62f490a84b5bae4a4cb9ad525c3d6783712e2856534e0a27d8037c444d",
-      "sourcePngSha256": "2ee9941aacca4a2dc1f629ef17b9e73cb814c890c3b94a3efe9bd279ec5c27bb",
+      "bytes": 50176,
+      "sha256": "4d52ee86c046651e18fa55db06262a6c5c185b8cc3058fea2bd1407c72bcd39e",
+      "sourcePngSha256": "7c5775316e86e5e3b16daed947333a8abf1c811699b963a37170857bac67b4bb",
       "shotId": "cinema-rear-arrival",
       "ui": false,
       "thumbnail": false
@@ -2505,9 +2701,9 @@
       "file": "images/cinema-rear-service.webp",
       "width": 1920,
       "height": 1080,
-      "bytes": 51242,
-      "sha256": "8e44f870069c3ab60b35eb5bfcab4b1600568e6fd48c78a983563b01e788e03e",
-      "sourcePngSha256": "1f8c7807147d3321575e14ab7e1ecc3790d7ba05be16feddc3f724df4f13d69d",
+      "bytes": 51856,
+      "sha256": "884565ee111292fe1ea05f56ae9efeaf5c461a72a2a7d9e7992a7ca1f7310d0e",
+      "sourcePngSha256": "4e8427c9c81e12cda5f8b2252264a896e887a50735247a25ebd4d4df467685b8",
       "shotId": "cinema-rear-service",
       "ui": false,
       "thumbnail": false
@@ -2703,9 +2899,9 @@
       "file": "images/cinema-rear-service-thumb.webp",
       "width": 640,
       "height": 360,
-      "bytes": 11304,
-      "sha256": "9bea8e37d5d7e68414d5bdfba69ce5409625f44f89085b704fcb0c968bf77bd0",
-      "sourcePngSha256": "1f8c7807147d3321575e14ab7e1ecc3790d7ba05be16feddc3f724df4f13d69d",
+      "bytes": 11638,
+      "sha256": "090878fa257058a286ca0f6066a9de8f1f611203ebc6cc1b690a87b36e97ca49",
+      "sourcePngSha256": "4e8427c9c81e12cda5f8b2252264a896e887a50735247a25ebd4d4df467685b8",
       "shotId": "cinema-rear-service",
       "ui": false,
       "thumbnail": true
@@ -2738,14 +2934,13 @@
     "uiScreens": 6,
     "thumbnails": 6,
     "publishedImages": 48,
-    "bytes": 7813990
+    "bytes": 7807210
   },
   "captureSources": {
     "8d24d11d37f5e6fa37afad308b8d5621761bc7df": {
       "role": "Original gallery capture retained for unchanged worlds",
       "worlds": [
         "atrium",
-        "cinema",
         "coast",
         "lake"
       ]
@@ -2753,6 +2948,7 @@
     "9b04bebe6ec5866446e8689ffeaaf4969bdf0db1": {
       "role": "Clean validation integration merge; distinct from the published component revisions",
       "worlds": [
+        "cinema",
         "overlook",
         "residence"
       ],
