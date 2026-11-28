@@ -42,6 +42,30 @@ function makeCamera() {
   return camera;
 }
 
+test('invisible stereo emitters follow the actual fitted display edges and world scale', t => {
+  const { monitor } = createMonitor(t);
+  const camera = makeCamera();
+  monitor.reset(camera);
+  monitor.group.scale.setScalar(1.7);
+  monitor.group.rotation.set(.12, .83, -.14);
+  monitor.group.updateMatrixWorld(true);
+  const [left, right] = monitor.audioEmitters;
+  assert.equal(left.type, 'Object3D');
+  assert.equal(right.type, 'Object3D');
+  const a = left.getWorldPosition(new Vector3());
+  const b = right.getWorldPosition(new Vector3());
+  assert.ok(Math.abs(a.distanceTo(b) - 2.7 * 1.7) < 1e-10);
+  const surface = monitor.group.getObjectByName('monitor-surface');
+  assert.equal(left.parent, surface);
+  assert.equal(right.parent, surface);
+  const target = new Mesh(new PlaneGeometry(6, 3), new MeshBasicMaterial());
+  target.position.set(-11, 4, 8);
+  monitor.setTarget(target);
+  assert.ok(Math.abs(left.getWorldPosition(a).distanceTo(right.getWorldPosition(b)) - 6) < 1e-10);
+  target.geometry.dispose();
+  target.material.dispose();
+});
+
 function pointerAtMonitor(camera, monitor) {
   camera.updateMatrixWorld(true);
   const projection = monitor.group.getWorldPosition(new Vector3()).project(camera);

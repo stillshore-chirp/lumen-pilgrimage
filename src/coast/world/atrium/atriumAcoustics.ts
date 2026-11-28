@@ -16,7 +16,7 @@ import {
 import type { TenantBay, TenantWorldPoint } from './atriumTenantPlan';
 import { ATRIUM_FRONT_GLAZING, ATRIUM_FRONT_GLASS_PLANES } from './atriumFrontPlan';
 import { atriumTenantFloorAt, atriumTenantRoomCeilingAt } from './atriumTenantWalking';
-import { ATRIUM_CAFE_PLAN, inAtriumCafe } from './atriumCafePlan';
+import { ATRIUM_CAFE_EQUIPMENT_POSITION, ATRIUM_CAFE_PLAN, inAtriumCafe } from './atriumCafePlan';
 
 type MutablePoint = { x: number; y: number; z: number };
 export type AtriumPoint = Readonly<MutablePoint>;
@@ -101,7 +101,6 @@ function tenantPanels(bay: TenantBay): VerticalPanel[] {
 }
 
 const TENANT_PANELS = ATRIUM_TENANTS.flatMap(tenantPanels);
-const SERVICE_BAY = ATRIUM_TENANTS.find(bay => bay.id === 'R2')!;
 
 export const ATRIUM_AIR_SOURCES: readonly AtriumPoint[] = [
   { x: ATRIUM_BOUNDS.minX + 1.7, y: ATRIUM_LEVELS[0] - 0.62, z: -13.5 },
@@ -110,7 +109,8 @@ export const ATRIUM_AIR_SOURCES: readonly AtriumPoint[] = [
 ];
 
 export const ATRIUM_SERVICE_SOURCES: readonly AtriumPoint[] = [
-  { ...tenantWorldPoint(SERVICE_BAY, 2.00, 4.52), y: 0.65 },
+  { x: ATRIUM_CAFE_EQUIPMENT_POSITION[0], y: ATRIUM_CAFE_EQUIPMENT_POSITION[1],
+    z: ATRIUM_CAFE_EQUIPMENT_POSITION[2] },
   // The storefront opening is the point where the filtered interior noise enters the gallery.
   { x: ATRIUM_BOUNDS.maxX - 0.03, y: ATRIUM_WALK_LEVEL + 1.15, z: -18.5 },
 ];

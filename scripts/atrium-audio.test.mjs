@@ -28,7 +28,52 @@ const {
 } = await import('../src/coast/world/atrium/atriumLayout.ts');
 const { ATRIUM_TENANTS, tenantWorldPoint } = await import('../src/coast/world/atrium/atriumTenantPlan.ts');
 const { ATRIUM_FRONT_END_BAYS, atriumFrontWindowMullions } = await import('../src/coast/world/atrium/atriumFrontPlan.ts');
+const { ATRIUM_MONITOR_SPEAKERS, atriumMonitorChannel, atriumMonitorPath } = await import('../src/coast/world/atrium/atriumMonitorAudio.ts');
+const { ATRIUM_CAFE_SPEAKERS, atriumCafeWorldPoint } = await import('../src/coast/world/atrium/atriumCafePlan.ts');
 hooks.deregister();
+
+test('shared facility output follows equipment and cafe opening/partition geometry', () => {
+  assert.equal(ATRIUM_MONITOR_SPEAKERS.length, 18);
+  assert.equal(ATRIUM_CAFE_SPEAKERS.length, 6);
+  for (const speaker of ATRIUM_CAFE_SPEAKERS) {
+    const [left, right] = speaker.position[2] < -38.5 ? [0, 1] : [1, 0];
+    assert.equal(atriumMonitorChannel('cafe', speaker), left);
+    assert.notEqual(atriumMonitorChannel('cafe', speaker), right);
+  }
+  assert.ok(ATRIUM_MONITOR_SPEAKERS.every(speaker => atriumMonitorChannel('atrium', speaker)
+    === (speaker.position[0] < 0 ? 0 : 1)));
+  const location = (u, d) => {
+    const [x, y, z] = atriumCafeWorldPoint(u, d, 1.6);
+    return { x, y, z };
+  };
+  const speaker = ATRIUM_CAFE_SPEAKERS.at(-2);
+  const inside = atriumMonitorPath('cafe', speaker, location(5.05, 14.8));
+  const outside = atriumMonitorPath('cafe', speaker, location(4.15, -2));
+  assert.ok(inside.gain > outside.gain * 3);
+  assert.equal(inside.cutoff, 8_000);
+  assert.ok(outside.cutoff <= 1_800);
+  assert.notEqual(outside.point.x, speaker.position[0], 'outside arrival comes through the entrance');
+  assert.ok(inside.reflections.every(reflection => reflection.delay > 0 && reflection.gain > 0));
+  const blocked = atriumMonitorPath('cafe', speaker, location(2, 17));
+  assert.equal(blocked.cutoff, 900);
+  assert.ok(blocked.reflections.every(reflection => reflection.gain === 0));
+  assert.ok(blocked.gain < inside.gain * .25);
+  const behindPartition = atriumMonitorPath('cafe', speaker, location(6.4, 17.7));
+  assert.equal(behindPartition.cutoff, 900,
+    'a segment that enters and leaves the closed store room is blocked even with both endpoints outside');
+  assert.ok(behindPartition.reflections.every(reflection => reflection.gain === 0));
+  for (const emitter of ATRIUM_MONITOR_SPEAKERS) {
+    const path = atriumMonitorPath('atrium', emitter, open);
+    assert.ok(Number.isFinite(path.gain) && path.gain > 0);
+    assert.ok(path.cutoff > 0 && Number.isFinite(path.lateSend));
+    const throughDoor = atriumMonitorPath('atrium', emitter, location(5.05, 12));
+    assert.ok(throughDoor.cutoff <= 1_800 && throughDoor.gain < path.gain);
+    assert.ok(throughDoor.reflections.every(reflection =>
+      reflection.point.x === throughDoor.point.x && reflection.point.y === throughDoor.point.y
+      && reflection.point.z === throughDoor.point.z && reflection.cutoff <= 1_800),
+    'all outside arrivals finish through the same cafe opening');
+  }
+});
 
 const open = { x: 0, y: 1.65, z: -19 };
 const underGallery = { x: ATRIUM_BOUNDS.maxX - 1.7, y: 1.65, z: -19 };
@@ -171,7 +216,9 @@ test('a finite gallery slab shelters an elevated source and the lounge softens t
 test('R2 equipment uses the same recessed opening and glazing as the storefront', () => {
   assert.equal(ATRIUM_SERVICE_SOURCES.length, 2);
   const source = ATRIUM_SERVICE_SOURCES[0];
-  assert.deepEqual(source, { x: 15.92, y: 0.65, z: -35.45 });
+  assert.equal(source.x, 17.2);
+  assert.equal(source.y, .65);
+  assert.ok(Math.abs(source.z + 34.05) < 1e-10);
   const cafe = ATRIUM_TENANTS.find(bay => bay.id === 'R2');
   const throughOpening = atriumSoundPath(tenantSoundPoint(cafe, 4.0, 1.65, -2.2), source);
   const throughGlass = atriumSoundPath(tenantSoundPoint(cafe, 1.32, 1.65, -2.2), source);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { test } from 'node:test';
-import { Vector3 } from 'three';
+import { PerspectiveCamera, Vector3 } from 'three';
 
 const src = new URL('../src/', import.meta.url).href;
 const hook = registerHooks({
@@ -18,7 +18,190 @@ const { cinemaSourceBandLoss, cinemaSeatingClearance, cinemaPathCrossesScreen, c
   cinemaBandShelves, cinemaScreenCrossings, CINEMA_SURFACE_GAINS } = await import('../src/coast/world/cinema/cinemaPropagation.ts');
 const { CINEMA_RENDER_SPEAKERS } = await import('../src/coast/world/cinema/cinemaSpeakers.ts');
 const { cinemaPropagationImpulse } = await import('../src/coast/world/cinema/cinemaPropagationFilter.ts');
+const { cinemaSharedFeedPlan, createCinemaSharedRouting } = await import('../src/coast/world/cinema/cinemaSharedRouting.ts');
+const { createCinemaPlayback } = await import('../src/coast/world/cinema/cinemaPlayback.ts');
 hook.deregister();
+
+test('shared playback releases listening children before their routing parent', () => {
+  class Param {
+    value = 0;
+    cancelScheduledValues() {}
+    setValueAtTime(value) { this.value = value; }
+    setTargetAtTime(value) { this.value = value; }
+    setValueCurveAtTime(values) { this.lastCurve = [...values]; this.value = values.at(-1); }
+  }
+  class Node {
+    connections = new Set();
+    gain = new Param(); frequency = new Param(); Q = new Param(); delayTime = new Param();
+    positionX = new Param(); positionY = new Param(); positionZ = new Param();
+    connect(target) {
+      if (++connectionCalls === failConnectionAt) throw new Error('Injected connection failure');
+      this.connections.add(target); return target;
+    }
+    disconnect(target) {
+      if (!target) { this.connections.clear(); return; }
+      if (!this.connections.delete(target)) throw new DOMException('No connection to target', 'InvalidAccessError');
+    }
+  }
+  const nodes = [];
+  let pannerCalls = 0;
+  let failAt = 0;
+  let connectionCalls = 0;
+  let failConnectionAt = 0;
+  let filterCalls = 0;
+  let failFilterAt = 0;
+  const node = () => { const value = new Node(); nodes.push(value); return value; };
+  const context = {
+    sampleRate: 8_000, currentTime: 0,
+    listener: Object.fromEntries(['position', 'forward', 'up'].flatMap(name => ['X', 'Y', 'Z'].map(axis => [name + axis, new Param()]))),
+    createGain: node, createChannelSplitter: node,
+    createBiquadFilter() { if (++filterCalls === failFilterAt) throw new Error('Injected filter failure'); return node(); },
+    createDelay: node, createWaveShaper: node,
+    createPanner() { if (++pannerCalls === failAt) throw new Error('Injected voice failure'); return node(); },
+    createConvolver: node,
+    createBuffer(channels, length) {
+      const data = Array.from({ length: channels }, () => new Float32Array(length));
+      return { numberOfChannels: channels, getChannelData: channel => data[channel] };
+    },
+  };
+  const source = node(), output = node(), unrelated = node();
+  source.connect(unrelated);
+  const ownedStart = nodes.length;
+  const playback = createCinemaPlayback(context, source, output, 6);
+  const camera = new PerspectiveCamera(); camera.position.set(0, 5, 35.85);
+  playback.update(camera);
+  const lightMix = [...nodes.find(node => node.panningModel === 'equalpower').connections][0].gain;
+  const initialLightLevel = lightMix.value;
+  assert.ok(initialLightLevel > 0 && initialLightLevel < 1, 'light mode uses an attenuated reference level');
+  context.currentTime = .03;
+  playback.setQuality('high');
+  playback.update(camera);
+  const highMix = [...nodes.find(node => node.panningModel === 'HRTF').connections][0].gain;
+  assert.equal(highMix.value, 1, 'high quality retains unity reference gain');
+  context.currentTime = .06;
+  playback.setQuality('light');
+  playback.update(camera);
+  assert.equal(lightMix.value, Math.fround(initialLightLevel),
+    'an interrupted crossfade restores the calibrated endpoint at Float32 curve precision');
+  assert.equal(highMix.value, 0);
+  assert.ok(lightMix.lastCurve.every(value => value >= 0 && value <= initialLightLevel + 1e-7),
+    'the crossfade must not bypass the lightweight attenuation');
+  assert.doesNotThrow(() => playback.dispose());
+  assert.doesNotThrow(() => playback.dispose());
+  assert.deepEqual([...source.connections], [unrelated]);
+  assert.ok(nodes.slice(ownedStart).every(value => value.connections.size === 0));
+  for (const target of [1, 30, 58, 60]) {
+    failAt = target; pannerCalls = 0;
+    const start = nodes.length;
+    const partial = createCinemaPlayback(context, source, output, 6);
+    assert.throws(() => partial.update(camera));
+    assert.doesNotThrow(() => partial.dispose());
+    assert.ok(nodes.slice(start).every(value => value.connections.size === 0), `partial voice ${target}`);
+    assert.deepEqual([...source.connections], [unrelated]);
+  }
+  failAt = 0;
+  for (const target of [4, 10]) {
+    failConnectionAt = 0;
+    const start = nodes.length;
+    const partial = createCinemaPlayback(context, source, output, 6);
+    connectionCalls = 0; failConnectionAt = target;
+    assert.throws(() => partial.update(camera));
+    assert.doesNotThrow(() => partial.dispose());
+    assert.ok(nodes.slice(start).every(value => value.connections.size === 0), `partial connection ${target}`);
+    assert.deepEqual([...source.connections], [unrelated]);
+  }
+  failConnectionAt = 0;
+  const filterStart = nodes.length;
+  const partialFilter = createCinemaPlayback(context, source, output, 6);
+  filterCalls = 0; failFilterAt = 3;
+  assert.throws(() => partialFilter.update(camera));
+  assert.doesNotThrow(() => partialFilter.dispose());
+  assert.ok(nodes.slice(filterStart).every(value => value.connections.size === 0));
+  failFilterAt = 0;
+  const survivingStart = nodes.length;
+  const surviving = createCinemaPlayback(context, source, output, 6);
+  surviving.update(camera);
+  const previousEdges = nodes.slice(survivingStart).reduce((sum, value) => sum + value.connections.size, 0);
+  const previousInputs = [...source.connections];
+  pannerCalls = 0; failAt = 30;
+  assert.throws(() => surviving.setQuality('high'));
+  assert.equal(nodes.slice(survivingStart).reduce((sum, value) => sum + value.connections.size, 0), previousEdges,
+    'a failed replacement keeps the previously active listening graph');
+  assert.deepEqual([...source.connections], previousInputs);
+  context.currentTime = .1;
+  assert.doesNotThrow(() => surviving.update(camera));
+  assert.doesNotThrow(() => surviving.dispose());
+  assert.ok(nodes.slice(survivingStart).every(value => value.connections.size === 0));
+  assert.deepEqual([...source.connections], [unrelated]);
+});
+
+test('shared mono/stereo drives the common 57 equipment outputs with bounded differentiated feeds', () => {
+  for (const mono of [false, true]) {
+    const plan = cinemaSharedFeedPlan(mono ? 1 : 2);
+    assert.equal(plan.length, 57);
+    assert.deepEqual(plan.map(feed => feed.speaker.id), CINEMA_RENDER_SPEAKERS.map(speaker => speaker.id));
+    assert.ok(plan.every(feed => feed.coefficients.every(Number.isFinite)
+      && feed.coefficients.some(coefficient => coefficient !== 0)));
+    const sum = feeds => feeds.reduce((total, feed) =>
+      total + feed.coefficients.reduce((value, coefficient) => value + Math.abs(coefficient), 0), 0);
+    assert.ok(Math.abs(sum(plan.filter(feed => feed.speaker.kind === 'screen')) - .66) < 1e-12);
+    assert.ok(Math.abs(sum(plan.filter(feed => feed.diffuse)) - .10) < 1e-12);
+    assert.ok(Math.abs(sum(plan.filter(feed => feed.bass)) - .05) < 1e-12);
+    const surround = plan.filter(feed => feed.diffuse);
+    assert.ok(new Set(surround.map(feed => feed.delaySeconds)).size >= 40);
+    assert.ok(new Set(surround.map(feed => feed.phaseFrequency)).size >= 40);
+    assert.ok(surround.every(feed => feed.delaySeconds >= .018 && feed.delaySeconds < .041));
+    assert.ok(surround.every(feed => feed.coefficients[0] * feed.coefficients[1] < 0));
+    assert.ok(surround.every(feed => feed.coefficients[0] + feed.coefficients[1] > 0),
+      'mono retains a lower-level diffuse floor instead of disappearing');
+    if (mono) {
+      const front = plan.filter(feed => feed.speaker.kind === 'screen');
+      assert.ok(front[2].coefficients[0] > front[0].coefficients[0] * 4);
+    }
+  }
+});
+
+test('known standard 5.1 keeps all six independent inputs including LFE on the common equipment', () => {
+  const plan = cinemaSharedFeedPlan(6);
+  assert.equal(plan.length, 57);
+  assert.ok(plan.every(feed => feed.coefficients.length === 6));
+  const destinations = channel => plan.filter(feed => feed.coefficients[channel] !== 0);
+  assert.deepEqual(destinations(0).map(feed => feed.speaker.id), ['screen-L', 'screen-LC']);
+  assert.deepEqual(destinations(1).map(feed => feed.speaker.id), ['screen-RC', 'screen-R']);
+  assert.deepEqual(destinations(2).map(feed => feed.speaker.id), ['screen-C']);
+  assert.equal(destinations(3).length, 4);
+  assert.ok(destinations(3).every(feed => feed.bass));
+  assert.ok(plan.filter(feed => !feed.bass).every(feed => feed.coefficients[3] === 0));
+  assert.ok(destinations(4).every(feed => feed.speaker.position[0] < 0 && !feed.bass));
+  assert.ok(destinations(5).every(feed => feed.speaker.position[0] > 0 && !feed.bass));
+  assert.equal(destinations(4).length, 24);
+  assert.equal(destinations(5).length, 24);
+  for (const [channel, expected] of [[0, .2], [1, .2], [2, .2], [3, .2], [4, .1], [5, .1]]) {
+    const sum = plan.reduce((sum, feed) => sum + Math.abs(feed.coefficients[channel]), 0);
+    assert.ok(Math.abs(sum - expected) < 1e-12);
+  }
+  assert.ok(Math.abs(plan.reduce((sum, feed) => sum + feed.coefficients.reduce((sum, value) => sum + Math.abs(value), 0), 0) - 1) < 1e-12);
+  const roomInputs = plan.filter(feed => feed.roomScale > 0);
+  assert.equal(roomInputs.length, 7);
+  assert.ok(roomInputs.filter(feed => feed.speaker.kind !== 'screen').every(feed =>
+    Math.abs(feed.coefficients.reduce((sum, value) => sum + Math.abs(value), 0) * feed.roomScale - .08) < 1e-12));
+  const node = () => ({ connections: [], gain: { value: 0 }, frequency: { value: 0 }, Q: { value: 0 }, delayTime: { value: 0 },
+    connect(target, output = 0) { this.connections.push({ target, output }); return target; },
+    disconnect() { this.connections = []; } });
+  const context = { createGain: node, createBiquadFilter: node, createDelay: node,
+    createChannelSplitter(channels) { return Object.assign(node(), { numberOfOutputs: channels }); } };
+  const input = node();
+  const routing = createCinemaSharedRouting(context, input, 6);
+  const layout = input.connections[0].target;
+  assert.deepEqual([layout.channelCount, layout.channelCountMode, layout.channelInterpretation], [6, 'explicit', 'discrete']);
+  const splitter = layout.connections[0].target;
+  assert.equal(splitter.numberOfOutputs, 6);
+  const lfeGains = splitter.connections.filter(edge => edge.output === 3).map(edge => edge.target);
+  assert.equal(lfeGains.length, 4);
+  assert.ok(lfeGains.every(gain => gain.gain.value === .05));
+  routing.dispose();
+  assert.equal(input.connections.length, 0);
+});
 
 const [centerSeat, frontSeat, rearSeat, wheelchairSeat] = CINEMA_DESTINATIONS;
 const seats = [frontSeat, centerSeat, rearSeat, { ...wheelchairSeat, x: 12.715, z: CINEMA_ROWS[14].z }, wheelchairSeat]
@@ -191,7 +374,14 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
         c50: await Promise.all([500, 1000, 2000].map(band => clarity(impulse, band, onset))),
       });
     }
-    const [left, right, unknown, aligned, inverted, surround, facing, turned, silent, bypass, switching] = await Promise.all([
+    // These stereo markers and this pose are held out from the five mono calibration seats.
+    const qualityHoldoutStats = [];
+    for (const quality of ['light', 'high']) for (const [name, input] of [['L', [.25, 0]], ['R', [0, .25]]]) {
+      const impulse = await response(quality, [0, 5, 35.85], input);
+      qualityHoldoutStats.push({ quality, name,
+        direct: 10 * Math.log10(energy(impulse, first, first + .012 * rate)) });
+    }
+    const [left, right, unknown, aligned, inverted, surround, facing, turned, silent, bypass, switching, lfe] = await Promise.all([
       response('light', seats[1], [0.4, 0]), response('light', seats[1], [0, 0.4]),
       response('light', seats[1], [0.4, 0], 0, { channelCount: 0 }),
       response('high', seats[2], [0.25, 0.25]), response('high', seats[2], [0.25, -0.25]),
@@ -199,6 +389,7 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
       response('high', seats[1], [0.25]), response('high', seats[1], [0.25], Math.PI / 2),
       response('light', seats[1], [0, 0]), response('light', seats[1], [0.4, 0], 0, { disposed: true }),
       response('light', seats[2], [0.3], 0, { transition: true }),
+      response('high', seats[1], [0, 0, 0, .4, 0, 0]),
     ]);
     const balance = buffer => {
       const [l, r] = [0, 1].map(ch => buffer.getChannelData(ch).slice(first, first + rate * 0.012)
@@ -206,12 +397,13 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
       return 10 * Math.log10(l / r);
     };
     return {
-      responseStats,
+      responseStats, qualityHoldoutStats,
       timing: { evaluationMs: performance.now() - evaluationStarted, importMs, responseTimings, clarityTimings },
       l: balance(left), r: balance(right), unknown: balance(unknown), c: balance(facing), turned: balance(turned),
       surround: balance(surround),
       monoAfterDispose: bypass.getChannelData(0)[first], bypassRight: bypass.getChannelData(1)[first],
       silentEnergy: energy(silent, 0, silent.length),
+      lfeEnergy: energy(lfe, 0, lfe.length),
       wetRatio: energy(inverted, first + rate * 0.08, rate) / energy(aligned, first + rate * 0.08, rate),
       switchingEnergy: [0.20, 0.24, 0.28, 0.38].map(time => energy(switching, Math.round(rate * time), Math.round(rate * (time + 0.02)))),
     };
@@ -231,12 +423,18 @@ test('Chromium OfflineAudioContext verifies cinema signals at representative sea
     assert.ok(Math.abs(metrics.responseStats[i].direct - metrics.responseStats[i + seats.length].direct) <= 2,
       `quality level at seat ${i}: ${metrics.responseStats[i].direct} vs ${metrics.responseStats[i + seats.length].direct}`);
   }
+  for (const name of ['L', 'R']) {
+    const pair = metrics.qualityHoldoutStats.filter(record => record.name === name);
+    assert.ok(Math.abs(pair[0].direct - pair[1].direct) <= 2,
+      `held-out quality level for ${name}: ${pair[0].direct} vs ${pair[1].direct}`);
+  }
   assert.ok(metrics.l > 2 && metrics.r < -2);
   assert.ok(Math.abs(metrics.l - metrics.unknown) < 0.01);
   assert.ok(metrics.surround < -2);
   assert.ok(Math.abs(metrics.turned - metrics.c) > 3);
   assert.ok(metrics.wetRatio > 0.35 && metrics.wetRatio < 2.5);
   assert.equal(metrics.silentEnergy, 0);
+  assert.ok(metrics.lfeEnergy > 1e-10, 'known-5.1 LFE survives the shared renderer');
   assert.ok(Math.abs(metrics.monoAfterDispose - 0.4) < 1e-6);
   assert.equal(metrics.bypassRight, 0);
   assert.ok(Math.min(...metrics.switchingEnergy) / Math.max(...metrics.switchingEnergy) > 0.25);
