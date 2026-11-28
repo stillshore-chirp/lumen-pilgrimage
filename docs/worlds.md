@@ -122,7 +122,7 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 [CinemaWorld](../src/coast/world/cinema/CinemaWorld.ts)が座席移動、上映、館内照明、空間音響をまとめます。[cinemaNavigation.ts](../src/coast/world/cinema/cinemaNavigation.ts)は座席背面と通路の歩行判定を同じ配置から作ります。映画館内の歩行は3.2 m/sです。背もたれは歩行を止め、上から越えることもできます。飛行中もスクリーン手前と客席側の外周で止まり、天井と梁の下まで上昇できます。
 
-側壁・後壁・天井のスピーカーと支持材への接近は、[筐体と取付の共通形状](cinema/cinema-speaker-mounts.md)を接触判定の基準にします。上部の[還気口・コファーの殻とダクト](cinema/cinema-ventilation.md)も描画と同じ体積で判定します。放射面の中心と向きは音響定義に合わせ、室全体の移動範囲を機器の高さで切り詰めません。飛行時の接触には、共通Controlsが頭部中心のYとクリアランスを渡す3D経路判定（[共通飛行の更新 #286](https://github.com/stillshore-chirp/lumen-pilgrimage/issues/286)）が必要です。2引数の呼出しだけでは機器との接触を判定できません。静止中の1:1頭部追跡は通常移動の停止と区別し、その頭部から見える内側・上・裏面も検証します。
+側壁・後壁・天井のスピーカーと支持材への接近は、[筐体と取付の共通形状](cinema/cinema-speaker-mounts.md)を接触判定の基準にします。上部の[還気口・コファーの殻とダクト](cinema/cinema-ventilation.md)も描画と同じ体積で判定します。放射面の中心と向きは音響定義に合わせ、室全体の移動範囲を機器の高さで切り詰めません。飛行時の接触には、共通Controlsが頭部中心のYとクリアランスを渡す3D経路判定（[共通飛行の更新 #286](https://github.com/stillshore-chirp/lumen-pilgrimage/issues/286)）が必要です。2引数の呼出しだけでは機器との接触を判定できません。静止中の1:1頭部追跡は通常移動の停止と区別し、その頭部から見える内側・上・裏面も検証します。対象版の統合と実動の確認範囲は[検証記録](cinema/cinema-reevaluation-verification.md)に記します。
 
 出口の扉と表示灯は館内の造作です。館外への移動はファストトラベルで行います。
 
