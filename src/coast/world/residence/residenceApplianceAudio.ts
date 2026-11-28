@@ -1,10 +1,11 @@
 import { coastRandom, type CoastPoint } from '../../terrain';
 import type { ResidenceApplianceAudioSource } from './residenceAppliances';
+import { createResidencePropagationDelay } from './residencePropagationDelay';
 
 type Point = Readonly<CoastPoint>;
 type ApplianceKind = ResidenceApplianceAudioSource['kind'];
 type SoundPath = (listener: Point, source: Point) => {
-  gain: number; cutoff: number; arrival: Point; diffuseGain: number;
+  gain: number; cutoff: number; arrival: Point; diffuseGain: number; delay?: number;
 };
 
 const sampleRate = 24000;
@@ -94,7 +95,8 @@ function createVoice(context: BaseAudioContext, dry: AudioNode, wet: AudioNode) 
   filter.Q.value = -.75;
   const operating = context.createGain();
   operating.gain.value = 0;
-  operating.connect(filter);
+  const propagation = createResidencePropagationDelay(context, filter);
+  operating.connect(propagation.input);
   const direct = context.createGain();
   const diffuse = context.createGain();
   direct.gain.value = 0;
@@ -104,7 +106,7 @@ function createVoice(context: BaseAudioContext, dry: AudioNode, wet: AudioNode) 
   panner.rolloffFactor = 0;
   filter.connect(direct).connect(panner).connect(dry);
   filter.connect(diffuse).connect(wet);
-  return { filter, direct, diffuse, panner, operating, loop: undefined as AudioBufferSourceNode | undefined,
+  return { filter, direct, diffuse, panner, operating, propagation, loop: undefined as AudioBufferSourceNode | undefined,
     tones: new Set<AudioBufferSourceNode>(), idleSince: undefined as number | undefined };
 }
 
@@ -122,6 +124,7 @@ function release(voice: Voice): void {
   }
   voice.tones.clear();
   voice.operating.disconnect();
+  voice.propagation.dispose();
   voice.filter.disconnect();
   voice.direct.disconnect();
   voice.diffuse.disconnect();
@@ -151,6 +154,7 @@ export function createResidenceApplianceAudio(context: BaseAudioContext, dry: Au
         if (!emitter.voice && !audible) continue;
         const fresh = !emitter.voice;
         const voice = emitter.voice ??= createVoice(context, dry, wet);
+        voice.propagation.update(route.delay ?? 0, time);
         const { x, y, z } = route.arrival;
         if (fresh) {
           voice.panner.positionX.value = x;
@@ -183,7 +187,7 @@ export function createResidenceApplianceAudio(context: BaseAudioContext, dry: Au
           if (buffer) {
             const tone = context.createBufferSource();
             tone.buffer = buffer;
-            tone.connect(voice.filter);
+            tone.connect(voice.propagation.input);
             voice.tones.add(tone);
             tone.onended = () => { tone.disconnect(); voice.tones.delete(tone); };
             tone.start(time + .05);

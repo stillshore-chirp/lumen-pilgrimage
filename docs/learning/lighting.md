@@ -126,6 +126,26 @@ $$
 
 直達光による影には、光源から受照面へ至る経路上の遮蔽物が必要になる。木より奥の器具がさらに奥の壁を照らす配置なら、その木を同じ器具による壁の枝影の根拠にはできない。Wardの原著§3.3は、受照点から光源が見えるかを影の光線で判定し、大きい光源や近い光源には複数の標本を用いる方法を説明する。一本の線分を使う断面検図は光路の成立を調べる初期判断であり、面光源の半影まで求める計算ではない。光源の位置、遮蔽物、受照面がつながるところに影を生じさせ、器具の点消灯でもその関係を保つ。 [Ward, 1994, §3.3](https://radsite.lbl.gov/radiance/papers/sg94.1/light.html)
 
+## シャドウマップを有限な受影面へ対応付ける
+
+離散的なshadow mapで近傍のtexelを比較すると、そのtexelは元の受影点と異なる位置を表す。[Microsoft公式「Cascaded Shadow Maps」](https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps#calculating-a-per-texel-depth-bias-with-ddx-and-ddy-for-large-pcfs) の「Depth Bias」「Calculating a Per-Texel Depth Bias with DDX and DDY for Large PCFs」は、同一平面を仮定して隣接位置の比較深度を補う方法と、追加計算費用を説明している。「Derivative-Based Offset」は、異なるcascadeを選ぶ分岐内で導関数を求めた場合の不連続も扱う。これらは原典由来の方式と成立条件で、特定の実装の画質・速度を保証する値ではない。
+
+screen座標に関するshadow座標の導関数を $d_x=(u_x,v_x,z_x)$、$d_y=(u_y,v_y,z_y)$ とすると、$D=u_xv_y-v_xu_y$ が退化しない範囲で、正規化shadow UVあたりの深度勾配は次になる。ここでUVと深度は無次元、screen微分は画素方向の変化である。
+
+$$
+g=\left(\frac{z_xv_y-z_yv_x}{D},\frac{z_yu_x-z_xu_y}{D}\right).
+$$
+
+これは2×2連立式の逆変換である。導関数は空間で変わるcascade/domainの選択やdiscardより前に計算し、退化・非有限値・過大な傾きでは既存の影へ戻す。hardwareのbilinear PCFは複数texelを同じ比較深度で評価するため、sample中心だけに勾配を加えてもそのfootprint内の差が残る場合がある。各texel中心へ比較深度を合わせ、比較結果を重み付き合成する方法には、texture命令と演算が増える費用がある。Three.js 0.184.0の `shadowmap_pars_fragment` と `WebGLShadowMap` は、比較samplerとLinearFilterによる経路の実装例である。
+
+受影面が薄い帯や端部の場合は、平面の式が正しくても、その延長が実面の外へ出る。隣接する床の下面がそこに投影されると、有限な面に存在しない領域を平均した結果が現れる。展望台の[局所受影](../worlds.md#敷居支持前面の局所受影)では、実面内の標本だけでkernelの重みを再正規化する限定した方法を使う。これはその制作物に対する独自の離散フィルタ設計で、Microsoft資料が同じ有限domain処理を定めているという意味ではない。
+
+比較深度と実面の領域判定には別の座標が必要になる。受影点のworld位置を $W$、normalBias付きの投影を $(u_b,z_b)$、bias前の実面投影を $u_0$、texel中心を $c$ とする。比較深度は $z_b+b+g\cdot(c-u_b)$ を保持し、domainのworld位置は $W+U(c_u-u_{0u})+V(c_v-u_{0v})$ で求める。$U,V$ はshadow UVあたりのworld接線で、単位はmである。後者へ $u_b$ を使うと、法線offsetを実面上の接線方向のずれとして混入させる。
+
+この対応は、同じ式を再計算するだけでなく、texel光線と実triangleの交点や、実面上で独立に解いたUV連立式へ照合する。矩形のboundsは曲面・穴・非凸面を表さず、有効標本0のfallbackも画質の成功を意味しない。別casterの影、接触端、視点移動と環境変化、実GPU時間を[対象版の通常表示](../verification.md#展望台の床断面と受影)で確認し、CPU模型・画面・物理的な光学を別の証拠として扱う。
+
+受影平面の深度補正は上記Microsoft資料の平面仮定とUV微分変換を参照し、GLSLで記述した。掲載された図・文章・HLSLは同梱せず、Three.js由来のPCF経路には既存の[MIT表示](../../public/licenses/three-0.184.0-LICENSE.txt)を維持する。技術資料の公開と、実装の利用条件・関係する権利の確認は別の判断として扱う。
+
 ## 天空モデルとRadianceでの評価
 
 [CIEの「Spatial distribution of daylight — CIE standard general sky」](https://www.cie.co.at/publications/spatial-distribution-daylight-cie-standard-general-sky-0) は、全天空の輝度分布を天候・気候・太陽位置に応じた複数の分布として扱う。標準は天頂輝度に対する相対分布を定義し、天頂輝度または水平照度を与えて絶対輝度へ拡張する。晴天、曇天、中間の条件を変えると、空の方向別の輝度に応じて受照分布が変わる。太陽の直射も、入射角と遮蔽に応じて室内の明暗を変える。
@@ -184,6 +204,26 @@ Radianceの結果は、窓の汚れ、実際の反射率、遮光設備の状態
 
 湖畔の広間では、水に映る岸や空を正面の浅い角度で見て、室内の窓辺で下を向くと同じ水面越しに魚と底が見えるようにした。通常画面では縮小した反射画像を間隔を空けて更新し、WebXRでは各眼の視線方向から反射を近似する。検証は視点と時刻を固定した正面の映り込みと、窓辺から見下ろす魚の輪郭の両方で行う。 [湖面の設計](../lake/lake-hall-design.md#光空と湖) · [水面の反射と透過](../../src/coast/world/lake/lakeWaterShaders.ts)
 
+### 標本化と再構成の費用を合わせて比べる
+
+遮蔽を少数の固定方向で計算すると、滑らかな二面の隅にも標本配置に沿った反復模様が生じることがある。方向を画素ごとに分散させる方法は、この誤差を粒状の分布へ変える。そのまま表示するのではなく、面の境界を守った再構成と組み合わせる。HBAOの原資料は低解像度で求めた遮蔽の後に全解像度の深度を使うフィルターを示し、Alchemyは遮蔽をcross-bilateral filterしてから前方描画へ合成する。異なる解像度やフィルターを採る場合は別の近似であり、原著と同じ境界品質を達成したとは判断しない。 [HBAO2008 pp.25–29](https://developer.download.nvidia.com/presentations/2008/SIGGRAPH/HBAO_SIG08b.pdf) · [Alchemy2011 Listing1,Fig.6](https://research.nvidia.com/sites/default/files/pubs/2011-08_The-Alchemy-Screen-space/paper.pdf)
+
+幾何法線を同じ深度描画の色面へ保存できれば、量子化された深度の差分だけで法線を推定する必要がなくなる。色面に保存した法線は通常の表示色と区別し、色変換、トーンマッピング、透過合成、縮小時の補間を通さない。圧縮した法線は読み出した後に単位長へ戻す。遮蔽値だけを平滑化し、境界判定に使う法線や深度まで平均しないことも大切である。
+
+再構成では法線の一致に加え、両方の接平面に対する位置のずれを調べる。片方の面だけを使うと、隅を越えた別の面から暗さが漏れる場合がある。元の深度と現在の受照面が合わない場合や、候補をすべて拒否した場合は、古い遮蔽を貼り付けずに寄与をゼロへ戻す。ただし、この保守的な判断は薄い部材の際で遮蔽の欠落を起こす可能性があるため、接触点と連続移動を実画像で確認する。
+
+前処理へ計算を移した方式の費用は、最終の描画だけを測っても比較できない。深度・法線の描画、遮蔽の積分、再構成、合成を含む重複しないGPU区間を測る。読み出し数の設計値も、シェーダーの外側で取得した中心画素をループ内で再取得していないかまで数える。コンパイラーの最適化を最大費用の保証にせず、ソースの読み数、解像度、追加ターゲットと描画回数、実測時間を対応付ける。
+
+### 順位の既知性と、実装の独立性を分ける
+
+Bayerの4×4順位のような既知の配置を使うときは、その順位を新規の発明として説明しない。例えば順位を0から15へ割り当てて角度へ写す方法は、方向の誤差を画素ごとに分散させる制作上の選択である。標本数を増やさず分散しても、細かい粒状誤差、画面座標に対する泳ぎ、薄い部材の境界は残り得る。固定カメラの誤差集計と、微小な移動を直接見た品質判定を分ける。[Bayer1973 Fig.5](https://web.archive.org/web/20130512190753if_/http://white.stanford.edu:80/~brian/psy221/reader/Bayer.1973.pdf)
+
+原著を参照して自分でshaderを書くこと、原著の文章・図・コードやSDKを複製すること、既存依存のOSS許諾を守ること、方式に関わる請求項を調べることは別の確認である。公開や独自実装だけで権利上の安全を断定しない。個別の用途・処理差・残る解釈を記す採用例は[住戸の方式採用記録](../residence/residence-70f-design.md#近接陰影の方式と採用根拠)に置く。
+
+### 画像の所有者と、contextの世代を揃える
+
+反射・影・陰影再構成の画像は同じrendererを使っていても、所有者と更新条件が異なる。contextが失われたときは旧世代の画像と登録済みの解放処理を退役し、復元後は影の生成を待って反射へ進む。画像を読むsamplerの型と実際のdepth/compare設定を初回から照合する。通常時の定常画像だけでなく、初回・resize・品質切替・喪失復元・終了を分けて確認すれば、旧世代を削除した警告と、新しい方式の画質を混同せずに評価できる。
+
 ## 観察した現象から原因へ戻る
 
 天窓の光の向きは空の輝度分布と開口で変わる。壁の輝度はコーブの配光、入射方向、反射率で変わり、展示物の色は照明のスペクトルと観察条件で変わる。画像のハイライトと暗部を評価するときは、表示変換前の値と、表示変換後のクリップや階調を照合する。
@@ -198,6 +238,7 @@ Radianceの結果は、窓の汚れ、実際の反射率、遮光設備の状態
 - [IES, Learn About IES Files](https://ies.org/education/learn-about-ies-files/)、[IES RP-2-20, Recommended Practice: Lighting Retail Spaces](https://ies.org/products/recommended-practice-lighting-retail-spaces/)、[IES, inverse-square law](https://ies.org/definitions/inverse-square-law/) — 配光ファイル、リテールの水平・垂直照度、点光源近似の距離目安。
 - [CIE, Spatial distribution of daylight — CIE standard general sky](https://www.cie.co.at/publications/spatial-distribution-daylight-cie-standard-general-sky-0) — CIE標準天空の相対輝度分布。
 - [Gregory J. Ward, The RADIANCE Lighting Simulation and Rendering System](https://radsite.lbl.gov/radiance/papers/sg94.1/paper.html)、[Radiance detailed description](https://radsite.lbl.gov/radiance/refer/long.html)、[GENSKY manual](https://radsite.lbl.gov/radiance/man_html/gensky.1.html) — Radianceの光線追跡、入力、天空生成、計算上の限界。
+- [Microsoft, Cascaded Shadow Maps](https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps) — Depth Bias、Per-Texel Depth Bias、Explanation with Shader Code、Derivative-Based Offset。公式ページの最終更新は2021-04-01、初出日はこの確認では特定していない。
 - [Blender Manual, Displays and Views](https://docs.blender.org/manual/id/5.0/render/color_management/displays_views.html)、[OpenEXR, Scene-Linear Image Representation](https://openexr.com/en/latest/SceneLinear.html)、[ACES, Output Transforms](https://docs.acescentral.com/system-components/output-transforms/)、[ACES, Tone Mapping](https://docs.acescentral.com/system-components/output-transforms/technical-details/tone-mapping/) — 露出、scene-referred、表示変換、トーンマッピング。
 - [J. Chen et al., UF/IFAS ENH879, Cultural Guidelines for Commercial Production of Interiorscape Ficus](https://ask.ifas.ufl.edu/publication/EP136/pdf) — p.2「Production」「Shipping and Interior Care」。生産・順化条件と室内照度を分けた評価。観賞用の描画目標や全植物の必要照度を定める資料ではない。
 - [A. P. Torres & R. G. Lopez, Purdue Extension HO-238-W, Measuring Daily Light Integral in a Greenhouse](https://www.extension.purdue.edu/extmedia/ho/ho-238-w.pdf) — pp.1–2「Measuring Light」「Daily Light Integral」。測光量と光量子による瞬時値・日積算量の区別。温室作物向け目標値は観賞庭へ流用しない。

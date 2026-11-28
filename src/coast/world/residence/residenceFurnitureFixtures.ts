@@ -278,7 +278,7 @@ function shower(model: FurnitureModel, m: ResidenceMaterials, appliances: Reside
   for (let i = -4; i <= 4; i++) shower.box(m.darkMetal, i * .046, .019, -.28, .025, .002, .026);
   const paneWidth = .34;
   const paneX = -(width - paneWidth) / 2;
-  shower.box(m.glass, paneX, 1.04, depth / 2 - .036, paneWidth, 2.04, .012);
+  shower.box(m.interiorGlass, paneX, 1.04, depth / 2 - .036, paneWidth, 2.04, .012);
   shower.box(m.metal, -width / 2 + .018, 1.04, depth / 2 - .036, .024, 2.048, .021);
   shower.box(m.metal, paneX, .026, depth / 2 - .036, paneWidth, .019, .024);
   const backWall = centerN - wallNorth;

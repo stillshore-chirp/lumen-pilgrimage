@@ -1,5 +1,5 @@
 import { PerspectiveCamera, Vector2, type Raycaster, type Scene, type WebGLRenderer } from 'three';
-import { MonitorAudio, type MonitorAudioMode } from './monitorAudio';
+import { MonitorAudio, type MonitorAudioMode, type WorldMonitorPlaybackFactory } from './monitorAudio';
 import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
 import { MonitorObject, type MonitorTheater } from './monitorObject';
 import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
@@ -16,6 +16,8 @@ export interface MonitorViewBinding {
   camera: PerspectiveCamera;
   releaseInput(): void;
   releaseDesktopGrab?(target: DesktopGrabTarget): void;
+  readonly createSpatialAudio?: WorldMonitorPlaybackFactory;
+  readonly audioQuality?: () => 'light' | 'high';
 }
 
 export class MonitorView {
@@ -31,6 +33,7 @@ export class MonitorView {
   };
   private readonly desktop = new MonitorDesktop(this.screen);
   private readonly audio = new MonitorAudio();
+  private audioCapabilities = -1;
   private readonly xr: MonitorXR;
   private readonly unsubscribeXR: () => void;
   private xrSession: XRSession | null = null;
@@ -239,6 +242,11 @@ export class MonitorView {
     this.audio.setMasterVolume(multiplier);
   }
 
+  prepareWorldChange(signal: AbortSignal, factory: WorldMonitorPlaybackFactory | null,
+    theater: MonitorTheater | null): Promise<() => void> {
+    return this.audio.prepareWorldChange(signal, factory, theater?.speakers ?? null);
+  }
+
   async toggleAudio(): Promise<void> {
     if (this.audioButton.disabled) return;
     if (this.audioStart || (this.audioPlayback === 'on' && this.audio.getStatus() === 'ready')) {
@@ -299,9 +307,16 @@ export class MonitorView {
       this.displayTarget.value = screenOption.value;
       this.audioMode.value = 'cinema';
     }
-    this.audio.setTheaterSpeakers(theater?.speakers ?? null);
+    this.updateDisplayTarget(!floating && Boolean(cinema) || this.screen.isVisible, false);
+    if (!this.screen.isFloating && this.audioMode.value === 'spatial') {
+      this.audioMode.value = cinema ? 'cinema' : 'television';
+    }
+    const source = this.audioMode.value === 'television' ? theater?.screen : this.screen.group;
+    this.audio.setPlaybackSpace(this.binding.createSpatialAudio ?? null, theater?.speakers ?? null,
+      this.binding.camera, source ?? this.screen.group, this.binding.audioQuality?.() ?? 'light');
     this.audio.setCinema(cinema?.createAudio ?? null);
-    this.updateDisplayTarget(!floating && Boolean(cinema) || this.screen.isVisible);
+    this.updateAudioModes();
+    this.syncSharedAudio();
   }
 
   update(viewer: PerspectiveCamera, frame?: XRFrame): void {
@@ -320,7 +335,11 @@ export class MonitorView {
       this.syncSharedAudio();
     }
     const soundSource = this.audioMode.value === 'television' ? this.theater?.screen : this.screen.group;
+    this.audio.setWorldQuality(this.binding.audioQuality?.() ?? 'light');
     this.audio.update(viewer, soundSource ?? this.screen.group);
+    if (this.audioMode.value !== this.audio.getMode() || this.audioCapabilities !== this.audioCapabilityState()) {
+      this.updateAudioModes();
+    }
     if (!this.panel.hidden) this.updateAudioStatus();
   }
 
@@ -378,13 +397,15 @@ export class MonitorView {
     if (!canEdit) this.setEditing(false);
   }
 
-  private updateDisplayTarget(visible: boolean): void {
+  private updateDisplayTarget(visible: boolean, updateAudio = true): void {
     this.releaseDesktopGrab();
     const target = this.displayTarget.value === 'television' ? this.theater : null;
     this.screen.setTarget(target?.screen ?? null, Boolean(target?.cinema));
     this.setScreenVisible(visible);
-    this.updateAudioModes();
-    this.syncSharedAudio();
+    if (updateAudio) {
+      this.updateAudioModes();
+      this.syncSharedAudio();
+    }
   }
 
   private updateAudioModes(): void {
@@ -392,6 +413,7 @@ export class MonitorView {
     const floating = this.screen.isFloating;
     const surround = this.audio.supportsSurround();
     const cinema = this.audio.supportsCinema();
+    this.audioCapabilities = this.audioCapabilityState();
     for (const option of this.audioMode.options) {
       if (option.value === 'spatial') {
         option.hidden = !floating;
@@ -411,6 +433,12 @@ export class MonitorView {
     this.audioMode.disabled = !canSpatialize && !surround && !cinema;
     this.audioMode.title = this.audioMode.disabled ? 'このブラウザで空間音響を利用できません。' : '';
     this.audio.setMode(this.audioMode.value as MonitorAudioMode);
+    this.audioMode.value = this.audio.getMode();
+  }
+
+  private audioCapabilityState(): number {
+    return (this.audio.supportsSpatial() ? 1 : 0) | (this.audio.supportsSurround() ? 2 : 0)
+      | (this.audio.supportsCinema() ? 4 : 0);
   }
 
   private setXRPresentation(presenting: boolean): void {
@@ -551,7 +579,10 @@ export class MonitorView {
     }, listen);
     volume.addEventListener('input', () => this.audio.setVolume(volume.valueAsNumber / 100), listen);
     this.audioMode.addEventListener('change', () => {
+      const source = this.audioMode.value === 'television' ? this.theater?.screen : this.screen.group;
+      this.audio.update(this.binding.camera, source ?? this.screen.group);
       this.audio.setMode(this.audioMode.value as MonitorAudioMode);
+      this.audioMode.value = this.audio.getMode();
       this.syncSharedAudio();
     }, listen);
     this.audioButton.addEventListener('click', () => void this.toggleAudio(), listen);

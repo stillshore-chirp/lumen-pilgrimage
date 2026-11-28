@@ -16,6 +16,8 @@ const {
 const { RESIDENCE_AVENUE, RESIDENCE_BALCONY_REFLECTOR, RESIDENCE_CROSS_STREETS, RESIDENCE_STREET_LEVEL } =
   await import('../src/coast/world/residence/residenceCityPlan.ts');
 const { RESIDENCE_FLOOR_ABOVE_STREET } = await import('../src/coast/world/residence/residenceFloor.ts');
+const { traceResidenceWalls } = await import('../src/coast/world/residence/residencePortalAcoustics.ts');
+const { RESIDENCE_WALLS } = await import('../src/coast/world/residence/residencePlan.ts');
 const { RESIDENCE_ROOM_RESPONSES, createFootfall, createInteriorDoorSound, createRoomImpulse, createSlider } =
   await import('../src/coast/world/residence/residenceAudioSamples.ts');
 hooks.deregister();
@@ -83,7 +85,7 @@ test('closed glazing favors low traffic frequencies and the stone core is quiete
   assert.ok(window.arrival.z > living.z && window.arrival.y > living.y - 4);
 });
 
-test('the actual sliding door changes the primary bedroom continuously and stays local', () => {
+test('the actual sliding door changes the primary bedroom and connected rooms continuously', () => {
   const amounts = [0, 0.12, 0.5, 0.82, 1].map(fraction =>
     residenceTrafficPath(residenceReceiver(bed, fraction), east, true));
   for (let i = 1; i < amounts.length; i += 1) {
@@ -94,7 +96,9 @@ test('the actual sliding door changes the primary bedroom continuously and stays
   assert.ok(amounts[4].cutoff > amounts[0].cutoff * 3.5);
   const openCore = residenceTrafficPath(residenceReceiver(core, 1), east, true);
   const closedCore = residenceTrafficPath(residenceReceiver(core, 0), east, true);
-  assert.deepEqual(openCore, closedCore);
+  assert.ok(openCore.gain > closedCore.gain, 'the open room chain carries balcony sound beyond the primary bedroom');
+  const closedRoomChain = residenceTrafficPath(residenceReceiver(core, 1, () => 0), east, true);
+  assert.ok(closedRoomChain.gain < openCore.gain, 'closing the intervening room doors limits that route');
   const threshold = [];
   for (let x = 20.44; x <= 21.44; x += 0.025) {
     const receiver = residenceReceiver(ear(x, -BALCONY_DOOR.z), 1);
@@ -110,9 +114,10 @@ test('interior doors attenuate transmitted sound and its high frequencies indepe
       const center = (opening.from + opening.to) / 2;
       return wall.axis === 'e' ? ear(center, wall.fixed + offset) : ear(wall.fixed + offset, center);
     };
-    const listener = at(-0.78);
-    const source = at(0.88);
-    const paths = [0, 0.06, 0.24, 0.60, 1].map(amount => residenceSoundPath(listener, source,
+    // Both endpoints stay beyond the largest hinged leaf's swept volume.
+    const listener = at(-1.25);
+    const source = at(1.25);
+    const paths = [0, 0.12, 0.24, 0.60, 1].map(amount => residenceSoundPath(listener, source,
       (_wall, gap) => gap === opening ? amount : 0));
     for (let index = 1; index < paths.length; index += 1) {
       assert.ok(paths[index].gain > paths[index - 1].gain);
@@ -124,6 +129,44 @@ test('interior doors attenuate transmitted sound and its high frequencies indepe
   }
 });
 
+test('the direct finite-wall fallback retains loss at 24 cm and 1 cm from the same opaque wall', () => {
+  const wall = RESIDENCE_WALLS.find(wall => wall.axis === 'n' && wall.fixed === 7.3);
+  const near = traceResidenceWalls(ear(8.2, 2), ear(7.29, 2), [wall]);
+  const far = traceResidenceWalls(ear(8.2, 2), ear(7.06, 2), [wall]);
+  assert.equal(near.gain, .095);
+  assert.equal(far.gain, .095);
+  assert.equal(near.cutoff, far.cutoff);
+  assert.ok(near.cutoff < 400);
+});
+
+test('balcony opening propagates through the hall and closet door chains beyond the primary room', () => {
+  for (const listener of [ear(17.6, 10.8), ear(16, 13.5), ear(14, 13.5)]) {
+    const closed = residenceReceiver(listener, 0, () => 1);
+    const open = residenceReceiver(listener, 1, () => 1);
+    assert.ok(open.doorPath.gain > closed.doorPath.gain * 2);
+    assert.ok(open.doorPath.paths.some(path => path.kind === 'open-chain'));
+    const blocked = residenceReceiver(listener, 1, () => 0);
+    assert.ok(blocked.doorPath.gain < open.doorPath.gain);
+    const sound = residenceTrafficPath(open, east, true);
+    assert.ok(sound.delay > 0 && Number.isFinite(sound.cutoff));
+  }
+});
+
+test('a floating source outside the plan remains audible through the balcony and is reciprocal', () => {
+  const source = ear(23.2, 13.575);
+  const listener = ear(14, 13.5);
+  const open = residenceSoundPath(listener, source, () => 1);
+  const closed = residenceSoundPath(listener, source, () => 0);
+  assert.ok(open.paths.some(path => path.kind === 'external-chain' && path.ids.some(id => id.includes('balcony-door'))));
+  assert.ok(open.gain > closed.gain * 2);
+  const reverse = residenceSoundPath(source, listener, () => 1);
+  assert.ok(Math.abs(open.gain - reverse.gain) < 1e-10);
+  assert.ok(reverse.arrival.x < source.x);
+  const outside = residenceReceiver(source, 1, () => 1);
+  assert.equal(outside.exterior, 1);
+  assert.ok(outside.wet.every(value => value === 0));
+});
+
 test('the fusuma changes the arriving bearing, connected room reflections and south-window traffic', () => {
   const teaDoor = RESIDENCE_INTERIOR_DOORS.find(({ id }) => id === 'tea-room');
   const besideTea = ear(6.49, 5.77);
@@ -133,11 +176,17 @@ test('the fusuma changes the arriving bearing, connected room reflections and so
   const open = residenceReceiver(besideTea, 0, openness(1));
   assert.ok(closed.wet[5] < partway.wet[5] && partway.wet[5] < open.wet[5]);
   assert.ok(Math.abs(open.wet.reduce((sum, value) => sum + value, 0) - 1) < 1e-8);
-  assert.ok(open.south.gain > closed.south.gain * 3 && open.south.cutoff > closed.south.cutoff * 1.25);
+  // Compare the same tea aperture: the strongest-window selector may instead
+  // choose the living/study window through a legitimate hall route when closed.
+  const pane = { x: 6.49, y: 1.425, z: -.135 };
+  const isolated = amount => residenceSoundPath(besideTea, pane,
+    (_wall, opening) => opening === teaDoor.opening ? amount : 0);
+  assert.ok(isolated(1).gain > isolated(0).gain * 3 && isolated(1).cutoff > isolated(0).cutoff * 1.25);
+  assert.ok(open.south.gain > closed.south.gain && open.south.cutoff > closed.south.cutoff);
   const offAxisListener = ear(5.2, 5.79);
   const offAxisSource = ear(5.2, 3.8);
   const path = residenceSoundPath(offAxisListener, offAxisSource, openness(1));
-  assert.ok(path.arrival.x > 6 && Math.abs(path.arrival.z + 5) < 0.01);
+  assert.ok(path.arrival.x > 6 && Math.abs(path.arrival.z + 5 + teaDoor.wall.thickness / 2 + .001) < .001);
   assert.ok(path.cutoff > residenceSoundPath(offAxisListener, offAxisSource, openness(0)).cutoff * 4);
   assert.deepEqual(residenceSoundPath(ear(6.2, 3.5), offAxisSource, openness(0)),
     residenceSoundPath(ear(6.2, 3.5), offAxisSource, openness(1)));

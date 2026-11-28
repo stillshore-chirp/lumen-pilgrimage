@@ -58,6 +58,10 @@
 
 [CoastNavigation](../src/coast/CoastControls.ts)はワールドごとに境界、初期姿勢、`groundHeight`、任意の水位と衝突判定、飛行上限、任意の天井高を提供します。共通の移動処理はこの契約から移動できる範囲と支持面を読みます。地形や建築を変更するときは、描画形状と同じ座標・高さをナビゲーションへ反映します。
 
+飛行の任意判定 `blocksFlight(x, z, eyeY, clearance)` は、ワールド座標のカメラ中心高と余裕半径を受け取ります。共通処理の半径は0.25 mです。従来の2引数関数も使用できます。XYZ経路を屋外では最大0.46 m、屋内では最大0.15 m間隔で標本化し、形状・床・天井・頭部の余裕を満たした最後のXYZだけを確定します。上下移動にも同じ判定を行います。これは離散経路の検査であり、任意の薄い形状に対する連続衝突判定ではありません。
+
+XRでスティック等により身体位置を動かす際は、追跡された頭部offsetを加えた位置でも判定します。既に重なっている場合は離れる向きへの退避を許可します。ヘッドセットから得る頭部の1対1追跡は維持し、現実の頭を動かした位置を仮想壁へ固定する処理にはしません。 [移動制御](../src/coast/CoastControls.ts) · [検査手順](verification.md#高さに応じた飛行の確認)
+
 | 実装座標の前提 | 現行の基準 |
 | --- | --- |
 | 海岸 | 海面は `y=0`、海岸の既定着地点は `(-12, 79)`。湖は独立した水位を持ちます。 |
@@ -104,7 +108,40 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 標高グリッド2種（`public/coast-overlook/overlook-elevation.bin`、`overlook-detail.bin`）を読み込み、デッキの擁壁、斜面、盆地の街区をつなぎます。[overlookTerrain.ts](../src/coast/world/overlook/overlookTerrain.ts)が標高を補間し、中央デッキ周囲に接地用の斜面を作ります。[OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts)はデッキ、街路、交通、航空機、空と照明をまとめ、更新処理から照明・交通・航空機を動かします。座標上の2階デッキは主デッキより7.2 m高く、東階段の各段・踊り場と歩行支持面を[overlookUpperDeck.ts](../src/coast/world/overlook/overlookUpperDeck.ts)で共有します。
 
-中央デッキ、西テラス、東テラス、2階展望デッキへ直接移動できます。現在、展望台用の配置図PDFはありません。標高データの出典と条件は[展望台の素材クレジット](../public/coast-overlook/ATTRIBUTION.md)、利用経路は[探索ガイド](exploration.md)を参照してください。
+中央デッキ、西テラス、東テラス、2階展望デッキへ直接移動できます。道路と地形の共通座標・役割・断面は [道路と地形の設計](overlook/road-terrain-design.md) を参照してください。標高データの出典と条件は[展望台の素材クレジット](../public/coast-overlook/ATTRIBUTION.md)、利用経路は[探索ガイド](exploration.md)を参照してください。
+
+亭の主外殻、両翼、段違い屋根、八角drum、ドーム断面は [overlookPavilionPlan.ts](../src/coast/world/overlook/overlookPavilionPlan.ts) を描画と飛行で共有します。高さは主床346 mからの相対値です。箱とdrumは余裕半径で保守的に拡張し、ドームは回転軸断面の各線分までの最短距離へ半径と外殻の最大突出量約0.06435 mを加えます。頂部と斜面の両方を守り、屋根より高い空間の移動を許可します。歩行範囲、飛行上限451 m、着地点と階段の支持面は維持します。
+
+#### 表示地形と局所接地
+
+地形の解析関数と表示三角形の高さを分けて扱います。`createOverlookSurface` が返す `sampleHeight(x,z)` は、描画用Float32頂点と同じ格子・対角線を使う補間です。非有限入力と表示field外は `undefined` になり、端へclampしません。表示fieldはX=−23000..23000 m、Z=−26000..11000 mです。
+
+この補間は斜面の植物・岩と、鳥2点・虫5点の音源支持に渡します。植物は幹下部・株元、岩は下部の支持点を変換後に照合し、最高の基部点が地表−10 mmを超える場合は個体全体をY方向へ下げます。葉や個々の頂点を引き伸ばさず、局所形状、XZ位置と配置分布を保ちます。地下の根リングを使う数値と、目に見える茎の地表交差は分けて確認します。岩は支持footprintと露出する本体を調べ、全埋没を接地の成功へ数えません。
+
+道路・都市・住宅の高さAPIを一律に置換する変更ではありません。音源の高さは表示面から鳥1.15 m、虫0.4 mの制作値を使い、道路の伝搬には [道路造成後の面](overlook/road-terrain-design.md#高さの責務と生成順) を明示して渡し、局所音源の支持とは用途を分けます。編集先は [表示地形](../src/coast/world/overlook/overlookTerrain.ts)、[斜面の個体配置](../src/coast/world/overlook/overlookHillside.ts)、[局所音源](../src/coast/world/overlook/overlookAudio.ts)です。
+
+#### 舗装と建物の支持断面
+
+主床の基準はY=346 mで、歩行支持面と足音の材区分を保ちます。敷石は公称50 mm厚、top変動±1.5 mm、目地の芯幅10 mm、上端幅14 mm、面取り水平/鉛直各2 mmです。石を置く7fieldの直下だけに連続bedを設け、非石部と外縁は従来の床高さを保ちます。
+
+| 層・接点 | 主床からの相対Y | 世界Y |
+| --- | --- | --- |
+| 石の上面 | 0±0.0015 m | 346±0.0015 m |
+| 目地の上面 | −0.003 m | 345.997 m |
+| 石の下面 / bed上面 | −0.050 m | 345.950 m |
+| bed下面 / 既存cap上面 | −0.0785 m | 345.9215 m |
+| 非石部のbacking上面 | −0.0355 m | 345.9645 m |
+| 建物bearingの下面..上面 | −0.070..0 m | 345.930..346 m |
+
+既存capの下面は345.7065 mで、foundation上面345.710 mへ3.5 mm重なります。亭の本体・両翼・入口柱2本・敷居の実6footprintにbearingを設け、backingへ34.5 mm重ねてcapまでの支持をつなぎます。敷居は `PAVILION_THRESHOLD` を描画と床支持で共有し、亭の描画形状や飛行volumeを変えません。装飾plinthの張出しは支持された本体からの持出しとして扱い、正当な影の隙間まで埋めません。数値は制作上の寸法であり、実施設の荷重認証ではありません。 [舗装生成](../src/coast/world/overlook/overlookDeck.ts) · [共通亭寸法](../src/coast/world/overlook/overlookPavilionPlan.ts)
+
+#### 敷居支持前面の局所受影
+
+[共通照明](../src/coast/world/coastLighting.ts) の `receiverPlaneShadowMaterials` は、展望台の石材3種へ受影平面の深度勾配補正を明示して適用します。`receiverPlaneShadowDomains` は、そのうち敷居の支持前面だけを有限な受影面として指定します。対象は `Recessed limestone` の実geometryから抽出した同一平面6triangleです。現在の範囲はX≈−5.45..5.45 m、Y≈345.93..346 m、Z≈8.565 mで、元の描画頂点・normal・index、caster、biasは保持します。座標を変更するときは共有敷居寸法と実geometryからdomainを再抽出します。
+
+[有限面のshader](../src/coast/world/coastFiniteReceiverShadow.ts) は、texel光線と実受影面の交点がdomain内にある標本を集め、kernel全体の重みを再正規化します。深度比較は従来のnormalBias付き座標を使い、domain判定にはnormalBias前のworldPositionから投影した別のUVを使います。両者を同じアンカーにすると、normalBiasが実面上の接線方向のずれへ変わるためです。対象外の面と材、options未指定のワールドは既存経路を使います。平面が退化する場合や有効標本がない場合も、既存の受影へ戻します。
+
+このdomainは矩形の支持前面1領域を対象とし、曲面・穴・非凸面へそのまま適用する条件ではありません。勾配guardとdomainの0.2 mm許容値は数値安定化の制作値です。近傍と広域のmap範囲・解像度・半径・fadeは維持します。各PCF標本を4texelの個別比較へ分けるため、texture命令、varyingとALUが増えます。fallbackを含む実GPU時間は別に測り、標本数だけで負荷やHMD性能を保証しません。 [座標の原理](learning/lighting.md#シャドウマップを有限な受影面へ対応付ける) · [再検証](verification.md#展望台の床断面と受影)
 
 擁壁、段、手すり、デッキの境界を変える場合は、描画形状と `groundHeight`／`blocksWalking`／`blocksFlight` を一組として扱います。[地形接続](../scripts/coast-terrain.test.mjs)と[階段・デッキのブラウザー試験](../scripts/coast-browser.test.mjs)が既存の入口です。
 

@@ -266,9 +266,14 @@ export function createResidenceMaterials() {
   const clearMirror = solid('Optical silvered mirror', { color: 0xc3d0d2, roughness: .12, metalness: .94 });
   const lamp = solid('Warm opal diffuser', { color: 0xf1e1cb, emissive: 0xffbc74, emissiveIntensity: .10, roughness: .78 });
   const glass = glazing('Low-reflection facade glass', 0xc8d7da, .050, .13);
+  // Interior panes remain visible in the facade's planar captures. Keep them
+  // separate so their shader never samples the target being rendered.
+  const interiorGlass = glazing('Low-reflection interior glass', 0xc8d7da, .050, .13);
+  interiorGlass.side = THREE.DoubleSide;
+  interiorGlass.forceSinglePass = true;
   const guard = glazing('Balcony clear laminated glass', 0xc2dbdc, .090, .14);
 
-  return { oak, stone, counterStone, tile, deck, core, wall, ceiling, trim, metal, glass, guard, fabric, rug, bedding,
+  return { oak, stone, counterStone, tile, deck, core, wall, ceiling, trim, metal, glass, interiorGlass, guard, fabric, rug, bedding,
     cabinetry, woodEnd, ceramic, darkMetal, brushedSteel, clearMirror, felt, linenShade, lamp, tatami, cedar, washi,
     dispose() {
       materials.forEach(material => material.dispose());

@@ -13,7 +13,7 @@
     "test:coast:browser": "node --test scripts/coast-browser.test.mjs",
     "test:monitor": "node --test scripts/monitor-signaling.test.mjs scripts/monitor-session.test.mjs scripts/monitor-capture.test.mjs scripts/monitor-pose.test.mjs scripts/monitor-xr.test.mjs scripts/monitor-audio.test.mjs",
     "test:monitor:browser": "node --test scripts/monitor-browser.test.mjs",
-    "test:residence": "node --test scripts/residence-navigation.test.mjs scripts/residence-audio.test.mjs scripts/residence-street.test.mjs scripts/residence-lighting.test.mjs scripts/residence-appliances.test.mjs",
+    "test:residence": "node --test scripts/residence-navigation.test.mjs scripts/residence-audio.test.mjs scripts/residence-street.test.mjs scripts/residence-lighting.test.mjs scripts/residence-appliances.test.mjs scripts/residence-acoustic-paths.test.mjs scripts/residence-monitor-audio.test.mjs scripts/residence-screen-occlusion.test.mjs",
     "test:residence:browser": "node --test scripts/residence-browser.test.mjs scripts/residence-light-motion.test.mjs",
     "test:cinema": "node --test scripts/cinema-navigation.test.mjs scripts/cinema-ventilation.test.mjs scripts/cinema-lighting.test.mjs scripts/cinema-audio.test.mjs scripts/cinema-source.test.mjs scripts/cinema-movie-output.test.mjs scripts/cinema-routing.test.mjs scripts/cinema-routing-packet.test.mjs scripts/cinema-reflections-geometry.test.mjs scripts/cinema-room-audio.test.mjs",
     "test:cinema:browser": "node --test --test-concurrency=1 scripts/cinema-browser.test.mjs scripts/cinema-audio.test.mjs scripts/cinema-movie-video.test.mjs scripts/cinema-screening.browser.test.mjs",
