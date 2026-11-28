@@ -135,6 +135,14 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 既存capの下面は345.7065 mで、foundation上面345.710 mへ3.5 mm重なります。亭の本体・両翼・入口柱2本・敷居の実6footprintにbearingを設け、backingへ34.5 mm重ねてcapまでの支持をつなぎます。敷居は `PAVILION_THRESHOLD` を描画と床支持で共有し、亭の描画形状や飛行volumeを変えません。装飾plinthの張出しは支持された本体からの持出しとして扱い、正当な影の隙間まで埋めません。数値は制作上の寸法であり、実施設の荷重認証ではありません。 [舗装生成](../src/coast/world/overlook/overlookDeck.ts) · [共通亭寸法](../src/coast/world/overlook/overlookPavilionPlan.ts)
 
+#### 敷居支持前面の局所受影
+
+[共通照明](../src/coast/world/coastLighting.ts) の `receiverPlaneShadowMaterials` は、展望台の石材3種へ受影平面の深度勾配補正を明示して適用します。`receiverPlaneShadowDomains` は、そのうち敷居の支持前面だけを有限な受影面として指定します。対象は `Recessed limestone` の実geometryから抽出した同一平面6triangleです。現在の範囲はX≈−5.45..5.45 m、Y≈345.93..346 m、Z≈8.565 mで、元の描画頂点・normal・index、caster、biasは保持します。座標を変更するときは共有敷居寸法と実geometryからdomainを再抽出します。
+
+[有限面のshader](../src/coast/world/coastFiniteReceiverShadow.ts) は、texel光線と実受影面の交点がdomain内にある標本を集め、kernel全体の重みを再正規化します。深度比較は従来のnormalBias付き座標を使い、domain判定にはnormalBias前のworldPositionから投影した別のUVを使います。両者を同じアンカーにすると、normalBiasが実面上の接線方向のずれへ変わるためです。対象外の面と材、options未指定のワールドは既存経路を使います。平面が退化する場合や有効標本がない場合も、既存の受影へ戻します。
+
+このdomainは矩形の支持前面1領域を対象とし、曲面・穴・非凸面へそのまま適用する条件ではありません。勾配guardとdomainの0.2 mm許容値は数値安定化の制作値です。近傍と広域のmap範囲・解像度・半径・fadeは維持します。各PCF標本を4texelの個別比較へ分けるため、texture命令、varyingとALUが増えます。fallbackを含む実GPU時間は別に測り、標本数だけで負荷やHMD性能を保証しません。 [座標の原理](learning/lighting.md#シャドウマップを有限な受影面へ対応付ける) · [再検証](verification.md#展望台の床断面と受影)
+
 擁壁、段、手すり、デッキの境界を変える場合は、描画形状と `groundHeight`／`blocksWalking`／`blocksFlight` を一組として扱います。[地形接続](../scripts/coast-terrain.test.mjs)と[階段・デッキのブラウザー試験](../scripts/coast-browser.test.mjs)が既存の入口です。
 
 ### 都心の70階住戸 — `residence`

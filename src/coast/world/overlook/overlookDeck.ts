@@ -526,6 +526,28 @@ export function createOverlookDeck(high: THREE.IUniform<number>, nightAmount: TH
   const deckLights = { value: 0 };
   const contactTexture = contacts.apply(finish, wallLamps, OVERLOOK_UPPER_DECK_HEIGHT, high, nightAmount, deckLights);
   model.finish(group);
+  // Derive the one finite receiver face from unchanged rendered geometry and the shared footprint.
+  // This tags the sampling domain only; no position/index/normal/caster attribute is modified.
+  const thresholdFront = PAVILION_THRESHOLD[2] - PAVILION_THRESHOLD[5] / 2;
+  const thresholdLeft = PAVILION_THRESHOLD[0] - PAVILION_THRESHOLD[3] / 2;
+  const thresholdRight = PAVILION_THRESHOLD[0] + PAVILION_THRESHOLD[3] / 2;
+  const receiverBounds = new THREE.Box3();
+  group.updateMatrixWorld(true);
+  group.traverse(object => {
+    if (!(object instanceof THREE.Mesh) || object.material !== finish.shadowStone) return;
+    const geometry = object.geometry;
+    const position = geometry.getAttribute('position');
+    const index = geometry.index;
+    for (let i = 0; i < (index ? index.count : position.count); i += 3) {
+      const vertices = [0, 1, 2].map(j => new THREE.Vector3().fromBufferAttribute(position, index ? index.getX(i + j) : i + j));
+      if (vertices.some(p => Math.abs(p.z - thresholdFront) > 1e-5 || p.x < thresholdLeft - 1e-5
+        || p.x > thresholdRight + 1e-5 || p.y > 1e-5)) continue;
+      const normal = new THREE.Triangle(...vertices).getNormal(new THREE.Vector3());
+      if (normal.z > -0.99999) continue;
+      for (const vertex of vertices) receiverBounds.expandByPoint(vertex.applyMatrix4(object.matrixWorld));
+    }
+  });
+  if (receiverBounds.isEmpty()) throw new Error('The threshold receiver face could not be resolved.');
   let lightingMode: WorldLightingMode = 'auto';
   function applyLamps(): void {
     const on = lightingMode === 'auto' ? nightAmount.value === 1 : lightingMode === 'on';
@@ -537,6 +559,8 @@ export function createOverlookDeck(high: THREE.IUniform<number>, nightAmount: TH
   applyLamps();
   return {
     group,
+    receiverPlaneShadowMaterials: [finish.shadowStone, finish.cream, finish.mortar] as const,
+    receiverPlaneShadowDomains: [{ material: finish.shadowStone, min: receiverBounds.min, max: receiverBounds.max }] as const,
     get artificialLightingMode() { return lightingMode; },
     setArtificialLightingMode(mode: WorldLightingMode) {
       lightingMode = mode;

@@ -3,8 +3,8 @@ import { registerHooks } from 'node:module';
 import { test, after } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { Raycaster, Texture, Vector3, Vector4 } from 'three';
-import { COAST_SUN_DIRECTION } from '../src/coast/world/coastAtmosphere.ts';
+import { BoxGeometry, Mesh, MeshStandardMaterial, PerspectiveCamera, Raycaster, Scene, ShaderLib, Texture, Vector3, Vector4 } from 'three';
+import { COAST_SUN_DIRECTION, createCoastAtmosphere } from '../src/coast/world/coastAtmosphere.ts';
 import { PRIMARY_RAINBOW_ANGLE } from '../src/coast/world/coastSprayRainbow.ts';
 import {
   COAST_BOUNDS, COAST_FALLS, COAST_WALKS, FOREST_STREAM, FOREST_WALKS, SEA_LEVEL, SPAWN,
@@ -17,7 +17,7 @@ const trafficUrl = new URL('../src/coast/world/overlook/overlookTraffic.ts', imp
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (context.parentURL === overlookUrl && specifier === '../coastNoise') return nextResolve('../coastNoise.ts', context);
-    if (context.parentURL?.includes('/world/overlook/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context);
+    if (context.parentURL?.includes('/coast/world/') && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(`${specifier}.ts`, context);
     const path = specifier === './terrain' && context.parentURL === acousticsUrl ? './terrain.ts' : specifier;
     return nextResolve(path, context);
   },
@@ -36,6 +36,7 @@ const { createOverlookEarthworks } = await import('../src/coast/world/overlook/o
 const { createOverlookDeck } = await import('../src/coast/world/overlook/overlookDeck.ts');
 const { PAVILION_BODY, PAVILION_THRESHOLD, pavilionWing, pavilionEntrancePier } = await import('../src/coast/world/overlook/overlookPavilionPlan.ts');
 const { createOverlookRoadStructures } = await import('../src/coast/world/overlook/overlookRoadStructures.ts');
+const { createCoastLighting } = await import('../src/coast/world/coastLighting.ts');
 hooks.deregister();
 
 let corridorFixture;
@@ -352,6 +353,114 @@ test('terrace bearing meets all six shared ground blocks and preserves the nonst
     ray.set(new Vector3(x, 345.98, z), new Vector3(0, -1, 0));
     assert.ok(ray.intersectObjects(backing, false).some(h => Math.abs(h.point.y - 345.9645) < 1e-6));
   }
+});
+
+test('the finite receiver domain covers the actual threshold front face only', () => {
+  const deck = pavingDeck(), [domain] = deck.receiverPlaneShadowDomains;
+  assert.equal(deck.receiverPlaneShadowDomains.length, 1);
+  assert.equal(domain.material, deck.group.getObjectByName('Recessed limestone').material);
+  const [x, , z, width, , depth] = PAVILION_THRESHOLD;
+  assert.ok(Math.abs(domain.min.x - (x - width / 2)) < 1e-5);
+  assert.ok(Math.abs(domain.max.x - (x + width / 2)) < 1e-5);
+  assert.ok(Math.abs(domain.min.z - (z - depth / 2)) < 1e-5);
+  assert.equal(domain.min.z, domain.max.z);
+  const ray = new Raycaster(new Vector3(), new Vector3(0, 0, 1));
+  for (const fx of [.01, .5, .99]) for (const fy of [.01, .5, .99]) {
+    const px = domain.min.x + (domain.max.x - domain.min.x) * fx;
+    const py = domain.min.y + (domain.max.y - domain.min.y) * fy;
+    ray.set(new Vector3(px, py, domain.min.z - 1), new Vector3(0, 0, 1));
+    const hit = ray.intersectObject(deck.group.getObjectByName('Recessed limestone'), false)[0];
+    assert.ok(hit && Math.abs(hit.point.z - domain.min.z) < 1e-6, 'domain points lie on the rendered front face');
+  }
+});
+
+test('finite receiver coordinates use the unbiased face projection independently of shadow comparison bias', () => {
+  const deck = pavingDeck(), [domain] = deck.receiverPlaneShadowDomains;
+  const world = domain.min.clone().add(domain.max).multiplyScalar(.5), normal = new Vector3(0, 0, -1);
+  const atmosphere = createCoastAtmosphere(new Vector3(-.66, .51, -.55));
+  const scene = new Scene();
+  // Material selection is explicit; the scene needs no GPU objects for this coordinate test.
+  const lighting = createCoastLighting(scene, atmosphere, () => 346);
+  try {
+    lighting.setQuality('high');
+    const camera = new PerspectiveCamera(); camera.position.copy(world).add(new Vector3(0, .3, -1.1));
+    lighting.update(0, camera); scene.updateMatrixWorld(true);
+    const light = scene.children.find(object => object.isDirectionalLight && object.shadow.mapSize.x === 2048);
+    light.shadow.updateMatrices(light);
+    const matrix = light.shadow.matrix, e = matrix.elements;
+    const p0 = world.clone().applyMatrix4(matrix), biased = world.clone().addScaledVector(normal, light.shadow.normalBias).applyMatrix4(matrix);
+    const worldDx = new Vector3(.001, 0, 0), worldDy = new Vector3(0, .001, 0);
+    const dx = world.clone().add(worldDx).addScaledVector(normal, light.shadow.normalBias).applyMatrix4(matrix).sub(biased);
+    const dy = world.clone().add(worldDy).addScaledVector(normal, light.shadow.normalBias).applyMatrix4(matrix).sub(biased);
+    const det = dx.x * dy.y - dx.y * dy.x;
+    const worldU = worldDx.clone().multiplyScalar(dy.y).addScaledVector(worldDy, -dx.y).divideScalar(det);
+    const worldV = worldDy.clone().multiplyScalar(dx.x).addScaledVector(worldDx, -dy.x).divideScalar(det);
+    // Independent oracle: solve the two UV equations directly on the real constant-Z face.
+    const solveFace = uv => {
+      const a = uv[0] - e[8] * domain.min.z - e[12], b = uv[1] - e[9] * domain.min.z - e[13];
+      const determinant = e[0] * e[5] - e[4] * e[1];
+      return new Vector3((a * e[5] - e[4] * b) / determinant, (e[0] * b - a * e[1]) / determinant, domain.min.z);
+    };
+    const inside = point => point.y >= domain.min.y && point.y <= domain.max.y;
+    let oldAnchorReversals = 0;
+    for (let x = -2; x <= 2; x++) for (let y = -2; y <= 2; y++) {
+      const uv = [(Math.floor(biased.x * 2048) + x + .5) / 2048, (Math.floor(biased.y * 2048) + y + .5) / 2048];
+      const actual = solveFace(uv);
+      const correct = world.clone().addScaledVector(worldU, uv[0] - p0.x).addScaledVector(worldV, uv[1] - p0.y);
+      const wrong = world.clone().addScaledVector(worldU, uv[0] - biased.x).addScaledVector(worldV, uv[1] - biased.y);
+      assert.ok(correct.distanceTo(actual) < 1e-7);
+      if (inside(wrong) !== inside(actual)) oldAnchorReversals++;
+    }
+    assert.ok(oldAnchorReversals > 0, 'the normalBias anchoring regression must be exercised');
+  } finally { lighting.dispose(); atmosphere.sky.value.dispose(); }
+});
+
+test('finite receiver shader opt-in leaves the default lighting path unchanged', () => {
+  const atmosphere = createCoastAtmosphere(new Vector3(-.66, .51, -.55));
+  const shader = material => {
+    const result = { uniforms: {}, vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader };
+    material.onBeforeCompile(result, {});
+    return { key: material.customProgramCacheKey(), vertex: result.vertexShader, fragment: result.fragmentShader };
+  };
+  const runDefault = options => {
+    const scene = new Scene(), material = new MeshStandardMaterial(), geometry = new BoxGeometry();
+    scene.add(new Mesh(geometry, material));
+    const lighting = createCoastLighting(scene, atmosphere, () => 346, options);
+    try { return shader(material); } finally { lighting.dispose(); material.dispose(); geometry.dispose(); }
+  };
+  try {
+    const baseline = runDefault();
+    assert.deepEqual(runDefault({ receiverPlaneShadowMaterials: [], receiverPlaneShadowDomains: [] }), baseline);
+    const deck = pavingDeck(), [domain] = deck.receiverPlaneShadowDomains;
+    const originalHooks = new Map();
+    deck.group.traverse(object => {
+      for (const material of Array.isArray(object.material) ? object.material : object.material ? [object.material] : []) {
+        originalHooks.set(material, { compile: material.onBeforeCompile, key: material.customProgramCacheKey });
+      }
+    });
+    const scene = new Scene(); scene.add(deck.group);
+    const lighting = createCoastLighting(scene, atmosphere, () => 346, {
+      receiverPlaneShadowMaterials: deck.receiverPlaneShadowMaterials, receiverPlaneShadowDomains: deck.receiverPlaneShadowDomains,
+    });
+    try {
+      const selected = shader(domain.material);
+      assert.ok(selected.key.endsWith('|finite-receiver-domain-v2'));
+      assert.match(selected.vertex, /coastUnbiasedLocal = directionalShadowMatrix\[1\] \* worldPosition/);
+      assert.match(selected.fragment, /domainDelta = center - domainAnchorUV/);
+      assert.match(selected.fragment, /coastLocalWorldTangents, vCoastUnbiasedLocalShadowUV/);
+      assert.match(selected.fragment, /p\.z \+ dot\(depthGradient, delta\)/);
+      for (const material of deck.receiverPlaneShadowMaterials.filter(value => value !== domain.material)) {
+        const other = shader(material);
+        assert.ok(!other.key.includes('finite-receiver-domain'));
+        assert.ok(!other.vertex.includes('vCoastUnbiasedLocalShadowUV'));
+      }
+    } finally {
+      lighting.dispose(); scene.remove(deck.group);
+      for (const [material, hooks] of originalHooks) {
+        material.onBeforeCompile = hooks.compile; material.customProgramCacheKey = hooks.key;
+      }
+    }
+  } finally { atmosphere.sky.value.dispose(); }
 });
 
 test('the coast contains a dry approach, tidal edge, and submerged seabed', () => {

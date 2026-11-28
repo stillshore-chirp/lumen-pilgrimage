@@ -99,6 +99,14 @@ Three.jsでは[WebGLRenderer](https://threejs.org/docs/pages/WebGLRenderer.html)
 
 斜めの縞などが現れる場合は、map/bump無効とreceiveShadow無効を別々に比較し、材・geometry・受影の原因を分けます。診断後は元の状態へ復帰して通常frameとの一致を確認し、診断画像で品質合格を出しません。全影無効や支持寸法の変更で原因を隠さず、受影の是正は通常の光と接触影を残す条件で確認します。床支持と材/影の最終品質は別の判定です。
 
+局所受影のCPU回帰も `node --test scripts/coast-terrain.test.mjs` に含めます。domainを実支持前面へ照合し、normalBias付き比較座標と実面のUVアンカーを混同したときの内外判定反転を、独立なUV連立式で再現します。生成shaderでunbiased UVの受け渡しと比較深度の分離を確認し、options未指定・非選択材の経路を照合します。これはGPU compileや完成画質の代替ではありません。
+
+ブラウザーでは低眼高の敷居前、昼夜、左右の実端、通常のベンチ・手すり、固定方向の小移動を確認します。対象前面の縞だけでなく、別casterの接触影、支持面と周辺との境界、domainに有効texelがない場合の切替を観察します。少数の静止点は、その間のすべての頭部移動や連続境界を証明しません。材の斑と影の細筋を区別し、原因を再分離していない残留模様は観察結果のまま記録します。
+
+深度を診断する場合は、通常frameの描画直後に取得したactual shadow matrix、map寸法、比較方式と現在の受影点からkernel texelを求めます。別frameのindexを流用しません。比較samplerの逆算には、実textureのtype/format/filter/compare、実uniform binding、比較深度0/1と既知depth control、kernelの被覆、原map不変、診断資源の解放と通常PNG hashの復帰を対応付けます。depth=1は正当なclear領域の場合があり、全binaryという条件だけで正しい取得としません。比較samplerの逆算、raw attachment取得、実fragment導関数の取得は区別します。source/distと実画面・数値の版付き証拠はIssue/PRの検証記録から参照し、実GPU費用と未確認の物理HMD条件も別記します。
+
+2026-11-28の固定候補比較では、ANGLE/Metal・1920×1080・DPR1・high/day、同じcameraと姿勢で各24有効queryを取得しました。展望台はprepareRenderを持たないためmain描画だけを測り、受影補正前C9の中央値5.174 msに対し有限面v2入りC11Rは5.337 ms（約3.16%増）でした。disjoint、未取得query、計測中のprogram増加は0です。単回・固定順・短時間の局所費用であり、全域の平均や実HMDの達成保証ではありません。
+
 ### 展望台の道路地形と道路音
 
 設計入力と生成順は [道路と地形の設計](overlook/road-terrain-design.md) を正本とします。`node --test scripts/coast-terrain.test.mjs` で元16路のXZ/横断frame、縦断の小さい持上げ、実chordの勾配、近側の地中曲線、実地面の切断と合成sampler、実headwallの開孔、背面の土断面と車両matrixの有限性を確認します。幅とshared XYZ、車両包絡、slabの閉鎖は共通planと生成geometryを別途照合します。独立した全数検査では、lining外三角形と掘削前地表の交差polygon全体で土被りを調べ、橋脚の全footprintと実地盤・slabを照合します。頂点だけのsampleや公称中心の重なりを全域の最小離隔へ読み替えません。

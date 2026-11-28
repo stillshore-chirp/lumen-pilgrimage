@@ -75,7 +75,10 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
   const scene = new THREE.Scene();
   scene.add(sky.dome, sky.clouds, ground.group, earthworks.group, roadStructures.group, deck.group, city.group, traffic.group, airTraffic.group,
     createOverlookHillside(heightAt, earthworks.sampleHeight));
-  const lighting = createCoastLighting(scene, atmosphere, heightAt, { nightIntensityScale: 0.28 });
+  const lighting = createCoastLighting(scene, atmosphere, heightAt, {
+    nightIntensityScale: 0.28, receiverPlaneShadowMaterials: deck.receiverPlaneShadowMaterials,
+    receiverPlaneShadowDomains: deck.receiverPlaneShadowDomains,
+  });
   await Promise.all([streets.ready, city.ready]);
 
   return {
