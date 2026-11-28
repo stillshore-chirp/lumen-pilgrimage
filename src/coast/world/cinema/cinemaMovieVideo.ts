@@ -510,6 +510,7 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
   private pumpQueued = false;
   private operation: Promise<void> = Promise.resolve();
   private lastPresentedIndex = -1;
+  private presentationTarget = 0;
   private _frameVersion = 0;
   private disposed = false;
   private lastError: CinemaMovieVideoError | null = null;
@@ -536,8 +537,22 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
   }
 
   private trimFrames(): void {
+    const targetTime = this.video.samples[this.presentationTarget].presentationTime;
     while (this.frames.size > MAX_FRAME_QUEUE) {
-      const candidate = [...this.frames.values()].find(entry => entry.index !== this.lastPresentedIndex);
+      let candidate: FrameEntry | undefined;
+      let candidateTime = 0;
+      for (const entry of this.frames.values()) {
+        if (entry.index === this.lastPresentedIndex || entry.index === this.presentationTarget) continue;
+        const time = this.video.samples[entry.index].presentationTime;
+        // Discard stale frames first, then the farthest future frame. Decode
+        // indices need not be in presentation order when the stream has B frames.
+        if (!candidate || (time < targetTime
+          ? candidateTime >= targetTime || time < candidateTime
+          : candidateTime >= targetTime && time > candidateTime)) {
+          candidate = entry;
+          candidateTime = time;
+        }
+      }
       if (!candidate) break;
       candidate.frame.close();
       this.frames.delete(candidate.index);
@@ -695,6 +710,7 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
     if (!Number.isFinite(timeSeconds)) throw new CinemaMovieVideoError('上映時刻は有限な秒数で指定してください。');
     const time = Math.max(0, Math.min(this.duration, timeSeconds));
     const target = this.presentationIndex(time);
+    this.presentationTarget = target;
     if (target === this.lastPresentedIndex && this.frames.has(target)) return true;
     const entry = this.frames.get(target);
     if (!entry) {
@@ -713,6 +729,7 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
     if (!Number.isFinite(timeSeconds)) throw new CinemaMovieVideoError('シーク時刻は有限な秒数で指定してください。');
     const time = Math.max(0, Math.min(this.duration, timeSeconds));
     const target = this.presentationIndex(time);
+    this.presentationTarget = target;
     this.requestedTarget = null;
     await this.enqueue(async () => {
       if (this.disposed) throw new CinemaMovieVideoError('破棄済みの上映映像です。');
