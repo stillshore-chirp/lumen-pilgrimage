@@ -75,6 +75,46 @@ function observeResidence() {
   };
   probe.lowpassCutoffs = () => [...probe.trafficFilters].filter(filter => filter.type === 'lowpass')
     .map(filter => filter.frequency.value);
+  (function installResidenceAudioGraphObserver() {
+    const probe = window.residenceProbe;
+    const edges = new WeakMap();
+    const connect = AudioNode.prototype.connect;
+    const disconnect = AudioNode.prototype.disconnect;
+    probe.firstFilters = start => {
+      const filters = new Set();
+      const visited = new Set();
+      const pending = [[start, 0]];
+      while (pending.length) {
+        const [node, depth] = pending.shift();
+        if (visited.has(node) || depth > 8) continue;
+        visited.add(node);
+        if (node instanceof BiquadFilterNode) {
+          filters.add(node);
+          continue;
+        }
+        for (const target of edges.get(node) ?? []) {
+          if (target instanceof AudioNode) pending.push([target, depth + 1]);
+        }
+      }
+      return [...filters];
+    };
+    AudioNode.prototype.connect = function (destination, ...args) {
+      const result = connect.call(this, destination, ...args);
+      let targets = edges.get(this);
+      if (!targets) edges.set(this, targets = new Set());
+      targets.add(destination);
+      if (this instanceof AudioBufferSourceNode && this.loop) {
+        for (const filter of probe.firstFilters(destination)) probe.trafficFilters.add(filter);
+      }
+      return result;
+    };
+    AudioNode.prototype.disconnect = function (...args) {
+      const result = disconnect.apply(this, args);
+      if (args.length === 0) edges.delete(this);
+      else if (args[0] instanceof AudioNode) edges.get(this)?.delete(args[0]);
+      return result;
+    };
+  })();
 }
 
 async function createPage(t) {
@@ -1176,7 +1216,7 @@ test('nearby appliances open individual controls and start localized audio', { t
     AudioBufferSourceNode.prototype.connect = function (target, ...args) {
       const duration = this.buffer?.duration ?? 0;
       const completion = [3.44, .78].some(seconds => Math.abs(duration - seconds) < .01);
-      if (!this.loop && completion && target instanceof BiquadFilterNode) chimes.add(this);
+      if (!this.loop && completion && window.residenceProbe.firstFilters(target).length > 0) chimes.add(this);
       return connect.call(this, target, ...args);
     };
     AudioBufferSourceNode.prototype.start = function (...args) {
