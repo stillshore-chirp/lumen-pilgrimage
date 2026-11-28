@@ -128,7 +128,15 @@ p ≈ f s / z
 
 [実寸UVの実装](../../src/coast/world/cinema/cinemaMetricUv.ts)では、X法線の面にZ/Y、Y法線の面にX/Z、Z法線の面にX/Yの寸法を使う。対象はunit BoxGeometry、直交した正のinstance scale、meshと親のunit scaleに限定する。回転したinstanceでも局所軸の長さは変わらない。親の追加scale、shear、丸い座席や筐体へこの式をそのまま適用せず、その形状の実寸とUVを別に定める。
 
-この壁の周期は8個×16mm=128mm、7.8125cycle/mである。生成式は各16texelのセルで半径2.4texel未満を暗い芯、半径3.25texel未満までを周縁の陰影として描く。1texelが1mmに対応するため、芯の名目径は4.8mm相当、周縁を含む名目外径は6.5mm相当となる。高品質時のbump振幅は0.8mmである。これは離散画素で表す不透明面の模様で、実際に背後へ抜ける開口や製品の孔寸法ではない。UVの実寸を直しても、円が数texelしかなければ近接で四角く見えるため、密度、輪郭の面積sampling、遠景のmipを別に確認する。形状を回し、同じ距離・光・bumpで比較してから、実際の照明shaderとの併用と連続移動を確認する。[照明・UVの検査](../../scripts/cinema-lighting.test.mjs)は、両hookの合成、map/bumpの同座標、品質切替と復元も扱う。
+この壁の周期は8個×16mm=128mm、7.8125cycle/mである。生成式は16mmのセルを64texelへ割り当て、半径2.4mm未満を暗い芯、半径3.25mm未満までを周縁の陰影として4×4面積samplingする。1texelは0.25mmに対応し、芯の名目径は4.8mm相当、周縁を含む名目外径は6.5mm相当となる。高品質時のbump振幅は0.8mmである。これは離散画素で表す不透明面の模様で、実際に背後へ抜ける開口や製品の孔寸法ではない。UVの実寸を直しても、円が数texelしかなければ近接で四角く見えるため、密度、輪郭の面積sampling、遠景のmipを別に確認する。形状を回し、同じ距離・光・bumpで比較してから、実際の照明shaderとの併用と連続移動を確認する。[照明・UVの検査](../../scripts/cinema-lighting.test.mjs)は、両hookの合成、map/bumpの同座標、品質切替と復元も扱う。
+
+### 丸い張地のchartと繊維の尺度
+
+単位の丸角boxを非等方に拡大した席では、元の6面chartの平坦部とedge円弧を、拡大後の距離へ対応させる。元形状とnormalを実寸へbakeし、instanceの平行移動と傾きを保って、色とbumpへ同じUVを使う。[張地の写像](../../src/coast/world/cinema/cinemaUpholsteryGeometry.ts)と[席の生成](../../src/coast/world/cinema/cinemaSeats.ts)がこの例である。
+
+張地の生成画像は16mm周期に32個の糸周期を置き、平坦部の名目pitchを0.5mmとする。高品質のbump振幅設定は0.2mmで、実製品の繊維高さを測定した値ではない。球角は平面へ完全等長に展開できず、現在のクッション4形状では局所尺度の近似により約0.25–0.58mmになる領域がある。平坦部の実寸だけで全曲面を合格にせず、角、chartの継ぎ目、斜め移動を確認する。
+
+張地と垂幕は同じ不変の画像Sourceを参照し、textureのUV変換を別に持つ。張地のrepeatはbaked UV用に1、垂幕は既存の3.75×4.25である。画像を共有することと、異なる形状のUV尺度を共有することを区別し、textureを破棄するときは各参照の所有を追う。
 
 ## GGX、Fresnel、metal-roughness の意味
 

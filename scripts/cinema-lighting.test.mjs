@@ -5,6 +5,7 @@ import {
   BoxGeometry, Camera, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
   PlaneGeometry, Scene, ShaderLib, Texture, UniformsUtils, Vector3,
 } from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const source = new URL('../src/coast/world/cinema/', import.meta.url).href;
 const hooks = registerHooks({
@@ -14,11 +15,13 @@ const hooks = registerHooks({
   },
 });
 const { createCinemaLighting } = await import('../src/coast/world/cinema/cinemaLighting.ts');
-const { cinemaFinishes } = await import('../src/coast/world/cinema/cinemaFinishes.ts');
+const { cinemaFinishes, CINEMA_WEAVE_PERIOD, CINEMA_ACOUSTIC_PATTERN } = await import('../src/coast/world/cinema/cinemaFinishes.ts');
 const { applyCinemaMetricBoxUv } = await import('../src/coast/world/cinema/cinemaMetricUv.ts');
 const { cinemaSpeakerFinishes, CINEMA_SPEAKER_GRILLE } = await import('../src/coast/world/cinema/cinemaSpeakerFinishes.ts');
 const { createCinemaSpeakerEquipment } = await import('../src/coast/world/cinema/cinemaSpeakerEquipment.ts');
 const { createCinemaAuditorium } = await import('../src/coast/world/cinema/cinemaAuditorium.ts');
+const { cinemaUpholsteryGeometry } = await import('../src/coast/world/cinema/cinemaUpholsteryGeometry.ts');
+const { createCinemaSeats } = await import('../src/coast/world/cinema/cinemaSeats.ts');
 const {
   bakeCinemaLightTransport, cinemaLightQuality, cinemaPictureOpening, cinemaProjectionFalloff, cinemaScreenLevels,
   CINEMA_LIGHT_BOUNCE, CINEMA_LIGHT_CROWN, CINEMA_ROOM_RETURN,
@@ -271,9 +274,10 @@ test('metric panel maps and bumps retain cinema lighting hooks across quality ch
   const panel = finish.acoustic;
   assert.throws(() => applyCinemaMetricBoxUv(panel, 7.8125), /already configured/);
   assert.deepEqual(panel.map.repeat.toArray(), [1, 1]);
-  assert.deepEqual(finish.seatFabric.map.repeat.toArray(), [3.75, 4.25]);
+  assert.deepEqual(finish.seatFabric.map.repeat.toArray(), [1, 1]);
+  assert.deepEqual(finish.drape.map.repeat.toArray(), [3.75, 4.25]);
   assert.deepEqual(finish.carpet.map.repeat.toArray(), [1, 1]);
-  const legacy = new MeshStandardMaterial({ map: finish.seatFabric.map });
+  const legacy = new MeshStandardMaterial({ map: finish.drape.map });
   assert.throws(() => applyCinemaMetricBoxUv(legacy, 1), /unit sampler repeat/);
   const metricCompile = panel.onBeforeCompile;
   const metricKey = panel.customProgramCacheKey();
@@ -348,7 +352,7 @@ test('generated upholstery shades stay inside their intended byte range instead 
   const finish = cinemaFinishes();
   const map = finish.seatFabric.map;
   try {
-    assert.strictEqual(map, finish.drape.map);
+    assert.strictEqual(map.source, finish.drape.map.source);
     let minimum = 255;
     let maximum = 0;
     for (let index = 0; index < map.image.data.length; index += 4) {
@@ -433,11 +437,17 @@ test('auditorium owns the detached grille height texture through light quality a
     const mesh = auditorium.group.getObjectByName('Recessed cinema speaker grilles');
     const map = mesh.material.map;
     const height = mesh.material.bumpMap;
+    const cloth = auditorium.group.getObjectByName('Woven back cushions').material.map;
+    const drape = auditorium.group.getObjectByName('Side drapery and folds').material.map;
     assert.ok(map && height && map !== height);
     let mapDisposals = 0;
     let heightDisposals = 0;
+    let clothDisposals = 0;
+    let drapeDisposals = 0;
     map.addEventListener('dispose', () => { mapDisposals += 1; });
     height.addEventListener('dispose', () => { heightDisposals += 1; });
+    cloth.addEventListener('dispose', () => { clothDisposals += 1; });
+    drape.addEventListener('dispose', () => { drapeDisposals += 1; });
     auditorium.setQuality('light');
     assert.equal(mesh.material.bumpMap, null);
     auditorium.dispose();
@@ -446,9 +456,159 @@ test('auditorium owns the detached grille height texture through light quality a
     assert.equal(mesh.material.bumpMap, null);
     assert.equal(mapDisposals, 1);
     assert.equal(heightDisposals, 1);
+    assert.equal(clothDisposals, 1);
+    assert.equal(drapeDisposals, 1);
   } finally {
     auditorium?.dispose();
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
+  }
+});
+
+test('rounded upholstery retains the existing shape and normals while flat charts use physical metres', () => {
+  const unit = new RoundedBoxGeometry(1, 1, 1, 1, .2);
+  const point = new Vector3();
+  const expected = new Vector3();
+  let flatEdges = 0;
+  let minimumCurvedScale = Infinity;
+  let maximumCurvedScale = 0;
+  try {
+    for (const size of [[.610, .633, .160], [.593, .385, .142], [.610 * .98, .633, .160], [.593 * .98, .385, .142]]) {
+      const geometry = cinemaUpholsteryGeometry(unit, size, .2, CINEMA_WEAVE_PERIOD);
+      const { position, normal, uv } = geometry.attributes;
+      try {
+        for (let index = 0; index < position.count; index += 1) {
+          expected.fromBufferAttribute(unit.attributes.position, index).multiply(new Vector3(...size));
+          assert.ok(point.fromBufferAttribute(position, index).distanceTo(expected) < 1e-7);
+          expected.fromBufferAttribute(unit.attributes.normal, index).divide(new Vector3(...size)).normalize();
+          assert.ok(point.fromBufferAttribute(normal, index).distanceTo(expected) < 1e-7);
+        }
+        for (const group of geometry.groups) for (let offset = group.start; offset < group.start + group.count; offset += 3) {
+          const axis = Math.floor(group.materialIndex / 2);
+          const p = [0, 1, 2].map(vertex => new Vector3().fromBufferAttribute(position, offset + vertex));
+          const du1 = (uv.getX(offset + 1) - uv.getX(offset)) * CINEMA_WEAVE_PERIOD;
+          const dv1 = (uv.getY(offset + 1) - uv.getY(offset)) * CINEMA_WEAVE_PERIOD;
+          const du2 = (uv.getX(offset + 2) - uv.getX(offset)) * CINEMA_WEAVE_PERIOD;
+          const dv2 = (uv.getY(offset + 2) - uv.getY(offset)) * CINEMA_WEAVE_PERIOD;
+          const determinant = du1 * dv2 - du2 * dv1;
+          if (Math.abs(determinant) > 1e-15) {
+            const edge1 = p[1].clone().sub(p[0]);
+            const edge2 = p[2].clone().sub(p[0]);
+            const u = edge1.clone().multiplyScalar(dv2).addScaledVector(edge2, -dv1).divideScalar(determinant);
+            const v = edge2.clone().multiplyScalar(du1).addScaledVector(edge1, -du2).divideScalar(determinant);
+            const a = u.lengthSq();
+            const b = u.dot(v);
+            const c = v.lengthSq();
+            const discriminant = Math.hypot(a - c, 2 * b);
+            minimumCurvedScale = Math.min(minimumCurvedScale, Math.sqrt(Math.max(0, (a + c - discriminant) / 2)));
+            maximumCurvedScale = Math.max(maximumCurvedScale, Math.sqrt((a + c + discriminant) / 2));
+          }
+          for (let vertex = 0; vertex < 3; vertex += 1) {
+            const a = offset + vertex;
+            const b = offset + (vertex + 1) % 3;
+            if (Math.abs(unit.attributes.normal.getComponent(a, axis)) < .999999
+              || Math.abs(unit.attributes.normal.getComponent(b, axis)) < .999999) continue;
+            const physical = point.fromBufferAttribute(position, a).distanceTo(expected.fromBufferAttribute(position, b));
+            const mapped = Math.hypot(uv.getX(a) - uv.getX(b), uv.getY(a) - uv.getY(b)) * CINEMA_WEAVE_PERIOD;
+            assert.ok(Math.abs(physical - mapped) < 1e-7);
+            flatEdges += 1;
+          }
+        }
+      } finally { geometry.dispose(); }
+    }
+    assert.equal(flatEdges, 240);
+    // Curved native charts compress/stretch locally; these bounds describe the
+    // existing four shapes rather than claiming an isometric spherical unwrap.
+    assert.ok(minimumCurvedScale > .49 && maximumCurvedScale < 1.16);
+  } finally { unit.dispose(); }
+});
+
+test('upholstery metadata belongs to each clone and does not alter the original unit metadata', () => {
+  const unit = new RoundedBoxGeometry(1, 1, 1, 1, .2);
+  const original = { source: 'unit cushion' };
+  unit.userData = original;
+  const first = cinemaUpholsteryGeometry(unit, [.610, .633, .160], .2, CINEMA_WEAVE_PERIOD);
+  const second = cinemaUpholsteryGeometry(unit, [.58114, .385, .142], .2, CINEMA_WEAVE_PERIOD);
+  try {
+    assert.strictEqual(unit.userData, original);
+    assert.deepEqual(unit.userData, { source: 'unit cushion' });
+    assert.notStrictEqual(first.userData, second.userData);
+    assert.notStrictEqual(first.userData, original);
+    assert.notStrictEqual(second.userData, original);
+    assert.deepEqual(first.userData.cinemaUpholstery.dimensions, [.610, .633, .160]);
+    assert.deepEqual(second.userData.cinemaUpholstery.dimensions, [.58114, .385, .142]);
+  } finally { first.dispose(); second.dispose(); unit.dispose(); }
+});
+
+test('seat-specific transforms preserve the drape and floor consumers and wall holes stay opaque at 512 pixels', () => {
+  const finish = cinemaFinishes();
+  const group = new Group();
+  createCinemaSeats(group, finish);
+  try {
+    assert.notStrictEqual(finish.seatFabric.map, finish.drape.map);
+    assert.strictEqual(finish.seatFabric.map.source, finish.drape.map.source);
+    assert.deepEqual(finish.seatFabric.map.repeat.toArray(), [1, 1]);
+    assert.deepEqual(finish.drape.map.repeat.toArray(), [3.75, 4.25]);
+    assert.deepEqual(finish.carpet.map.repeat.toArray(), [1, 1]);
+    assert.strictEqual(finish.carpet.map, finish.aisle.map);
+    const sourceIndices = new Map();
+    const cushionMetadata = new Set();
+    group.traverse(mesh => {
+      const indices = mesh.userData.cinemaSeatSourceIndices;
+      if (!indices) return;
+      if (mesh.name === 'Woven back cushions') {
+        cushionMetadata.add(mesh.geometry.userData);
+        mesh.geometry.computeBoundingBox();
+        const size = mesh.geometry.boundingBox.getSize(new Vector3()).toArray();
+        size.forEach((value, axis) => assert.ok(Math.abs(value
+          - mesh.geometry.userData.cinemaUpholstery.dimensions[axis]) < 1e-7));
+      }
+      const collected = sourceIndices.get(mesh.name) ?? [];
+      collected.push(...indices);
+      sourceIndices.set(mesh.name, collected);
+    });
+    assert.equal(cushionMetadata.size, 4);
+    for (const [name, count] of [['Woven back cushions', 1176], ['Stitched crown seams', 588]]) {
+      const indices = sourceIndices.get(name).sort((a, b) => a - b);
+      assert.deepEqual(indices, Array.from({ length: count }, (_, index) => index));
+    }
+    finish.setHighDetail(true);
+    assert.equal(finish.seatFabric.bumpMap, finish.seatFabric.map);
+    assert.equal(finish.seatFabric.bumpScale, .0002);
+    assert.equal(finish.drape.bumpMap, null);
+    assert.equal(finish.carpet.bumpScale, .018);
+    assert.equal(finish.aisle.bumpScale, .020);
+    assert.equal(finish.acoustic.bumpScale, .0008);
+    const map = finish.acoustic.map;
+    assert.equal(map.image.width, 512);
+    assert.equal(map.image.height, 512);
+    const cells = CINEMA_ACOUSTIC_PATTERN.cells;
+    assert.equal(map.image.width / cells, 64);
+    for (let index = 3; index < map.image.data.length; index += 4) assert.equal(map.image.data[index], 255);
+    const coreAlong = axis => {
+      let count = 0;
+      for (let pixel = 0; pixel < 64; pixel += 1) {
+        const x = axis === 0 ? pixel : 32;
+        const y = axis === 1 ? pixel : 32;
+        if (map.image.data[(y * 512 + x) * 4] < 110) count += 1;
+      }
+      return count;
+    };
+    const width = coreAlong(0);
+    const height = coreAlong(1);
+    assert.ok(width >= 18 && width <= 21 && Math.abs(width - height) <= 1);
+  } finally {
+    const geometries = new Set([finish.box]);
+    const materials = new Set();
+    const textures = new Set();
+    group.traverse(mesh => {
+      if (!(mesh instanceof Mesh)) return;
+      geometries.add(mesh.geometry); materials.add(mesh.material);
+      if (mesh instanceof InstancedMesh) mesh.dispose();
+    });
+    for (const material of Object.values(finish)) if (material instanceof MeshStandardMaterial) materials.add(material);
+    for (const material of materials) { if (material.map) textures.add(material.map); if (material.bumpMap) textures.add(material.bumpMap); material.dispose(); }
+    for (const geometry of geometries) geometry.dispose();
+    for (const texture of textures) texture.dispose();
   }
 });
