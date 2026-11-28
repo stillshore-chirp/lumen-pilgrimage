@@ -502,6 +502,8 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
   private readonly file: File;
   private readonly video: ParsedVideo;
   private readonly frames = new Map<number, FrameEntry>();
+  private readonly pendingFrames = new Set<number>();
+  private activeDecodeTarget: number | null = null;
   private decoder: VideoDecoder | null = null;
   private decoderGeneration = 0;
   private decoderNeedsKeyframe = false;
@@ -542,7 +544,7 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
       let candidate: FrameEntry | undefined;
       let candidateTime = 0;
       for (const entry of this.frames.values()) {
-        if (entry.index === this.lastPresentedIndex || entry.index === this.presentationTarget) continue;
+        if (entry.index === this.lastPresentedIndex || entry.index === this.presentationTarget || entry.index === this.activeDecodeTarget) continue;
         const time = this.video.samples[entry.index].presentationTime;
         // Discard stale frames first, then the farthest future frame. Decode
         // indices need not be in presentation order when the stream has B frames.
@@ -561,6 +563,7 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
 
   private closeDecoder(): void {
     this.decoderGeneration += 1;
+    this.pendingFrames.clear();
     if (this.decoder) {
       this.decoder.close();
       this.decoder = null;
@@ -586,6 +589,7 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
           frame.close();
           return;
         }
+        this.pendingFrames.delete(index);
         const previous = this.frames.get(index);
         previous?.frame.close();
         this.frames.set(index, { index, frame });
@@ -593,6 +597,7 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
       },
       error: error => {
         if (generation === this.decoderGeneration) {
+          this.pendingFrames.clear();
           this.lastError = new CinemaMovieVideoError(`H.264映像のデコードに失敗しました: ${error.message}`);
         }
       },
@@ -625,12 +630,36 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
     }
   }
 
+  private futureFrameCount(): number {
+    const time = this.video.samples[this.presentationTarget].presentationTime;
+    let count = 0;
+    for (const index of this.frames.keys()) {
+      if (this.video.samples[index].presentationTime > time) count += 1;
+    }
+    for (const index of this.pendingFrames) {
+      if (!this.frames.has(index) && this.video.samples[index].presentationTime > time) count += 1;
+    }
+    return count;
+  }
+
+  private futureFrameCapacity(): number {
+    // A missing current frame can coexist with the previously displayed frame.
+    return MAX_FRAME_QUEUE - (this.lastPresentedIndex >= 0
+      && this.lastPresentedIndex !== this.presentationTarget ? 2 : 1);
+  }
+
   private async decodeTo(targetIndex: number, reset: boolean): Promise<void> {
     if (this.disposed) return;
     const target = Math.max(0, Math.min(targetIndex, this.video.samples.length - 1));
     if (this.frames.has(target)) return;
+    const isPrefetch = !reset && this.video.samples[target].presentationTime
+      > this.video.samples[this.presentationTarget].presentationTime;
+    // A forward prefetch can already have been output and discarded. It is not
+    // an explicit reverse seek, and must not restart the decoder speculatively.
+    if (isPrefetch && (this.futureFrameCount() >= this.futureFrameCapacity()
+      || target < this.decodeCursor && !this.pendingFrames.has(target))) return;
     const start = this.findKeySample(target);
-    if (reset || !this.decoder || this.decoderNeedsKeyframe || target < this.decodeCursor) {
+    if (reset || !this.decoder || this.decoderNeedsKeyframe || (target < this.decodeCursor && !this.pendingFrames.has(target))) {
       if (reset) this.releaseFrames();
       this.lastPresentedIndex = -1;
       this.createDecoder(start);
@@ -638,27 +667,47 @@ class CinemaMovieVideoImpl implements CinemaMovieVideo {
     const decoder = this.decoder;
     if (!decoder) unsupported('映像デコーダーを初期化できません。');
     const generation = this.decoderGeneration;
-    const limit = Math.min(this.video.samples.length - 1, target + MAX_FRAME_QUEUE / 2);
-    while (!this.frames.has(target) && this.decodeCursor <= limit) {
-      if (this.disposed || generation !== this.decoderGeneration) return;
-      await this.waitForDecodeSlot(decoder);
-      const sample = this.video.samples[this.decodeCursor];
-      const bytes = await readFileRange(this.file, sample.offset, sample.size);
-      if (this.disposed || generation !== this.decoderGeneration) return;
-      decoder.decode(new EncodedVideoChunk({
-        type: sample.key ? 'key' : 'delta',
-        timestamp: sample.outputTimestamp,
-        duration: sample.outputDuration,
-        data: bytes,
-      }));
-      this.decodeCursor += 1;
+    this.activeDecodeTarget = target;
+    try {
+      while (!this.frames.has(target) && this.decodeCursor < this.video.samples.length) {
+        if (this.disposed || generation !== this.decoderGeneration) return;
+        if (isPrefetch && this.video.samples[target].presentationTime
+          < this.video.samples[this.presentationTarget].presentationTime) return;
+        if (this.futureFrameCount() >= this.futureFrameCapacity()) {
+          if (isPrefetch) return;
+          // The required coded sample may follow a future reference picture.
+          // Admit it before draining; do not impose a new format/reorder limit.
+          if (this.decodeCursor > target) break;
+        }
+        await this.waitForDecodeSlot(decoder);
+        if (this.disposed || generation !== this.decoderGeneration) return;
+        if (this.frames.has(target)) break;
+        if (isPrefetch && (this.futureFrameCount() >= this.futureFrameCapacity()
+          || this.video.samples[target].presentationTime < this.video.samples[this.presentationTarget].presentationTime)) return;
+        const sample = this.video.samples[this.decodeCursor];
+        const bytes = await readFileRange(this.file, sample.offset, sample.size);
+        if (this.disposed || generation !== this.decoderGeneration) return;
+        if (this.frames.has(target)) break;
+        if (isPrefetch && (this.futureFrameCount() >= this.futureFrameCapacity()
+          || this.video.samples[target].presentationTime < this.video.samples[this.presentationTarget].presentationTime)) return;
+        if (Number.isFinite(sample.presentationTime)) this.pendingFrames.add(sample.index);
+        decoder.decode(new EncodedVideoChunk({
+          type: sample.key ? 'key' : 'delta',
+          timestamp: sample.outputTimestamp,
+          duration: sample.outputDuration,
+          data: bytes,
+        }));
+        this.decodeCursor += 1;
+      }
+      if (!this.frames.has(target)) {
+        await decoder.flush();
+        this.decoderNeedsKeyframe = true;
+      }
+      if (this.lastError) throw this.lastError;
+      if (!this.frames.has(target)) throw new CinemaMovieVideoError('指定した映像フレームを準備できませんでした。');
+    } finally {
+      this.activeDecodeTarget = null;
     }
-    if (!this.frames.has(target)) {
-      await decoder.flush();
-      this.decoderNeedsKeyframe = true;
-    }
-    if (this.lastError) throw this.lastError;
-    if (!this.frames.has(target)) throw new CinemaMovieVideoError('指定した映像フレームを準備できませんでした。');
   }
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {

@@ -120,6 +120,8 @@ LFEの上限は120 Hzとする。各位置のスピーカーから低域を振�
 
 本編と内蔵試映は同じ48 kHzの上映処理に入り、57台の配線、座席から求めた初期反射、KEMARの実測応答を使って左右の音を出す。映像入力は非断片化のH.264 MP4を受け付ける。WebCodecsではハードウェアデコードを優先し、その設定が利用できない場合はブラウザーの既定を使う。 [上映処理](../../src/coast/world/cinema/cinemaScreening.ts) · [実測素材の出典と加工](../../public/cinema-audio/ATTRIBUTION.md)
 
+映像の先読みは表示済み・現在要求・同世代で出力待ちのframeを区別し、8frameの保持上限内で将来frameの投入を制限する。先読みで一度出力・破棄したframeを、利用者による逆行seekと同一視しない。通常の前方デコードは出力callbackを受けて進め、必要なframeがまだ得られない終端や参照frameの排出時にだけflushする。flush後のキーフレーム条件、seek世代の取消、B-frameの表示順、破棄時の全frame/decoder解放を維持する。実際に提示できる映像がないときに音声を止める同期条件は維持し、映像待ちを隠すために音声時計だけを進めない。 [映像状態の回帰試験](../../scripts/cinema-movie-output.test.mjs)
+
 57出力の上映経路はJavaScriptの単一AudioWorkletを使い、KEMAR由来の左右各144タップを保持する。耳への方向は水平30°刻み、仰角−20/0/20/60/80°の60方向から近いものを選び、応答が切り替わるときは同じ入力履歴の旧・新応答を720サンプル（48kHzで15ms）かけてつなぐ。範囲外の仰角は端の応答を使うため、入力方向と採用方向の差を記録し、座席と高所飛行の確認を分ける。後期残響は16本の遅延線と帯域別減衰を持つ別の成分として合成する。 [経路と方向](../../src/coast/world/cinema/cinemaRoomAudio.ts) · [畳み込み](../../src/coast/world/cinema/cinemaConvolution.ts) · [音響処理](../../src/coast/world/cinema/cinemaRoomProcessor.ts)
 
 共有音声と57出力の上映経路は、空気吸収、軸外減衰、幕透過、反射面の帯域係数、段床・座席の幾何判定を[共通の伝搬定義](../../src/coast/world/cinema/cinemaPropagation.ts)から作る。数値は場面用の推定値で、特定機器の実測ポーラーデータではない。57出力経路は全経路長に空気吸収、最初の出射方向に指向性、有限の幕を横切る回数に応じた透過を適用する。反射の基準帯域は経路ゲイン、帯域間の差はフィルターへ分け、同じ減衰を二重に掛けない。伝搬のシェルフ応答は256タップの因果FIRで近似する。 [伝搬FIR](../../src/coast/world/cinema/cinemaPropagationFilter.ts)
