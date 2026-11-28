@@ -7,7 +7,7 @@ import { CINEMA_RENDER_SPEAKERS as RENDER_SPEAKERS } from './cinemaSpeakers';
 
 const SAMPLE_RATE = 48_000;
 const SOUND_SPEED_METRES_PER_SECOND = 343;
-const MAX_DELAY_SAMPLES = 0.250 * SAMPLE_RATE;
+const MAX_EXCESS_DELAY_SAMPLES = 0.250 * SAMPLE_RATE;
 const REFERENCE_DISTANCE = 38.02;
 const MAX_PATHS = 48;
 
@@ -165,7 +165,9 @@ function makeCandidate(
   const legs = [speakerPosition, ...points, listener];
   const pathLength = legs.slice(1).reduce((sum, point, index) => sum + distance(legs[index], point), 0);
   const delaySamples = speakerDelay + pathLength * SAMPLE_RATE / SOUND_SPEED_METRES_PER_SECOND;
-  if (!(delaySamples >= 0 && delaySamples <= MAX_DELAY_SAMPLES)) return undefined;
+  // Match the direct path's existing 1m distance floor and fixed alignment.
+  const directDelay = speakerDelay + Math.max(1, distance(speakerPosition, listener)) * SAMPLE_RATE / SOUND_SPEED_METRES_PER_SECOND;
+  if (!(delaySamples >= 0 && delaySamples <= directDelay + MAX_EXCESS_DELAY_SAMPLES)) return undefined;
   const bandGain = cinemaReflectionBandGain(sequence.map(surface => surface.id));
   const lowReflection = bandGain[0];
   const highReflection = bandGain[bandGain.length - 1];
