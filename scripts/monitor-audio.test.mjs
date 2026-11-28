@@ -48,6 +48,8 @@ class MockTrack extends EventTarget {
     this.readyState = 'ended';
     this.dispatchEvent(new Event('ended'));
   }
+
+  getSettings() { return { channelCount: 2 }; }
 }
 
 class MockStream extends EventTarget {
@@ -71,7 +73,7 @@ function poseParams(...groups) {
 
 function setup(t, { spatial = true, blocked = false } = {}) {
   const contexts = [];
-  class MockContext {
+  class MockContext extends EventTarget {
     currentTime = 10;
     state = 'suspended';
     destination = new MockNode();
@@ -84,7 +86,7 @@ function setup(t, { spatial = true, blocked = false } = {}) {
     compressors = [];
     waveshapers = [];
 
-    constructor() { contexts.push(this); }
+    constructor() { super(); contexts.push(this); }
 
     async resume() {
       if (blocked) throw new Error('resume blocked');
@@ -100,7 +102,7 @@ function setup(t, { spatial = true, blocked = false } = {}) {
     }
 
     createGain() {
-      const gain = Object.assign(new MockNode(), { gain: new MockParam() });
+      const gain = Object.assign(new MockNode(), { context: this, numberOfInputs: 1, gain: new MockParam() });
       this.gains.push(gain);
       return gain;
     }
@@ -223,6 +225,347 @@ test('attaches late shared audio to one private graph and frees it on replacemen
   audio.dispose();
   assert.equal(contexts[1].state, 'closed');
   assert.equal(await audio.start(), false);
+});
+
+function providerFixture({ reject = () => false, invalid = () => false } = {}) {
+  const calls = [];
+  const factory = (context, destination, emitters) => {
+    const inputs = emitters.map(() => context.createGain());
+    const dry = context.createGain();
+    const late = context.createGain();
+    const owned = [...inputs, dry, late];
+    inputs.forEach(input => { input.connect(dry); input.connect(late); });
+    dry.connect(destination);
+    late.connect(destination);
+    const call = {
+      context, destination, emitters, inputs, owned, qualities: [], poses: [], disposed: 0,
+      initialListener: [context.listener.positionX.value, context.listener.positionY.value, context.listener.positionZ.value],
+    };
+    calls.push(call);
+    const playback = {
+      inputs: invalid(emitters) ? inputs.slice(1) : inputs,
+      setQuality(quality) { call.qualities.push(quality); },
+      update(camera) {
+        assert.equal(call.disposed, 0);
+        const position = camera.getWorldPosition(camera.position.clone());
+        call.poses.push(position.toArray());
+        assert.equal(inputs.some(input => context.sources[0].connections.includes(input)), false);
+      },
+      dispose() {
+        if (call.disposed) return;
+        call.disposed++;
+        owned.forEach(node => node.disconnect());
+      },
+    };
+    if (reject(emitters)) { playback.dispose(); throw new Error('provider unavailable'); }
+    return playback;
+  };
+  return { factory, calls };
+}
+
+function routeReaches(node, target, seen = new Set()) {
+  if (node === target) return true;
+  if (seen.has(node)) return false;
+  seen.add(node);
+  return node.connections.some(next => routeReaches(next, target, seen));
+}
+
+test('world playback owns no media and receives initialized poses/quality before attachment', async t => {
+  const { audio, contexts } = setup(t);
+  const camera = new PerspectiveCamera();
+  camera.position.set(20, 1.6, -3);
+  const parent = new Group();
+  parent.position.set(17, .1, -5);
+  parent.rotation.y = .3;
+  const display = new Group();
+  display.position.set(2, 1.3, -1);
+  parent.add(display);
+  const speakers = Array.from({ length: 6 }, (_, i) => {
+    const object = new Group(); object.position.set(18 + i, 1.2, -6); return object;
+  });
+  const fixture = providerFixture();
+  audio.setPlaybackSpace(fixture.factory, speakers, camera, display, 'high');
+  audio.setMode('television');
+  const track = new MockTrack('audio');
+  const stream = new MockStream([track]);
+  audio.setStream(stream);
+  assert.equal(await audio.start(), true);
+  const [context] = contexts;
+  const [source] = context.sources;
+  assert.equal(context.panners.length, 0, 'the legacy distance/HRTF Panners are not in series');
+  assert.equal(fixture.calls.length, 2);
+  const single = fixture.calls.find(call => call.inputs.length === 1);
+  const surround = fixture.calls.find(call => call.inputs.length === 6);
+  assert.deepEqual(single.initialListener, camera.position.toArray());
+  assert.deepEqual(single.qualities, ['high']);
+  assert.deepEqual(single.poses, [camera.position.toArray()]);
+  assert.notEqual(single.emitters[0].object, display, 'provider receives a plain pose, not a world-owned object');
+  assert.deepEqual(single.emitters[0].object.getWorldPosition(display.position.clone()).toArray(),
+    display.getWorldPosition(display.position.clone()).toArray());
+  assert.deepEqual(surround.emitters.map(({ id, band }) => [id, band]),
+    ['L', 'R', 'C', 'LFE', 'SL', 'SR'].map(id => [id, id === 'LFE' ? 'lfe' : 'fullrange']));
+  const mono = source.connections.find(node => node.channelCount === 1);
+  const layout = source.connections.find(node => node.channelCount === 6);
+  assert.deepEqual([mono.channelCountMode, mono.channelInterpretation], ['explicit', 'speakers']);
+  assert.deepEqual([layout.channelCountMode, layout.channelInterpretation], ['explicit', 'speakers']);
+  assert.deepEqual(mono.connections, single.inputs);
+  const [splitter] = context.splitters;
+  const [lfe] = context.filters;
+  assert.equal(context.filters.length, 1);
+  assert.equal(lfe.frequency.value, 120);
+  assert.deepEqual(splitter.outputs, [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual(splitter.connections, [...surround.inputs.slice(0, 3), lfe, ...surround.inputs.slice(4)]);
+  assert.deepEqual(lfe.connections, [surround.inputs[3]]);
+  const master = context.gains[0];
+  assert.ok(fixture.calls.every(call => call.owned.every(node => routeReaches(node, call.destination))));
+  assert.ok(fixture.calls.every(call => routeReaches(call.destination, master)));
+  audio.setMasterVolume(0);
+  assert.deepEqual(master.gain.events.at(-1), ['ramp', 0, 10.08]);
+  audio.setMode('surround');
+  assert.deepEqual(surround.destination.gain.events.at(-1), ['ramp', 1, 10.12]);
+  assert.deepEqual(single.destination.gain.events.at(-1), ['ramp', 0, 10.12]);
+  camera.position.x += 2;
+  audio.update(camera, display);
+  assert.equal(context.listener.positionX.value, camera.position.x, 'provider-only graph still updates the shared listener');
+  assert.ok(fixture.calls.every(call => call.poses.at(-1)[0] === camera.position.x));
+  audio.setWorldQuality('light');
+  assert.ok(fixture.calls.every(call => call.qualities.at(-1) === 'light'));
+
+  const oldUpdates = fixture.calls.map(call => call.poses.length);
+  const next = providerFixture();
+  const nextCamera = new PerspectiveCamera(); nextCamera.position.set(-8, 1.5, 6);
+  const nextDisplay = new Group(); nextDisplay.position.set(-9, 1.7, 3);
+  audio.setPlaybackSpace(next.factory, null, nextCamera, nextDisplay, 'high');
+  assert.ok(fixture.calls.every(call => call.disposed === 1 && call.owned.every(node => node.disconnected)));
+  assert.deepEqual(fixture.calls.map(call => call.poses.length), oldUpdates);
+  assert.deepEqual(next.calls[0].initialListener, nextCamera.position.toArray());
+  assert.deepEqual(next.calls[0].qualities, ['high']);
+  assert.deepEqual(context.sources, [source]);
+  assert.equal(contexts.length, 1);
+  assert.equal(source.stream.tracks[0], track);
+  assert.equal(track.readyState, 'live');
+  assert.equal(context.gains[0], master);
+  audio.setPlaybackSpace(next.factory, null, nextCamera, nextDisplay, 'high');
+  assert.equal(next.calls.length, 1, 'same binding does not allocate another renderer');
+  audio.setPlaybackSpace(null, null, nextCamera, nextDisplay, 'light');
+  assert.equal(next.calls[0].disposed, 1);
+  assert.equal(context.panners.length, 1, 'other worlds recover the original spatial renderer');
+  track.end();
+  assert.equal(source.disconnected, true);
+});
+
+test('a rejected world branch falls back atomically without discarding a successful sibling', async t => {
+  const { audio, contexts } = setup(t);
+  const camera = new PerspectiveCamera();
+  const display = new Group();
+  const speakers = Array.from({ length: 6 }, () => new Group());
+  const fixture = providerFixture({ invalid: emitters => emitters.length === 1 });
+  audio.setPlaybackSpace(fixture.factory, speakers, camera, display, 'light');
+  audio.setMode('television');
+  audio.setStream(new MockStream([new MockTrack('audio')]));
+  await audio.start();
+  const [context] = contexts;
+  const source = context.sources[0];
+  const stereo = source.connections.find(node => node.channelCount === 2);
+  assert.equal(audio.getMode(), 'stereo');
+  assert.equal(audio.supportsSpatial(), false);
+  assert.equal(audio.supportsSurround(), true);
+  assert.equal(stereo.gain.events.at(-1)?.[1] ?? stereo.gain.value, 1);
+  const failed = fixture.calls.find(call => call.inputs.length === 1);
+  const success = fixture.calls.find(call => call.inputs.length === 6);
+  assert.equal(failed.disposed, 1);
+  assert.equal(success.disposed, 0);
+  audio.setMode('surround');
+  assert.equal(audio.getMode(), 'surround');
+  assert.deepEqual(success.destination.gain.events.at(-1), ['ramp', 1, 10.12]);
+  audio.dispose();
+  audio.dispose();
+  assert.equal(success.disposed, 1);
+  assert.equal(failed.disposed, 1);
+});
+
+test('world update failure removes only its owned branch and restores headphone stereo', async t => {
+  const { audio, contexts } = setup(t);
+  const camera = new PerspectiveCamera();
+  const display = new Group();
+  const fixture = providerFixture();
+  let fail = false;
+  const factory = (...args) => {
+    const playback = fixture.factory(...args);
+    const update = playback.update;
+    playback.update = listener => { if (fail) throw new Error('inactive renderer'); update(listener); };
+    return playback;
+  };
+  audio.setPlaybackSpace(factory, null, camera, display, 'light');
+  audio.setMode('spatial');
+  audio.setStream(new MockStream([new MockTrack('audio')]));
+  await audio.start();
+  fail = true;
+  audio.update(camera, display);
+  assert.equal(audio.getMode(), 'stereo');
+  assert.equal(audio.supportsSpatial(), false);
+  assert.equal(fixture.calls[0].disposed, 1);
+  const source = contexts[0].sources[0];
+  assert.equal(source.connections.length, 1);
+  assert.equal(source.connections[0].channelCount, 2);
+  assert.deepEqual(source.connections[0].gain.events.slice(-2), [['cancel', 10], ['set', 1, 10]]);
+  assert.equal(source.disconnected, false);
+});
+
+test('throwing and foreign-context providers clean partial handles while the stream remains usable', async t => {
+  const { audio, contexts } = setup(t);
+  const camera = new PerspectiveCamera();
+  const display = new Group();
+  const speakers = Array.from({ length: 6 }, () => new Group());
+  const rejected = providerFixture({ reject: emitters => emitters.length === 6 });
+  audio.setPlaybackSpace(rejected.factory, speakers, camera, display, 'light');
+  audio.setMode('surround');
+  const first = new MockTrack('audio');
+  audio.setStream(new MockStream([first]));
+  await audio.start();
+  assert.equal(audio.getMode(), 'stereo');
+  assert.equal(audio.supportsSpatial(), true);
+  assert.equal(audio.supportsSurround(), false);
+  assert.equal(rejected.calls.find(call => call.inputs.length === 6).disposed, 1);
+  assert.equal(rejected.calls.find(call => call.inputs.length === 1).disposed, 0);
+  const foreign = providerFixture();
+  const factory = (...args) => {
+    const handle = foreign.factory(...args);
+    handle.inputs[0].context = {};
+    return handle;
+  };
+  audio.setPlaybackSpace(factory, null, camera, display, 'light');
+  assert.equal(audio.supportsSpatial(), false);
+  assert.equal(foreign.calls[0].disposed, 1);
+  assert.equal(contexts[0].sources.length, 1);
+  assert.equal(first.readyState, 'live');
+  const good = providerFixture();
+  audio.setPlaybackSpace(good.factory, null, camera, display, 'light');
+  const second = new MockTrack('audio');
+  audio.setStream(new MockStream([second]));
+  assert.equal(good.calls[0].disposed, 1);
+  assert.equal(good.calls[1].disposed, 0);
+  assert.equal(first.readyState, 'live');
+  second.end();
+  assert.equal(good.calls[1].disposed, 1);
+  audio.stop();
+  assert.ok(good.calls.every(call => call.disposed === 1));
+});
+
+test('the optional world renderer leaves cinema ownership and headphone stereo independent', async t => {
+  const { audio, contexts } = setup(t);
+  const camera = new PerspectiveCamera();
+  const display = new Group();
+  const world = providerFixture();
+  const cinema = [];
+  audio.setPlaybackSpace(world.factory, null, camera, display, 'light');
+  audio.setCinema((context, source, output, channels) => {
+    const input = context.createGain();
+    source.connect(input).connect(output);
+    const record = { channels, output, disposed: 0 };
+    cinema.push(record);
+    return { update() {}, setQuality() {}, dispose() { source.disconnect(input); input.disconnect(); record.disposed++; } };
+  });
+  audio.setStream(new MockStream([new MockTrack('audio')]));
+  await audio.start();
+  audio.setMode('cinema');
+  assert.equal(cinema.length, 1);
+  assert.equal(cinema[0].channels, 2);
+  assert.equal(audio.getMode(), 'cinema');
+  assert.deepEqual(cinema[0].output.gain.events.at(-1), ['ramp', 1, 10.12]);
+  audio.setPlaybackSpace(null, null, camera, display, 'high');
+  assert.equal(world.calls[0].disposed, 1);
+  assert.equal(cinema[0].disposed, 0);
+  assert.equal(audio.getMode(), 'cinema');
+  const source = contexts[0].sources[0];
+  const stereo = source.connections.find(node => node.channelCount === 2);
+  audio.setMode('stereo');
+  assert.deepEqual(stereo.gain.events.at(-1), ['ramp', 1, 10.12]);
+  assert.equal(contexts.length, 1);
+  assert.equal(contexts[0].sources.length, 1);
+  audio.dispose();
+  assert.equal(cinema[0].disposed, 1);
+});
+
+test('a short world output handoff preserves media and restores the latest user mix', async t => {
+  const { audio, contexts } = setup(t);
+  const camera = new PerspectiveCamera(), display = new Group();
+  const original = providerFixture();
+  audio.setPlaybackSpace(original.factory, null, camera, display, 'light');
+  audio.setMode('spatial');
+  const track = new MockTrack('audio'); audio.setStream(new MockStream([track]));
+  await audio.start();
+  const context = contexts[0], source = context.sources[0], master = context.gains[0];
+  context.currentTime = 11;
+  const pending = audio.prepareWorldChange(new AbortController().signal);
+  assert.deepEqual(master.gain.events.at(-1), ['ramp', 0, 11.024]);
+  assert.equal(original.calls[0].disposed, 0, 'the old renderer remains valid until the synchronous swap');
+  audio.setVolume(.4); audio.setMasterVolume(1.5);
+  assert.equal(master.gain.events.at(-1)[1], 0);
+  const finish = await pending;
+  const next = providerFixture();
+  context.currentTime = 11.032;
+  audio.setPlaybackSpace(next.factory, null, camera, display, 'high');
+  assert.equal(original.calls[0].disposed, 1);
+  assert.equal(context.sources[0], source);
+  assert.equal(context.gains[0], master);
+  finish(); finish();
+  const event = master.gain.events.at(-1);
+  assert.equal(event[0], 'ramp'); near(event[1], .4 * 1.5 * .75); near(event[2], 11.056);
+  assert.equal(track.readyState, 'live');
+  assert.equal(contexts.length, 1);
+});
+
+test('aborted/stale world handoffs restore output safely and respect mute and stop', async t => {
+  const { audio, contexts } = setup(t);
+  audio.setPlaybackSpace(providerFixture().factory, null, new PerspectiveCamera(), new Group(), 'light');
+  audio.setMode('spatial');
+  audio.setStream(new MockStream([new MockTrack('audio')])); await audio.start();
+  const context = contexts[0], master = context.gains[0];
+  context.currentTime = 11;
+  const first = audio.prepareWorldChange(new AbortController().signal);
+  const abort = new AbortController();
+  const second = audio.prepareWorldChange(abort.signal);
+  const staleFinish = await first;
+  const before = master.gain.events.length;
+  staleFinish();
+  assert.equal(master.gain.events.length, before, 'an older caller cannot release the current handoff');
+  audio.setEnabled(false);
+  abort.abort();
+  const finish = await second; finish();
+  assert.equal(master.gain.events.at(-1)[1], 0, 'cancelled world loading preserves a user mute');
+  audio.setEnabled(true);
+  const last = audio.prepareWorldChange(new AbortController().signal);
+  audio.stop();
+  const afterStop = master.gain.events.length;
+  (await last)();
+  await new Promise(resolve => setTimeout(resolve, 40));
+  assert.equal(master.gain.events.length, afterStop);
+  assert.equal(context.state, 'closed');
+});
+
+test('unchanged stereo/spatial routes and inaudible playback skip the world handoff', async t => {
+  const { audio, contexts } = setup(t);
+  const camera = new PerspectiveCamera(), display = new Group();
+  const signal = new AbortController().signal;
+  (await audio.prepareWorldChange(signal))();
+  assert.equal(contexts.length, 0);
+  const fixture = providerFixture();
+  audio.setPlaybackSpace(fixture.factory, null, camera, display, 'light');
+  audio.setStream(new MockStream([new MockTrack('audio')])); await audio.start();
+  const master = contexts[0].gains[0];
+  const noNewAutomation = async (factory = null) => {
+    const count = master.gain.events.length;
+    (await audio.prepareWorldChange(signal, factory))();
+    assert.equal(master.gain.events.length, count);
+  };
+  await noNewAutomation();
+  audio.setMode('spatial'); await noNewAutomation(fixture.factory);
+  audio.setEnabled(false); await noNewAutomation();
+  audio.setEnabled(true); audio.setVolume(0); await noNewAutomation();
+  audio.setVolume(1); audio.setMasterVolume(0); await noNewAutomation();
+  audio.setMasterVolume(1); audio.setPlaybackSpace(null, null, camera, display, 'light');
+  audio.setMode('spatial'); await noNewAutomation();
 });
 
 test('level and playback enablement ramp independently of the complementary mode fade', async t => {
