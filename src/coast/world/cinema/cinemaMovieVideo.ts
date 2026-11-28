@@ -350,7 +350,7 @@ function parseSyncSamples(data: Uint8Array, stss: Box | undefined, sampleCount: 
   const count = readUint32(data, stss.contentStart + 4);
   const sync = new Set<number>();
   let cursor = stss.contentStart + 8;
-  for (let i = 0; i < count; i += 1) sync.add(readUint32(data, cursor++) - 1);
+  for (let i = 0; i < count; i += 1) sync.add(readUint32(data, cursor + i * 4) - 1);
   return sync;
 }
 

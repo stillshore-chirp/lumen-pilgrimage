@@ -20,7 +20,7 @@ test('CinemaMovieVideo decodes a local H.264 MP4 with seek and a bounded present
   try {
     await exec('ffmpeg', [
       '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=96x54:rate=5',
-      '-t', '2.0', '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', fixture,
+      '-t', '2.0', '-an', '-c:v', 'libx264', '-g', '5', '-keyint_min', '5', '-sc_threshold', '0', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', fixture,
     ]);
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
@@ -69,6 +69,7 @@ test('CinemaMovieVideo decodes a local H.264 MP4 with seek and a bounded present
     const endRepeated = movie.present(movie.duration + 10);
     const result = {
       duration: movie.duration,
+      syncKeys: movie.video.samples.filter(sample => sample.key).map(sample => sample.index),
       size: [movie.canvas.width, movie.canvas.height],
       initialVersion,
       initial,
@@ -86,6 +87,7 @@ test('CinemaMovieVideo decodes a local H.264 MP4 with seek and a bounded present
   }, Buffer.from(bytes).toString('base64'));
   assert.ok(result.duration > 1.9 && result.duration < 2.1, result);
   assert.deepEqual(result.size, [96, 54]);
+  assert.deepEqual(result.syncKeys, [0, 5], 'the two 32-bit sync sample entries retain their four-byte stride');
   assert.equal(result.initial, true);
   assert.equal(result.repeated, true);
   assert.equal(result.initialVersion, 0);
