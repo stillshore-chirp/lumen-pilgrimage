@@ -108,7 +108,7 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 標高グリッド2種（`public/coast-overlook/overlook-elevation.bin`、`overlook-detail.bin`）を読み込み、デッキの擁壁、斜面、盆地の街区をつなぎます。[overlookTerrain.ts](../src/coast/world/overlook/overlookTerrain.ts)が標高を補間し、中央デッキ周囲に接地用の斜面を作ります。[OverlookWorld](../src/coast/world/overlook/OverlookWorld.ts)はデッキ、街路、交通、航空機、空と照明をまとめ、更新処理から照明・交通・航空機を動かします。座標上の2階デッキは主デッキより7.2 m高く、東階段の各段・踊り場と歩行支持面を[overlookUpperDeck.ts](../src/coast/world/overlook/overlookUpperDeck.ts)で共有します。
 
-中央デッキ、西テラス、東テラス、2階展望デッキへ直接移動できます。現在、展望台用の配置図PDFはありません。標高データの出典と条件は[展望台の素材クレジット](../public/coast-overlook/ATTRIBUTION.md)、利用経路は[探索ガイド](exploration.md)を参照してください。
+中央デッキ、西テラス、東テラス、2階展望デッキへ直接移動できます。道路と地形の共通座標・役割・断面は [道路と地形の設計](overlook/road-terrain-design.md) を参照してください。標高データの出典と条件は[展望台の素材クレジット](../public/coast-overlook/ATTRIBUTION.md)、利用経路は[探索ガイド](exploration.md)を参照してください。
 
 亭の主外殻、両翼、段違い屋根、八角drum、ドーム断面は [overlookPavilionPlan.ts](../src/coast/world/overlook/overlookPavilionPlan.ts) を描画と飛行で共有します。高さは主床346 mからの相対値です。箱とdrumは余裕半径で保守的に拡張し、ドームは回転軸断面の各線分までの最短距離へ半径と外殻の最大突出量約0.06435 mを加えます。頂部と斜面の両方を守り、屋根より高い空間の移動を許可します。歩行範囲、飛行上限451 m、着地点と階段の支持面は維持します。
 
@@ -118,7 +118,7 @@ WebXRでは、湖畔の行灯を指してコントローラーのグリップを
 
 この補間は斜面の植物・岩と、鳥2点・虫5点の音源支持に渡します。植物は幹下部・株元、岩は下部の支持点を変換後に照合し、最高の基部点が地表−10 mmを超える場合は個体全体をY方向へ下げます。葉や個々の頂点を引き伸ばさず、局所形状、XZ位置と配置分布を保ちます。地下の根リングを使う数値と、目に見える茎の地表交差は分けて確認します。岩は支持footprintと露出する本体を調べ、全埋没を接地の成功へ数えません。
 
-道路・都市・住宅の高さAPIを一律に置換する変更ではありません。音源の高さは表示面から鳥1.15 m、虫0.4 mの制作値を使い、道路の伝搬計算には従来の地形入力を保持します。編集先は [表示地形](../src/coast/world/overlook/overlookTerrain.ts)、[斜面の個体配置](../src/coast/world/overlook/overlookHillside.ts)、[局所音源](../src/coast/world/overlook/overlookAudio.ts)です。
+道路・都市・住宅の高さAPIを一律に置換する変更ではありません。音源の高さは表示面から鳥1.15 m、虫0.4 mの制作値を使い、道路の伝搬には [道路造成後の面](overlook/road-terrain-design.md#高さの責務と生成順) を明示して渡し、局所音源の支持とは用途を分けます。編集先は [表示地形](../src/coast/world/overlook/overlookTerrain.ts)、[斜面の個体配置](../src/coast/world/overlook/overlookHillside.ts)、[局所音源](../src/coast/world/overlook/overlookAudio.ts)です。
 
 #### 舗装と建物の支持断面
 

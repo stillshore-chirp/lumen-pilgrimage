@@ -63,6 +63,7 @@ flowchart LR
 ## 景観と描画
 
 - 丘陵展望台は標高データに展望デッキの擁壁と、その外側に落ちる斜面を接続する。手前の街区から約15 km先の都心へ向けて建物を段階的に高くし、西・東・さらに奥へ複数の高層街区を広げる。高層棟と周囲の低・中層街区は同じ基準位置を使う。既存の街路沿いの建物から向きと間隔を求め、遠方の低・中層街区を補う。幹線と高層棟の敷地を空け、延伸先でも車体・前照灯・尾灯を道路の高さと線形に合わせる。 [街区の基準位置](../src/coast/world/overlook/overlookDistricts.ts) · [高層業務街区](../src/coast/world/overlook/overlookSkyline.ts) · [幹線交通](../src/coast/world/overlook/overlookTraffic.ts) · [地理データの出典](../public/coast-overlook/ATTRIBUTION.md)
+- 展望台の道路は純粋な[共通plan](../src/coast/world/overlook/overlookCorridorPlan.ts)でXZ・縦断・station・坑口を確定し、実地面の三角形を切る[earthworks](../src/coast/world/overlook/overlookEarthworks.ts)、路面、閉鎖slab・覆工、交通を生成する。設計標高と描画地盤を分け、造成後の合成支持面を展望台の橋脚・都市・局所接地へ渡す。住戸の共有地勢には道路工事前の面を保持する。 [道路と地形の設計](overlook/road-terrain-design.md)
 - 展望台の舗装は、石fieldの連続bedと従来高さを保つ非石backingを分け、既存cap/foundationへ支持をつなぐ。亭の本体・翼・入口柱と敷居は共通planの実footprintでbearingを生成し、床高さ・足音材区分と亭の描画/飛行volumeを保つ。 [床の断面](worlds.md#舗装と建物の支持断面)
 - 展望台の局所接地は、表示地形が返すFloat32三角形補間を斜面の植物・岩と鳥/虫の音源へ渡す。個体の基部だけを支持検査し、補正は個体全体のY移動に限定する。音源支持と道路伝搬の地形入力を分け、都市や住戸の高さAPIを暗黙に置換しない。 [接地の契約](worlds.md#表示地形と局所接地)
 - [空と大気](../src/coast/world/coastAtmosphere.ts) は太陽光の色、空の散乱、距離霞を計算する。昼と夜の切替を空、環境光、距離霞、各ワールドの描画に反映する。入り江と山道の海・湖は、両品質で同じ空と光源を反射に使う。[湖面](../src/coast/world/coastUplandLake.ts) は地形の浅瀬を参照する。高品質では海岸と湖の水面付近で、反射用カメラを間隔を空けて描画する。丘陵展望台では、夜間に街灯と窓、デッキの照明が点く。
@@ -98,7 +99,7 @@ flowchart LR
 
 - 音響は明示操作で開始する。[海岸の発音点](../src/coast/coastShore.ts) は海につながる浅瀬と陸の境界から求め、波が打つ方向へ動かす。再生中の発音点はクロスフェードで入れ替える。[伝播の計算](../src/coast/coastAcoustics.ts) は岩壁による遮蔽と短い反射、開口を経由する到達音を扱う。[足音と水音](../src/coast/CoastFoley.ts) は移動・潜水と地表の材質から選ぶ。カメラが潜ると、水中にいる深さに応じてミックスの高域を下げる。
 - [住戸と映画館の足音](../src/coast/world/residence/residenceAudioSamples.ts) は、靴底が沈む低い接地音と、体重が前へ移るときの短い擦れを帯域の異なるノイズから合成する。石やタイルは擦れの輪郭が残り、木床は落ち着いた音、絨毯はさらにこもった音になる。映画館では足元の位置から絨毯と段鼻を判定し、一歩ごとに移動距離と0.48秒以上の間隔を取る。 [映画館の発音処理](../src/coast/world/cinema/cinemaAmbience.ts)
-- [丘陵展望台の音響](../src/coast/world/overlook/overlookAudio.ts) は幹線の高さを含む中心線を分割し、各区間の距離と丘による遮蔽で音の強さと高域の減衰を求める。道路ごとに合成した音を頭部伝達関数（HRTF）で定位させる。昼は低木に鳥声、夜はデッキ前方の草地と斜面に虫の声を間隔をずらして配置する。虫の音も高低差と地形の遮蔽を反映する。 [録音の出典と伝搬の資料](../public/coast-overlook/ATTRIBUTION.md)
+- [丘陵展望台の音響](../src/coast/world/overlook/overlookAudio.ts) は、道路8路の露出部8声と実孔14声を区別し、区間の源長を保存して合成する。坑内の道のりと孔から耳までを一度だけ距離則へ入れ、外部の地形遮蔽とHRTFを適用する。露出部の幅を重心へ縮約する近似、同じPCMの時間/再生率差、坑内反射の未モデル化を区別する。鳥・虫の支持面と道路音の発生位置は [道路と地形の設計](overlook/road-terrain-design.md#道路音の到来と範囲) を参照する。 [録音の出典](../public/coast-overlook/ATTRIBUTION.md)
 - 丘陵展望台の足音は、描画と共用する[舗装区画](../src/coast/world/overlook/overlookDeck.ts)と[階段・上階の接地形状](../src/coast/world/overlook/overlookUpperDeck.ts)からデッキ、階段、外周の石畳を判定し、足元の左右に交互に定位させる。探索の歩行音にはナビゲーションの座標と接地状態を渡し、聴取位置と向きには描画時の視点を使う。 [フレーム処理](../src/coast/CoastApp.ts)
 - `CoastApp` は描画と音響に同じ時間帯を渡す。自然景観では昼の鳥声と夜の虫声をなじませ、丘陵展望台と住戸の夜は交通の発音量を下げる。静穏な昼と弱い夜間逆転層を想定し、伝搬経路の曲がり方を地形遮蔽に反映する。遠方の低域を補正し、近くの波や落水、潜水時の処理は各音源の位置と水深に従う。[大気による吸収と屈折の資料](https://www.fhwa.dot.gov/ENVIRonment/noise/noise_barriers/design_construction/design/design03.cfm)
 - [落水](../src/coast/world/coastWaterfall.ts) は水の加速と岩に沿った流れを描く。泡と霧の起点は海・湖ごとの水位に合わせ、音響は描画と同じ着水点を参照する。

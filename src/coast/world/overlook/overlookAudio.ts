@@ -11,8 +11,8 @@ import { isOverlookStairTread, isUpperDeck, overlookDeckGround } from './overloo
 import type { OverlookSurfaceHeight } from './overlookTerrain';
 
 type SoundPoint = Readonly<{ x: number; y: number; z: number }>;
-type Corridor = { points: readonly SoundPoint[]; weight: number };
-type RoadSection = { point: SoundPoint; length: number };
+type RoadSection = { point: SoundPoint; length: number; interiorDistance?: number };
+type Corridor = { points: readonly SoundPoint[]; weight: number; sections?: readonly RoadSection[]; playbackRate?: number; offsetSeconds?: number };
 type TrafficVoice = {
   road: readonly RoadSection[];
   weight: number;
@@ -82,7 +82,7 @@ function footstepSurface(x: number, z: number): FootstepSurface {
 }
 
 export class OverlookAudio {
-  private readonly roads: { sections: RoadSection[]; weight: number }[];
+  private readonly roads: { sections: readonly RoadSection[]; weight: number; playbackRate?: number; offsetSeconds?: number }[];
   private readonly request = new AbortController();
   private readonly traffic: TrafficVoice[] = [];
   private readonly crickets: CricketVoice[] = [];
@@ -110,8 +110,18 @@ export class OverlookAudio {
 
   constructor(corridors: readonly Corridor[], private readonly heightAt: (x: number, z: number) => number,
     private readonly sourceHeightAt?: OverlookSurfaceHeight) {
+    for (const corridor of corridors) {
+      if ((corridor.playbackRate !== undefined && (!Number.isFinite(corridor.playbackRate) || corridor.playbackRate <= 0))
+        || (corridor.offsetSeconds !== undefined && (!Number.isFinite(corridor.offsetSeconds) || corridor.offsetSeconds < 0))) {
+        throw new Error('Invalid traffic playback profile.');
+      }
+    }
+    for (const corridor of corridors) for (const section of corridor.sections ?? []) {
+      if (![section.point.x, section.point.y, section.point.z, section.length, section.interiorDistance ?? 0].every(Number.isFinite)
+        || section.length <= 0 || (section.interiorDistance ?? 0) < 0) throw new Error('Invalid traffic sound path.');
+    }
     this.roads = corridors
-      .map(({ points, weight }) => ({ sections: roadSections(points), weight }))
+      .map(({ points, weight, sections, playbackRate, offsetSeconds }) => ({ sections: sections ?? roadSections(points), weight, playbackRate, offsetSeconds }))
       .filter(({ sections, weight }) => sections.length && weight > 0);
   }
 
@@ -274,7 +284,7 @@ export class OverlookAudio {
     this.birdBus = birdBus;
     this.birdBuffer = birds;
 
-    for (const [index, { sections, weight }] of this.roads.entries()) {
+    for (const [index, { sections, weight, playbackRate, offsetSeconds }] of this.roads.entries()) {
       const panner = spatialPanner(context, sections[0].point);
       const filter = context.createBiquadFilter();
       filter.type = 'lowpass';
@@ -286,7 +296,10 @@ export class OverlookAudio {
       const level = context.createGain();
       level.gain.value = 0;
       filter.connect(atmosphere).connect(level).connect(panner).connect(trafficBus);
-      this.loop(context, traffic, filter, (index * 23.7) % traffic.duration, 1 - index * 0.011);
+      // The number of arrival voices must not progressively lower the sample pitch.
+      // Explicit profiles retain each road's exposed stream and offset the bores.
+      this.loop(context, traffic, filter, (offsetSeconds ?? index * 23.7) % traffic.duration,
+        playbackRate ?? 1 - index * 0.011);
       this.traffic.push({ road: sections, weight, panner, filter, atmosphere, level });
     }
 
@@ -387,10 +400,15 @@ export class OverlookAudio {
     let x = 0, y = 0, z = 0;
     let cutoff = 0;
     let lowBand = 0;
-    for (const { point, length } of voice.road) {
+    for (const { point, length, interiorDistance = 0 } of voice.road) {
       const horizontal = Math.hypot(point.x - listener.x, point.z - listener.z);
-      const distance = Math.max(100, Math.hypot(horizontal, point.y - listener.y));
-      const blocked = this.terrainScreen(listener, point, distance, thermalRayLift(horizontal, this.time));
+      const outsideDistance = Math.hypot(horizontal, point.y - listener.y);
+      // The last real opening supplies arrival direction; the same manual
+      // distance law follows the complete internal plus exterior route.
+      // Panner rolloff is zero. This is a bounded point proxy, not a calibrated
+      // tunnel-reflection/directivity model or an added internal low-pass.
+      const distance = Math.max(100, outsideDistance + interiorDistance);
+      const blocked = this.terrainScreen(listener, point, Math.max(100, outsideDistance), thermalRayLift(horizontal, this.time));
       // Sum acoustic power along the road; a long line loses about 3 dB per distance doubling.
       const contribution = length / distance ** 2 * Math.exp(-distance / 5500) * 0.075 ** blocked;
       power += contribution;

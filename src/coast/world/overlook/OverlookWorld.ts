@@ -10,9 +10,12 @@ import { OverlookAudio } from './overlookAudio';
 import { createOverlookCity, createOverlookCityGround } from './overlookCity';
 import { createOverlookDeck, OVERLOOK_DECK_OBSTACLES } from './overlookDeck';
 import { createOverlookHillside } from './overlookHillside';
+import { createOverlookCorridorPlan, createOverlookRoadDatum } from './overlookCorridorPlan';
+import { createOverlookEarthworks } from './overlookEarthworks';
+import { createOverlookRoadStructures } from './overlookRoadStructures';
 import { blocksPavilionFlight } from './overlookPavilionPlan';
-import { createOverlookSurface, DECK_LEVEL, loadOverlookTerrain } from './overlookTerrain';
-import { createOverlookTraffic, isOverlookRoadway } from './overlookTraffic';
+import { createOverlookSurface, DECK_LEVEL, gradeBeforeLocalWorks, loadOverlookSurvey, OVERLOOK_SURFACE_BOUNDS } from './overlookTerrain';
+import { createOverlookTraffic } from './overlookTraffic';
 import { blocksUpperDeckWalking, isUpperDeck, overlookDeckGround } from './overlookUpperDeck';
 
 const DAY_SUN = new THREE.Vector3(-0.66, 0.51, -0.55).normalize();
@@ -30,7 +33,8 @@ function blocksDeckWalking(x: number, z: number, foot: number): boolean {
 }
 
 export async function loadOverlookScene(): Promise<ExplorationScene> {
-  const heightAt = await loadOverlookTerrain();
+  const survey = await loadOverlookSurvey();
+  const heightAt = (x: number, z: number) => gradeBeforeLocalWorks(x, z, survey(x, z));
   const atmosphere = createCoastAtmosphere(DAY_SUN, {
     nightHorizon: 0x1b2330,
     nightZenith: 0x141824,
@@ -44,23 +48,39 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
   sky.clouds.position.y = 425;
 
   const streets = createOverlookCityGround();
-  const traffic = createOverlookTraffic(heightAt);
-  const airTraffic = createOverlookAirTraffic();
-  const city = createOverlookCity(heightAt, {
-    sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x272c35, blocksFootprint: isOverlookRoadway,
-  });
   const high = { value: 0 };
   const ground = createOverlookSurface(heightAt, streets, atmosphere.night, high);
+  const originalSurfaceHeight = (x: number, z: number): number => {
+    const y = ground.sampleHeight(x, z);
+    if (y === undefined) throw new Error('The overlook placement is outside the rendered terrain.');
+    return y;
+  };
+  const corridors = createOverlookCorridorPlan(createOverlookRoadDatum(survey), originalSurfaceHeight, OVERLOOK_SURFACE_BOUNDS);
+  const earthworks = createOverlookEarthworks(ground.group, ground.sampleHeight, corridors, ground.material);
+  const surfaceHeight = (x: number, z: number): number => {
+    const y = earthworks.sampleHeight(x, z);
+    if (y === undefined) throw new Error('The overlook support is outside the rendered field.');
+    return y;
+  };
+  const traffic = createOverlookTraffic(surfaceHeight, corridors);
+  const roadStructures = createOverlookRoadStructures(corridors);
+  const airTraffic = createOverlookAirTraffic();
+  const terrainBounds = OVERLOOK_SURFACE_BOUNDS;
+  const city = createOverlookCity(surfaceHeight, {
+    sunDirection: DAY_SUN, dayHaze: 0xaebbc1, nightHaze: 0x272c35,
+    blocksFootprint: (x, z, padding) => x - padding < terrainBounds.minX || x + padding > terrainBounds.maxX
+      || z - padding < terrainBounds.minZ || z + padding > terrainBounds.maxZ || corridors.isRoadway(x, z, padding),
+  });
   const deck = createOverlookDeck(high, atmosphere.night);
   const scene = new THREE.Scene();
-  scene.add(sky.dome, sky.clouds, ground.group, deck.group, city.group, traffic.group, airTraffic.group,
-    createOverlookHillside(heightAt, ground.sampleHeight));
+  scene.add(sky.dome, sky.clouds, ground.group, earthworks.group, roadStructures.group, deck.group, city.group, traffic.group, airTraffic.group,
+    createOverlookHillside(heightAt, earthworks.sampleHeight));
   const lighting = createCoastLighting(scene, atmosphere, heightAt, { nightIntensityScale: 0.28 });
   await Promise.all([streets.ready, city.ready]);
 
   return {
     id: 'overlook',
-    audio: new OverlookAudio(traffic.soundCorridors, heightAt, ground.sampleHeight),
+    audio: new OverlookAudio(traffic.soundCorridors, surfaceHeight, earthworks.sampleHeight),
     navigation: {
       bounds, spawn: EXPLORATION_WORLDS[1].places[0], groundHeight: overlookDeckGround,
       flightCeiling: DECK_LEVEL + 105, blocksWalking: blocksDeckWalking,
@@ -96,6 +116,8 @@ export async function loadOverlookScene(): Promise<ExplorationScene> {
         sky.dispose();
         lighting.dispose();
         deck.dispose();
+        earthworks.dispose();
+        roadStructures.dispose();
         ground.dispose();
         traffic.dispose();
         airTraffic.dispose();
