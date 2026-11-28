@@ -55,7 +55,7 @@ function createProcessor(speakerCount = 1, inputCount = 1, kinds = Array(speaker
 }
 
 function send(processor, data) {
-  processor.port.onmessage({ data });
+  processor.port.onmessage?.({ data });
 }
 
 test('cinema room processor holds the playback sample during an underrun', () => {
@@ -995,6 +995,58 @@ test('legacy absent metadata, inactive objects, overflow and bed/LFE retain sepa
 });
 
 
+test('room disposal retires status, resync and error callbacks after sending the terminal command once', async t => {
+  const h = await moduleParityRoom({ bed: ['C'], objects: [], lfeGainDb: 0 }, t);
+  const receive = h.node.port.onmessage;
+  const processorError = h.node.onprocessorerror;
+  assert.equal(typeof receive, 'function'); assert.equal(typeof processorError, 'function');
+  receive({ data: { type: 'status', generation: 0, sample: 123, contextTime: .25, playing: true, underruns: 0 } });
+  assert.equal(h.room.status().sample, 123);
+  processorError(); assert.equal(h.room.status().error, 'Cinema room processor failed');
+  receive({ data: { type: 'error', message: 'Before disposal' } });
+  assert.equal(h.room.status().error, 'Before disposal');
+  const beforeResync = h.messages.length;
+  receive({ data: { type: 'bank-resync' } });
+  const camera = new PerspectiveCamera(); camera.position.set(0, 5, 35.85); camera.updateMatrixWorld(true);
+  h.room.update(camera);
+  const resync = h.messages.slice(beforeResync).find(message => message.type === 'bank-state');
+  assert.ok(resync && resync.baseStateId === null && resync.updates.length === resync.pathCount);
+  const before = { ...h.room.status() };
+  h.room.dispose();
+  assert.equal(h.node.port.onmessage, null); assert.equal(h.node.onprocessorerror, null);
+  assert.equal(h.processor.port.onmessage, null);
+  assert.deepEqual(h.node.lifecycle, ['dispose', 'disconnect', 'close']);
+  assert.equal(h.messages.filter(message => message.type === 'dispose').length, 1);
+  const messageCount = h.messages.length;
+  // Already-dispatched callbacks are also inert after their registration ends.
+  receive({ data: { type: 'status', generation: 0, sample: 999, contextTime: 1, playing: true, underruns: 2 } });
+  receive({ data: { type: 'bank-resync' } });
+  receive({ data: { type: 'error', message: 'Late error' } }); processorError();
+  h.room.update(camera); h.room.dispose();
+  assert.deepEqual(h.room.status(), before); assert.equal(h.messages.length, messageCount);
+  assert.equal(h.node.closeCount, 1); assert.equal(h.node.disconnectCount, 1);
+  assert.equal(h.step().alive, false);
+});
+
+test('processor disposal unregisters its receive callback after the final status and ignores late commands', () => {
+  const { processor, statuses } = createProcessor();
+  const receive = processor.port.onmessage;
+  receive({ data: { type: 'seek', sample: 17, generation: 2 } });
+  assert.equal(statuses.at(-1).sample, 17);
+  receive({ data: { type: 'dispose' } });
+  assert.equal(processor.port.onmessage, null); assert.equal(processor.disposed, true);
+  assert.equal(statuses.at(-1).playing, false);
+  const count = statuses.length;
+  receive({ data: { type: 'playing', active: true } });
+  receive({ data: { type: 'seek', sample: 999, generation: 3 } });
+  receive({ data: { type: 'dispose' } });
+  assert.equal(processor.playhead, 17); assert.equal(processor.playing, false);
+  assert.equal(statuses.length, count);
+  const output = [new Float32Array(128).fill(1), new Float32Array(128).fill(1)];
+  assert.equal(processor.process([], [output]), false);
+  assert.ok(output.every(ear => ear.every(value => value === 0)));
+});
+
 async function moduleParityRoom(program, t) {
   const nativeFetch = globalThis.fetch, NativeNode = globalThis.AudioWorkletNode;
   t.after(() => { globalThis.fetch = nativeFetch; globalThis.AudioWorkletNode = NativeNode; });
@@ -1013,11 +1065,13 @@ async function moduleParityRoom(program, t) {
   globalThis.AudioWorkletNode = class {
     constructor(_context, _name, options) {
       node = this; this.processor = new Implementation(options); this.closed = false;
-      this.port = { onmessage: null, close: () => { this.closed = true; }, postMessage: (message, transfer = []) => {
-        const received = structuredClone(message, { transfer }); messages.push(received); this.processor.port.onmessage({ data: received });
+      this.closeCount = 0; this.disconnectCount = 0; this.lifecycle = [];
+      this.port = { onmessage: null, close: () => { this.closed = true; this.closeCount++; this.lifecycle.push('close'); }, postMessage: (message, transfer = []) => {
+        if (message.type === 'dispose') this.lifecycle.push('dispose');
+        const received = structuredClone(message, { transfer }); messages.push(received); this.processor.port.onmessage?.({ data: received });
       } };
     }
-    connect() {} disconnect() {}
+    connect() {} disconnect() { this.disconnectCount++; this.lifecycle.push('disconnect'); }
   };
   const room = await createCinemaRoomAudio(context, {}, program);
   function flush() { while (outgoing.length) { const data = outgoing.shift(); statuses.push(data);
@@ -1025,7 +1079,7 @@ async function moduleParityRoom(program, t) {
   function step(count = 128) { scope.currentTime = context.currentTime; scope.currentFrame = Math.round(context.currentTime * 48000);
     const output = [new Float32Array(count), new Float32Array(count)], alive = node.processor.process([], [output]);
     context.currentTime += count / 48000; flush(); return { output, alive }; }
-  return { room, context, messages, statuses, flush, step, get processor() { return node.processor; }, moduleSource };
+  return { room, context, messages, statuses, flush, step, get processor() { return node.processor; }, get node() { return node; }, moduleSource };
 }
 
 function expandPackedRouting(packet, inputs, speakers) {

@@ -327,6 +327,7 @@ export async function createCinemaRoomAudio(
   };
 
   node.port.onmessage = event => {
+    if (disposed) return;
     const message = event.data as {
       readonly type?: string;
       readonly generation?: number;
@@ -354,6 +355,7 @@ export async function createCinemaRoomAudio(
     }
   };
   node.onprocessorerror = () => {
+    if (disposed) return;
     error = 'Cinema room processor failed';
     latest = { ...latest, error };
   };
@@ -463,6 +465,8 @@ export async function createCinemaRoomAudio(
       node.port.postMessage({ type: 'dispose' });
       node.disconnect();
       node.port.close();
+      node.port.onmessage = null;
+      node.onprocessorerror = null;
     },
   };
 }

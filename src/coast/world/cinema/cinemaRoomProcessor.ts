@@ -164,6 +164,7 @@ class CinemaRoomProcessor extends AudioWorkletProcessor {
         this.convolver.pending = null;
         this.playing = false;
         this.postStatus(true);
+        this.port.onmessage = null;
         break;
       default:
         break;
