@@ -90,7 +90,7 @@ CC0の解釈は [CC0 1.0 Legal Code](https://creativecommons.org/publicdomain/ze
 | 商業アトリウム | [床材の取得と加工](../public/atrium-materials/ATTRIBUTION.md) · [合成環境音の内訳](../public/atrium-audio/ATTRIBUTION.md)。 | [建築・展示と音の編集先](worlds.md#商業アトリウム)。環境音の生成は [`atriumAudioSamples.ts`](../src/coast/world/atrium/atriumAudioSamples.ts)。 |
 | 湖畔の広間 | [雲と植生の出典・生成と変換](../public/lake-materials/ATTRIBUTION.md)。小葉の[編集元PNG](../assets/lake-materials/lake-broadleaf-clusters.png)を保持。箏の加工単音と39秒生成曲は[音声クレジット](../public/lake-audio/ATTRIBUTION.md)・[採否台帳](../assets/lake-audio/sample-manifest.json)へ対応付け。木材と岩は既存の仕上げ材・景観素材を使用。 | [植生の形態と配置](lake/lake-hall-design.md#植生の形態と配置)、[樹木・低木・地被](../src/coast/world/lake/lakeVegetation.ts)、[卓上の有花枝](../src/coast/world/lake/lakeHallArrangement.ts) · [ワールドの編集先](worlds.md#湖畔の広間)。 |
 
-商業アトリウムの新設施設では、木・布・紙の模様を [`atriumFrontMaterials.ts`](../src/coast/world/atrium/atriumFrontMaterials.ts)、植物の形状を [`atriumFrontGarden.ts`](../src/coast/world/atrium/atriumFrontGarden.ts) から生成します。調査資料の図版・写真・製品意匠は転写せず、出典と適用条件は [施設設計](atrium/sofa-facing-facility-design.md)に記録します。
+商業アトリウムの新設施設では、木・布・紙の模様を [`atriumFrontMaterials.ts`](../src/coast/world/atrium/atriumFrontMaterials.ts)、植物の形状を [`atriumFrontGarden.ts`](../src/coast/world/atrium/atriumFrontGarden.ts) から生成します。調査資料の図版・写真・製品意匠は転写せず、出典と適用条件は [施設設計](atrium/sofa-facing-facility-design.md)に記録します。 大型カフェの低振幅の木・布・鉱物肌と独自メニューは [`atriumCafeInterior.ts`](../src/coast/world/atrium/atriumCafeInterior.ts) で生成し、既存の許諾済み石材と組み合わせます。寸法・UV周期・接触AO・生成条件は[大型カフェの設計](atrium/cafe-interior-design.md#詳細造作素材の製作仕様)を参照します。
 
 ### 画像・3Dモデル・録音の再作成
 

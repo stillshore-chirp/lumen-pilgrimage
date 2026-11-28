@@ -23,6 +23,8 @@ export type TenantFixture = Readonly<{
   type: string;
   rect: TenantRect;
   height: number;
+  seatHeight?: number;
+  backHeight?: number;
   label: string;
   spec: string;
 }>;
@@ -161,4 +163,15 @@ export function tenantWorldPoint(bay: TenantBay, u: number, d: number): TenantWo
 /** The usable storefront span in the local u direction, in metres. */
 export function tenantWidth(bay: TenantBay): number {
   return Math.abs(bay.span[1] - bay.span[0]);
+}
+
+/** Finished entry undersides, shared by visible construction and head clearance. */
+export function tenantEntryGeometry(bay: TenantBay) {
+  return {
+    soffitDepth: bay.entry[2] + .035,
+    soffitBottom: bay.elevation.portalHead,
+    lintelCenterD: bay.entry[2],
+    lintelDepth: bay.id === 'R4' ? .24 : .15,
+    lintelBottom: bay.entryHeight,
+  } as const;
 }
