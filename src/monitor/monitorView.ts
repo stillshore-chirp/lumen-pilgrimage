@@ -3,6 +3,7 @@ import { MonitorAudio, type MonitorAudioMode, type WorldMonitorPlaybackFactory }
 import { MonitorDesktop, type MonitorDragMode } from './monitorDesktop';
 import { MonitorObject, type MonitorTheater } from './monitorObject';
 import { MonitorReceiver, type MonitorConnectionState } from './monitorSession';
+import { MonitorLocalPairing } from './monitorPairing';
 import { describeMonitorVideo, measureMonitorVideo } from './monitorVideoMetrics';
 import { MonitorXR } from './monitorXR';
 import type { CoastXR } from '../coast/CoastXR';
@@ -39,9 +40,11 @@ export class MonitorView {
   private readonly unsubscribeXR: () => void;
   private xrSession: XRSession | null = null;
   private readonly receiver: MonitorReceiver;
+  private readonly localPairing: MonitorLocalPairing;
   private measurement: AbortController | undefined;
   private readonly measureVideo: HTMLButtonElement;
   private readonly videoStatistics: HTMLElement;
+  private readonly localShare: HTMLButtonElement;
   private readonly events = new AbortController();
   private readonly pointer = new Vector2();
   private readonly panel = document.createElement('section');
@@ -114,6 +117,8 @@ export class MonitorView {
       </div>
       <button type="button" data-monitor-reset disabled>位置・サイズを戻す</button>
       <div class="monitor-view-section">
+        <button type="button" data-monitor-local-share>この端末から共有</button>
+        <p data-monitor-local-help>配信画面を開き、共有する画面を選びます。コードの入力は不要です。接続は配信側で許可してください。</p>
         <a data-monitor-sender-link target="_blank" rel="noopener">配信画面を開く</a>
         <form data-monitor-form>
           <label for="monitor-join-code">接続コード</label>
@@ -168,6 +173,7 @@ export class MonitorView {
     this.retryVideo = query('retry-video');
     this.measureVideo = query('measure-video');
     this.videoStatistics = query('video-statistics');
+    this.localShare = query('local-share');
     this.audioButton = query('sound');
     this.audioMode = query('sound-mode');
     this.audioStatus = query('audio-status');
@@ -199,6 +205,20 @@ export class MonitorView {
       onState: state => this.setConnectionState(state),
       onStream: stream => this.setStream(stream),
     });
+    this.localPairing = new MonitorLocalPairing(code => {
+      if (this.hasActiveConnection || this.events.signal.aborted) return;
+      this.code.value = '';
+      this.setScreenVisible(true);
+      void this.receiver.connect(code);
+    });
+    this.localShare.addEventListener('click', () => {
+      if (this.hasActiveConnection) return;
+      const opened = this.localPairing.open(sender);
+      query('local-help').textContent = opened
+        ? '配信画面で共有する画面を選び、確認番号を照合して接続を許可してください。2分以内に進まない場合は手動コードで接続できます。'
+        : '配信画面を開けませんでした。ブラウザーのポップアップ設定を確認するか、「配信画面を開く」から手動コードで接続してください。';
+    }, { signal: this.events.signal });
+    window.addEventListener('pagehide', () => this.localPairing.cancel(), { signal: this.events.signal });
     this.bindPanel(query('volume'));
     this.bindPointer();
     this.setConnectionState(this.state);
@@ -354,6 +374,7 @@ export class MonitorView {
   release(): void {
     this.releaseDesktopGrab();
     this.finishDrag();
+    this.localPairing.cancel();
     this.measurement?.abort();
     this.receiver.disconnect();
     this.audio.stop();
@@ -482,7 +503,9 @@ export class MonitorView {
     const active = this.hasActiveConnection;
     this.code.disabled = active;
     this.code.required = !active;
+    this.localShare.disabled = active;
     this.measureVideo.disabled = !!this.measurement || state.phase !== 'connected';
+    if (active) this.localPairing.cancel();
     this.connectButton.textContent = active ? '切断' : '接続';
     this.verification.hidden = !state.verification;
     this.verification.textContent = state.verification ?? '';
@@ -602,6 +625,7 @@ export class MonitorView {
     }
     this.form.addEventListener('submit', event => {
       event.preventDefault();
+      this.localPairing.cancel();
       if (this.code.disabled) this.receiver.disconnect();
       else {
         this.setScreenVisible(true);

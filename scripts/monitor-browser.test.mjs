@@ -2347,6 +2347,42 @@ test('PCVR reconnection retains residence shader preparation, retry, and session
   }
 });
 
+test('same-device sharing hands off one code without bypassing the chooser or sender approval', { timeout }, async () => {
+  const context = await browser.newContext({ viewport });
+  await context.addInitScript(installSyntheticCapture);
+  await context.addInitScript(observePeers);
+  const viewer = await context.newPage();
+  try {
+    await viewer.goto(url.href);
+    await button(viewer, '仮想モニター').click();
+    const popup = viewer.waitForEvent('popup');
+    await button(viewer, 'この端末から共有').click();
+    const sender = await popup;
+    await sender.locator('[data-share-button]').waitFor();
+    assert.equal(await sender.evaluate(() => window.opener), null);
+    assert.equal(await sender.evaluate(() => window.captureFixture.streams.length), 0);
+    assert.equal(await viewer.locator('#monitor-join-code').inputValue(), '');
+    await button(sender, '画面共有を開始').click();
+    await sender.locator('[data-monitor-verification]').filter({ hasText: /^\d{6}$/ }).waitFor();
+    const number = await sender.locator('[data-monitor-verification]').textContent();
+    assert.equal(await viewer.evaluate(value => document.querySelector('[data-monitor-verification]').textContent === value, number), true);
+    assert.equal(await viewer.locator('#monitor-join-code').inputValue(), '');
+    assert.equal(await sender.evaluate(() => window.captureFixture.activeGesture), true);
+    assert.equal(await sender.evaluate(() => window.monitorPeers.length), 0);
+    assert.equal(await viewer.evaluate(() => window.monitorPeers.length), 0);
+    assert.equal(await viewer.locator(videoSelector).evaluate(video => video.srcObject), null);
+    assert.equal(new URL(sender.url()).search, '?monitor=sender');
+    assert.equal(new URL(viewer.url()).searchParams.has('code'), false);
+    await button(sender, '接続を許可').click();
+    await waitForVideo(viewer, 1);
+    await button(sender, '共有を停止').click();
+    await viewer.waitForFunction(selector => document.querySelector(selector).srcObject === null, videoSelector);
+    assert.equal(await sender.evaluate(() => window.captureFixture.streams[0].getTracks().every(track => track.readyState === 'ended')), true);
+  } finally {
+    await context.close();
+  }
+});
+
 // A single observation window covers acquisition, transport, decoding and video composition.
 // Only numeric video counters are returned; network addresses, SDP and track labels stay in the browser.
 async function measurePipelinePage(page, durationMs) {

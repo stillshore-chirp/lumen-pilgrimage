@@ -1,3 +1,4 @@
+import { MonitorPairingSource } from './monitorPairing';
 import { describeMonitorVideo, measureMonitorVideo } from './monitorVideoMetrics';
 import { captureErrorMessage, MonitorCapture } from './monitorCapture';
 import { MonitorSender, type MonitorConnectionState, type MonitorOutput } from './monitorSession';
@@ -35,7 +36,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
         <section data-pairing hidden>
           <h2>ペアリングコード</h2>
           <code data-monitor-pair-code></code>
-          <p>視聴画面の仮想モニターにこのコードを入力してください。有効時間は発行から2分です。</p>
+          <p>この端末の視聴画面から開いた場合は、コードを自動で渡します。別端末ではこのコードを入力してください。有効時間は発行から2分です。</p>
         </section>
         <section data-approval hidden>
           <h2>接続の確認</h2>
@@ -68,6 +69,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
 
   const measure = view.querySelector<HTMLButtonElement>('[data-monitor-measure-video]')!;
   const statistics = view.querySelector<HTMLElement>('[data-monitor-video-statistics]')!;
+  const localPairing = new MonitorPairingSource();
   let measurement: AbortController | undefined;
 
   const capture = new MonitorCapture(navigator.mediaDevices);
@@ -91,6 +93,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
       if (events.signal.aborted) return;
       if (next.phase !== 'approval') deciding = false;
       if (next.phase === 'ended' || next.phase === 'failed') {
+        localPairing.dispose();
         measurement?.abort();
         measurement = undefined;
         statistics.textContent = '';
@@ -135,6 +138,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
     if (audioHelp.textContent !== explanation) audioHelp.textContent = explanation;
     measure.disabled = !!measurement || state?.phase !== 'connected';
     measure.textContent = measurement ? '3秒間計測しています…' : '映像の滑らかさを計測';
+    localPairing.publish(state?.phase === 'waiting' ? state.code : undefined);
     pairCode.textContent = state?.phase === 'waiting' ? state.code ?? '' : '';
     pairing.hidden = !pairCode.textContent;
     const restoreFocus = approval.contains(document.activeElement);
@@ -160,6 +164,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
 
   function stop() {
     if (!capture.active && !choosing) return;
+    localPairing.dispose();
     release();
     message = '画面共有を停止しました。';
     render();
@@ -220,6 +225,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
 
   function dispose() {
     events.abort();
+    localPairing.dispose();
     release();
     view.remove();
   }
@@ -249,7 +255,7 @@ export function mountMonitorSender(mount: HTMLElement): () => void {
       if (!events.signal.aborted) render();
     }
   }, listeners);
-  window.addEventListener('pagehide', stop, listeners);
+  window.addEventListener('pagehide', () => { localPairing.dispose(); stop(); }, listeners);
   render();
   return dispose;
 }

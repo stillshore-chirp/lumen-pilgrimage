@@ -489,8 +489,102 @@ test('a receiver requires expiration information before accepting approved media
   assert.deepEqual(peers, []);
 });
 
-// Video diagnostics preserve the meaning and availability of each measured stage.
+// Local pairing authenticates the exact launched window before transferring a private port.
+const { MonitorLocalPairing, MonitorPairingSource } = await import('../src/monitor/monitorPairing.ts');
 const { monitorVideoSnapshot, monitorVideoRates, measureMonitorVideo } = await import('../src/monitor/monitorVideoMetrics.ts');
+
+function postEvent(host, { source, origin = host.location.origin, data, ports = [] }) {
+  host.dispatchEvent(Object.assign(new Event('message'), { source, origin, data, ports }));
+}
+
+function localHost() {
+  const host = new EventTarget();
+  host.location = { origin: 'https://monitor.example' };
+  host.opener = null;
+  return host;
+}
+
+test('local launch accepts one code only from the exact same-origin launched sender', async t => {
+  const host = localHost();
+  let child;
+  const transfers = [];
+  const opened = [];
+  host.open = (url, target) => {
+    opened.push({ url, target });
+    child = { postMessage: (data, origin, ports) => transfers.push({ data, origin, ports }) };
+    return child;
+  };
+  const codes = [];
+  const pairing = new MonitorLocalPairing(code => codes.push(code), host);
+  t.after(() => pairing.cancel());
+  const url = new URL('/?monitor=sender', host.location.origin);
+  assert.equal(pairing.open(url), true);
+  const ready = { type: 'lumen-monitor-sender-ready' };
+  postEvent(host, { source: {}, data: ready });
+  postEvent(host, { source: child, origin: 'https://other.example', data: ready });
+  assert.equal(transfers.length, 0);
+  postEvent(host, { source: child, data: ready });
+  assert.equal(transfers.length, 1);
+  assert.equal(transfers[0].origin, host.location.origin);
+  const port = transfers[0].ports[0];
+  t.after(() => port.close());
+  port.postMessage({ type: 'lumen-monitor-pairing-code', code: 'bad' });
+  port.postMessage({ type: 'lumen-monitor-pairing-code', code: 'AAAA-BBBB-CCCC' });
+  port.postMessage({ type: 'lumen-monitor-pairing-code', code: 'DDDD-EEEE-FFFF' });
+  await until(() => codes.length > 0, 'local code was not delivered');
+  assert.deepEqual(codes, ['AAAA-BBBB-CCCC']);
+  assert.deepEqual(opened, [{ url: url.href, target: '_blank' }]);
+  assert.equal(pairing.open(new URL('https://other.example/')), false);
+});
+
+test('cancelling a handoff prevents an old channel or window from enrolling a later attempt', async t => {
+  const host = localHost();
+  const children = [];
+  const ports = [];
+  host.open = () => {
+    const child = { postMessage: (_data, _origin, transfer) => ports.push(transfer[0]) };
+    children.push(child);
+    return child;
+  };
+  const codes = [];
+  const pairing = new MonitorLocalPairing(code => codes.push(code), host);
+  t.after(() => { pairing.cancel(); for (const port of ports) port.close(); });
+  const url = new URL('/?monitor=sender', host.location.origin);
+  pairing.open(url);
+  postEvent(host, { source: children[0], data: { type: 'lumen-monitor-sender-ready' } });
+  pairing.cancel();
+  pairing.open(url);
+  ports[0].postMessage({ type: 'lumen-monitor-pairing-code', code: 'AAAA-BBBB-CCCC' });
+  postEvent(host, { source: children[0], data: { type: 'lumen-monitor-sender-ready' } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ports.length, 1);
+  assert.deepEqual(codes, []);
+  host.open = () => null;
+  assert.equal(pairing.open(url), false);
+});
+
+test('sender detaches opener immediately and sends only a single code over its authenticated port', async t => {
+  const host = localHost();
+  const ready = [];
+  const opener = { postMessage: (data, origin) => ready.push({ data, origin }) };
+  host.opener = opener;
+  const source = new MonitorPairingSource(host);
+  t.after(() => source.dispose());
+  assert.equal(host.opener, null);
+  assert.deepEqual(ready, [{ data: { type: 'lumen-monitor-sender-ready' }, origin: host.location.origin }]);
+  const channel = new MessageChannel();
+  t.after(() => { channel.port1.close(); channel.port2.close(); });
+  const received = [];
+  channel.port1.onmessage = ({ data }) => received.push(data);
+  source.publish('AAAA-BBBB-CCCC');
+  postEvent(host, { source: {}, data: { type: 'lumen-monitor-pairing-port' }, ports: [channel.port2] });
+  postEvent(host, { source: opener, origin: 'https://other.example', data: { type: 'lumen-monitor-pairing-port' }, ports: [channel.port2] });
+  assert.deepEqual(received, []);
+  postEvent(host, { source: opener, data: { type: 'lumen-monitor-pairing-port' }, ports: [channel.port2] });
+  await until(() => received.length > 0, 'sender handoff missing');
+  source.publish('DDDD-EEEE-FFFF');
+  assert.deepEqual(received, [{ type: 'lumen-monitor-pairing-code', code: 'AAAA-BBBB-CCCC' }]);
+});
 
 test('video diagnostics measure each counter interval and preserve missing or reset metrics', () => {
   const report = rows => new Map(rows.map(row => [row.id, row]));
@@ -562,4 +656,35 @@ test('a backgrounded video measurement is rejected instead of reporting throttli
   document.dispatchEvent(new Event('visibilitychange'));
   document.visibilityState = 'visible';
   await assert.rejects(pending, /visible page/);
+});
+
+test('handoff expiry removes the temporary window and port authority without extending server enrollment', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const host = localHost();
+  const transferred = [];
+  const child = { postMessage: (_data, _origin, ports) => transferred.push(ports[0]) };
+  host.open = () => child;
+  const codes = [];
+  const pairing = new MonitorLocalPairing(code => codes.push(code), host);
+  t.after(() => pairing.cancel());
+  pairing.open(new URL('/?monitor=sender', host.location.origin));
+  t.mock.timers.tick(120_000);
+  postEvent(host, { source: child, data: { type: 'lumen-monitor-sender-ready' } });
+  assert.deepEqual(transferred, []);
+  assert.deepEqual(codes, []);
+
+  const sourceHost = localHost();
+  const opener = { postMessage() {} };
+  sourceHost.opener = opener;
+  const source = new MonitorPairingSource(sourceHost);
+  t.after(() => source.dispose());
+  const channel = new MessageChannel();
+  t.after(() => { channel.port1.close(); channel.port2.close(); });
+  const received = [];
+  channel.port1.onmessage = ({ data }) => received.push(data);
+  postEvent(sourceHost, { source: opener, data: { type: 'lumen-monitor-pairing-port' }, ports: [channel.port2] });
+  t.mock.timers.tick(120_000);
+  source.publish('AAAA-BBBB-CCCC');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(received, []);
 });
