@@ -328,6 +328,8 @@ npm run test:coast:browser
 
 映画館の [配置テスト](../scripts/cinema-navigation.test.mjs) は、通常席の眼高1.15 mと車いす席の眼高1.00 mから幕の下端へ線を引き、前列の背もたれと床上1.30 mの頭頂モデルを越えることを確認します。頭頂モデルの高さに対する最小余裕は2 cmです。座位から見て手すりと支柱が幕に重ならないこと、段数、踏面26 cm以上とけあげ18 cm以下、横通路と車いすスペースの高さ、8か所の扉との接続も検証します。
 
+住戸の音響browser試験は、音源から伝搬用Gain・Delayを経由して最初のBiquadまでの接続を追跡します。二つの遅延tapが同じfilterへ合流しても一つとして数えます。襖・バルコニー引戸・玄関戸の実操作後に、交通音の帯域係数、室への送り、乾いた成分のgainが変わることを確認します。家電の完了音は短音の種類・非loop・実際のstartイベントを区別し、伝搬入力への接続から追跡します。接続・係数・イベントの通過を、最終波形の帯域応答や聴感の合格と同一視しません。PCMの到来・尾部・欠測や聞こえ方は、同じ入力と姿勢による直接確認へ分けて記録します。
+
 映画館はビルド後に `COAST_CHROME_CHANNEL=chrome npm run test:cinema:browser` で確認します。`--no-shell` で導入した Chromium を使う場合は、`COAST_CHROME_CHANNEL=chromium npm run test:cinema:browser` を実行してください。音響試験はチャンネル未指定時に Chromium のヘッドレスシェルを使います。
 
 ローカル上映の回帰試験には、H.264をデコードできるChromeと、`libx264` を使えるFFmpegが必要です。WindowsのPowerShellでは `$env:COAST_CHROME_CHANNEL = "chrome"` を設定してから `npm run test:cinema:browser` を実行します。[上映のブラウザー試験](../scripts/cinema-screening.browser.test.mjs) は、生成した7.1.4素材と位置付き音源の組を利用者と同じファイル選択から開き、映像フレームとテスト信号の出力、シーク、非常点検中の停止と復帰、模擬WebXRでの再生継続を確かめます。
