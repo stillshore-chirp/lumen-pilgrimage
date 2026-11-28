@@ -9,7 +9,7 @@ import {
   CINEMA_ROOM_HEIGHT, CINEMA_SCREEN, cinemaGroundHeight,
 } from './cinemaLayout';
 import { createCinemaSeats } from './cinemaSeats';
-import { cinemaScreenSubstrateBox } from './cinemaScreenSurface';
+import { cinemaScreenSubstrateBox, cinemaScreenSubstrateGeometry } from './cinemaScreenSurface';
 import { createCinemaSpeakerEquipment } from './cinemaSpeakerEquipment';
 import { CINEMA_RETURN_COFFER_BOXES, CINEMA_VENTILATION_PARTS, cinemaVentilationWallBoxes } from './cinemaVentilation';
 
@@ -167,8 +167,10 @@ function addScreenSurround(group: Group, finish: CinemaFinishes): void {
     }
   }
 
-  // Resolve equal quantized depths in favour of the unchanged projection face at distant seats.
-  cinemaBoxes(group, 'Opaque cinema screen substrate', finish.box, finish.matte, [cinemaScreenSubstrateBox()]).renderOrder = -1;
+  const substrate = cinemaBoxes(group, 'Opaque cinema screen substrate', cinemaScreenSubstrateGeometry(),
+    finish.matte, [cinemaScreenSubstrateBox()]);
+  substrate.material = [finish.matte, new MeshBasicMaterial({ visible: false })];
+  substrate.renderOrder = -1;
   cinemaBoxes(group, 'Black acoustic masking around the screen opening', finish.box, finish.matte, masks);
   cinemaBoxes(group, 'Side drapery and folds', finish.box, finish.drape, drapes);
   cinemaBoxes(group, 'Low-reflection proscenium and screen frame', finish.box, finish.protection, frame);

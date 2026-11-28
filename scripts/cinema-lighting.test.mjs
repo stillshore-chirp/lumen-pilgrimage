@@ -633,28 +633,48 @@ test('cinema screen substrate closes its back and edges inside the existing fram
   const substrate = auditorium.group.getObjectByName('Opaque cinema screen substrate');
   const frame = auditorium.group.getObjectByName('Low-reflection proscenium and screen frame');
   const lighting = createCinemaLighting(scene, auditorium.group);
-  let geometryDisposals = 0, materialDisposals = 0, instanceDisposals = 0;
+  let geometryDisposals = 0, materialDisposals = 0, hiddenDisposals = 0, instanceDisposals = 0;
   try {
     assert.ok(substrate instanceof InstancedMesh && frame instanceof InstancedMesh);
     assert.equal(substrate.count, 1);
+    assert.ok(Array.isArray(substrate.material));
+    const [surface, hiddenFront] = substrate.material;
+    assert.ok(surface instanceof MeshStandardMaterial);
+    assert.equal(hiddenFront.visible, false);
+    assert.equal(surface.visible, true);
+    assert.notStrictEqual(substrate.geometry, frame.geometry);
+    assert.equal(frame.geometry.index.count, 36);
+    assert.equal(frame.geometry.groups.length, 6);
+    assert.equal(substrate.geometry.index.count, 36);
+    assert.deepEqual(substrate.geometry.groups, [
+      { start: 0, count: 30, materialIndex: 0 }, { start: 30, count: 6, materialIndex: 1 },
+    ]);
+    const visibleGroups = substrate.geometry.groups.filter(group => substrate.material[group.materialIndex].visible);
+    assert.equal(visibleGroups.length, 1);
+    assert.equal(visibleGroups[0].count, 30);
+    for (let i = 30; i < 36; i++) {
+      const vertex = substrate.geometry.index.getX(i);
+      assert.equal(substrate.geometry.attributes.normal.getZ(vertex), 1);
+      assert.equal(substrate.geometry.attributes.position.getZ(vertex), .5);
+    }
     const projection = scene.getObjectByName('Thirty-metre cinema projection screen');
     assert.equal(projection.renderOrder, 0);
     assert.equal(substrate.renderOrder, -1);
-    for (const material of [substrate.material, projection.material]) {
+    for (const material of [surface, projection.material]) {
       assert.equal(material.depthTest, true);
       assert.equal(material.depthWrite, true);
       assert.equal(material.depthFunc, LessEqualDepth);
       assert.equal(material.polygonOffset, false);
     }
-    assert.ok(substrate.material instanceof MeshStandardMaterial);
-    assert.equal(substrate.material.transparent, false);
-    assert.equal(substrate.material.opacity, 1);
-    assert.equal(substrate.material.emissive.getHex(), 0);
-    assert.equal(substrate.material.map, null);
-    assert.equal(substrate.material.roughness, .97);
-    assert.equal(substrate.material.color.getHex(), 0x101114);
+    assert.ok(surface instanceof MeshStandardMaterial);
+    assert.equal(surface.transparent, false);
+    assert.equal(surface.opacity, 1);
+    assert.equal(surface.emissive.getHex(), 0);
+    assert.equal(surface.map, null);
+    assert.equal(surface.roughness, .97);
+    assert.equal(surface.color.getHex(), 0x101114);
     const shader = { uniforms: {}, vertexShader: ShaderLib.standard.vertexShader, fragmentShader: ShaderLib.standard.fragmentShader };
-    substrate.material.onBeforeCompile(shader, {});
+    surface.onBeforeCompile(shader, {});
     assert.ok(shader.fragmentShader.includes('cinemaIncident'));
     assert.ok(!shader.fragmentShader.includes('cinemaSource'));
     const [x, y, z, width, height, depth] = cinemaScreenSubstrateBox();
@@ -679,6 +699,10 @@ test('cinema screen substrate closes its back and edges inside the existing fram
     }
     scene.updateMatrixWorld(true);
     const ray = (origin, direction, objects = [scene]) => new Raycaster(new Vector3(...origin), new Vector3(...direction)).intersectObjects(objects, true);
+    const physicalFront = ray([0, CINEMA_SCREEN.center, .65], [0,0,-1], [substrate]);
+    assert.strictEqual(physicalFront[0].object, substrate);
+    assert.equal(physicalFront[0].face.materialIndex, 1);
+    assert.ok(Math.abs(physicalFront[0].point.z - box.max.z) < 1e-8);
     const front = ray([0, CINEMA_SCREEN.center, .65], [0,0,-1]);
     assert.equal(front[0].object.name, 'Thirty-metre cinema projection screen');
     assert.ok(Math.abs(front[0].point.z - CINEMA_SCREEN.z) < 1e-12);
@@ -694,13 +718,14 @@ test('cinema screen substrate closes its back and edges inside the existing fram
       [[0,box.min.y-.1,z],[0,1,0]], [[0,box.max.y+.1,z],[0,-1,0]],
     ]) assert.strictEqual(ray(origin, direction, [substrate])[0].object, substrate);
     substrate.geometry.addEventListener('dispose', () => geometryDisposals++);
-    substrate.material.addEventListener('dispose', () => materialDisposals++);
+    surface.addEventListener('dispose', () => materialDisposals++);
+    hiddenFront.addEventListener('dispose', () => hiddenDisposals++);
     substrate.addEventListener('dispose', () => instanceDisposals++);
   } finally {
     lighting.dispose();
     auditorium.dispose();
     auditorium.dispose();
   }
-  assert.deepEqual([geometryDisposals, materialDisposals, instanceDisposals], [1,1,1]);
+  assert.deepEqual([geometryDisposals, materialDisposals, hiddenDisposals, instanceDisposals], [1,1,1,1]);
   assert.equal(auditorium.group.children.length, 0);
 });
